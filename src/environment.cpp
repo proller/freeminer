@@ -1399,7 +1399,7 @@ void ServerEnvironment::step(float dtime, float uptime)
 	/*
 		Manage active objects
 	*/
-	if(m_object_management_interval.step(dtime, 0.5))
+	if(m_object_management_interval.step(dtime, 3))
 	{
 		ScopeProfiler sp(g_profiler, "SEnv: remove removed objs avg /.5s", SPT_AVG);
 		/*
