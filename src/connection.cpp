@@ -465,11 +465,11 @@ Peer::Peer(u16 a_id, Address a_address):
 	id(a_id),
 	timeout_counter(0.0),
 	ping_timer(0.0),
-	resend_timeout(2),
+	resend_timeout(10),
 	avg_rtt(-1.0),
 	has_sent_with_id(false),
 	m_sendtime_accu(0),
-	m_max_packets_per_second(10),
+	m_max_packets_per_second(500),
 	m_num_sent(0),
 	m_max_num_sent(0),
 	congestion_control_aim_rtt(0.2),
@@ -486,12 +486,12 @@ void Peer::reportRTT(float rtt)
 	if(rtt >= 0.0){
 		if(rtt < 0.01){
 			if(m_max_packets_per_second < congestion_control_max_rate)
-				m_max_packets_per_second *= 1.05;
+				m_max_packets_per_second *= 1.03;
 		} else if(rtt < congestion_control_aim_rtt){
 			if(m_max_packets_per_second < congestion_control_max_rate)
-				m_max_packets_per_second *= 1.02;
+				m_max_packets_per_second *= 1.01;
 		} else {
-			m_max_packets_per_second *= 0.7;
+			m_max_packets_per_second *= 0.95;
 			if(m_max_packets_per_second < congestion_control_min_rate)
 				m_max_packets_per_second = congestion_control_min_rate;
 		}
@@ -670,7 +670,7 @@ void Connection::send(float dtime)
 		Peer *peer = getPeerNoEx(packet.peer_id);
 		if(!peer)
 			continue;
-		if(peer->channels[packet.channelnum].outgoing_reliables.size() >= 1000){
+		if(peer->channels[packet.channelnum].outgoing_reliables.size() >= 3000){
 			postponed_packets.push_back(packet);
 		} else if(peer->m_num_sent < peer->m_max_num_sent){
 			rawSendAsPacket(packet.peer_id, packet.channelnum,
