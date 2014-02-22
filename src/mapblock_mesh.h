@@ -41,6 +41,7 @@ struct MeshMakeData
 	v3s16 m_crack_pos_relative;
 	bool m_smooth_lighting;
 	IGameDef *m_gamedef;
+	int range;
 
 	MeshMakeData(IGameDef *gamedef);
 

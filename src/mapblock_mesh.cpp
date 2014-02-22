@@ -32,6 +32,11 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "settings.h"
 #include "util/directiontables.h"
 
+#define RANGE_SPECIAL 2
+#define RANGE_SHADERS 5
+#define RANGE_L1 3
+
+
 float srgb_linear_multiply(float f, float m, float max)
 {
 	f = f * f; // SRGB -> Linear
@@ -52,6 +57,7 @@ MeshMakeData::MeshMakeData(IGameDef *gamedef):
 	m_crack_pos_relative(-1337, -1337, -1337),
 	m_smooth_lighting(false),
 	m_gamedef(gamedef)
+	,range(0)
 {}
 
 void MeshMakeData::fill(MapBlock *block)
@@ -626,7 +632,7 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 
 	TODO: Add 3: Both faces drawn with backface culling, remove equivalent
 */
-static u8 face_contents(content_t m1, content_t m2, bool *equivalent,
+static u8 face_contents(MeshMakeData *data, content_t m1, content_t m2, bool *equivalent,
 		INodeDefManager *ndef)
 {
 	*equivalent = false;
@@ -634,6 +640,11 @@ static u8 face_contents(content_t m1, content_t m2, bool *equivalent,
 	if(m1 == CONTENT_IGNORE || m2 == CONTENT_IGNORE)
 		return 0;
 	
+	if (data->range > RANGE_L1 && m1 != CONTENT_AIR && m2 != CONTENT_AIR) {
+		*equivalent = true;
+		return 0;
+	}
+
 	bool contents_differ = (m1 != m2);
 	
 	const ContentFeatures &f1 = ndef->get(m1);
@@ -643,8 +654,8 @@ static u8 face_contents(content_t m1, content_t m2, bool *equivalent,
 	if(f1.sameLiquid(f2))
 		contents_differ = false;
 	
-	u8 c1 = f1.solidness;
-	u8 c2 = f2.solidness;
+	u8 c1 = (data->range > RANGE_SPECIAL && f1.drawtype != NDT_AIRLIKE) ? 2 : f1.solidness;
+	u8 c2 = (data->range > RANGE_SPECIAL && f2.drawtype != NDT_AIRLIKE) ? 2 : f2.solidness;
 
 	bool solidness_differs = (c1 != c2);
 	bool makes_face = contents_differ && solidness_differs;
@@ -779,7 +790,7 @@ static void getTileInfo(
 	
 	// This is hackish
 	bool equivalent = false;
-	u8 mf = face_contents(n0.getContent(), n1.getContent(),
+	u8 mf = face_contents(data, n0.getContent(), n1.getContent(),
 			&equivalent, ndef);
 
 	if(mf == 0)
@@ -1105,6 +1116,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 		- whatever
 	*/
 
+	if(data->range<=RANGE_SPECIAL)
 	mapblock_mesh_generate_special(data, collector);
 	
 
@@ -1114,6 +1126,9 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 	bool enable_shaders = g_settings->getBool("enable_shaders");
 	bool enable_bumpmapping = g_settings->getBool("enable_bumpmapping");
 	bool enable_parallax_occlusion = g_settings->getBool("enable_parallax_occlusion");
+
+	if (data->range > RANGE_SHADERS)
+		enable_shaders = enable_bumpmapping = enable_parallax_occlusion = 0;
 
 	video::E_MATERIAL_TYPE  shadermat1, shadermat2, shadermat3,
 							shadermat4, shadermat5;
@@ -1265,9 +1280,10 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 
 	if(m_mesh)
 	{
-#if 0
+#if 1
 		// Usually 1-700 faces and 1-7 materials
-		std::cout<<"Updated MapBlock has "<<fastfaces_new.size()<<" faces "
+	if(fastfaces_new.size())
+		infostream<<"Updated MapBlock has "<<fastfaces_new.size()<<" faces "
 				<<"and uses "<<m_mesh->getMeshBufferCount()
 				<<" materials (meshbuffers)"<<std::endl;
 #endif
