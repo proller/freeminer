@@ -246,6 +246,8 @@ void ContentFeatures::reset()
 		circuit_element_states[i] = 0;
 	}
 	circuit_element_delay = 0;
+
+	color_avg = video::SColor(255,myrand_range(0,255),myrand_range(0,255),myrand_range(0,255));
 }
 
 void ContentFeatures::serialize(std::ostream &os, u16 protocol_version)
@@ -424,6 +426,7 @@ public:
 			f.diggable            = false;
 			f.buildable_to        = true;
 			f.is_ground_content   = true;
+			f.color_avg = video::SColor(0,255,255,255);
 			// Insert directly into containers
 			content_t c = CONTENT_AIR;
 			m_content_features[c] = f;
@@ -443,6 +446,7 @@ public:
 			f.diggable            = false;
 			f.buildable_to        = true; // A way to remove accidental CONTENT_IGNOREs
 			f.is_ground_content   = true;
+			f.color_avg = video::SColor(0,255,255,255);
 			// Insert directly into containers
 			content_t c = CONTENT_IGNORE;
 			m_content_features[c] = f;

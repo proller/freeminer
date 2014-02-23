@@ -35,6 +35,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define RANGE_SPECIAL 2
 #define RANGE_SHADERS 5
 #define RANGE_L1 3
+#define RANGE_FAR 4
 
 
 float srgb_linear_multiply(float f, float m, float max)
@@ -1037,6 +1038,105 @@ static void updateAllFastFaceRows(MeshMakeData *data,
 	}
 }
 
+
+static void mapblock_farmesh(MeshMakeData *data, scene::SMesh * m_mesh) {
+        //return;
+//MapBlock *block = data->m_env.getMap().getBlockNoCreateNoEx(r.p);
+
+	video::SColor c = video::SColor(0,255,255,255);
+{
+	VoxelManipulator &vmanip = data->m_vmanip;
+	INodeDefManager *ndef = data->m_gamedef->ndef();
+	v3s16 blockpos_nodes = data->m_blockpos * MAP_BLOCKSIZE;
+		bool full_ignore = true;
+		bool some_ignore = false;
+		bool full_air = true;
+		bool some_air = false;
+		for(s16 z0=0; z0<MAP_BLOCKSIZE; z0++)
+		for(s16 y0=0; y0<MAP_BLOCKSIZE; y0++)
+		for(s16 x0=0; x0<MAP_BLOCKSIZE; x0++)
+		{
+			v3s16 p(x0,y0,z0);
+			//MapNode n = block->getNode(p);
+			MapNode n = vmanip.getNodeNoEx(blockpos_nodes + p);
+			const ContentFeatures &f = ndef->get(n);
+			content_t ct = n.getContent();
+			if(ct == CONTENT_IGNORE)
+				some_ignore = true;
+			else
+				full_ignore = false;
+			if(ct == CONTENT_AIR)
+				some_air = true;
+			else
+				full_air = false;
+			if (ct != CONTENT_IGNORE && ct != CONTENT_AIR)
+				c = f.color_avg;
+		}
+	if (full_ignore || full_air)
+		return;
+	}
+
+
+	video::S3DVertex vertices[24] =
+	{
+		// Up
+		video::S3DVertex(-0.5,+0.5,-0.5, 0,1,0, c, 0,1),
+		video::S3DVertex(-0.5,+0.5,+0.5, 0,1,0, c, 0,0),
+		video::S3DVertex(+0.5,+0.5,+0.5, 0,1,0, c, 1,0),
+		video::S3DVertex(+0.5,+0.5,-0.5, 0,1,0, c, 1,1),
+		// Down
+		video::S3DVertex(-0.5,-0.5,-0.5, 0,-1,0, c, 0,0),
+		video::S3DVertex(+0.5,-0.5,-0.5, 0,-1,0, c, 1,0),
+		video::S3DVertex(+0.5,-0.5,+0.5, 0,-1,0, c, 1,1),
+		video::S3DVertex(-0.5,-0.5,+0.5, 0,-1,0, c, 0,1),
+		// Right
+		video::S3DVertex(+0.5,-0.5,-0.5, 1,0,0, c, 0,1),
+		video::S3DVertex(+0.5,+0.5,-0.5, 1,0,0, c, 0,0),
+		video::S3DVertex(+0.5,+0.5,+0.5, 1,0,0, c, 1,0),
+		video::S3DVertex(+0.5,-0.5,+0.5, 1,0,0, c, 1,1),
+		// Left
+		video::S3DVertex(-0.5,-0.5,-0.5, -1,0,0, c, 1,1),
+		video::S3DVertex(-0.5,-0.5,+0.5, -1,0,0, c, 0,1),
+		video::S3DVertex(-0.5,+0.5,+0.5, -1,0,0, c, 0,0),
+		video::S3DVertex(-0.5,+0.5,-0.5, -1,0,0, c, 1,0),
+		// Back
+		video::S3DVertex(-0.5,-0.5,+0.5, 0,0,1, c, 1,1),
+		video::S3DVertex(+0.5,-0.5,+0.5, 0,0,1, c, 0,1),
+		video::S3DVertex(+0.5,+0.5,+0.5, 0,0,1, c, 0,0),
+		video::S3DVertex(-0.5,+0.5,+0.5, 0,0,1, c, 1,0),
+		// Front
+		video::S3DVertex(-0.5,-0.5,-0.5, 0,0,-1, c, 0,1),
+		video::S3DVertex(-0.5,+0.5,-0.5, 0,0,-1, c, 0,0),
+		video::S3DVertex(+0.5,+0.5,-0.5, 0,0,-1, c, 1,0),
+		video::S3DVertex(+0.5,-0.5,-0.5, 0,0,-1, c, 1,1),
+	};
+
+	u16 indices[6] = {0,1,2,2,3,0};
+
+	//scene::SMesh *mesh = new scene::SMesh();
+	for (u32 i=0; i<6; ++i)
+	{
+		scene::IMeshBuffer *buf = new scene::SMeshBuffer();
+		buf->append(vertices + 4 * i, 4, indices, 6);
+	//scaleMesh(buf, scale);  // also recalculates bounding box
+		// Set default material
+		buf->getMaterial().setFlag(video::EMF_LIGHTING, false);
+		buf->getMaterial().setFlag(video::EMF_BILINEAR_FILTER, false);
+		//buf->getMaterial().MaterialType = video::EMT_TRANSPARENT_ALPHA_CHANNEL_REF;
+		buf->getMaterial().setFlag(video::EMF_FOG_ENABLE, true);
+		buf->getMaterial().MaterialType = video::EMT_TRANSPARENT_ALPHA_CHANNEL;
+		//buf->getMaterial().MaterialType = video::EMT_SOLID;
+		// Add mesh buffer to mesh
+		m_mesh->addMeshBuffer(buf);
+		buf->drop();
+	}
+
+	//scene::SAnimatedMesh *anim_mesh = new scene::SAnimatedMesh(mesh);
+	//mesh->drop();
+	v3f scale(MAP_BLOCKSIZE*BS);
+	scaleMesh(m_mesh, scale);  // also recalculates bounding box
+}
+
 /*
 	MapBlockMesh
 */
@@ -1057,6 +1157,10 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 	//TimeTaker timer1("MapBlockMesh()");
 
 	std::vector<FastFace> fastfaces_new;
+
+	if (data->range > RANGE_FAR) {
+		mapblock_farmesh(data, m_mesh);
+	} else {
 
 	/*
 		We are including the faces of the trailing edges of the block.
@@ -1270,6 +1374,9 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 		buf->drop();
 		buf->append(&p.vertices[0], p.vertices.size(),
 				&p.indices[0], p.indices.size());
+
+	}
+
 	}
 
 	/*

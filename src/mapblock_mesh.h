@@ -123,6 +123,8 @@ public:
 
 	bool clearHardwareBuffer;
 
+	video::SColor color_avg;
+
 private:
 	scene::SMesh *m_mesh;
 	IGameDef *m_gamedef;

@@ -258,6 +258,8 @@ struct ContentFeatures
 	SimpleSoundSpec sound_dig;
 	SimpleSoundSpec sound_dug;
 
+	video::SColor color_avg; //far mesh average color
+
 	/*
 		Methods
 	*/
