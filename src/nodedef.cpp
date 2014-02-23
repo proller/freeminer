@@ -246,8 +246,6 @@ void ContentFeatures::reset()
 		circuit_element_states[i] = 0;
 	}
 	circuit_element_delay = 0;
-
-	color_avg = video::SColor(255,myrand_range(0,255),myrand_range(0,255),myrand_range(0,255));
 }
 
 void ContentFeatures::serialize(std::ostream &os, u16 protocol_version)
@@ -426,7 +424,9 @@ public:
 			f.diggable            = false;
 			f.buildable_to        = true;
 			f.is_ground_content   = true;
+#ifndef SERVER
 			f.color_avg = video::SColor(0,255,255,255);
+#endif
 			// Insert directly into containers
 			content_t c = CONTENT_AIR;
 			m_content_features[c] = f;
@@ -446,7 +446,9 @@ public:
 			f.diggable            = false;
 			f.buildable_to        = true; // A way to remove accidental CONTENT_IGNOREs
 			f.is_ground_content   = true;
+#ifndef SERVER
 			f.color_avg = video::SColor(0,255,255,255);
+#endif
 			// Insert directly into containers
 			content_t c = CONTENT_IGNORE;
 			m_content_features[c] = f;
@@ -651,6 +653,10 @@ public:
 		{
 			ContentFeatures *f = &m_content_features[i];
 
+			if (f->post_effect_color.getAlpha())
+				f->color_avg = f->post_effect_color; //remove
+			else
+				f->color_avg = video::SColor(255,myrand_range(0,255),myrand_range(0,255),myrand_range(0,255));
 			// Figure out the actual tiles to use
 			TileDef tiledef[6];
 			for(u32 j=0; j<6; j++)
