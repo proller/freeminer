@@ -653,10 +653,6 @@ public:
 		{
 			ContentFeatures *f = &m_content_features[i];
 
-			if (f->post_effect_color.getAlpha())
-				f->color_avg = f->post_effect_color; //remove
-			else
-				f->color_avg = video::SColor(255,myrand_range(0,255),myrand_range(0,255),myrand_range(0,255));
 			// Figure out the actual tiles to use
 			TileDef tiledef[6];
 			for(u32 j=0; j<6; j++)
@@ -784,6 +780,7 @@ public:
 					}
 				}
 			}
+			f->color_avg = tsrc->getTextureInfo(f->tiles[0].texture_id)->color; // TODO: make average
 			// Special tiles (fill in f->special_tiles[])
 			for(u16 j=0; j<CF_SPECIAL_COUNT; j++){
 				// Texture

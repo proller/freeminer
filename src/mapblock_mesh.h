@@ -123,7 +123,9 @@ public:
 
 	bool clearHardwareBuffer;
 
-	video::SColor color_avg;
+	//video::SColor color_avg;
+	bool transparent;
+	int range;
 
 private:
 	scene::SMesh *m_mesh;

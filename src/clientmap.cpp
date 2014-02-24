@@ -35,6 +35,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
+#define RANGE_OCCLUDED 6
+
 ClientMap::ClientMap(
 		Client *client,
 		IGameDef *gamedef,
@@ -128,7 +130,7 @@ void ClientMap::OnRegisterSceneNode()
 }
 
 static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
-		float start_off, float end_off, u32 needed_count, INodeDefManager *nodemgr)
+		float start_off, float end_off, u32 needed_count, INodeDefManager *nodemgr, int range)
 {
 	float d0 = (float)BS * p0.getDistanceFrom(p1);
 	v3s16 u0 = p1 - p0;
@@ -141,11 +143,15 @@ static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
 		v3s16 p = floatToInt(pf, BS);
 		MapNode n = map->getNodeNoEx(p);
 		bool is_transparent = false;
+		if(range<RANGE_OCCLUDED){
 		const ContentFeatures &f = nodemgr->get(n);
 		if(f.solidness == 0)
 			is_transparent = (f.visual_solidness != 2);
 		else
 			is_transparent = (f.solidness != 2);
+		} else {
+			is_transparent = (n.getContent() == CONTENT_IGNORE || n.getContent() == CONTENT_AIR);
+		}
 		if(!is_transparent){
 			count++;
 			if(count >= needed_count)
@@ -297,6 +303,9 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver)
 			}
 
 			v3s16 cpn = block->getPos() * MAP_BLOCKSIZE;
+
+			int cam_range_blocks = getNodeBlockPos(cam_pos_nodes).getDistanceFrom(block->getPos());
+
 			cpn += v3s16(MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2);
 			float step = BS*1;
 			float stepfac = 1.1;
@@ -308,23 +317,23 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver)
 			if(
 				occlusion_culling_enabled &&
 				isOccluded(this, spn, cpn + v3s16(0,0,0),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, cam_range_blocks) &&
 				isOccluded(this, spn, cpn + v3s16(bs2,bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, cam_range_blocks) &&
 				isOccluded(this, spn, cpn + v3s16(bs2,bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, cam_range_blocks) &&
 				isOccluded(this, spn, cpn + v3s16(bs2,-bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, cam_range_blocks) &&
 				isOccluded(this, spn, cpn + v3s16(bs2,-bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, cam_range_blocks) &&
 				isOccluded(this, spn, cpn + v3s16(-bs2,bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, cam_range_blocks) &&
 				isOccluded(this, spn, cpn + v3s16(-bs2,bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, cam_range_blocks) &&
 				isOccluded(this, spn, cpn + v3s16(-bs2,-bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, cam_range_blocks) &&
 				isOccluded(this, spn, cpn + v3s16(-bs2,-bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr)
+					step, stepfac, startoff, endoff, needed_count, nodemgr, cam_range_blocks)
 			)
 			{
 				blocks_occlusion_culled++;

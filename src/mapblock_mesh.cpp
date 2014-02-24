@@ -1039,15 +1039,15 @@ static void updateAllFastFaceRows(MeshMakeData *data,
 }
 
 
-static void mapblock_farmesh(MeshMakeData *data, scene::SMesh * m_mesh) {
+static void mapblock_farmesh(MapBlockMesh * mesh, MeshMakeData *data, scene::SMesh * m_mesh) {
         //return;
 //MapBlock *block = data->m_env.getMap().getBlockNoCreateNoEx(r.p);
 
 	video::SColor c = video::SColor(0,255,255,255);
-{
 	VoxelManipulator &vmanip = data->m_vmanip;
 	INodeDefManager *ndef = data->m_gamedef->ndef();
 	v3s16 blockpos_nodes = data->m_blockpos * MAP_BLOCKSIZE;
+	{
 		bool full_ignore = true;
 		bool some_ignore = false;
 		bool full_air = true;
@@ -1069,13 +1069,17 @@ static void mapblock_farmesh(MeshMakeData *data, scene::SMesh * m_mesh) {
 				some_air = true;
 			else
 				full_air = false;
-			if (ct != CONTENT_IGNORE && ct != CONTENT_AIR)
+			if (ct != CONTENT_IGNORE && ct != CONTENT_AIR) {
+				//c = data->m_gamedef->tsrc()->getTextureInfo(ndef->get(n).tiles[0].texture_id)->color;
 				c = f.color_avg;
+				// TODO: calculate avg here
+			}
 		}
-	if (full_ignore || full_air)
-		return;
+		if (full_ignore || full_air){
+			mesh->transparent = 1;
+			return;
+		}
 	}
-
 
 	video::S3DVertex vertices[24] =
 	{
@@ -1121,9 +1125,10 @@ static void mapblock_farmesh(MeshMakeData *data, scene::SMesh * m_mesh) {
 	//scaleMesh(buf, scale);  // also recalculates bounding box
 		// Set default material
 		buf->getMaterial().setFlag(video::EMF_LIGHTING, false);
-		buf->getMaterial().setFlag(video::EMF_BILINEAR_FILTER, false);
+		//buf->getMaterial().setFlag(video::EMF_BILINEAR_FILTER, false);
 		//buf->getMaterial().MaterialType = video::EMT_TRANSPARENT_ALPHA_CHANNEL_REF;
 		buf->getMaterial().setFlag(video::EMF_FOG_ENABLE, true);
+		buf->getMaterial().setFlag(video::EMF_BACK_FACE_CULLING, true);
 		buf->getMaterial().MaterialType = video::EMT_TRANSPARENT_ALPHA_CHANNEL;
 		//buf->getMaterial().MaterialType = video::EMT_SOLID;
 		// Add mesh buffer to mesh
@@ -1151,6 +1156,8 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 	m_last_daynight_ratio((u32) -1),
 	m_daynight_diffs(),
 	m_usage_timer(0)
+	,transparent(false)
+	,range(data->range)
 {
 	// 4-21ms for MAP_BLOCKSIZE=16  (NOTE: probably outdated)
 	// 24-155ms for MAP_BLOCKSIZE=32  (NOTE: probably outdated)
@@ -1159,7 +1166,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 	std::vector<FastFace> fastfaces_new;
 
 	if (data->range > RANGE_FAR) {
-		mapblock_farmesh(data, m_mesh);
+		mapblock_farmesh(this, data, m_mesh);
 	} else {
 
 	/*
