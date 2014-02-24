@@ -304,7 +304,11 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver)
 
 			int cam_range_blocks = getNodeBlockPos(cam_pos_nodes).getDistanceFrom(block->getPos());
 
-			if ((cam_range_blocks != block->mesh->range) && (cam_range_blocks <= RANGE_MAX || block->mesh->range <= RANGE_MAX) && (cam_range_blocks >= RANGE_MIN || block->mesh->range >= RANGE_MIN)) {
+			if (cam_range_blocks != block->mesh->range
+				&& (cam_range_blocks <= RANGE_MAX || block->mesh->range <= RANGE_MAX)
+				&& (cam_range_blocks >= RANGE_MIN || block->mesh->range >= RANGE_MIN)
+				&& !block->mesh->transparent
+			) {
 				m_client->addUpdateMeshTask(block->getPos(), false, true);
 			}
 
