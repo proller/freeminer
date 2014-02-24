@@ -35,8 +35,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
-#define RANGE_OCCLUDED 6
-
 ClientMap::ClientMap(
 		Client *client,
 		IGameDef *gamedef,
@@ -305,6 +303,10 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver)
 			v3s16 cpn = block->getPos() * MAP_BLOCKSIZE;
 
 			int cam_range_blocks = getNodeBlockPos(cam_pos_nodes).getDistanceFrom(block->getPos());
+
+			if ((cam_range_blocks != block->mesh->range) && (cam_range_blocks <= RANGE_MAX || block->mesh->range <= RANGE_MAX) && (cam_range_blocks >= RANGE_MIN || block->mesh->range >= RANGE_MIN)) {
+				m_client->addUpdateMeshTask(block->getPos(), false, true);
+			}
 
 			cpn += v3s16(MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2);
 			float step = BS*1;

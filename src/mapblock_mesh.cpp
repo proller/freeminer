@@ -32,12 +32,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "settings.h"
 #include "util/directiontables.h"
 
-#define RANGE_SPECIAL 2
-#define RANGE_SHADERS 5
-#define RANGE_L1 3
-#define RANGE_FAR 4
-
-
 float srgb_linear_multiply(float f, float m, float max)
 {
 	f = f * f; // SRGB -> Linear
