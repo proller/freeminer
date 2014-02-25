@@ -1072,6 +1072,8 @@ static void mapblock_farmesh(MapBlockMesh * mesh, MeshMakeData *data, scene::SMe
 		if (full_ignore || full_air){
 			mesh->transparent = 1;
 			return;
+		} else if(!some_ignore && !some_air) {
+			mesh->solid = 1;
 		}
 	}
 
@@ -1151,6 +1153,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 	m_daynight_diffs(),
 	m_usage_timer(0)
 	,transparent(false)
+	,solid(false)
 	,range(data->range)
 {
 	// 4-21ms for MAP_BLOCKSIZE=16  (NOTE: probably outdated)

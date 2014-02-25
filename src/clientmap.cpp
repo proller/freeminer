@@ -286,6 +286,9 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver)
 				}
 			}
 
+			if(block->mesh->transparent) {
+				continue;
+			}
 			/*
 				Occlusion culling
 			*/
@@ -303,6 +306,22 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver)
 			v3s16 cpn = block->getPos() * MAP_BLOCKSIZE;
 
 			int cam_range_blocks = getNodeBlockPos(cam_pos_nodes).getDistanceFrom(block->getPos());
+
+/* todo
+MapBlock *b;
+if (block->mesh->solid)
+if ((b = this->getBlockNoCreateNoEx((block->getPos()+v3s16(1,0,0))  *MAP_BLOCKSIZE)) && b->mesh && b->mesh->solid)
+if ((b = this->getBlockNoCreateNoEx((block->getPos()+v3s16(-1,0,0)) *MAP_BLOCKSIZE)) && b->mesh && b->mesh->solid)
+if ((b = this->getBlockNoCreateNoEx((block->getPos()+v3s16(0,1,0))  *MAP_BLOCKSIZE)) && b->mesh && b->mesh->solid)
+if ((b = this->getBlockNoCreateNoEx((block->getPos()+v3s16(0,-1,0)) *MAP_BLOCKSIZE)) && b->mesh && b->mesh->solid)
+if ((b = this->getBlockNoCreateNoEx((block->getPos()+v3s16(0,0,1))  *MAP_BLOCKSIZE)) && b->mesh && b->mesh->solid)
+if ((b = this->getBlockNoCreateNoEx((block->getPos()+v3s16(0,0,-1)) *MAP_BLOCKSIZE)) && b->mesh && b->mesh->solid)
+{
+errorstream<<"skip solid"<<std::endl;
+			return;
+}
+*/
+
 
 			if (cam_range_blocks != block->mesh->range
 				&& (cam_range_blocks <= RANGE_MAX || block->mesh->range <= RANGE_MAX)

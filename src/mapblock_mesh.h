@@ -134,6 +134,7 @@ public:
 
 	//video::SColor color_avg;
 	bool transparent;
+	bool solid;
 	int range;
 
 private:
