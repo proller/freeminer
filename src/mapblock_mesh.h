@@ -33,6 +33,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define RANGE_L1 3
 #define RANGE_FAR 50
 #define RANGE_OCCLUDED 6 // clientmap.cpp
+#define RANGE_ANIMATION 2
 #define RANGE_MAX 7 //maximum farmesh effect at
 #define RANGE_MIN 2 //minimum ..
 

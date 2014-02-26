@@ -141,15 +141,15 @@ static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
 		v3s16 p = floatToInt(pf, BS);
 		MapNode n = map->getNodeNoEx(p);
 		bool is_transparent = false;
-		if(range<RANGE_OCCLUDED){
+		//if(range<RANGE_OCCLUDED){
 		const ContentFeatures &f = nodemgr->get(n);
 		if(f.solidness == 0)
 			is_transparent = (f.visual_solidness != 2);
 		else
 			is_transparent = (f.solidness != 2);
-		} else {
-			is_transparent = (n.getContent() == CONTENT_IGNORE || n.getContent() == CONTENT_AIR);
-		}
+		//} else {
+		//	is_transparent = (n.getContent() == CONTENT_IGNORE || n.getContent() == CONTENT_AIR);
+		//}
 		if(!is_transparent){
 			count++;
 			if(count >= needed_count)

@@ -452,6 +452,9 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 
 	// Position is at the center of the cube.
 	v3f pos = p * BS;
+	//v3f pos = (p+(step>1?step)) * BS;
+	//if (step>1)	pos-=step*BS/2- BS - BS/2;
+	if (step>1)	pos-=step*BS/2- BS;
 
 	float x0 = 0.0;
 	float y0 = 0.0;
@@ -464,9 +467,11 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 
 	v3s16 t;
 	u16 t1;
+	bool step_scale = 0;
 	switch (tile.rotation)
 	{
 	case 0:
+//step_scale = 1;
 		break;
 	case 1: //R90
 		t = vertex_dirs[0];
@@ -479,6 +484,7 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 		li3=li2;
 		li2=li1;
 		li1=t1;
+//step_scale = 1;
 		break;
 	case 2: //R180
 		t = vertex_dirs[0];
@@ -493,6 +499,7 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 		t1  = li1;
 		li1 = li3;
 		li3 = t1;
+//step_scale = 1;
 		break;
 	case 3: //R270
 		t = vertex_dirs[0];
@@ -505,6 +512,7 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 		li1 = li2;
 		li2 = li3;
 		li3 = t1;
+//step_scale = 1;
 		break;
 	case 4: //FXR90
 		t = vertex_dirs[0];
@@ -533,6 +541,7 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 		li3 = t1;
 		y0 += h;
 		h *= -1;
+//step_scale = 1;
 		break;
 	case 6: //FYR90
 		t = vertex_dirs[0];
@@ -547,6 +556,7 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 		li1 = t1;
 		x0 += w;
 		w *= -1;
+//step_scale = 1;
 		break;
 	case 7: //FYR270
 		t = vertex_dirs[0];
@@ -561,14 +571,17 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 		li3 = t1;
 		x0 += w;
 		w *= -1;
+//step_scale = 1;
 		break;
 	case 8: //FX
 		y0 += h;
 		h *= -1;
+//step_scale = 1;
 		break;
 	case 9: //FY
 		x0 += w;
 		w *= -1;
+//step_scale = 1;
 		break;
 	default:
 		break;
@@ -585,9 +598,11 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 
 	for(u16 i=0; i<4; i++)
 	{
-		vertex_pos[i].X *= scale.X * step;
-		vertex_pos[i].Y *= scale.Y * step;
-		vertex_pos[i].Z *= scale.Z * step;
+		//if (step_scale)
+			vertex_pos[i] *= step;
+		vertex_pos[i].X *= scale.X ;
+		vertex_pos[i].Y *= scale.Y ;
+		vertex_pos[i].Z *= scale.Z ;
 		vertex_pos[i] += pos;
 	}
 
@@ -635,10 +650,12 @@ static u8 face_contents(MeshMakeData *data, content_t m1, content_t m2, bool *eq
 	if(m1 == CONTENT_IGNORE || m2 == CONTENT_IGNORE)
 		return 0;
 	
+/*
 	if (data->range > RANGE_L1 && m1 != CONTENT_AIR && m2 != CONTENT_AIR) {
 		*equivalent = true;
 		return 0;
 	}
+*/
 
 	bool contents_differ = (m1 != m2);
 	
@@ -649,8 +666,12 @@ static u8 face_contents(MeshMakeData *data, content_t m1, content_t m2, bool *eq
 	if(f1.sameLiquid(f2))
 		contents_differ = false;
 	
+/*
 	u8 c1 = (data->range > RANGE_SPECIAL && f1.drawtype != NDT_AIRLIKE) ? 2 : f1.solidness;
 	u8 c2 = (data->range > RANGE_SPECIAL && f2.drawtype != NDT_AIRLIKE) ? 2 : f2.solidness;
+*/
+	u8 c1 = f1.solidness;
+	u8 c2 = f2.solidness;
 
 	bool solidness_differs = (c1 != c2);
 	bool makes_face = contents_differ && solidness_differs;
@@ -866,6 +887,7 @@ static void updateFastFaceRow(
 			lights, tile, light_source, step);
 
 	translate_dir*=step;
+	translate_dir_f*=step;
 
 	for(u16 j=0; j<MAP_BLOCKSIZE; j+=step)
 	{
@@ -883,7 +905,9 @@ static void updateFastFaceRow(
 		
 		// If at last position, there is nothing to compare to and
 		// the face must be drawn anyway
+//		if(j != MAP_BLOCKSIZE - 1)
 		if(j != MAP_BLOCKSIZE - step)
+//		if(j < MAP_BLOCKSIZE - step || step == MAP_BLOCKSIZE)
 		{
 			p_next = p + translate_dir;
 			
@@ -943,6 +967,7 @@ static void updateFastFaceRow(
 				v3f pf(p_corrected.X, p_corrected.Y, p_corrected.Z);
 				// Center point of face (kind of)
 				v3f sp = pf - ((f32)continuous_tiles_count / 2. - 0.5) * translate_dir_f;
+				//v3f sp = pf - ((f32)continuous_tiles_count / 2. - (f32)step/2) * translate_dir_f;
 				if(continuous_tiles_count != 1)
 					sp += translate_dir_f;
 				v3f scale(1,1,1);
@@ -1183,6 +1208,9 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 	else if (data->range > RANGE_LOD+2) step = 8;
 	else if (data->range > RANGE_LOD+1) step = 4;
 	else if (data->range > RANGE_LOD) step = 2;
+
+	//test if (data->range > RANGE_LOD) step = 16;
+
 	{
 		// 4-23ms for MAP_BLOCKSIZE=16  (NOTE: probably outdated)
 		//TimeTaker timer2("updateAllFastFaceRows()");
@@ -1270,7 +1298,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 				<<", p.indices.size()="<<p.indices.size()
 				<<std::endl;*/
 
-		if (1 || step <= 1) {
+		if (step <= RANGE_ANIMATION) {
 		// Generate animation data
 		// - Cracks
 		if(p.tile.material_flags & MATERIAL_FLAG_CRACK)
@@ -1312,6 +1340,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 					os.str(),
 					&p.tile.texture_id);
 		}
+		}
 		// - Classic lighting (shaders handle this by themselves)
 		if(!enable_shaders)
 		{
@@ -1339,7 +1368,6 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 					vc.setBlue (srgb_linear_multiply(vc.getBlue(),  1.3, 255.0));
 				}
 			}
-		}
 		}
 		// Create material
 		video::SMaterial material;
