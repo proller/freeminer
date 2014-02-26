@@ -26,12 +26,14 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <map>
 
 // all values in 16x16x16 blocks
-#define RANGE_SPECIAL 2
+#define RANGE_LOD 2 //minimum ..
+
+#define RANGE_SPECIAL RANGE_LOD
 #define RANGE_SHADERS 5
 #define RANGE_L1 3
-#define RANGE_FAR 5
+#define RANGE_FAR 50
 #define RANGE_OCCLUDED 6 // clientmap.cpp
-#define RANGE_MAX 6 //maximum farmesh effect at
+#define RANGE_MAX 7 //maximum farmesh effect at
 #define RANGE_MIN 2 //minimum ..
 
 class IGameDef;

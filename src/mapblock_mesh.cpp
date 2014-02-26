@@ -446,7 +446,7 @@ struct FastFace
 };
 
 static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
-		v3f p, v3s16 dir, v3f scale, u8 light_source, std::vector<FastFace> &dest)
+		v3f p, v3s16 dir, v3f scale, u8 light_source, std::vector<FastFace> &dest, int step)
 {
 	FastFace face;
 
@@ -585,9 +585,9 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 
 	for(u16 i=0; i<4; i++)
 	{
-		vertex_pos[i].X *= scale.X;
-		vertex_pos[i].Y *= scale.Y;
-		vertex_pos[i].Z *= scale.Z;
+		vertex_pos[i].X *= scale.X * step;
+		vertex_pos[i].Y *= scale.Y * step;
+		vertex_pos[i].Z *= scale.Z * step;
 		vertex_pos[i] += pos;
 	}
 
@@ -772,6 +772,7 @@ static void getTileInfo(
 		u16 *lights,
 		TileSpec &tile,
 		u8 &light_source
+		,int step
 	)
 {
 	VoxelManipulator &vmanip = data->m_vmanip;
@@ -779,7 +780,7 @@ static void getTileInfo(
 	v3s16 blockpos_nodes = data->m_blockpos * MAP_BLOCKSIZE;
 
 	MapNode n0 = vmanip.getNodeNoEx(blockpos_nodes + p);
-	MapNode n1 = vmanip.getNodeNoEx(blockpos_nodes + p + face_dir);
+	MapNode n1 = vmanip.getNodeNoEx(blockpos_nodes + p + face_dir*step);
 	TileSpec tile0 = getNodeTile(n0, p, face_dir, data);
 	TileSpec tile1 = getNodeTile(n1, p + face_dir, -face_dir, data);
 	
@@ -847,7 +848,8 @@ static void updateFastFaceRow(
 		v3f translate_dir_f,
 		v3s16 face_dir,
 		v3f face_dir_f,
-		std::vector<FastFace> &dest)
+		std::vector<FastFace> &dest,
+		int step)
 {
 	v3s16 p = startpos;
 	
@@ -861,9 +863,11 @@ static void updateFastFaceRow(
 	u8 light_source = 0;
 	getTileInfo(data, p, face_dir, 
 			makes_face, p_corrected, face_dir_corrected,
-			lights, tile, light_source);
+			lights, tile, light_source, step);
 
-	for(u16 j=0; j<MAP_BLOCKSIZE; j++)
+	translate_dir*=step;
+
+	for(u16 j=0; j<MAP_BLOCKSIZE; j+=step)
 	{
 		// If tiling can be done, this is set to false in the next step
 		bool next_is_different = true;
@@ -879,14 +883,14 @@ static void updateFastFaceRow(
 		
 		// If at last position, there is nothing to compare to and
 		// the face must be drawn anyway
-		if(j != MAP_BLOCKSIZE - 1)
+		if(j != MAP_BLOCKSIZE - step)
 		{
 			p_next = p + translate_dir;
 			
 			getTileInfo(data, p_next, face_dir,
 					next_makes_face, next_p_corrected,
 					next_face_dir_corrected, next_lights,
-					next_tile, next_light_source);
+					next_tile, next_light_source, step);
 			
 			if(next_makes_face == makes_face
 					&& next_p_corrected == p_corrected + translate_dir
@@ -955,10 +959,11 @@ static void updateFastFaceRow(
 				{
 					scale.Z = continuous_tiles_count;
 				}
+				//scale *= step;
 				
 				makeFastFace(tile, lights[0], lights[1], lights[2], lights[3],
 						sp, face_dir_corrected, scale, light_source,
-						dest);
+						dest, step);
 				
 				g_profiler->avg("Meshgen: faces drawn by tiling", 0);
 				for(int i=1; i<continuous_tiles_count; i++){
@@ -984,50 +989,50 @@ static void updateFastFaceRow(
 }
 
 static void updateAllFastFaceRows(MeshMakeData *data,
-		std::vector<FastFace> &dest)
+		std::vector<FastFace> &dest, int step)
 {
 	/*
 		Go through every y,z and get top(y+) faces in rows of x+
 	*/
-	for(s16 y=0; y<MAP_BLOCKSIZE; y++){
-		for(s16 z=0; z<MAP_BLOCKSIZE; z++){
+	for(s16 y=0; y<MAP_BLOCKSIZE; y+=step){
+		for(s16 z=0; z<MAP_BLOCKSIZE; z+=step){
 			updateFastFaceRow(data,
 					v3s16(0,y,z),
 					v3s16(1,0,0), //dir
 					v3f  (1,0,0),
 					v3s16(0,1,0), //face dir
 					v3f  (0,1,0),
-					dest);
+					dest, step);
 		}
 	}
 
 	/*
 		Go through every x,y and get right(x+) faces in rows of z+
 	*/
-	for(s16 x=0; x<MAP_BLOCKSIZE; x++){
-		for(s16 y=0; y<MAP_BLOCKSIZE; y++){
+	for(s16 x=0; x<MAP_BLOCKSIZE; x+=step){
+		for(s16 y=0; y<MAP_BLOCKSIZE; y+=step){
 			updateFastFaceRow(data,
 					v3s16(x,y,0),
 					v3s16(0,0,1), //dir
 					v3f  (0,0,1),
 					v3s16(1,0,0), //face dir
 					v3f  (1,0,0),
-					dest);
+					dest, step);
 		}
 	}
 
 	/*
 		Go through every y,z and get back(z+) faces in rows of x+
 	*/
-	for(s16 z=0; z<MAP_BLOCKSIZE; z++){
-		for(s16 y=0; y<MAP_BLOCKSIZE; y++){
+	for(s16 z=0; z<MAP_BLOCKSIZE; z+=step){
+		for(s16 y=0; y<MAP_BLOCKSIZE; y+=step){
 			updateFastFaceRow(data,
 					v3s16(0,y,z),
 					v3s16(1,0,0), //dir
 					v3f  (1,0,0),
 					v3s16(0,0,1), //face dir
 					v3f  (0,0,1),
-					dest);
+					dest, step);
 		}
 	}
 }
@@ -1162,7 +1167,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 
 	std::vector<FastFace> fastfaces_new;
 
-	if (data->range > RANGE_FAR) {
+	if (0 && data->range > RANGE_FAR) {
 		mapblock_farmesh(this, data, m_mesh);
 	} else {
 
@@ -1173,10 +1178,15 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 
 		NOTE: This is the slowest part of this method.
 	*/
+	int step = 1; // todo dynamic range, from FPS
+	if		(data->range > RANGE_LOD+3) step = 16;
+	else if (data->range > RANGE_LOD+2) step = 8;
+	else if (data->range > RANGE_LOD+1) step = 4;
+	else if (data->range > RANGE_LOD) step = 2;
 	{
 		// 4-23ms for MAP_BLOCKSIZE=16  (NOTE: probably outdated)
 		//TimeTaker timer2("updateAllFastFaceRows()");
-		updateAllFastFaceRows(data, fastfaces_new);
+		updateAllFastFaceRows(data, fastfaces_new, step);
 	}
 	// End of slow part
 
@@ -1224,7 +1234,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 		- whatever
 	*/
 
-	if(data->range<=RANGE_SPECIAL)
+	if(data->range<=RANGE_SPECIAL || step <= 1)
 	mapblock_mesh_generate_special(data, collector);
 	
 
@@ -1235,7 +1245,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 	bool enable_bumpmapping = g_settings->getBool("enable_bumpmapping");
 	bool enable_parallax_occlusion = g_settings->getBool("enable_parallax_occlusion");
 
-	if (data->range > RANGE_SHADERS)
+	if (data->range > RANGE_SHADERS || step > 1)
 		enable_shaders = enable_bumpmapping = enable_parallax_occlusion = 0;
 
 	video::E_MATERIAL_TYPE  shadermat1, shadermat2, shadermat3,
@@ -1254,11 +1264,13 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 
 	for(u32 i = 0; i < collector.prebuffers.size(); i++)
 	{
+
 		PreMeshBuffer &p = collector.prebuffers[i];
 		/*dstream<<"p.vertices.size()="<<p.vertices.size()
 				<<", p.indices.size()="<<p.indices.size()
 				<<std::endl;*/
 
+		if (1 || step <= 1) {
 		// Generate animation data
 		// - Cracks
 		if(p.tile.material_flags & MATERIAL_FLAG_CRACK)
@@ -1328,7 +1340,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 				}
 			}
 		}
-
+		}
 		// Create material
 		video::SMaterial material;
 		material.setFlag(video::EMF_LIGHTING, false);
