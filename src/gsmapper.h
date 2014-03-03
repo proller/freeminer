@@ -39,9 +39,11 @@ class gsMapper
 		video::ITexture* d_pmarker;
 		ITextureSource *d_tsrc;
 		LocalPlayer* d_player;
-		std::map<v3s16, u8> d_map;
-		std::map<v3s16, u8> d_radar;
-		std::map<std::string, u8> d_nodeids;
+		//std::map<v3s16, u8> d_map;
+		std::map<v3s16, video::SColor> d_map_color;
+		//std::map<v3s16, u8> d_radar;
+		std::map<v3s16, video::SColor> d_radar_color;
+		//std::map<std::string, u8> d_nodeids;
 		std::vector<video::SColor> d_colorids;
 		v3s16 d_origin;
 		u16 d_posx;

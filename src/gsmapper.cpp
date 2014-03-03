@@ -34,14 +34,15 @@ gsMapper::gsMapper(IrrlichtDevice *device, Client *client):
 {
 	// note: max = 255, alpha values are ignored
 	d_colorids.clear();
-	d_nodeids.clear();
+//	d_nodeids.clear();
 
 	d_colorids.push_back(video::SColor(0,0,0,0));		// 0 = background
-	d_nodeids["air"] = 0;
+//	d_nodeids["air"] = 0;
 	d_colorids.push_back(video::SColor(0,99,99,99));	// 1 = mystery node
-	d_nodeids["unknown"] = 1;
+//	d_nodeids["unknown"] = 1;
 	d_colorids.push_back(video::SColor(0,32,32,192));	// 2+ = standard nodes
-	d_nodeids["default:water_source"] = 2;
+//	d_nodeids["default:water_source"] = 2;
+/*
 	d_colorids.push_back(video::SColor(0,64,64,224));
 	d_nodeids["default:water_flowing"] = 3;
 	d_colorids.push_back(video::SColor(0,32,128,16));
@@ -68,13 +69,16 @@ gsMapper::gsMapper(IrrlichtDevice *device, Client *client):
 	d_nodeids["default:jungletree"] = 14;
 	d_colorids.push_back(video::SColor(0,32,64,0));
 	d_nodeids["default:junglewood"] = 15;
+*/
 
 	d_valid = false;
 	d_hastex = false;
 	d_hasptex = false;
 	d_cooldown = 0;
-	d_map.clear();
-	d_radar.clear();
+	//d_map.clear();
+	d_map_color.clear();
+	//d_radar.clear();
+	d_radar_color.clear();
 
 	d_tsrc = d_client->getTextureSource();
 	d_player = d_client->getEnv().getLocalPlayer();
@@ -239,24 +243,24 @@ void gsMapper::drawMap(v3s16 position)
 					{
 						MapNode n = map.getNodeNoEx(p);
 						p.Y--;
-						if (n.param0 != CONTENT_IGNORE && n.param0 != CONTENT_AIR)
+						if (n.getContent() != CONTENT_IGNORE && n.getContent() != CONTENT_AIR)
 						{
 							const ContentFeatures &f = d_client->getNodeDefManager()->get(n);
 							b = false;
-							std::string name = f.name;
-							std::map<std::string, u8>::iterator i1 = d_nodeids.find(name);
+							//std::string name = f.name;
+							//std::map<std::string, u8>::iterator i1 = d_nodeids.find(name);
 							p.Y = d_surface;
 	
-							u8 id = 1;	// unknown
-							if (i1 != d_nodeids.end()) id = d_nodeids[name];
+							//u8 id = 1;	// unknown
+							//if (i1 != d_nodeids.end()) id = d_nodeids[name];
 	
 							// check to see if this node is different from the map
-							std::map<v3s16, u8>::iterator i2 = d_map.find(p);
-							if ( i2 == d_map.end() ||
-								(i2 != d_map.end() && id != d_map[p]) )
+							std::map<v3s16, video::SColor>::iterator i2 = d_map_color.find(p);
+							if ( i2 == d_map_color.end() ||
+								(i2 != d_map_color.end() && f.color_avg != d_map_color[p]) )
 							{
 								hasChanged = true;
-								d_map[p] = id;	// change it
+								d_map_color[p] = f.color_avg;	// change it
 							}
 						}
 					}
@@ -267,7 +271,7 @@ void gsMapper::drawMap(v3s16 position)
 				p.Y = position.Y;
 				s16 y2 = position.Y;
 				MapNode n = map.getNodeNoEx(p);
-				bool w = (n.param0 != CONTENT_IGNORE && n.param0 != CONTENT_AIR);
+				bool w = (n.getContent() != CONTENT_IGNORE && n.getContent() != CONTENT_AIR);
 				int count = 0;
 				u8 id = 0;
 				while (b && id == 0)
@@ -276,23 +280,25 @@ void gsMapper::drawMap(v3s16 position)
 					{
 						p.Y++;
 						n = map.getNodeNoEx(p);
-						if (n.param0 == CONTENT_AIR) id = 1;
+						if (n.getContent() == CONTENT_AIR) id = 1;
 
 					} else {	// not wall = scan down for non-air
 						p.Y--;
 						n = map.getNodeNoEx(p);
-						if (n.param0 != CONTENT_IGNORE && n.param0 != CONTENT_AIR)
+						if (n.getContent() != CONTENT_IGNORE && n.getContent() != CONTENT_AIR)
 						{
 							y2 = p.Y;
 							id = 1;
 						}
 					}
-					if (id == 0 && n.param0 != CONTENT_IGNORE) y2 = p.Y;
+					if (id == 0 && n.getContent() != CONTENT_IGNORE) y2 = p.Y;
 					if (count++ >= (d_scan / 8)) b = false;
 				}
 
 				p.Y = y2;
 				n = map.getNodeNoEx(p);
+				const ContentFeatures &f = d_client->getNodeDefManager()->get(n);
+/*
 				u8 id2 = 1;
 				if (n.param0 != CONTENT_IGNORE && n.param0 != CONTENT_AIR)
 				{
@@ -301,21 +307,21 @@ void gsMapper::drawMap(v3s16 position)
 					std::map<std::string, u8>::iterator i4 = d_nodeids.find(name);
 					if (i4 != d_nodeids.end()) id2 = d_nodeids[name];
 				}
-
 				// check for under water
 				if (id == 0 && w) {
 					if (id2 == 2) id = 2;
 				}
 
 				if (id == 1) id = id2;	// found something
-
+*/
 				p.Y = d_surface;		// the data is always flat
-				std::map<v3s16, u8>::iterator i5 = d_radar.find(p);
-				if ( i5 == d_radar.end() ||
-					(i5 != d_radar.end() && id != d_radar[p]) )
+				std::map<v3s16, video::SColor>::iterator i5 = d_radar_color.find(p);
+				if ( i5 == d_radar_color.end() ||
+					(i5 != d_radar_color.end() && f.color_avg != d_radar_color[p]) )
 				{
 					hasChanged = true;
-					d_radar[p] = id;	// change it
+					//d_radar[p] = id;	// change it
+					d_radar_color[p] = f.color_avg;
 				}
 			}
 			x++;
@@ -349,17 +355,18 @@ void gsMapper::drawMap(v3s16 position)
 				p.Y = d_surface;
 				p.Z = d_origin.Z + z;
 
-				u8 i = 0;
+				//u8 i = 0;
+				video::SColor c;
 				if (d_above)
 				{
-					std::map<v3s16, u8>::iterator i3 = d_map.find(p);
-					if (i3 != d_map.end()) i = d_map[p];
+					std::map<v3s16, video::SColor>::iterator i3 = d_map_color.find(p);
+					if (i3 != d_map_color.end()) c = d_map_color[p];
 				} else {
-					std::map<v3s16, u8>::iterator i6 = d_radar.find(p);
-					if (i6 != d_radar.end()) i = d_radar[p];
+					std::map<v3s16, video::SColor>::iterator i6 = d_radar_color.find(p);
+					if (i6 != d_radar_color.end()) c = d_radar_color[p];
 				}
 
-				video::SColor c = d_colorids[i];
+				//video::SColor c = d_colorids[i];
 				c.setAlpha(d_alpha);
 				image->setPixel(x, nheight - z - 1, c);
 			}
