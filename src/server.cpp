@@ -4275,7 +4275,22 @@ void Server::DenyAccess(u16 peer_id, const std::wstring &reason)
 
 	SendAccessDenied(peer_id, reason);
 	m_clients.event(peer_id,SetDenied);
+
+	// == not needed in new connection
+	// If there are way too many clients, get rid of denied new ones immediately
+	if((int)m_clients.getClientList().size() > 2 * g_settings->getU16("max_users")){
+		verbosestream<<"Server: DenyAccess: Too many clients; getting rid of "
+					<<"peer_id="<<peer_id<<" immediately"<<std::endl;
+			// Delete peer to stop sending it data
+			m_con.DeletePeer(peer_id);
+			// Delete client also to stop block sends and other stuff
+			DeleteClient(peer_id, CDR_DENY);
+	}
+	// == cut here
+
+/* used in new connection.
 	m_con.DisconnectPeer(peer_id);
+*/
 }
 
 void Server::DeleteClient(u16 peer_id, ClientDeletionReason reason)

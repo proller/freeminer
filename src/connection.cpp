@@ -631,8 +631,8 @@ void Connection::processCommand(ConnectionCommand &c)
 		return;
 	case CONNCMD_SERVE:
 		dout_con<<getDesc()<<" processing CONNCMD_SERVE port="
-				<<c.port<<std::endl;
-		serve(c.port);
+				<<c.address.serializeString()<<std::endl;
+		serve(c.address);
 		return;
 	case CONNCMD_CONNECT:
 		dout_con<<getDesc()<<" processing CONNCMD_CONNECT"<<std::endl;
@@ -1078,11 +1078,12 @@ nextpeer:
 	}
 }
 
-void Connection::serve(u16 port)
+void Connection::serve(Address bind_address)
 {
-	dout_con<<getDesc()<<" serving at port "<<port<<std::endl;
+	dout_con<<getDesc()<<"UDP serving at port "<<bind_address.serializeString()<<std::endl;
+
 	try{
-		m_socket.Bind(port);
+		m_socket.Bind(bind_address);
 		m_peer_id = PEER_ID_SERVER;
 	}
 	catch(SocketException &e){
@@ -1111,7 +1112,13 @@ void Connection::connect(Address address)
 	e.peerAdded(peer->id, peer->address);
 	putEvent(e);
 	
-	m_socket.Bind(0);
+
+	Address bind_addr;
+	if (address.isIPv6())
+		bind_addr.setAddress((IPv6AddressBytes*) NULL);
+	else
+		bind_addr.setAddress(0,0,0,0);
+	m_socket.Bind(bind_addr);
 	
 	// Send a dummy packet to server with peer_id = PEER_ID_INEXISTENT
 	m_peer_id = PEER_ID_INEXISTENT;
@@ -1635,10 +1642,10 @@ void Connection::putCommand(ConnectionCommand &c)
 	m_command_queue.push_back(c);
 }
 
-void Connection::Serve(unsigned short port)
+void Connection::Serve(Address bind_addr)
 {
 	ConnectionCommand c;
-	c.serve(port);
+	c.serve(bind_addr);
 	putCommand(c);
 }
 
