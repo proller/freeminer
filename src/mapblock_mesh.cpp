@@ -454,7 +454,10 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 	v3f pos = p * BS;
 	//v3f pos = (p+(step>1?step)) * BS;
 	//if (step>1)	pos-=step*BS/2- BS - BS/2;
-	if (step>1)	pos-=step*BS/2- BS;
+	//good 
+	//if (step>1)	pos-=step*BS/2- BS;
+	//if (step>1)	
+	//pos-=(step-1)*BS/2;//-(step>1?BS:0);
 
 	float x0 = 0.0;
 	float y0 = 0.0;
@@ -467,11 +470,9 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 
 	v3s16 t;
 	u16 t1;
-	bool step_scale = 0;
 	switch (tile.rotation)
 	{
 	case 0:
-//step_scale = 1;
 		break;
 	case 1: //R90
 		t = vertex_dirs[0];
@@ -484,7 +485,6 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 		li3=li2;
 		li2=li1;
 		li1=t1;
-//step_scale = 1;
 		break;
 	case 2: //R180
 		t = vertex_dirs[0];
@@ -499,7 +499,6 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 		t1  = li1;
 		li1 = li3;
 		li3 = t1;
-//step_scale = 1;
 		break;
 	case 3: //R270
 		t = vertex_dirs[0];
@@ -512,7 +511,6 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 		li1 = li2;
 		li2 = li3;
 		li3 = t1;
-//step_scale = 1;
 		break;
 	case 4: //FXR90
 		t = vertex_dirs[0];
@@ -541,7 +539,6 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 		li3 = t1;
 		y0 += h;
 		h *= -1;
-//step_scale = 1;
 		break;
 	case 6: //FYR90
 		t = vertex_dirs[0];
@@ -556,7 +553,6 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 		li1 = t1;
 		x0 += w;
 		w *= -1;
-//step_scale = 1;
 		break;
 	case 7: //FYR270
 		t = vertex_dirs[0];
@@ -571,17 +567,14 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 		li3 = t1;
 		x0 += w;
 		w *= -1;
-//step_scale = 1;
 		break;
 	case 8: //FX
 		y0 += h;
 		h *= -1;
-//step_scale = 1;
 		break;
 	case 9: //FY
 		x0 += w;
 		w *= -1;
-//step_scale = 1;
 		break;
 	default:
 		break;
@@ -594,15 +587,23 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 				BS/2*vertex_dirs[i].Y,
 				BS/2*vertex_dirs[i].Z
 		);
+
 	}
 
 	for(u16 i=0; i<4; i++)
 	{
 		//if (step_scale)
-			vertex_pos[i] *= step;
+			//if (vertex_pos[i].X>0||vertex_pos[i].Y>0||vertex_pos[i].Z>0)
+			//if (vertex_pos[i].X||vertex_pos[i].Y)
+			//if (vertex_pos[i].Z>0||vertex_pos[i].X>0||vertex_pos[i].Y>0)
+			//if (dir.Z>0||dir.X>0||dir.Y>0)
+			//if (dir.Z<=0)
+			//vertex_pos[i] *= step;
+
 		vertex_pos[i].X *= scale.X ;
 		vertex_pos[i].Y *= scale.Y ;
 		vertex_pos[i].Z *= scale.Z ;
+
 		vertex_pos[i] += pos;
 	}
 
@@ -800,10 +801,10 @@ static void getTileInfo(
 	INodeDefManager *ndef = data->m_gamedef->ndef();
 	v3s16 blockpos_nodes = data->m_blockpos * MAP_BLOCKSIZE;
 
-	MapNode n0 = vmanip.getNodeNoEx(blockpos_nodes + p);
-	MapNode n1 = vmanip.getNodeNoEx(blockpos_nodes + p + face_dir*step);
-	TileSpec tile0 = getNodeTile(n0, p, face_dir, data);
-	TileSpec tile1 = getNodeTile(n1, p + face_dir, -face_dir, data);
+	MapNode n0 = vmanip.getNodeNoEx(blockpos_nodes + p*step);
+	MapNode n1 = vmanip.getNodeNoEx(blockpos_nodes + p*step + face_dir*step);
+	TileSpec tile0 = getNodeTile(n0, p*step, face_dir, data);
+	TileSpec tile1 = getNodeTile(n1, p*step + face_dir*step, -face_dir, data);
 	
 	// This is hackish
 	bool equivalent = false;
@@ -886,10 +887,10 @@ static void updateFastFaceRow(
 			makes_face, p_corrected, face_dir_corrected,
 			lights, tile, light_source, step);
 
-	translate_dir*=step;
-	translate_dir_f*=step;
-
-	for(u16 j=0; j<MAP_BLOCKSIZE; j+=step)
+	//translate_dir*=step;
+	//translate_dir_f*=step;
+    u16 to = MAP_BLOCKSIZE/step;
+	for(u16 j=0; j<to; j++)
 	{
 		// If tiling can be done, this is set to false in the next step
 		bool next_is_different = true;
@@ -909,9 +910,10 @@ static void updateFastFaceRow(
 		if(j != MAP_BLOCKSIZE - step)
 //		if(j < MAP_BLOCKSIZE - step || step == MAP_BLOCKSIZE)
 		{
+			//p_next = p + translate_dir*step;
 			p_next = p + translate_dir;
 			
-			getTileInfo(data, p_next, face_dir,
+			getTileInfo(data, p_next/*+translate_dir*(step-1)*/, face_dir,
 					next_makes_face, next_p_corrected,
 					next_face_dir_corrected, next_lights,
 					next_tile, next_light_source, step);
@@ -1019,8 +1021,9 @@ static void updateAllFastFaceRows(MeshMakeData *data,
 	/*
 		Go through every y,z and get top(y+) faces in rows of x+
 	*/
-	for(s16 y=0; y<MAP_BLOCKSIZE; y+=step){
-		for(s16 z=0; z<MAP_BLOCKSIZE; z+=step){
+	s16 to = MAP_BLOCKSIZE/step;
+	for(s16 y=0; y<to; y++){
+		for(s16 z=0; z<to; z++){
 			updateFastFaceRow(data,
 					v3s16(0,y,z),
 					v3s16(1,0,0), //dir
@@ -1034,8 +1037,8 @@ static void updateAllFastFaceRows(MeshMakeData *data,
 	/*
 		Go through every x,y and get right(x+) faces in rows of z+
 	*/
-	for(s16 x=0; x<MAP_BLOCKSIZE; x+=step){
-		for(s16 y=0; y<MAP_BLOCKSIZE; y+=step){
+	for(s16 x=0; x<to; x++){
+		for(s16 y=0; y<to; y++){
 			updateFastFaceRow(data,
 					v3s16(x,y,0),
 					v3s16(0,0,1), //dir
@@ -1049,8 +1052,8 @@ static void updateAllFastFaceRows(MeshMakeData *data,
 	/*
 		Go through every y,z and get back(z+) faces in rows of x+
 	*/
-	for(s16 z=0; z<MAP_BLOCKSIZE; z+=step){
-		for(s16 y=0; y<MAP_BLOCKSIZE; y+=step){
+	for(s16 z=0; z<to; z++){
+		for(s16 y=0; y<to; y++){
 			updateFastFaceRow(data,
 					v3s16(0,y,z),
 					v3s16(1,0,0), //dir
@@ -1192,9 +1195,9 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 
 	std::vector<FastFace> fastfaces_new;
 
-	if (0 && data->range > RANGE_FAR) {
-		mapblock_farmesh(this, data, m_mesh);
-	} else {
+	//if (0 && data->range > RANGE_FAR) {
+	//	mapblock_farmesh(this, data, m_mesh);
+	//} else {
 
 	/*
 		We are including the faces of the trailing edges of the block.
@@ -1209,7 +1212,8 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 	else if (data->range > RANGE_LOD+1) step = 4;
 	else if (data->range > RANGE_LOD) step = 2;
 
-	//test if (data->range > RANGE_LOD) step = 16;
+	//test 
+	//if (data->range > RANGE_LOD) step = 8;
 
 	{
 		// 4-23ms for MAP_BLOCKSIZE=16  (NOTE: probably outdated)
@@ -1419,7 +1423,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 		buf->append(&p.vertices[0], p.vertices.size(),
 				&p.indices[0], p.indices.size());
 
-	}
+	//}
 
 	}
 
@@ -1427,6 +1431,8 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 		Do some stuff to the mesh
 	*/
 
+//if(step)
+	scaleMesh(m_mesh, v3f(step,step,step));  // also recalculates bounding box
 	translateMesh(m_mesh, intToFloat(data->m_blockpos * MAP_BLOCKSIZE, BS));
 
 	if(m_mesh)
