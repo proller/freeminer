@@ -478,6 +478,7 @@ set(minetest_SRCS
 	guiFileSelectMenu.cpp
 	convert_json.cpp
 	FMColoredString.cpp
+	gsmapper.cpp
 	${minetest_SCRIPT_SRCS}
 )
 

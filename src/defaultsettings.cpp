@@ -299,6 +299,20 @@ void set_default_settings(Settings *settings)
 
 	settings->setDefault("language", "");
 
+	// gsmapper
+	settings->setDefault("hud_map", "false");
+	settings->setDefault("hud_map_back", "0,0,0");
+	settings->setDefault("hud_map_width", "128");
+	settings->setDefault("hud_map_height", "128");
+	settings->setDefault("hud_map_scale", "1.0");
+	settings->setDefault("hud_map_alpha", "192");
+	settings->setDefault("hud_map_above", "true");
+	settings->setDefault("hud_map_scan", "64");
+	settings->setDefault("hud_map_surface", "32");
+	settings->setDefault("hud_map_tracking", "false");
+	settings->setDefault("hud_map_border", "16");
+
+
 	// freeminer user-friendly defaults
 	settings->setDefault("pause_fps_max", "1");
 	settings->setDefault("enable_vbo", "true");
@@ -327,6 +341,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("sqlite_synchronous", "1");
 	settings->setDefault("farmesh", "0");
 	settings->setDefault("farmesh_step", "3");
+	settings->setDefault("hud_map", "true");
 
 #ifndef _WIN32
 	//BROKEN settings->setDefault("ipv6_server", "true"); // problems on all windows versions (unable to play in local game)
