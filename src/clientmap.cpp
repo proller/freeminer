@@ -35,6 +35,19 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
+MapDrawControl::MapDrawControl():
+		range_all(false),
+		wanted_range(500),
+		wanted_max_blocks(0),
+		wanted_min_range(0),
+		blocks_drawn(0),
+		blocks_would_have_drawn(0),
+		farthest_drawn(0)
+	{
+		farmesh = g_settings->getS32("farmesh");
+		farmesh_step = g_settings->getS32("farmesh_step");
+	}
+
 ClientMap::ClientMap(
 		Client *client,
 		IGameDef *gamedef,
@@ -286,9 +299,11 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver)
 				}
 			}
 
+/*
 			if(block->mesh->transparent) {
 				continue;
 			}
+*/
 			/*
 				Occlusion culling
 			*/
@@ -303,9 +318,12 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver)
 					occlusion_culling_enabled = false;
 			}
 
-			v3s16 cpn = block->getPos() * MAP_BLOCKSIZE;
-
 			int cam_range_blocks = getNodeBlockPos(cam_pos_nodes).getDistanceFrom(block->getPos());
+			if (m_control.farmesh && getFarmeshStep(m_control, cam_range_blocks) != block->mesh->step) { //&& !block->mesh->transparent
+				m_client->addUpdateMeshTask(block->getPos(), false, false);
+			}
+
+			v3s16 cpn = block->getPos() * MAP_BLOCKSIZE;
 
 /* todo
 MapBlock *b;
@@ -322,16 +340,8 @@ errorstream<<"skip solid"<<std::endl;
 }
 */
 
-
-			if (cam_range_blocks != block->mesh->range
-				&& (cam_range_blocks <= RANGE_MAX || block->mesh->range <= RANGE_MAX)
-				&& (cam_range_blocks >= RANGE_MIN || block->mesh->range >= RANGE_MIN)
-				&& !block->mesh->transparent
-			) {
-				m_client->addUpdateMeshTask(block->getPos(), false, true);
-			}
-
 			cpn += v3s16(MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2);
+
 			float step = BS*1;
 			float stepfac = 1.1;
 			float startoff = BS*1;

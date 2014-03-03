@@ -31,6 +31,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "shader.h"
 #include "settings.h"
 #include "util/directiontables.h"
+#include "clientmap.h"
 
 float srgb_linear_multiply(float f, float m, float max)
 {
@@ -42,17 +43,28 @@ float srgb_linear_multiply(float f, float m, float max)
 	return f;
 }
 
+int getFarmeshStep(MapDrawControl& draw_control, int range) {
+	if (draw_control.farmesh) {
+		if		(range >= draw_control.farmesh+draw_control.farmesh_step*3)	return 16;
+		else if (range >= draw_control.farmesh+draw_control.farmesh_step*2)	return 8;
+		else if (range >= draw_control.farmesh+draw_control.farmesh_step)	return 4;
+		else if (range >= draw_control.farmesh)								return 2;
+	}
+	return 1;
+};
+
 /*
 	MeshMakeData
 */
 
-MeshMakeData::MeshMakeData(IGameDef *gamedef):
+MeshMakeData::MeshMakeData(IGameDef *gamedef, MapDrawControl& draw_control_):
 	m_vmanip(),
 	m_blockpos(-1337,-1337,-1337),
 	m_crack_pos_relative(-1337, -1337, -1337),
 	m_smooth_lighting(false),
 	m_gamedef(gamedef)
 	,range(0)
+	,draw_control(draw_control_)
 {}
 
 void MeshMakeData::fill(MapBlock *block)
@@ -803,8 +815,8 @@ static void getTileInfo(
 
 	MapNode n0 = vmanip.getNodeNoEx(blockpos_nodes + p*step);
 	MapNode n1 = vmanip.getNodeNoEx(blockpos_nodes + p*step + face_dir*step);
-	TileSpec tile0 = getNodeTile(n0, p*step, face_dir, data);
-	TileSpec tile1 = getNodeTile(n1, p*step + face_dir*step, -face_dir, data);
+	TileSpec tile0 = getNodeTile(n0, p, face_dir, data);
+	TileSpec tile1 = getNodeTile(n1, p + face_dir, -face_dir, data);
 	
 	// This is hackish
 	bool equivalent = false;
@@ -838,7 +850,7 @@ static void getTileInfo(
 	if(equivalent)
 		tile.material_flags |= MATERIAL_FLAG_BACKFACE_CULLING;
 
-	if(data->m_smooth_lighting == false)
+	if(data->m_smooth_lighting == false || step > 1)
 	{
 		lights[0] = lights[1] = lights[2] = lights[3] =
 				getFaceLight(n0, n1, face_dir, data);
@@ -887,9 +899,7 @@ static void updateFastFaceRow(
 			makes_face, p_corrected, face_dir_corrected,
 			lights, tile, light_source, step);
 
-	//translate_dir*=step;
-	//translate_dir_f*=step;
-    u16 to = MAP_BLOCKSIZE/step;
+	u16 to = MAP_BLOCKSIZE/step;
 	for(u16 j=0; j<to; j++)
 	{
 		// If tiling can be done, this is set to false in the next step
@@ -906,9 +916,7 @@ static void updateFastFaceRow(
 		
 		// If at last position, there is nothing to compare to and
 		// the face must be drawn anyway
-//		if(j != MAP_BLOCKSIZE - 1)
-		if(j != MAP_BLOCKSIZE - step)
-//		if(j < MAP_BLOCKSIZE - step || step == MAP_BLOCKSIZE)
+		if(j != to - 1)
 		{
 			//p_next = p + translate_dir*step;
 			p_next = p + translate_dir;
@@ -1018,10 +1026,10 @@ static void updateFastFaceRow(
 static void updateAllFastFaceRows(MeshMakeData *data,
 		std::vector<FastFace> &dest, int step)
 {
+	s16 to = MAP_BLOCKSIZE/step;
 	/*
 		Go through every y,z and get top(y+) faces in rows of x+
 	*/
-	s16 to = MAP_BLOCKSIZE/step;
 	for(s16 y=0; y<to; y++){
 		for(s16 z=0; z<to; z++){
 			updateFastFaceRow(data,
@@ -1177,6 +1185,7 @@ static void mapblock_farmesh(MapBlockMesh * mesh, MeshMakeData *data, scene::SMe
 
 MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 	clearHardwareBuffer(false),
+	step(0),
 	m_mesh(new scene::SMesh()),
 	m_gamedef(data->m_gamedef),
 	m_animation_force_timer(0), // force initial animation
@@ -1187,11 +1196,13 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 	m_usage_timer(0)
 	,transparent(false)
 	,solid(false)
-	,range(data->range)
+	//,range(data->range)
 {
 	// 4-21ms for MAP_BLOCKSIZE=16  (NOTE: probably outdated)
 	// 24-155ms for MAP_BLOCKSIZE=32  (NOTE: probably outdated)
 	//TimeTaker timer1("MapBlockMesh()");
+
+	step = getFarmeshStep(data->draw_control, data->range);
 
 	std::vector<FastFace> fastfaces_new;
 
@@ -1266,7 +1277,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 		- whatever
 	*/
 
-	if(data->range<=RANGE_SPECIAL || step <= 1)
+	if(step <= 1)
 	mapblock_mesh_generate_special(data, collector);
 	
 
@@ -1302,7 +1313,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 				<<", p.indices.size()="<<p.indices.size()
 				<<std::endl;*/
 
-		if (step <= RANGE_ANIMATION) {
+		if (step <= data->draw_control.farmesh || !data->draw_control.farmesh) {
 		// Generate animation data
 		// - Cracks
 		if(p.tile.material_flags & MATERIAL_FLAG_CRACK)
@@ -1431,9 +1442,16 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data):
 		Do some stuff to the mesh
 	*/
 
-//if(step)
-	scaleMesh(m_mesh, v3f(step,step,step));  // also recalculates bounding box
-	translateMesh(m_mesh, intToFloat(data->m_blockpos * MAP_BLOCKSIZE, BS));
+	v3f t = v3f(0,0,0);
+	if (step>1) {
+		scaleMesh(m_mesh, v3f(step,step,step));
+		// TODO: remove this wrong numbers, find formula   good test: fly above ocean
+		if (step == 2)	t = v3f(BS/2,		 BS/2,		BS/2);
+		if (step == 4)	t = v3f(BS*1.666,	-BS/3.0,	BS*1.666);
+		if (step == 8)	t = v3f(BS*2.666,	-BS*2.4,	BS*2.666);
+		if (step == 16)	t = v3f(BS*6.4,		-BS*6.4,	BS*6.4);
+	}
+	translateMesh(m_mesh, intToFloat(data->m_blockpos * MAP_BLOCKSIZE, BS) + t);
 
 	if(m_mesh)
 	{
