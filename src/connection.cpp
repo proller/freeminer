@@ -902,6 +902,9 @@ void Connection::receive()
 	}
 	catch(ProcessedSilentlyException &e){
 	}
+	catch(...){
+		derr_con<<"Connection::receive(): Unknown exeption"<<std::endl;
+	}
 	} // for
 }
 
