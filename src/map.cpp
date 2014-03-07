@@ -3072,7 +3072,9 @@ MapBlock* ServerMap::finishBlockMake(BlockMakeData *data,
 #endif
 
 	MapBlock *block = getBlockNoCreateNoEx(blockpos_requested);
-	assert(block);
+	if(!block) {
+		errorstream<<"finishBlockMake(): created NULL block at "<<PP(blockpos_requested)<<std::endl;
+	}
 
 	return block;
 }
@@ -4504,7 +4506,7 @@ void ManualMapVoxelManipulator::blitBackAll(
 		v3s16 p = i->first;
 		MapBlock *block = m_map->getBlockNoCreateNoEx(p);
 		bool existed = !(i->second & VMANIP_BLOCK_DATA_INEXIST);
-		if(existed == false)
+		if(!block || existed == false)
 		{
 			continue;
 		}
