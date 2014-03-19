@@ -1592,7 +1592,8 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
 	float time_from_last_punch = 10;
 
 	float update_draw_list_timer = 0.0;
-	v3f update_draw_list_last_cam_dir;
+	//v3f update_draw_list_last_cam_dir;
+	v3f update_draw_list_last_cam_pos;
 
 	bool invert_mouse = g_settings->getBool("invert_mouse");
 
@@ -3510,12 +3511,16 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
 			changed much
 		*/
 		update_draw_list_timer += dtime;
-		if(update_draw_list_timer >= 0.2 ||
-				update_draw_list_last_cam_dir.getDistanceFrom(camera_direction) > 0.2 ||
-				camera_offset_changed){
+//errorstream<<"PosD="<<update_draw_list_last_cam_pos.getDistanceFrom(camera_position)<<" M="<<MAP_BLOCKSIZE*1*BS<<std::endl;
+		if(update_draw_list_timer >= 3 ||
+				//update_draw_list_last_cam_dir.getDistanceFrom(camera_direction) > 0.2 ||
+				update_draw_list_last_cam_pos.getDistanceFrom(camera_position) > MAP_BLOCKSIZE*1*BS ||
+				camera_offset_changed
+				){
 			update_draw_list_timer = 0;
 			client.getEnv().getClientMap().updateDrawList(driver);
-			update_draw_list_last_cam_dir = camera_direction;
+			//update_draw_list_last_cam_dir = camera_direction;
+			update_draw_list_last_cam_pos = camera_position;
 		}
 
 		/*

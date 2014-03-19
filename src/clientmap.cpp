@@ -179,8 +179,8 @@ static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
 
 void ClientMap::updateDrawList(video::IVideoDriver* driver)
 {
-	//ScopeProfiler sp(g_profiler, "CM::updateDrawList()", SPT_AVG);
-	//g_profiler->add("CM::updateDrawList() count", 1);
+	ScopeProfiler sp(g_profiler, "CM::updateDrawList()", SPT_AVG);
+	g_profiler->add("CM::updateDrawList() count", 1);
 
 	INodeDefManager *nodemgr = m_gamedef->ndef();
 
@@ -283,7 +283,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver)
 
 			float d = 0.0;
 			if(isBlockInSight(block->getPos(), camera_position,
-					camera_direction, camera_fov,
+					camera_direction, 0 /*camera_fov*/,
 					range, &d) == false)
 			{
 				continue;
@@ -437,6 +437,9 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 {
 	DSTACK(__FUNCTION_NAME);
 
+	ScopeProfiler sp(g_profiler, "CM::renderMap()", SPT_AVG);
+	g_profiler->add("CM::renderMap) count", 1);
+
 	bool is_transparent_pass = pass == scene::ESNRP_TRANSPARENT;
 	
 	std::string prefix;
@@ -536,7 +539,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 		
 		float d = 0.0;
 		if(isBlockInSight(block->getPos(), camera_position,
-				camera_direction, camera_fov,
+				camera_direction, 0 /*camera_fov*/,
 				100000*BS, &d) == false)
 		{
 			continue;
