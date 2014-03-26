@@ -529,7 +529,8 @@ public:
 
 #ifndef SERVER // Only on client
 	MapBlockMesh *mesh;
-	MapBlockMesh  *mesh2, *mesh4, *mesh8, *mesh16;
+	MapBlockMesh *mesh2, *mesh4, *mesh8, *mesh16;
+	MapBlockMesh *mesh32, *mesh64, *mesh128;
 #endif
 	
 	NodeMetadataList m_node_metadata;

@@ -52,6 +52,7 @@ MapDrawControl::MapDrawControl():
 		,fps_avg(30)
 		,fps_wanted(30)
 		,drawtime_avg(30)
+		,camera_fov_blocks(0)
 	{
 		farmesh = g_settings->getS32("farmesh");
 		farmesh_step = g_settings->getS32("farmesh_step");
@@ -206,6 +207,11 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 	// Or maybe they aren't? Well whatever.
 	camera_fov *= 1.2;
 
+	if(m_control.fps_avg > m_control.fps_wanted *0.7)
+		camera_fov = 0;
+
+	m_control.camera_fov_blocks = camera_fov;
+
 	v3s16 cam_pos_nodes = floatToInt(camera_position, BS);
 	v3s16 box_nodes_d = m_control.wanted_range * v3s16(1,1,1);
 	v3s16 p_nodes_min = cam_pos_nodes - box_nodes_d;
@@ -269,14 +275,21 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 		{
 			MapBlock *block = *i;
 
-			int mesh_step = getFarmeshStep(m_control, getNodeBlockPos(cam_pos_nodes).getDistanceFrom(block->getPos()));
+			v3s16 bp = block->getPos();
+			int mesh_step = getFarmeshStep(m_control, getNodeBlockPos(cam_pos_nodes).getDistanceFrom(bp));
+			int mesh_step_actual = 1;
+			if (block->getMesh(mesh_step))
+				mesh_step_actual = block->getMesh(mesh_step)->step;
+			if (mesh_step_actual == 32 && (bp.X % 2 || bp.Y % 2 || bp.Z % 2))
+				continue;
+			if (mesh_step_actual == 64 && (bp.X % 4 || bp.Y % 4 || bp.Z % 4))
+				continue;
+			if (mesh_step_actual == 128 && (bp.X % 8 || bp.Y % 8 || bp.Z % 8))
+				continue;
 			/*
 				Compare block position to camera position, skip
 				if not seen on display
 			*/
-			
-			if (block->getMesh(mesh_step) != NULL)
-				block->getMesh(mesh_step)->updateCameraOffset(m_camera_offset);
 			
 			float range = 100000 * BS;
 			if(m_control.range_all == false)
@@ -284,7 +297,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 
 			float d = 0.0;
 			if(isBlockInSight(block->getPos(), camera_position,
-					camera_direction, 0 /*camera_fov*/,
+					camera_direction, camera_fov,
 					range, &d) == false)
 			{
 				continue;
@@ -587,6 +600,8 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 
 			MapBlockMesh *mapBlockMesh = block->getMesh(mesh_step);
 			assert(mapBlockMesh);
+
+			mapBlockMesh->updateCameraOffset(m_camera_offset);
 
 			scene::SMesh *mesh = mapBlockMesh->getMesh();
 			assert(mesh);

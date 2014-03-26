@@ -1595,9 +1595,10 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
 	float object_hit_delay_timer = 0.0;
 	float time_from_last_punch = 10;
 
-	float update_draw_list_timer = 0.0;
-	//v3f update_draw_list_last_cam_dir;
+	float update_draw_list_timer = 2.0;
+	v3f update_draw_list_last_cam_dir;
 	v3f update_draw_list_last_cam_pos;
+	int update_draw_list_last_vrange = 0;
 
 	bool invert_mouse = g_settings->getBool("invert_mouse");
 
@@ -3516,15 +3517,19 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
 		*/
 		update_draw_list_timer += dtime;
 //errorstream<<"PosD="<<update_draw_list_last_cam_pos.getDistanceFrom(camera_position)<<" M="<<MAP_BLOCKSIZE*1*BS<<std::endl;
+		if(!no_output)
 		if(update_draw_list_timer >= 3 ||
-				//update_draw_list_last_cam_dir.getDistanceFrom(camera_direction) > 0.2 ||
+				(draw_control.camera_fov_blocks>0 && update_draw_list_last_cam_dir.getDistanceFrom(camera_direction) > 0.2) ||
 				update_draw_list_last_cam_pos.getDistanceFrom(camera_position) > MAP_BLOCKSIZE*1*BS ||
+				update_draw_list_last_vrange != draw_control.wanted_range ||
 				camera_offset_changed
 				){
+			TimeTaker tt_draw("mainloop: updateDrawList");
 			update_draw_list_timer = 0;
 			client.getEnv().getClientMap().updateDrawList(driver, dtime);
-			//update_draw_list_last_cam_dir = camera_direction;
+			update_draw_list_last_cam_dir = camera_direction;
 			update_draw_list_last_cam_pos = camera_position;
+			update_draw_list_last_vrange = draw_control.wanted_range; 
 		}
 
 		/*

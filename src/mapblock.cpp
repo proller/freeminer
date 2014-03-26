@@ -75,6 +75,7 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 #ifndef SERVER
 	mesh = NULL;
 	mesh2 = mesh4 = mesh8 = mesh16 = NULL;
+	mesh32 = mesh64 = mesh128 = NULL;
 #endif
 }
 
@@ -799,6 +800,10 @@ void MapBlock::pushElementsToCircuit(Circuit* circuit)
 
 #ifndef SERVER
 MapBlockMesh* MapBlock::getMesh(int step) {
+	if (step >= 128 && mesh128) return mesh128;
+	if (step >= 64 && mesh64) return mesh64;
+	if (step >= 32 && mesh32) return mesh32;
+
 	if (step >= 16 && mesh16) return mesh16;
 	if (step >= 8  && mesh8)  return mesh8;
 	if (step >= 4  && mesh4)  return mesh4;
@@ -808,10 +813,20 @@ MapBlockMesh* MapBlock::getMesh(int step) {
 	if (mesh4)  return mesh4;
 	if (mesh8)  return mesh8;
 	if (mesh16) return mesh16;
+
+	//bad idea (scaled):
+	if (mesh32) return mesh32;
+	if (mesh64) return mesh64;
+	if (mesh128)return mesh128;
+
 	return mesh;
 }
 
 void MapBlock::setMesh(MapBlockMesh* rmesh) {
+	     if (rmesh->step == 128){if (mesh128) delete mesh128;  mesh128 = rmesh;}
+	else if (rmesh->step == 64) {if (mesh64) delete mesh64;  mesh64 = rmesh;}
+	else if (rmesh->step == 32) {if (mesh32) delete mesh32;  mesh32 = rmesh;}
+	else 
 	     if (rmesh->step == 16) {if (mesh16) delete mesh16;  mesh16 = rmesh;}
 	else if (rmesh->step == 8 ) {if (mesh8)  delete mesh8;   mesh8  = rmesh;}
 	else if (rmesh->step == 4 ) {if (mesh4)  delete mesh4;   mesh4  = rmesh;}
@@ -820,6 +835,10 @@ void MapBlock::setMesh(MapBlockMesh* rmesh) {
 }
 
 void MapBlock::delMesh() {
+	if (mesh128){delete mesh128;mesh128= NULL;}
+	if (mesh64) {delete mesh64; mesh64 = NULL;}
+	if (mesh32) {delete mesh32; mesh32 = NULL;}
+
 	if (mesh16) {delete mesh16; mesh16 = NULL;}
 	if (mesh8)  {delete mesh8;  mesh8  = NULL;}
 	if (mesh4)  {delete mesh4;  mesh4  = NULL;}
@@ -1069,12 +1088,7 @@ void MapBlock::incrementUsageTimer(float dtime)
 	m_usage_timer += dtime;
 /*
 #ifndef SERVER
-	if(mesh){
-		if(mesh->getUsageTimer() > 10)
-			mesh->setStatic();
-		else
-			mesh->incrementUsageTimer(dtime);
-	}
+//	mesh->incrementUsageTimer(dtime);
 #endif
 */
 }

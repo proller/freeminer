@@ -48,9 +48,16 @@ float srgb_linear_multiply(float f, float m, float max)
 
 int getFarmeshStep(MapDrawControl& draw_control, int range) {
 	if (draw_control.farmesh) {
-		if		(range >= draw_control.farmesh+draw_control.farmesh_step*3)	return 16;
+		//if (range >= draw_control.farmesh+draw_control.farmesh_step*4)	return 64;
+		//if (range >= draw_control.farmesh+draw_control.farmesh_step*2)	return 32;
+/*		if		(range >= draw_control.farmesh+draw_control.farmesh_step*14)return 128;
+		else if	(range >= draw_control.farmesh+draw_control.farmesh_step*10)return 64;
+		else if (range >= draw_control.farmesh+draw_control.farmesh_step*8)	return 32;
+		else
+*/
+		     if (range >= draw_control.farmesh+draw_control.farmesh_step*3)	return 16;
 		else if (range >= draw_control.farmesh+draw_control.farmesh_step*2)	return 8;
-		else if (range >= draw_control.farmesh+draw_control.farmesh_step)	return 4;
+		else if (range >= draw_control.farmesh+draw_control.farmesh_step*1)	return 4;
 		else if (range >= draw_control.farmesh)								return 2;
 	}
 	return 1;
@@ -789,15 +796,25 @@ static void getTileInfo(
 	INodeDefManager *ndef = data->m_gamedef->ndef();
 	v3s16 blockpos_nodes = data->m_blockpos * MAP_BLOCKSIZE;
 
+//int stp = 0;
+//if (step> 16) step = 16, stp=1;
 	MapNode n0 = vmanip.getNodeNoEx(blockpos_nodes + p*step);
 	MapNode n1 = vmanip.getNodeNoEx(blockpos_nodes + p*step + face_dir*step);
 	TileSpec tile0 = getNodeTile(n0, p, face_dir, data);
 	TileSpec tile1 = getNodeTile(n1, p + face_dir, -face_dir, data);
-	
+
 	// This is hackish
 	bool equivalent = false;
-	u8 mf = face_contents(n0.getContent(), n1.getContent(),
+	u8 mf;
+/*if (step>16 && n0.getContent() != CONTENT_IGNORE)
+	mf = 1;
+else*/
+	mf = face_contents(n0.getContent(), n1.getContent(),
 			&equivalent, ndef);
+
+//if (stp)
+//verbosestream<<" n0="<<ndef->get(n0).name<<" n1="<<ndef->get(n1).name<< " mf="<<(int)mf<<std::endl;
+//if (step>16) mf=1,equivalent=0;
 
 	if(mf == 0)
 	{
@@ -829,7 +846,7 @@ static void getTileInfo(
 	if(data->m_smooth_lighting == false || step > 1)
 	{
 		lights[0] = lights[1] = lights[2] = lights[3] =
-				getFaceLight(n0, n1, face_dir, data);
+				getFaceLight(n0, step>16?n0:n1, face_dir, data);
 	}
 	else
 	{
@@ -876,6 +893,8 @@ static void updateFastFaceRow(
 			lights, tile, light_source, step);
 
 	u16 to = MAP_BLOCKSIZE/step;
+	if (!to) { to = 1; /*makes_face= 1;*/}
+//if (step>16)errorstream<<"to="<<to<<std::endl;
 	for(u16 j=0; j<to; j++)
 	{
 		// If tiling can be done, this is set to false in the next step
@@ -892,7 +911,7 @@ static void updateFastFaceRow(
 		
 		// If at last position, there is nothing to compare to and
 		// the face must be drawn anyway
-		if(j != to - 1)
+		if(j != to - 1 /*|| to > 1*/)
 		{
 			p_next = p + translate_dir;
 			
@@ -941,6 +960,7 @@ static void updateFastFaceRow(
 
 		continuous_tiles_count++;
 		
+if (step>16)verbosestream<<" step="<<step<<" nid="<<next_is_different<<" mf="<<makes_face<<std::endl;
 		if(next_is_different)
 		{
 			/*
@@ -999,7 +1019,10 @@ static void updateFastFaceRow(
 static void updateAllFastFaceRows(MeshMakeData *data,
 		std::vector<FastFace> &dest, int step)
 {
+//if (step> 16) step = 16;
+
 	s16 to = MAP_BLOCKSIZE/step;
+	if (!to) to = 1;
 	/*
 		Go through every y,z and get top(y+) faces in rows of x+
 	*/
@@ -1067,7 +1090,6 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	//TimeTaker timer1("MapBlockMesh()");
 
 	std::vector<FastFace> fastfaces_new;
-
 	/*
 		We are including the faces of the trailing edges of the block.
 		This means that when something changes, the caller must
@@ -1300,6 +1322,9 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 		if (step == 4)	t = v3f(BS*1.666,	-BS/3.0,	BS*1.666);
 		if (step == 8)	t = v3f(BS*2.666,	-BS*2.4,	BS*2.666);
 		if (step == 16)	t = v3f(BS*6.4,		-BS*6.4,	BS*6.4);
+		if (step == 32)	t = v3f(BS*18,		-BS*18,		BS*18);
+		if (step == 64)	t = v3f(BS*40,		-BS*40,		BS*40);
+		if (step == 128)t = v3f(BS*80,		-BS*80,		BS*80);
 	}
 	translateMesh(m_mesh, intToFloat(data->m_blockpos * MAP_BLOCKSIZE - camera_offset, BS) + t);
 
