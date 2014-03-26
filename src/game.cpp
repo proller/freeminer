@@ -1,3 +1,4 @@
+
 /*
 game.cpp
 Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
@@ -867,14 +868,17 @@ public:
 		services->setPixelShaderConstant("eyePosition", (irr::f32*)&eye_position, 3);
 		services->setVertexShaderConstant("eyePosition", (irr::f32*)&eye_position, 3);
 
-		// Normal map texture layer
+		// Uniform sampler layers
+		int layer0 = 0;
 		int layer1 = 1;
 		int layer2 = 2;
 		// before 1.8 there isn't a "integer interface", only float
 #if (IRRLICHT_VERSION_MAJOR == 1 && IRRLICHT_VERSION_MINOR < 8)
+		services->setPixelShaderConstant("baseTexture" , (irr::f32*)&layer0, 1);
 		services->setPixelShaderConstant("normalTexture" , (irr::f32*)&layer1, 1);
 		services->setPixelShaderConstant("useNormalmap" , (irr::f32*)&layer2, 1);
 #else
+		services->setPixelShaderConstant("baseTexture" , (irr::s32*)&layer0, 1);
 		services->setPixelShaderConstant("normalTexture" , (irr::s32*)&layer1, 1);
 		services->setPixelShaderConstant("useNormalmap" , (irr::s32*)&layer2, 1);
 #endif
@@ -3518,7 +3522,7 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
 				camera_offset_changed
 				){
 			update_draw_list_timer = 0;
-			client.getEnv().getClientMap().updateDrawList(driver);
+			client.getEnv().getClientMap().updateDrawList(driver, dtime);
 			//update_draw_list_last_cam_dir = camera_direction;
 			update_draw_list_last_cam_pos = camera_position;
 		}

@@ -141,8 +141,11 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("preload_item_visuals", "true");
 	settings->setDefault("enable_bumpmapping", "false");
 	settings->setDefault("enable_parallax_occlusion", "false");
-	settings->setDefault("parallax_occlusion_scale", "0.08");
-	settings->setDefault("parallax_occlusion_bias", "0.04");
+	settings->setDefault("generate_normalmaps", "false");
+	settings->setDefault("normalmaps_strength", "0.6");
+	settings->setDefault("normalmaps_smooth", "1");
+	settings->setDefault("parallax_occlusion_scale", "0.06");
+	settings->setDefault("parallax_occlusion_bias", "0.03");
 	settings->setDefault("enable_waving_water", "false");
 	settings->setDefault("water_wave_height", "1.0");
 	settings->setDefault("water_wave_length", "20.0");
@@ -331,7 +334,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("sqlite_synchronous", "1");
 	settings->setDefault("farmesh", "2");
 	settings->setDefault("farmesh_step", "3");
-	settings->setDefault("farmesh_wanted", "1000");
+	settings->setDefault("farmesh_wanted", "500");
 
 #ifndef _WIN32
 	//BROKEN settings->setDefault("ipv6_server", "true"); // problems on all windows versions (unable to play in local game)
