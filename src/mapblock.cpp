@@ -1081,6 +1081,7 @@ void MapBlock::incrementUsageTimer(float dtime)
 */
 }
 
+/* here for errorstream
 	void MapBlock::setTimestamp(u32 time)
 	{
 //infostream<<"setTimestamp = "<< time <<std::endl;
@@ -1106,6 +1107,7 @@ void MapBlock::incrementUsageTimer(float dtime)
 			}
 		}
 	}
+*/
 
 /*
 	Get a quick string to describe what a block actually contains

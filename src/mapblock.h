@@ -149,19 +149,17 @@ public:
 	}
 	
 	// m_modified methods
-	void raiseModified(u32 mod);
-/*
+	void raiseModified(u32 mod)
 	{
-		if(mod >= m_modified){
+		if(mod >= MOD_STATE_WRITE_NEEDED) {
+			m_changed_timestamp = m_timestamp;
+		}
+		if(mod > m_modified){
 			m_modified = mod;
 			if(m_modified >= MOD_STATE_WRITE_AT_UNLOAD)
 				m_disk_timestamp = m_timestamp;
-			if(m_modified >= MOD_STATE_WRITE_NEEDED) {
-				m_changed_timestamp = m_timestamp;
-			}
 		}
 	}
-*/
 	void raiseModified(u32 mod, const std::string &reason)
 	{
 		raiseModified(mod);
@@ -417,19 +415,15 @@ public:
 		Timestamp (see m_timestamp)
 		NOTE: BLOCK_TIMESTAMP_UNDEFINED=0xffffffff means there is no timestamp.
 	*/
-	void setTimestamp(u32 time);
-/*
+	void setTimestamp(u32 time)
 	{
 		m_timestamp = time;
 		raiseModified(MOD_STATE_WRITE_AT_UNLOAD, "setTimestamp");
 	}
-*/
-	void setTimestampNoChangedFlag(u32 time);
-/*
+	void setTimestampNoChangedFlag(u32 time)
 	{
 		m_timestamp = time;
 	}
-*/
 	u32 getTimestamp()
 	{
 		return m_timestamp;
