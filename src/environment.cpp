@@ -1253,7 +1253,7 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 				continue;
 
 			// Set current time as timestamp (and let it set ChangedFlag)
-			block->setTimestampNoChangedFlag(m_game_time);
+			block->setTimestamp(m_game_time);
 		}
 
 		/*
