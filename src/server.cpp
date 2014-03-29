@@ -568,7 +568,9 @@ void Server::AsyncRunStep(bool initial_step)
 	/*
 		Update uptime
 	*/
-	m_uptime = m_uptime + dtime;
+	{
+		m_uptime.set(m_uptime.get() + dtime);
+	}
 
 	f32 dedicated_server_step = g_settings->getFloat("dedicated_server_step");
 	//u32 max_cycle_ms = 1000 * (m_lag > dedicated_server_step ? dedicated_server_step/(m_lag/dedicated_server_step) : dedicated_server_step);
@@ -622,7 +624,7 @@ void Server::AsyncRunStep(bool initial_step)
 		// Step environment
 		ScopeProfiler sp(g_profiler, "SEnv step");
 		ScopeProfiler sp2(g_profiler, "SEnv step avg", SPT_AVG);
-		m_env->step(dtime, m_uptime, max_cycle_ms);
+		m_env->step(dtime, m_uptime.get(), max_cycle_ms);
 	}
 
 	const float map_timer_and_unload_dtime = 10.92;
@@ -632,7 +634,7 @@ void Server::AsyncRunStep(bool initial_step)
 		JMutexAutoLock lock(m_env_mutex);
 		// Run Map's timers and unload unused data
 		ScopeProfiler sp(g_profiler, "Server: map timer and unload");
-		if(m_env->getMap().timerUpdate(m_uptime,
+		if(m_env->getMap().timerUpdate(m_uptime.get(),
 				max_cycle_ms,
 				g_settings->getFloat("server_unload_unused_data_timeout")))
 					m_map_timer_and_unload_interval.run_next(map_timer_and_unload_dtime);
@@ -785,7 +787,7 @@ void Server::AsyncRunStep(bool initial_step)
 		{
 			ServerList::sendAnnounce(!counter ? "start" : "update",
 										m_clients.getPlayerNames(),
-										m_uptime,
+										m_uptime.get(),
 										m_env->getGameTime(),
 										m_lag,
 										m_gamespec.id,
@@ -1834,7 +1836,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			v3s16 p = readV3S16(&data[2+1+i*6]);
 			/*infostream<<"Server: GOTBLOCKS ("
 					<<p.X<<","<<p.Y<<","<<p.Z<<")"<<std::endl;*/
-			client->GotBlock(p, m_uptime + m_env->m_game_time_start);
+			client->GotBlock(p, m_uptime.get() + m_env->m_game_time_start);
 		}
 		if((s16)datasize > 2+1+(count)*6) // only freeminer client
 			client->wanted_range = readU16(&data[2+1+(count*6)]);
@@ -3853,7 +3855,7 @@ void Server::SendBlocks(float dtime)
 				return;
 
 			total_sending += client->SendingCount();
-			client->GetNextBlocks(m_env,m_emerge, dtime, m_uptime + m_env->m_game_time_start, queue);
+			client->GetNextBlocks(m_env,m_emerge, dtime, m_uptime.get() + m_env->m_game_time_start, queue);
 		}
 		m_clients.Unlock();
 	}
@@ -4418,7 +4420,7 @@ std::wstring Server::getStatusString()
 	// Version
 	os<<L"version="<<narrow_to_wide(minetest_version_simple);
 	// Uptime
-	os<<L", uptime="<<m_uptime;
+	os<<L", uptime="<<m_uptime.get();
 	// Max lag estimate
 	os<<L", max_lag="<<m_env->getMaxLagEstimate();
 	// Information about clients

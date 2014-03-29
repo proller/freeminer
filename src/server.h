@@ -41,7 +41,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <list>
 #include <map>
 #include <vector>
-#include <atomic>
 
 #define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
@@ -537,7 +536,7 @@ private:
 	// Timer for sending time of day over network
 	float m_time_of_day_send_timer;
 	// Uptime of server in seconds
-	std::atomic<double> m_uptime;
+	MutexedVariable<double> m_uptime;
 
 public:
 	/*
