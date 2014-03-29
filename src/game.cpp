@@ -1064,7 +1064,7 @@ static void show_pause_menu(FormspecFormSource* current_formspec,
 }
 
 /******************************************************************************/
-void the_game(bool &kill, bool random_input, InputHandler *input,
+bool the_game(bool &kill, bool random_input, InputHandler *input,
 	IrrlichtDevice *device, gui::IGUIFont* font, std::string map_dir,
 	std::string playername, std::string password,
 	std::string address /* If "", local server is used */,
@@ -1130,6 +1130,9 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
 	}
 
 	Server *server = NULL;
+
+	bool reconnect = 0;
+	bool connect_ok = 0;
 
 	try{
 	// Event manager
@@ -1253,7 +1256,8 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
 	try{
 		float time_counter = 0.0;
 		input->clear();
-		float fps_max = g_settings->getFloat("fps_max");
+		float fps_max = g_settings->getFloat("pause_fps_max");
+
 		bool cloud_menu_background = g_settings->getBool("menu_clouds");
 		u32 lasttime = device->getTimer()->getTime();
 		while(device->run())
@@ -1322,6 +1326,10 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
 				sleep_ms(25);
 			}
 			time_counter += dtime;
+			if (time_counter > CONNECTION_TIMEOUT) {
+				reconnect = 1;
+				break;
+			}
 		}
 	}
 	catch(con::PeerNotFoundException &e)
@@ -1440,6 +1448,10 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
 				sleep_ms(25);
 			}
 			time_counter += dtime;
+			if (time_counter > CONNECTION_TIMEOUT) {
+				reconnect = 1;
+				break;
+			}
 		}
 	}
 
@@ -1463,7 +1475,7 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
 	*/
 	Camera camera(smgr, draw_control, gamedef);
 	if (!camera.successfullyCreated(error_message))
-		return;
+		return 0;
 
 	f32 camera_yaw = 0; // "right/left"
 	f32 camera_pitch = 0; // "up/down"
@@ -1661,6 +1673,8 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
 
 	bool use_weather = g_settings->getBool("weather");
 	bool no_output = device->getVideoDriver()->getDriverType() == video::EDT_NULL;
+	int errors = 0;
+	f32 dedicated_server_step = g_settings->getFloat("dedicated_server_step");
 
 	{
 	core::stringw str = L"Freeminer [";
@@ -2444,7 +2458,12 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
 			if(server != NULL)
 			{
 				//TimeTaker timer("server->step(dtime)");
+				try {
 				server->step(dtime);
+				} catch(std::exception &e) {
+					if (!errors++ || !(errors % (int)(60/dedicated_server_step)))
+						errorstream << "Fatal error n=" << errors << " : " << e.what() << std::endl;
+				}
 			}
 			{
 				//TimeTaker timer("client.step(dtime)");
@@ -3781,6 +3800,13 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
 		Profiler::GraphValues values;
 		g_profiler->graphGet(values);
 		graph.put(values);
+
+		if (client.connectedAndInitialized()) {
+			connect_ok = 1;
+		} else if (connect_ok) {
+			reconnect = 1;
+			break;
+		}
 	}
 
 	/*
@@ -3869,6 +3895,7 @@ void the_game(bool &kill, bool random_input, InputHandler *input,
 	infostream << "\tRemaining materials: "
 		<< driver-> getMaterialRendererCount ()
 		<< " (note: irrlicht doesn't support removing renderers)"<< std::endl;
+	return reconnect;
 }
 
 
