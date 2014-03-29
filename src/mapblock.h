@@ -149,19 +149,27 @@ public:
 	}
 	
 	// m_modified methods
-	void raiseModified(u32 mod)
+	void raiseModified(u32 mod);
+/*
 	{
-		if(mod > m_modified){
+		if(mod >= m_modified){
 			m_modified = mod;
 			if(m_modified >= MOD_STATE_WRITE_AT_UNLOAD)
 				m_disk_timestamp = m_timestamp;
+			if(m_modified >= MOD_STATE_WRITE_NEEDED) {
+				m_changed_timestamp = m_timestamp;
+			}
 		}
 	}
+*/
 	void raiseModified(u32 mod, const std::string &reason)
 	{
+		raiseModified(mod);
+
+#ifdef WTF
 		if(mod > m_modified){
 			m_modified = mod;
-/* maybe make via define for debug
+/*
 			m_modified_reason = reason;
 			m_modified_reason_too_long = false;
 */
@@ -181,6 +189,7 @@ public:
 			}
 */
 		}
+#endif
 	}
 	u32 getModified()
 	{
@@ -408,15 +417,19 @@ public:
 		Timestamp (see m_timestamp)
 		NOTE: BLOCK_TIMESTAMP_UNDEFINED=0xffffffff means there is no timestamp.
 	*/
-	void setTimestamp(u32 time)
+	void setTimestamp(u32 time);
+/*
 	{
 		m_timestamp = time;
 		raiseModified(MOD_STATE_WRITE_AT_UNLOAD, "setTimestamp");
 	}
-	void setTimestampNoChangedFlag(u32 time)
+*/
+	void setTimestampNoChangedFlag(u32 time);
+/*
 	{
 		m_timestamp = time;
 	}
+*/
 	u32 getTimestamp()
 	{
 		return m_timestamp;
@@ -541,6 +554,9 @@ public:
 	u32 heat_last_update;
 	u32 humidity_last_update;
 	float m_uptime_timer_last;
+
+	// Last really changed time (need send to client)
+	u32 m_changed_timestamp;
 private:
 	/*
 		Private member variables

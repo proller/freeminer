@@ -317,6 +317,7 @@ void ActiveBlockList::update(std::list<v3s16> &active_positions,
 ServerEnvironment::ServerEnvironment(ServerMap *map,
 		GameScripting *scriptIface, Circuit* circuit, IGameDef *gamedef):
 	m_abmhandler(NULL),
+	m_game_time_start(0),
 	m_map(map),
 	m_script(scriptIface),
 	m_circuit(circuit),
@@ -607,6 +608,7 @@ void ServerEnvironment::loadMeta(const std::string &savedir)
 	}
 
 	try{
+		m_game_time_start =
 		m_game_time = args.getU64("game_time");
 	}catch(SettingNotFoundException &e){
 		// Getting this is crucial, otherwise timestamps are useless
@@ -1251,7 +1253,7 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 				continue;
 
 			// Set current time as timestamp (and let it set ChangedFlag)
-			block->setTimestamp(m_game_time);
+			block->setTimestampNoChangedFlag(m_game_time);
 		}
 
 		/*

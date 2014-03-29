@@ -536,7 +536,7 @@ private:
 	// Timer for sending time of day over network
 	float m_time_of_day_send_timer;
 	// Uptime of server in seconds
-	MutexedVariable<double> m_uptime;
+	std::atomic<double> m_uptime;
 
 public:
 	/*
