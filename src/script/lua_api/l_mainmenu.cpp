@@ -460,6 +460,17 @@ int ModApiMainMenu::l_get_favorites(lua_State *L)
 	servers = ServerList::getLocal();
 #endif
 
+	Json::Value root(Json::arrayValue);
+	for (unsigned int i = 0; i < servers.size(); i++)
+	{
+		root[i] = servers[i];
+	}
+	lua_pushnil(L);
+	int nullindex = lua_gettop(L);
+	if(!push_json_value(L, root, nullindex)) {
+	}
+
+#if 0
 	lua_newtable(L);
 	int top = lua_gettop(L);
 	unsigned int index = 1;
@@ -558,6 +569,7 @@ int ModApiMainMenu::l_get_favorites(lua_State *L)
 		lua_settable(L, top);
 		index++;
 	}
+#endif
 	return 1;
 }
 
