@@ -138,52 +138,6 @@ bool insert (ServerListSpec server)
 
 std::vector<ServerListSpec> deSerialize(const std::string &liststring)
 {
-	return deSerializeJson(liststring);
-/*
-	std::vector<ServerListSpec> serverlist;
-	std::istringstream stream(liststring);
-	std::string line, tmp;
-	while (std::getline(stream, line))
-	{
-		std::transform(line.begin(), line.end(),line.begin(), ::toupper);
-		if (line == "[SERVER]")
-		{
-			ServerListSpec thisserver;
-			std::getline(stream, tmp);
-			thisserver["name"] = tmp;
-			std::getline(stream, tmp);
-			thisserver["address"] = tmp;
-			std::getline(stream, tmp);
-			thisserver["port"] = tmp;
-			std::getline(stream, tmp);
-			thisserver["description"] = tmp;
-			serverlist.push_back(thisserver);
-		}
-	}
-	return serverlist;
-*/
-}
-
-std::string serialize(std::vector<ServerListSpec> &serverlist)
-{
-	return serializeJson(serverlist);
-/*
-	std::string liststring;
-	for(std::vector<ServerListSpec>::iterator i = serverlist.begin(); i != serverlist.end(); i++)
-	{
-		liststring += "[server]\n";
-		liststring += (*i)["name"].asString() + "\n";
-		liststring += (*i)["address"].asString() + "\n";
-		liststring += (*i)["port"].asString() + "\n";
-		liststring += (*i)["description"].asString() + "\n";
-		liststring += "\n";
-	}
-	return liststring;
-*/
-}
-
-std::vector<ServerListSpec> deSerializeJson(const std::string &liststring)
-{
 	std::vector<ServerListSpec> serverlist;
 	Json::Value root;
 	Json::Reader reader;
@@ -206,7 +160,7 @@ std::vector<ServerListSpec> deSerializeJson(const std::string &liststring)
 	return serverlist;
 }
 
-std::string serializeJson(std::vector<ServerListSpec> &serverlist)
+std::string serialize(std::vector<ServerListSpec> &serverlist)
 {
 	Json::Value root;
 	Json::Value list(Json::arrayValue);

@@ -40,8 +40,6 @@ namespace ServerList
 	bool insert(ServerListSpec server);
 	std::vector<ServerListSpec> deSerialize(const std::string &liststring);
 	std::string serialize(std::vector<ServerListSpec>&);
-	std::vector<ServerListSpec> deSerializeJson(const std::string &liststring);
-	std::string serializeJson(std::vector<ServerListSpec>&);
 	#if USE_CURL
 	void sendAnnounce(std::string action = "", const std::vector<std::string> & clients_names = std::vector<std::string>(), 
 				double uptime = 0, u32 game_time = 0, float lag = 0, std::string gameid = "", 
