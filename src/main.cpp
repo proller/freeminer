@@ -1730,7 +1730,8 @@ int main(int argc, char *argv[])
 					server["port"] = menudata.port;
 					server["description"] = menudata.serverdescription;
 					server["playername"] = menudata.name;
-					server["playerpassword"] = menudata.password;
+					if(g_settings->getBool("password_save"))
+						server["playerpassword"] = menudata.password;
 					ServerList::insert(server);
 				}
 
