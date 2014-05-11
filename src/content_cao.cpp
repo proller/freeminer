@@ -44,7 +44,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/mathconstants.h"
 #include "map.h"
 #include "main.h" // g_settings
-#include "game.h" // CameraModes
+#include "camera.h" // CameraModes
 #include <IMeshManipulator.h>
 #include <IAnimatedMeshSceneNode.h>
 #include <IBoneSceneNode.h>
@@ -169,7 +169,7 @@ public:
 
 	void addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 			IrrlichtDevice *irr);
-	void removeFromScene();
+	void removeFromScene(bool permanent);
 	void updateLight(u8 light_at_pos);
 	v3s16 getLightPosition();
 	void updateNodePos();
@@ -239,7 +239,7 @@ void TestCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 	updateNodePos();
 }
 
-void TestCAO::removeFromScene()
+void TestCAO::removeFromScene(bool permanent)
 {
 	if(m_node == NULL)
 		return;
@@ -313,7 +313,7 @@ public:
 
 	void addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 			IrrlichtDevice *irr);
-	void removeFromScene();
+	void removeFromScene(bool permanent);
 	void updateLight(u8 light_at_pos);
 	v3s16 getLightPosition();
 	void updateNodePos();
@@ -415,7 +415,7 @@ void ItemCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 	updateTexture();
 }
 
-void ItemCAO::removeFromScene()
+void ItemCAO::removeFromScene(bool permanent)
 {
 	if(m_node == NULL)
 		return;
@@ -584,7 +584,7 @@ private:
 	v2s16 m_tx_basepos;
 	bool m_initial_tx_basepos_set;
 	bool m_tx_select_horiz_by_yawpitch;
-	v2f m_animation_range;
+	v2s32 m_animation_range;
 	int m_animation_speed;
 	int m_animation_blend;
 	std::map<std::string, core::vector2d<v3f> > m_bone_position; // stores position and rotation for each bone name
@@ -627,7 +627,7 @@ public:
 		m_tx_basepos(0,0),
 		m_initial_tx_basepos_set(false),
 		m_tx_select_horiz_by_yawpitch(false),
-		m_animation_range(v2f(0,0)),
+		m_animation_range(v2s32(0,0)),
 		m_animation_speed(15),
 		m_animation_blend(0),
 		m_bone_position(std::map<std::string, core::vector2d<v3f> >()),
@@ -651,7 +651,6 @@ public:
 
 	bool getCollisionBox(aabb3f *toset) {
 		if (m_prop.physical) {
-			aabb3f retval;
 			//update collision box
 			toset->MinEdge = m_prop.collisionbox.MinEdge * BS;
 			toset->MaxEdge = m_prop.collisionbox.MaxEdge * BS;
@@ -1096,6 +1095,7 @@ public:
 
 			if (player->camera_mode > CAMERA_MODE_FIRST) {
 				int old_anim = player->last_animation;
+				float old_anim_speed = player->last_animation_speed;
 				m_is_visible = true;
 				m_position = player->getPosition() + v3f(0,BS,0);
 				m_velocity = v3f(0,0,0);
@@ -1108,34 +1108,52 @@ public:
 				if(controls.up || controls.down || controls.left || controls.right)
 					walking = true;
 
-				m_animation_speed = 30;
+				f32 new_speed = player->local_animation_speed;
+				v2s32 new_anim = v2s32(0,0);
+				bool allow_update = false;
 
+				// increase speed if using fast or flying fast
+				if((g_settings->getBool("fast_move") &&
+					m_gamedef->checkLocalPrivilege("fast")) &&
+					(controls.aux1 ||
+					(!player->touching_ground &&
+					g_settings->getBool("free_move") &&
+					m_gamedef->checkLocalPrivilege("fly"))))
+						new_speed *= 1.5;
+				// slowdown speed if sneeking
 				if(controls.sneak && walking)
-					m_animation_speed = 15;
+					new_speed /= 2;
 
 				if(walking && (controls.LMB || controls.RMB)) {
-					m_animation_range = v2f(player->animation_wd_start, player->animation_wd_stop);
+					new_anim = player->local_animations[3];
 					player->last_animation = WD_ANIM;
 				} else if(walking) {
-					m_animation_range = v2f(player->animation_walk_start, player->animation_walk_stop);
+					new_anim = player->local_animations[1];
 					player->last_animation = WALK_ANIM;
 				} else if(controls.LMB || controls.RMB) {
-					m_animation_range = v2f(player->animation_dig_start, player->animation_dig_stop);
+					new_anim = player->local_animations[2];
 					player->last_animation = DIG_ANIM;
 				}
 
-				// reset animation when no input detected
-				if (!walking && !controls.LMB && !controls.RMB) {
+				// Apply animations if input detected and not attached
+				// or set idle animation
+				if ((new_anim.X + new_anim.Y) > 0 && !player->isAttached) {
+					allow_update = true;
+					m_animation_range = new_anim;
+					m_animation_speed = new_speed;
+					player->last_animation_speed = m_animation_speed;
+				} else {
 					player->last_animation = NO_ANIM;
 					if (old_anim != NO_ANIM) {
-						m_animation_range = v2f(player->animation_default_start, player->animation_default_stop);
+						m_animation_range = player->local_animations[0];
 						updateAnimation();
 					}
 				}
 
 				// Update local player animations
-				if (player->last_animation != old_anim && player->last_animation != NO_ANIM)
-					updateAnimation();
+				if ((player->last_animation != old_anim || m_animation_speed != old_anim_speed) &&
+					player->last_animation != NO_ANIM && allow_update)
+						updateAnimation();
 
 			} else {
 				m_is_visible = false;
@@ -1504,8 +1522,7 @@ public:
 	{
 		if(m_animated_meshnode == NULL)
 			return;
-
-		m_animated_meshnode->setFrameLoop((int)m_animation_range.X, (int)m_animation_range.Y);
+		m_animated_meshnode->setFrameLoop(m_animation_range.X, m_animation_range.Y);
 		m_animated_meshnode->setAnimationSpeed(m_animation_speed);
 		m_animated_meshnode->setTransitionTime(m_animation_blend);
 	}
@@ -1778,18 +1795,31 @@ public:
 		}
 		else if(cmd == GENERIC_CMD_SET_ANIMATION)
 		{
-			LocalPlayer *player = m_env->getLocalPlayer();
-			if(!m_is_local_player || player->last_animation == NO_ANIM) {
-				m_animation_range = readV2F1000(is);
+			// TODO: change frames send as v2s32 value
+			v2f range = readV2F1000(is);
+			if (!m_is_local_player) {
+			 	m_animation_range = v2s32((s32)range.X, (s32)range.Y);
 				m_animation_speed = readF1000(is);
 				m_animation_blend = readF1000(is);
-				// update animation only if object is not player
-				// or the received animation is not registered
-				if(!m_is_local_player ||
-					(m_animation_range.X != player->animation_walk_start &&
-					m_animation_range.X != player->animation_dig_start &&
-					m_animation_range.X != player->animation_wd_start))
-					updateAnimation();
+				updateAnimation();
+			} else {
+				LocalPlayer *player = m_env->getLocalPlayer();
+				if(player->last_animation == NO_ANIM) {
+					m_animation_range = v2s32((s32)range.X, (s32)range.Y);
+					m_animation_speed = readF1000(is);
+					m_animation_blend = readF1000(is);
+				}
+				// update animation only if local animations present
+				// and received animation is unknown (except idle animation)
+				bool is_known = false;
+				for (int i = 1;i<4;i++) {
+					if(m_animation_range.Y == player->local_animations[i].Y)
+						is_known = true;
+				}
+				if(!is_known ||
+					(player->local_animations[1].Y + player->local_animations[2].Y < 1)) {
+						updateAnimation();
+				}
 			}
 		}
 		else if(cmd == GENERIC_CMD_SET_BONE_POSITION)

@@ -411,6 +411,61 @@ int ObjectRef::l_set_animation(lua_State *L)
 	return 0;
 }
 
+// set_local_animation(self, {stand/idle}, {walk}, {dig}, {walk+dig}, frame_speed)
+int ObjectRef::l_set_local_animation(lua_State *L)
+{
+	//NO_MAP_LOCK_REQUIRED;
+	ObjectRef *ref = checkobject(L, 1);
+	Player *player = getplayer(ref);
+	if (player == NULL)
+		return 0;
+	// Do it
+	v2s32 frames[4];
+	for (int i=0;i<4;i++) {
+		if(!lua_isnil(L, 2+1))
+			frames[i] = read_v2s32(L, 2+i);
+	}
+	float frame_speed = 30;
+	if(!lua_isnil(L, 6))
+		frame_speed = lua_tonumber(L, 6);
+
+	if (!getServer(L)->setLocalPlayerAnimations(player, frames, frame_speed))
+		return 0;
+
+	lua_pushboolean(L, true);
+	return 0;
+}
+
+// set_eye_offset(self, v3f first pv, v3f third pv)
+int ObjectRef::l_set_eye_offset(lua_State *L)
+{
+	//NO_MAP_LOCK_REQUIRED;
+	ObjectRef *ref = checkobject(L, 1);
+	Player *player = getplayer(ref);
+	if (player == NULL)
+		return 0;
+	// Do it
+	v3f offset_first = v3f(0, 0, 0);
+	v3f offset_third = v3f(0, 0, 0);
+	
+	if(!lua_isnil(L, 2))
+		offset_first = read_v3f(L, 2);
+	if(!lua_isnil(L, 3))
+		offset_third = read_v3f(L, 3);
+
+	// Prevent abuse of offset values (keep player always visible)
+	offset_third.X = rangelim(offset_third.X,-10,10);
+	offset_third.Z = rangelim(offset_third.Z,-5,5);
+	/* TODO: if possible: improve the camera colision detetion to allow Y <= -1.5) */
+	offset_third.Y = rangelim(offset_third.Y,-10,15); //1.5*BS
+
+	if (!getServer(L)->setPlayerEyeOffset(player, offset_first, offset_third))
+		return 0;
+
+	lua_pushboolean(L, true);
+	return 0;
+}
+
 // set_bone_position(self, std::string bone, v3f position, v3f rotation)
 int ObjectRef::l_set_bone_position(lua_State *L)
 {
@@ -609,6 +664,7 @@ int ObjectRef::l_get_entity_name(lua_State *L)
 	NO_MAP_LOCK_REQUIRED;
 	ObjectRef *ref = checkobject(L, 1);
 	LuaEntitySAO *co = getluaobject(ref);
+	log_deprecated(L,"Deprecated call to \"get_entity_name");
 	if(co == NULL) return 0;
 	// Do it
 	std::string name = co->getName();
@@ -661,7 +717,7 @@ int ObjectRef::l_get_player_name(lua_State *L)
 		return 1;
 	}
 	// Do it
-	lua_pushstring(L, player->getName());
+	lua_pushstring(L, player->getName().c_str());
 	return 1;
 }
 
@@ -855,6 +911,10 @@ int ObjectRef::l_hud_add(lua_State *L)
 	elem->scale = lua_istable(L, -1) ? read_v2f(L, -1) : v2f();
 	lua_pop(L, 1);
 
+	lua_getfield(L, 2, "size");
+	elem->size = lua_istable(L, -1) ? read_v2s32(L, -1) : v2s32();
+	lua_pop(L, 1);
+
 	elem->name   = getstringfield_default(L, 2, "name", "");
 	elem->text   = getstringfield_default(L, 2, "text", "");
 	elem->number = getintfield_default(L, 2, "number", 0);
@@ -872,6 +932,11 @@ int ObjectRef::l_hud_add(lua_State *L)
 	lua_getfield(L, 2, "world_pos");
 	elem->world_pos = lua_istable(L, -1) ? read_v3f(L, -1) : v3f();
 	lua_pop(L, 1);
+
+	/* check for known deprecated element usage */
+	if ((elem->type  == HUD_ELEM_STATBAR) && (elem->size == v2s32())) {
+		log_deprecated(L,"Deprecated usage of statbar without size!");
+	}
 
 	u32 id = getServer(L)->hudAdd(player, elem);
 	if (id == (u32)-1) {
@@ -968,6 +1033,10 @@ int ObjectRef::l_hud_change(lua_State *L)
 			e->world_pos = read_v3f(L, 4);
 			value = &e->world_pos;
 			break;
+		case HUD_STAT_SIZE:
+			e->size = read_v2s32(L, 4);
+			value = &e->size;
+			break;
 	}
 
 	getServer(L)->hudChange(player, id, stat, value);
@@ -1047,6 +1116,28 @@ int ObjectRef::l_hud_set_flags(lua_State *L)
 		return 0;
 
 	lua_pushboolean(L, true);
+	return 1;
+}
+
+int ObjectRef::l_hud_get_flags(lua_State *L)
+{
+	ObjectRef *ref = checkobject(L, 1);
+	Player *player = getplayer(ref);
+	if (player == NULL)
+		return 0;
+
+	lua_newtable(L);
+	lua_pushboolean(L, player->hud_flags & HUD_FLAG_HOTBAR_VISIBLE);
+	lua_setfield(L, -2, "hotbar");
+	lua_pushboolean(L, player->hud_flags & HUD_FLAG_HEALTHBAR_VISIBLE);
+	lua_setfield(L, -2, "healthbar");
+	lua_pushboolean(L, player->hud_flags & HUD_FLAG_CROSSHAIR_VISIBLE);
+	lua_setfield(L, -2, "crosshair");
+	lua_pushboolean(L, player->hud_flags & HUD_FLAG_WIELDITEM_VISIBLE);
+	lua_setfield(L, -2, "wielditem");
+	lua_pushboolean(L, player->hud_flags & HUD_FLAG_BREATHBAR_VISIBLE);
+	lua_setfield(L, -2, "breathbar");
+
 	return 1;
 }
 
@@ -1270,10 +1361,13 @@ const luaL_reg ObjectRef::methods[] = {
 	luamethod(ObjectRef, hud_change),
 	luamethod(ObjectRef, hud_get),
 	luamethod(ObjectRef, hud_set_flags),
+	luamethod(ObjectRef, hud_get_flags),
 	luamethod(ObjectRef, hud_set_hotbar_itemcount),
 	luamethod(ObjectRef, hud_set_hotbar_image),
 	luamethod(ObjectRef, hud_set_hotbar_selected_image),
 	luamethod(ObjectRef, set_sky),
 	luamethod(ObjectRef, override_day_night_ratio),
+	luamethod(ObjectRef, set_local_animation),
+	luamethod(ObjectRef, set_eye_offset),
 	{0,0}
 };

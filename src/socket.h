@@ -30,6 +30,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef _WIN32_WINNT
 	#define _WIN32_WINNT 0x0501
 #endif
+	#define NOMINMAX
 	#include <windows.h>
 	#include <winsock2.h>
 	#include <ws2tcpip.h>
@@ -91,6 +92,7 @@ public:
 	Address(const IPv6AddressBytes * ipv6_bytes, u16 port);
 	bool operator==(Address &address);
 	bool operator!=(Address &address);
+	// Resolve() may throw ResolveError (address is unchanged in this case)
 	void Resolve(const char *name);
 	struct sockaddr_in getAddress() const;
 	unsigned short getPort() const;
@@ -100,6 +102,7 @@ public:
 	struct sockaddr_in6 getAddress6() const;
 	int getFamily() const;
 	bool isIPv6() const;
+	bool isZero() const;
 	void setPort(unsigned short port);
 	void print(std::ostream *s) const;
 	std::string serializeString() const;

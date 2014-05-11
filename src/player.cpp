@@ -57,13 +57,6 @@ Player::Player(IGameDef *gamedef):
 	m_speed(0,0,0),
 	m_position(0,0,0),
 	m_collisionbox(-BS*0.30,0.0,-BS*0.30,BS*0.30,BS*1.75,BS*0.30)
-#if WTF
-	m_last_pitch(0),
-	m_last_yaw(0),
-	m_last_pos(0,0,0),
-	m_last_hp(PLAYER_MAX_HP),
-	m_last_inventory(gamedef->idef())
-#endif
 {
 	updateName("<not set>");
 	inventory.clear();
@@ -72,9 +65,6 @@ Player::Player(IGameDef *gamedef):
 	craft->setWidth(3);
 	inventory.addList("craftpreview", 1);
 	inventory.addList("craftresult", 1);
-#if WTF
-	m_last_inventory = inventory;
-#endif
 
 	// Can be redefined via Lua
 	inventory_formspec = "size[8,7.5]"
@@ -261,20 +251,11 @@ void Player::deSerialize(std::istream &is, std::string playername)
 			inventory.getList("craftresult")->changeItem(0, ItemStack());
 		}
 	}
-
-	// Set m_last_*
-#if WTF
-	checkModified();
-#endif
 }
 
 /*
 	RemotePlayer
 */
-
-
-
-
 
 void RemotePlayer::setPosition(const v3f &position)
 {
@@ -282,3 +263,68 @@ void RemotePlayer::setPosition(const v3f &position)
 	if(m_sao)
 		m_sao->setBasePosition(position);
 }
+
+
+
+Json::Value operator<<(Json::Value &json, v3f &v) {
+	json["X"] = v.X;
+	json["Y"] = v.Y;
+	json["Z"] = v.Z;
+	return json;
+}
+
+Json::Value operator>>(Json::Value &json, v3f &v) {
+	v.X = json["X"].asFloat();
+	v.Y = json["Y"].asFloat();
+	v.Z = json["Z"].asFloat();
+	return json;
+}
+
+Json::Value operator<<(Json::Value &json, Player &player) {
+	std::ostringstream ss(std::ios_base::binary);
+	//todo
+	player.inventory.serialize(ss);
+	json["inventory_old"] = ss.str();
+
+	json["name"] = player.m_name;
+	json["pitch"] = player.m_pitch;
+	json["yaw"] = player.m_yaw;
+	json["position"] << player.m_position;
+	json["hp"] = player.hp;
+	json["breath"] = player.m_breath;
+	return json;
+}
+
+Json::Value operator>>(Json::Value &json, Player &player) {
+	player.updateName(json["name"].asCString());
+	player.setPitch(json["pitch"].asFloat());
+	player.setYaw(json["yaw"].asFloat());
+	v3f position;
+	json["position"]>>position;
+	player.setPosition(position);
+	player.hp = json["hp"].asInt();
+	player.m_breath = json["breath"].asInt();
+
+	//todo
+	std::istringstream ss(json["inventory_old"].asString());
+	auto & inventory = player.inventory;
+	inventory.deSerialize(ss);
+
+	if(inventory.getList("craftpreview") == NULL)
+	{
+		// Convert players without craftpreview
+		inventory.addList("craftpreview", 1);
+
+		bool craftresult_is_preview = true;
+		//if(args.exists("craftresult_is_preview"))
+		//	craftresult_is_preview = args.getBool("craftresult_is_preview");
+		if(craftresult_is_preview)
+		{
+			// Clear craftresult
+			inventory.getList("craftresult")->changeItem(0, ItemStack());
+		}
+	}
+
+	return json;
+}
+

@@ -48,6 +48,13 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "filesys.h"
 #include "gettime.h"
 #include "gettext.h"
+#if USE_FREETYPE
+#include "settings.h"
+#include "main.h"  // for g_settings
+#include "intlGUIEditBox.h"
+#endif
+
+#include "scripting_game.h"
 
 #define MY_CHECKPOS(a,b)													\
 	if (v_pos.size() != 2) {												\
@@ -71,20 +78,22 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 GUIFormSpecMenu::GUIFormSpecMenu(irr::IrrlichtDevice* dev,
 		gui::IGUIElement* parent, s32 id, IMenuManager *menumgr,
 		InventoryManager *invmgr, IGameDef *gamedef,
-		ISimpleTextureSource *tsrc) :
+		ISimpleTextureSource *tsrc, IFormSource* fsrc, TextDest* tdst,
+		GUIFormSpecMenu** ext_ptr) :
 	GUIModalMenu(dev->getGUIEnvironment(), parent, id, menumgr),
 	m_device(dev),
 	m_invmgr(invmgr),
 	m_gamedef(gamedef),
 	m_tsrc(tsrc),
-	m_form_src(NULL),
-	m_text_dst(NULL),
 	m_selected_item(NULL),
 	m_selected_amount(0),
 	m_selected_dragging(false),
 	m_tooltip_element(NULL),
 	m_allowclose(true),
-	m_lock(false)
+	m_lock(false),
+	m_form_src(fsrc),
+	m_text_dst(tdst),
+	m_ext_ptr(ext_ptr)
 {
 	current_keys_pending.key_down = false;
 	current_keys_pending.key_up = false;
@@ -98,8 +107,18 @@ GUIFormSpecMenu::~GUIFormSpecMenu()
 	removeChildren();
 
 	delete m_selected_item;
-	delete m_form_src;
-	delete m_text_dst;
+
+	if (m_form_src != NULL) {
+		delete m_form_src;
+	}
+	if (m_text_dst != NULL) {
+		delete m_text_dst;
+	}
+
+	if (m_ext_ptr != NULL) {
+		assert(*m_ext_ptr == this);
+		*m_ext_ptr = NULL;
+	}
 }
 
 void GUIFormSpecMenu::removeChildren()
@@ -813,11 +832,13 @@ void GUIFormSpecMenu::parsePwdField(parserData* data,std::string element)
 {
 	std::vector<std::string> parts = split(element,';');
 
-	if (parts.size() == 4) {
+	if (parts.size() == 4 || parts.size() == 5) {
 		std::vector<std::string> v_pos = split(parts[0],',');
 		std::vector<std::string> v_geom = split(parts[1],',');
 		std::string name = parts[2];
 		std::string label = parts[3];
+		std::string default_val;
+		if (parts.size() == 5) default_val = parts[4];
 
 		MY_CHECKPOS("pwdfield",0);
 		MY_CHECKGEOM("pwdfield",1);
@@ -835,6 +856,10 @@ void GUIFormSpecMenu::parsePwdField(parserData* data,std::string element)
 
 		core::rect<s32> rect = core::rect<s32>(pos.X, pos.Y, pos.X+geom.X, pos.Y+geom.Y);
 
+		if(m_form_src && default_val.size())
+			default_val = m_form_src->resolveText(default_val);
+
+		default_val = unescape_string(default_val);
 		label = unescape_string(label);
 
 		std::wstring wlabel = narrow_to_wide(label.c_str());
@@ -842,7 +867,7 @@ void GUIFormSpecMenu::parsePwdField(parserData* data,std::string element)
 		FieldSpec spec = FieldSpec(
 			narrow_to_wide(name.c_str()),
 			wlabel,
-			L"",
+			narrow_to_wide(default_val.c_str()),
 			258+m_fields.size()
 			);
 
@@ -931,7 +956,14 @@ void GUIFormSpecMenu::parseSimpleField(parserData* data,
 	else
 	{
 		spec.send = true;
-		gui::IGUIEditBox *e = Environment->addEditBox(spec.fdefault.c_str(), rect, true, this, spec.fid);
+
+		gui::IGUIEditBox *e = nullptr;
+		#if USE_FREETYPE
+		if (g_settings->getBool("freetype"))
+			e = (gui::IGUIEditBox *) new gui::intlGUIEditBox(spec.fdefault.c_str(), true, Environment, this, spec.fid, rect);
+		#endif
+		if (!e)
+			e = Environment->addEditBox(spec.fdefault.c_str(), rect, true, this, spec.fid);
 
 		if (spec.fname == data->focused_fieldname) {
 			Environment->setFocus(e);
@@ -1019,7 +1051,14 @@ void GUIFormSpecMenu::parseTextArea(parserData* data,
 	else
 	{
 		spec.send = true;
-		gui::IGUIEditBox *e = Environment->addEditBox(spec.fdefault.c_str(), rect, true, this, spec.fid);
+
+		gui::IGUIEditBox *e = nullptr;
+		#if USE_FREETYPE
+		if (g_settings->getBool("freetype"))
+			e = (gui::IGUIEditBox *) new gui::intlGUIEditBox(spec.fdefault.c_str(), true, Environment, this, spec.fid, rect);
+		#endif
+		if (!e)
+			e = Environment->addEditBox(spec.fdefault.c_str(), rect, true, this, spec.fid);
 
 		if (spec.fname == data->focused_fieldname) {
 			Environment->setFocus(e);
@@ -1028,6 +1067,7 @@ void GUIFormSpecMenu::parseTextArea(parserData* data,
 		if (type == "textarea")
 		{
 			e->setMultiLine(true);
+			e->setWordWrap(true);
 			e->setTextAlignment(gui::EGUIA_UPPERLEFT, gui::EGUIA_UPPERLEFT);
 		} else {
 			irr::SEvent evt;
@@ -1468,7 +1508,13 @@ void GUIFormSpecMenu::parseElement(parserData* data,std::string element)
 	std::string type = trim(parts[0]);
 	std::string description = trim(parts[1]);
 
-	if ((type == "size") || (type == "invsize")){
+	if (type == "size") {
+		parseSize(data,description);
+		return;
+	}
+
+	if (type == "invsize") {
+		log_deprecated("Deprecated formspec element \"invsize\" is used");
 		parseSize(data,description);
 		return;
 	}

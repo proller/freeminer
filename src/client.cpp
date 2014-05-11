@@ -50,6 +50,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "serialization.h"
 #include "util/serialize.h"
 #include "config.h"
+#include "cmake_config_githash.h"
 #include "util/directiontables.h"
 #include "util/pointedthing.h"
 #include "version.h"
@@ -175,6 +176,9 @@ void * MeshUpdateThread::Thread()
 	
 	BEGIN_DEBUG_EXCEPTION_HANDLER
 
+	porting::setThreadName("MeshUpdateThread");
+	porting::setThreadPriority(10);
+
 	while(!StopRequested())
 	{
 		QueuedMeshUpdate *q = m_queue_in.pop();
@@ -227,6 +231,11 @@ Client::Client(
 		bool ipv6
 		, bool simple_singleplayer_mode
 ):
+	m_packetcounter_timer(0.0),
+	m_connection_reinit_timer(0.1),
+	m_avg_rtt_timer(0.0),
+	m_playerpos_send_timer(0.0),
+	m_ignore_damage_timer(0.0),
 	m_tsrc(tsrc),
 	m_shsrc(shsrc),
 	m_itemdef(itemdef),
@@ -261,15 +270,9 @@ Client::Client(
 	m_last_time_of_day_f(-1),
 	m_time_of_day_update_timer(0),
 	m_recommended_send_interval(0.1),
-	m_removed_sounds_check_timer(0)
+	m_removed_sounds_check_timer(0),
+	m_state(LC_Created)
 {
-	m_packetcounter_timer = 0.0;
-	//m_delete_unused_sectors_timer = 0.0;
-	m_connection_reinit_timer = 0.0;
-	m_avg_rtt_timer = 0.0;
-	m_playerpos_send_timer = 0.0;
-	m_ignore_damage_timer = 0.0;
-
 	/*
 		Add local player
 	*/
@@ -334,26 +337,16 @@ void Client::connect(Address address)
 	m_con.Connect(address);
 }
 
-bool Client::connectedAndInitialized()
-{
-	if(m_con.Connected() == false)
-		return false;
-	
-	if(m_server_ser_ver == SER_FMT_VER_INVALID)
-		return false;
-	
-	return true;
-}
-
 void Client::step(float dtime)
 {
 	DSTACK(__FUNCTION_NAME);
-	
+
 	m_uptime += dtime;
+
 	// Limit a bit
 	if(dtime > 2.0)
 		dtime = 2.0;
-	
+
 	if(m_ignore_damage_timer > dtime)
 		m_ignore_damage_timer -= dtime;
 	else
@@ -377,14 +370,12 @@ void Client::step(float dtime)
 		{
 			counter = 20.0;
 			
-			infostream<<"Client packetcounter (20s):"<<std::endl;
+			infostream << "Client packetcounter (" << m_packetcounter_timer
+					<< "):"<<std::endl;
 			m_packetcounter.print(infostream);
 			m_packetcounter.clear();
 		}
 	}
-	
-	// Get connection status
-	bool connected = connectedAndInitialized();
 
 #if 0
 	{
@@ -476,8 +467,13 @@ void Client::step(float dtime)
 		}
 	}
 #endif
-
-	if(connected == false)
+	// UGLY hack to fix 2 second startup delay caused by non existent
+	// server client startup synchronization in local server or singleplayer mode
+	static bool initial_step = true;
+	if (initial_step) {
+		initial_step = false;
+	}
+	else if(m_state == LC_Created)
 	{
 		float &counter = m_connection_reinit_timer;
 		counter -= dtime;
@@ -489,7 +485,6 @@ void Client::step(float dtime)
 			
 			Player *myplayer = m_env.getLocalPlayer();
 			assert(myplayer != NULL);
-	
 			// Send TOSERVER_INIT
 			// [0] u16 TOSERVER_INIT
 			// [2] u8 SER_FMT_VER_HIGHEST_READ
@@ -502,7 +497,7 @@ void Client::step(float dtime)
 			writeU8(&data[2], SER_FMT_VER_HIGHEST_READ);
 
 			memset((char*)&data[3], 0, PLAYERNAME_SIZE);
-			snprintf((char*)&data[3], PLAYERNAME_SIZE, "%s", myplayer->getName());
+			snprintf((char*)&data[3], PLAYERNAME_SIZE, "%s", myplayer->getName().c_str());
 
 			/*infostream<<"Client: sending initial password hash: \""<<m_password<<"\""
 					<<std::endl;*/
@@ -646,7 +641,7 @@ void Client::step(float dtime)
 		{
 			counter = 0.0;
 			// connectedAndInitialized() is true, peer exists.
-			float avg_rtt = m_con.GetPeerAvgRTT(PEER_ID_SERVER);
+			float avg_rtt = getRTT();
 			infostream<<"Client: avg_rtt="<<avg_rtt<<std::endl;
 		}
 	}
@@ -657,7 +652,7 @@ void Client::step(float dtime)
 	{
 		float &counter = m_playerpos_send_timer;
 		counter += dtime;
-		if(counter >= m_recommended_send_interval)
+		if((m_state == LC_Ready) && (counter >= m_recommended_send_interval))
 		{
 			counter = 0.0;
 			sendPlayerPos();
@@ -1071,6 +1066,8 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id)
 		// Send as reliable
 		m_con.Send(PEER_ID_SERVER, 1, reply, true);
 
+		m_state = LC_Init;
+
 		return;
 	}
 
@@ -1242,7 +1239,7 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id)
 		m_time_of_day_set = true;
 
 		u32 dr = m_env.getDayNightRatio();
-		verbosestream<<"Client: time_of_day="<<time_of_day
+		infostream<<"Client: time_of_day="<<time_of_day
 				<<" time_speed="<<time_speed
 				<<" dr="<<dr<<std::endl;
 	}
@@ -1812,9 +1809,13 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id)
 		v2f align        = readV2F1000(is);
 		v2f offset       = readV2F1000(is);
 		v3f world_pos;
+		v2s32 size;
 		try{
 			world_pos    = readV3F1000(is);
 		}catch(SerializationError &e) {};
+		try{
+			size = readV2S32(is);
+		} catch(SerializationError &e) {};
 
 		ClientEvent event;
 		event.type             = CE_HUDADD;
@@ -1830,6 +1831,7 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id)
 		event.hudadd.align     = new v2f(align);
 		event.hudadd.offset    = new v2f(offset);
 		event.hudadd.world_pos = new v3f(world_pos);
+		event.hudadd.size      = new v2s32(size);
 		m_client_event_queue.push_back(event);
 	}
 	else if(command == TOCLIENT_HUDRM)
@@ -1850,6 +1852,7 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id)
 		v2f v2fdata;
 		v3f v3fdata;
 		u32 intdata = 0;
+		v2s32 v2s32data;
 		
 		std::string datastring((char *)&data[2], datasize - 2);
 		std::istringstream is(datastring, std::ios_base::binary);
@@ -1864,6 +1867,8 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id)
 			sdata = deSerializeString(is);
 		else if (stat == HUD_STAT_WORLD_POS)
 			v3fdata = readV3F1000(is);
+		else if (stat == HUD_STAT_SIZE )
+			v2s32data = readV2S32(is);
 		else
 			intdata = readU32(is);
 		
@@ -1875,6 +1880,7 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id)
 		event.hudchange.v3fdata = new v3f(v3fdata);
 		event.hudchange.sdata   = new std::string(sdata);
 		event.hudchange.data    = intdata;
+		event.hudchange.v2s32data = new v2s32(v2s32data);
 		m_client_event_queue.push_back(event);
 	}
 	else if(command == TOCLIENT_HUD_SET_FLAGS)
@@ -1907,21 +1913,6 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id)
 		else if (param == HUD_PARAM_HOTBAR_SELECTED_IMAGE) {
 			((LocalPlayer *) player)->hotbar_selected_image = value;
 		}
-	}
-	else if(command == TOCLIENT_ANIMATIONS)
-	{
-		std::string datastring((char*)&data[2], datasize-2);
-		std::istringstream is(datastring, std::ios_base::binary);
-		LocalPlayer *player = m_env.getLocalPlayer();
-		assert(player != NULL);
-		player->animation_default_start = readF1000(is);
-		player->animation_default_stop = readF1000(is);
-		player->animation_walk_start = readF1000(is);
-		player->animation_walk_stop = readF1000(is);
-		player->animation_dig_start = readF1000(is);
-		player->animation_dig_stop = readF1000(is);
-		player->animation_wd_start = readF1000(is);
-		player->animation_wd_stop = readF1000(is);
 	}
 	else if(command == TOCLIENT_SET_SKY)
 	{
@@ -1957,6 +1948,31 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id)
 		event.override_day_night_ratio.ratio_f     = day_night_ratio_f;
 		m_client_event_queue.push_back(event);
 	}
+	else if(command == TOCLIENT_LOCAL_PLAYER_ANIMATIONS)
+	{
+		std::string datastring((char *)&data[2], datasize - 2);
+		std::istringstream is(datastring, std::ios_base::binary);
+
+		LocalPlayer *player = m_env.getLocalPlayer();
+		assert(player != NULL);
+
+		player->local_animations[0] = readV2S32(is);
+		player->local_animations[1] = readV2S32(is);
+		player->local_animations[2] = readV2S32(is);
+		player->local_animations[3] = readV2S32(is);
+		player->local_animation_speed = readF1000(is);
+	}
+	else if(command == TOCLIENT_EYE_OFFSET)
+	{
+		std::string datastring((char *)&data[2], datasize - 2);
+		std::istringstream is(datastring, std::ios_base::binary);
+
+		LocalPlayer *player = m_env.getLocalPlayer();
+		assert(player != NULL);
+
+		player->eye_offset_first = readV3F1000(is);
+		player->eye_offset_third = readV3F1000(is);
+	}
 	else
 	{
 		infostream<<"Client: Ignoring unknown command "
@@ -1972,7 +1988,7 @@ void Client::Send(u16 channelnum, SharedBuffer<u8> data, bool reliable)
 
 void Client::interact(u8 action, const PointedThing& pointed)
 {
-	if(connectedAndInitialized() == false){
+	if(m_state != LC_Ready){
 		infostream<<"Client::interact() "
 				"cancelled (not connected)"
 				<<std::endl;
@@ -2179,6 +2195,27 @@ void Client::sendRespawn()
 	std::ostringstream os(std::ios_base::binary);
 
 	writeU16(os, TOSERVER_RESPAWN);
+
+	// Make data buffer
+	std::string s = os.str();
+	SharedBuffer<u8> data((u8*)s.c_str(), s.size());
+	// Send as reliable
+	Send(0, data, true);
+}
+
+void Client::sendReady()
+{
+	DSTACK(__FUNCTION_NAME);
+	std::ostringstream os(std::ios_base::binary);
+
+	writeU16(os, TOSERVER_CLIENT_READY);
+	writeU8(os,VERSION_MAJOR);
+	writeU8(os,VERSION_MINOR);
+	writeU8(os,(int)VERSION_PATCH_ORIG);
+	writeU8(os,0);
+
+	writeU16(os,strlen(CMAKE_VERSION_GITHASH));
+	os.write(CMAKE_VERSION_GITHASH,strlen(CMAKE_VERSION_GITHASH));
 
 	// Make data buffer
 	std::string s = os.str();
@@ -2693,16 +2730,26 @@ void Client::afterContentReceived(IrrlichtDevice *device, gui::IGUIFont* font)
 	if (!no_output)
 		m_mesh_update_thread.Start();
 	
+	m_state = LC_Ready;
+	sendReady();
 	infostream<<"Client::afterContentReceived() done"<<std::endl;
 }
 
 float Client::getRTT(void)
 {
-	try{
-		return m_con.GetPeerAvgRTT(PEER_ID_SERVER);
-	} catch(con::PeerNotFoundException &e){
-		return 1337;
-	}
+	return m_con.getPeerStat(PEER_ID_SERVER,con::AVG_RTT);
+}
+
+float Client::getCurRate(void)
+{
+	return ( m_con.getLocalStat(con::CUR_INC_RATE) +
+			m_con.getLocalStat(con::CUR_DL_RATE));
+}
+
+float Client::getAvgRate(void)
+{
+	return ( m_con.getLocalStat(con::AVG_INC_RATE) +
+			m_con.getLocalStat(con::AVG_DL_RATE));
 }
 
 // IGameDef interface

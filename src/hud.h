@@ -48,6 +48,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #define HUD_HOTBAR_ITEMCOUNT_DEFAULT 8
 #define HUD_HOTBAR_ITEMCOUNT_MAX     23
 
+
+#define HOTBAR_IMAGE_SIZE 48
+
 enum HudElementType {
 	HUD_ELEM_IMAGE     = 0,
 	HUD_ELEM_TEXT      = 1,
@@ -66,7 +69,8 @@ enum HudElementStat {
 	HUD_STAT_DIR,
 	HUD_STAT_ALIGN,
 	HUD_STAT_OFFSET,
-	HUD_STAT_WORLD_POS
+	HUD_STAT_WORLD_POS,
+	HUD_STAT_SIZE
 };
 
 struct HudElement {
@@ -81,6 +85,7 @@ struct HudElement {
 	v2f align;
 	v2f offset;
 	v3f world_pos;
+	v2s32 size;
 };
 
 #ifndef SERVER
@@ -108,10 +113,6 @@ public:
 	Inventory *inventory;
 	ITextureSource *tsrc;
 
-	v2u32 screensize;
-	v2s32 displaycenter;
-	s32 hotbar_imagesize;
-	
 	video::SColor crosshair_argb;
 	video::SColor selectionbox_argb;
 	bool use_crosshair_image;
@@ -119,23 +120,32 @@ public:
 	bool use_hotbar_image;
 	std::string hotbar_selected_image;
 	bool use_hotbar_selected_image;
+	v3s16 camera_offset;
 	
 	Hud(video::IVideoDriver *driver,scene::ISceneManager* smgr,
 		gui::IGUIEnvironment* guienv, gui::IGUIFont *font,
 		u32 text_height, IGameDef *gamedef,
 		LocalPlayer *player, Inventory *inventory);
 	
-	void drawItem(v2s32 upperleftpos, s32 imgsize, s32 itemcount,
-		InventoryList *mainlist, u16 selectitem, u16 direction);
-	void drawLuaElements();
-	void drawStatbar(v2s32 pos, u16 corner, u16 drawdir,
-					 std::string texture, s32 count, v2s32 offset);
-	
-	void drawHotbar(v2s32 centerlowerpos, s32 halfheartcount, u16 playeritem, s32 breath);
+	void drawHotbar(u16 playeritem);
 	void resizeHotbar();
-	
 	void drawCrosshair();
 	void drawSelectionBoxes(std::vector<aabb3f> &hilightboxes);
+	void drawLuaElements(v3s16 camera_offset);
+private:
+	void drawStatbar(v2s32 pos, u16 corner, u16 drawdir, std::string texture,
+			s32 count, v2s32 offset, v2s32 size=v2s32());
+	
+	void drawItems(v2s32 upperleftpos, s32 itemcount, s32 offset,
+		InventoryList *mainlist, u16 selectitem, u16 direction);
+
+	void drawItem(const ItemStack &item, const core::rect<s32>& rect, bool selected);
+	
+	v2u32 m_screensize;
+	v2s32 m_displaycenter;
+	s32 m_hotbar_imagesize;
+	s32 m_padding;
+	video::SColor hbar_colors[4];
 };
 
 void drawItemStack(video::IVideoDriver *driver,

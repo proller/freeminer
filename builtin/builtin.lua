@@ -12,12 +12,6 @@ print = minetest.debug
 math.randomseed(os.time())
 os.setlocale("C", "numeric")
 
-local errorfct = error
-error = function(text)
-	print(debug.traceback(""))
-	errorfct(text)
-end
-
 -- Load other files
 local modpath = minetest.get_modpath("__builtin")
 dofile(modpath.."/serialize.lua")
@@ -25,6 +19,7 @@ dofile(modpath.."/misc_helpers.lua")
 dofile(modpath.."/item.lua")
 dofile(modpath.."/misc_register.lua")
 dofile(modpath.."/item_entity.lua")
+dofile(modpath.."/key_value_storage.lua")
 dofile(modpath.."/deprecated.lua")
 dofile(modpath.."/misc.lua")
 dofile(modpath.."/privileges.lua")
@@ -38,3 +33,4 @@ dofile(modpath.."/voxelarea.lua")
 dofile(modpath.."/vector.lua")
 dofile(modpath.."/profiler.lua")
 dofile(modpath.."/forceloading.lua")
+dofile(modpath.."/statbars.lua")

@@ -131,7 +131,9 @@ public:
 			//data[i] = MapNode();
 			data[i] = MapNode(CONTENT_IGNORE);
 		}
+/*
 		raiseModified(MOD_STATE_WRITE_NEEDED, "reallocate");
+*/
 	}
 
 	/*
@@ -151,6 +153,9 @@ public:
 	// m_modified methods
 	void raiseModified(u32 mod)
 	{
+		if(mod >= MOD_STATE_WRITE_NEEDED && m_timestamp != BLOCK_TIMESTAMP_UNDEFINED) {
+			m_changed_timestamp = m_timestamp;
+		}
 		if(mod > m_modified){
 			m_modified = mod;
 			if(m_modified >= MOD_STATE_WRITE_AT_UNLOAD)
@@ -159,17 +164,20 @@ public:
 	}
 	void raiseModified(u32 mod, const std::string &reason)
 	{
+		raiseModified(mod);
+
+#ifdef WTFdebug
+		if(mod >= MOD_STATE_WRITE_NEEDED && m_timestamp != BLOCK_TIMESTAMP_UNDEFINED) {
+			m_changed_timestamp = m_timestamp;
+		}
 		if(mod > m_modified){
 			m_modified = mod;
-/* maybe make via define for debug
 			m_modified_reason = reason;
 			m_modified_reason_too_long = false;
-*/
 
 			if(m_modified >= MOD_STATE_WRITE_AT_UNLOAD){
 				m_disk_timestamp = m_timestamp;
 			}
-/*
 		} else if(mod == m_modified){
 			if(!m_modified_reason_too_long){
 				if(m_modified_reason.size() < 40)
@@ -179,8 +187,8 @@ public:
 					m_modified_reason_too_long = true;
 				}
 			}
-*/
 		}
+#endif
 	}
 	u32 getModified()
 	{
@@ -205,14 +213,18 @@ public:
 	void setIsUnderground(bool a_is_underground)
 	{
 		is_underground = a_is_underground;
+/*
 		raiseModified(MOD_STATE_WRITE_NEEDED, "setIsUnderground");
+*/
 	}
 
 	void setLightingExpired(bool expired)
 	{
 		if(expired != m_lighting_expired){
 			m_lighting_expired = expired;
+/*
 			raiseModified(MOD_STATE_WRITE_NEEDED, "setLightingExpired");
+*/
 		}
 	}
 	bool getLightingExpired()
@@ -227,7 +239,9 @@ public:
 	void setGenerated(bool b)
 	{
 		if(b != m_generated){
+/*
 			raiseModified(MOD_STATE_WRITE_NEEDED, "setGenerated");
+*/
 			m_generated = b;
 		}
 	}
@@ -337,7 +351,7 @@ public:
 		if(data == NULL)
 			throw InvalidPositionException();
 		data[z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + y*MAP_BLOCKSIZE + x] = n;
-		raiseModified(MOD_STATE_WRITE_NEEDED /*, "setNodeNoCheck"*/);
+		raiseModified(MOD_STATE_WRITE_NEEDED/*, "setNodeNoCheck"*/);
 	}
 	
 	void setNodeNoCheck(v3s16 p, MapNode & n)
@@ -542,6 +556,9 @@ public:
 	u32 heat_last_update;
 	u32 humidity_last_update;
 	float m_uptime_timer_last;
+
+	// Last really changed time (need send to client)
+	u32 m_changed_timestamp;
 private:
 	/*
 		Private member variables
@@ -629,9 +646,12 @@ inline bool blockpos_over_limit(v3s16 p)
 /*
 	Returns the position of the block where the node is located
 */
-inline v3s16 getNodeBlockPos(v3s16 p)
+inline v3s16 getNodeBlockPos(const v3s16 &p)
 {
+	return v3s16(p.X >> MAP_BLOCKP, p.Y >> MAP_BLOCKP, p.Z >> MAP_BLOCKP);
+/*
 	return getContainerPos(p, MAP_BLOCKSIZE);
+*/
 }
 
 inline v2s16 getNodeSectorPos(v2s16 p)

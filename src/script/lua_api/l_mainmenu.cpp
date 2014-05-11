@@ -23,7 +23,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "lua_api/l_mainmenu.h"
 #include "lua_api/l_internal.h"
 #include "common/c_content.h"
-#include "lua_api/l_async_events.h"
+#include "cpp_api/s_async.h"
 #include "guiEngine.h"
 #include "guiMainMenu.h"
 #include "guiKeyChangeMenu.h"
@@ -390,11 +390,6 @@ int ModApiMainMenu::l_get_modstore_details(lua_State *L)
 /******************************************************************************/
 int ModApiMainMenu::l_get_modstore_list(lua_State *L)
 {
-	std::string listtype = "local";
-
-	if (!lua_isnone(L,1)) {
-		listtype = luaL_checkstring(L,1);
-	}
 	Json::Value mods;
 	std::string url = "";
 	try{
@@ -460,104 +455,16 @@ int ModApiMainMenu::l_get_favorites(lua_State *L)
 	servers = ServerList::getLocal();
 #endif
 
-	lua_newtable(L);
-	int top = lua_gettop(L);
-	unsigned int index = 1;
-
+	Json::Value root(Json::arrayValue);
 	for (unsigned int i = 0; i < servers.size(); i++)
 	{
-		lua_pushnumber(L,index);
-
-		lua_newtable(L);
-		int top_lvl2 = lua_gettop(L);
-
-		if (servers[i]["clients"].asString().size()) {
-			std::string clients_raw = servers[i]["clients"].asString();
-			char* endptr = 0;
-			int numbervalue = strtol(clients_raw.c_str(),&endptr,10);
-
-			if ((clients_raw != "") && (*endptr == 0)) {
-				lua_pushstring(L,"clients");
-				lua_pushnumber(L,numbervalue);
-				lua_settable(L, top_lvl2);
-			}
-		}
-
-		if (servers[i]["clients_max"].asString().size()) {
-
-			std::string clients_max_raw = servers[i]["clients_max"].asString();
-			char* endptr = 0;
-			int numbervalue = strtol(clients_max_raw.c_str(),&endptr,10);
-
-			if ((clients_max_raw != "") && (*endptr == 0)) {
-				lua_pushstring(L,"clients_max");
-				lua_pushnumber(L,numbervalue);
-				lua_settable(L, top_lvl2);
-			}
-		}
-
-		if (servers[i]["version"].asString().size()) {
-			lua_pushstring(L,"version");
-			std::string topush = servers[i]["version"].asString();
-			lua_pushstring(L,topush.c_str());
-			lua_settable(L, top_lvl2);
-		}
-
-		if (servers[i]["password"].asString().size()) {
-			lua_pushstring(L,"password");
-			lua_pushboolean(L,true);
-			lua_settable(L, top_lvl2);
-		}
-
-		if (servers[i]["creative"].asString().size()) {
-			lua_pushstring(L,"creative");
-			lua_pushboolean(L,true);
-			lua_settable(L, top_lvl2);
-		}
-
-		if (servers[i]["damage"].asString().size()) {
-			lua_pushstring(L,"damage");
-			lua_pushboolean(L,true);
-			lua_settable(L, top_lvl2);
-		}
-
-		if (servers[i]["pvp"].asString().size()) {
-			lua_pushstring(L,"pvp");
-			lua_pushboolean(L,true);
-			lua_settable(L, top_lvl2);
-		}
-
-		if (servers[i]["description"].asString().size()) {
-			lua_pushstring(L,"description");
-			std::string topush = servers[i]["description"].asString();
-			lua_pushstring(L,topush.c_str());
-			lua_settable(L, top_lvl2);
-		}
-
-		if (servers[i]["name"].asString().size()) {
-			lua_pushstring(L,"name");
-			std::string topush = servers[i]["name"].asString();
-			lua_pushstring(L,topush.c_str());
-			lua_settable(L, top_lvl2);
-		}
-
-		if (servers[i]["address"].asString().size()) {
-			lua_pushstring(L,"address");
-			std::string topush = servers[i]["address"].asString();
-			lua_pushstring(L,topush.c_str());
-			lua_settable(L, top_lvl2);
-		}
-
-		if (servers[i]["port"].asString().size()) {
-			lua_pushstring(L,"port");
-			std::string topush = servers[i]["port"].asString();
-			lua_pushstring(L,topush.c_str());
-			lua_settable(L, top_lvl2);
-		}
-
-		lua_settable(L, top);
-		index++;
+		root[i] = servers[i];
 	}
+	lua_pushnil(L);
+	int nullindex = lua_gettop(L);
+	if(!push_json_value(L, root, nullindex)) {
+	}
+
 	return 1;
 }
 
@@ -993,6 +900,9 @@ int ModApiMainMenu::l_download_file(lua_State *L)
 			lua_pushboolean(L,true);
 			return 1;
 		}
+	} else {
+		errorstream << "DOWNLOAD denied: " << absolute_destination
+				<< " isn't a allowed path" << std::endl;
 	}
 	lua_pushboolean(L,false);
 	return 1;
@@ -1008,23 +918,49 @@ int ModApiMainMenu::l_gettext(lua_State *L)
 }
 
 /******************************************************************************/
+int ModApiMainMenu::l_get_screen_info(lua_State *L)
+{
+	lua_newtable(L);
+	int top = lua_gettop(L);
+	lua_pushstring(L,"density");
+	lua_pushnumber(L,porting::getDisplayDensity());
+	lua_settable(L, top);
+
+	lua_pushstring(L,"display_width");
+	lua_pushnumber(L,porting::getDisplaySize().X);
+	lua_settable(L, top);
+
+	lua_pushstring(L,"display_height");
+	lua_pushnumber(L,porting::getDisplaySize().Y);
+	lua_settable(L, top);
+
+	lua_pushstring(L,"window_width");
+	lua_pushnumber(L,porting::getWindowSize().X);
+	lua_settable(L, top);
+
+	lua_pushstring(L,"window_height");
+	lua_pushnumber(L,porting::getWindowSize().Y);
+	lua_settable(L, top);
+	return 1;
+}
+
+/******************************************************************************/
 int ModApiMainMenu::l_do_async_callback(lua_State *L)
 {
 	GUIEngine* engine = getGuiEngine(L);
 
-	const char* serialized_fct_raw = luaL_checkstring(L, 1);
-	unsigned int lenght_fct = luaL_checkint(L, 2);
+	size_t func_length, param_length;
+	const char* serialized_func_raw = luaL_checklstring(L, 1, &func_length);
 
-	const char* serialized_params_raw = luaL_checkstring(L, 3);
-	unsigned int lenght_params = luaL_checkint(L, 4);
+	const char* serialized_param_raw = luaL_checklstring(L, 2, &param_length);
 
-	assert(serialized_fct_raw != 0);
-	assert(serialized_params_raw != 0);
+	assert(serialized_func_raw != NULL);
+	assert(serialized_param_raw != NULL);
 
-	std::string serialized_fct = std::string(serialized_fct_raw,lenght_fct);
-	std::string serialized_params = std::string(serialized_params_raw,lenght_params);
+	std::string serialized_func = std::string(serialized_func_raw, func_length);
+	std::string serialized_param = std::string(serialized_param_raw, param_length);
 
-	lua_pushinteger(L,engine->DoAsync(serialized_fct,serialized_params));
+	lua_pushinteger(L, engine->queueAsync(serialized_func, serialized_param));
 
 	return 1;
 }
@@ -1065,6 +1001,7 @@ void ModApiMainMenu::Initialize(lua_State *L, int top)
 	API_FCT(sound_play);
 	API_FCT(sound_stop);
 	API_FCT(gettext);
+	API_FCT(get_screen_info);
 	API_FCT(do_async_callback);
 }
 

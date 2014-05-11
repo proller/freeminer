@@ -219,6 +219,9 @@ private:
 	// hud_set_flags(self, flags)
 	static int l_hud_set_flags(lua_State *L);
 
+	// hud_get_flags()
+	static int l_hud_get_flags(lua_State *L);
+
 	// hud_set_hotbar_itemcount(self, hotbar_itemcount)
 	static int l_hud_set_hotbar_itemcount(lua_State *L);
 
@@ -233,6 +236,12 @@ private:
 
 	// override_day_night_ratio(self, type, list)
 	static int l_override_day_night_ratio(lua_State *L);
+
+	// set_local_animation(self, {stand/idle}, {walk}, {dig}, {walk+dig}, frame_speed)
+	static int l_set_local_animation(lua_State *L);
+
+	// set_eye_offset(self, v3f first pv, v3f third pv)
+	static int l_set_eye_offset(lua_State *L);
 
 public:
 	ObjectRef(ServerActiveObject *object);

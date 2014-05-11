@@ -48,7 +48,7 @@ HTTPFetchRequest::HTTPFetchRequest()
 	caller = HTTPFETCH_DISCARD;
 	request_id = 0;
 	timeout = g_settings->getS32("curl_timeout");
-	connect_timeout = timeout * 5;
+	connect_timeout = timeout;
 	
 	useragent = std::string("Minetest/") + minetest_version_hash + " (" + porting::get_sysinfo() + ")";
 }
@@ -581,6 +581,8 @@ protected:
 		ThreadStarted();
 		log_register_thread("CurlFetchThread");
 		DSTACK(__FUNCTION_NAME);
+
+		porting::setThreadName("CurlFetchThread");
 
 		CurlHandlePool pool;
 

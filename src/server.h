@@ -178,7 +178,8 @@ public:
 	Server(
 		const std::string &path_world,
 		const SubgameSpec &gamespec,
-		bool simple_singleplayer_mode
+		bool simple_singleplayer_mode,
+		bool ipv6
 	);
 	~Server();
 	void start(Address bind_addr);
@@ -189,6 +190,7 @@ public:
 	// This is run by ServerThread and does the actual processing
 	void AsyncRunStep(bool initial_step=false);
 	u16 Receive();
+	PlayerSAO* StageTwoClientInit(u16 peer_id);
 	void ProcessData(u8 *data, u32 datasize, u16 peer_id);
 
 	// Environment must be locked when called
@@ -325,6 +327,9 @@ public:
 	inline Address getPeerAddress(u16 peer_id)
 			{ return m_con.GetPeerAddress(peer_id); }
 			
+	bool setLocalPlayerAnimations(Player *player, v2s32 animation_frames[4], f32 frame_speed);
+	bool setPlayerEyeOffset(Player *player, v3f first, v3f third);
+
 	bool setSky(Player *player, const video::SColor &bgcolor,
 			const std::string &type, const std::vector<std::string> &params);
 	
@@ -336,6 +341,10 @@ public:
 	void deletingPeer(con::Peer *peer, bool timeout);
 
 	void DenyAccess(u16 peer_id, const std::wstring &reason);
+	bool getClientConInfo(u16 peer_id, con::rtt_stat_type type,float* retval);
+	bool getClientInfo(u16 peer_id,ClientState* state, u32* uptime,
+			u8* ser_vers, u16* prot_vers, u8* major, u8* minor, u8* patch,
+			std::string* vers_string);
 
 private:
 
@@ -349,7 +358,6 @@ private:
 	void SendDeathscreen(u16 peer_id,bool set_camera_point_target, v3f camera_point_target);
 	void SendItemDef(u16 peer_id,IItemDefManager *itemdef, u16 protocol_version);
 	void SendNodeDef(u16 peer_id,INodeDefManager *nodedef, u16 protocol_version);
-	void SendAnimations(con::Connection &con, u16 peer_id);
 
 	/* mark blocks not sent for all clients */
 	void SetBlocksNotSent(std::map<v3s16, MapBlock *>& block);
@@ -361,6 +369,8 @@ private:
 	void SendPlayerHP(u16 peer_id);
 	void SendPlayerBreath(u16 peer_id);
 	void SendMovePlayer(u16 peer_id);
+	void SendLocalPlayerAnimations(u16 peer_id, v2s32 animation_frames[4], f32 animation_speed);
+	void SendEyeOffset(u16 peer_id, v3f first, v3f third);
 	void SendPlayerPrivileges(u16 peer_id);
 	void SendPlayerInventoryFormspec(u16 peer_id);
 	void SendShowFormspecMessage(u16 peer_id, const std::string &formspec, const std::string &formname);

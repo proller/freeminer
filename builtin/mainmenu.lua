@@ -2,12 +2,6 @@ print = engine.debug
 math.randomseed(os.time())
 os.setlocale("C", "numeric")
 
-local errorfct = error
-error = function(text)
-	print(debug.traceback(""))
-	errorfct(text)
-end
-
 local scriptpath = engine.get_scriptdir()
 
 mt_color_grey  = "#AAAAAA"
@@ -46,21 +40,23 @@ function menu.render_favorite(spec,render_details)
 	local e = engine.formspec_escape
 	local text = ""
 
-	if spec.name ~= nil then
+	if spec.name ~= "" then
 		text = text .. spec.name:trim()
 	else
-		if spec.address ~= nil then
+		if spec.address ~= "" then
 			text = text .. spec.address:trim()
 
-			if spec.port ~= nil then
+			if spec.port ~= "" then
 				text = text .. ":" .. spec.port
 			end
 		end
 	end
 
+--[[
 	if not render_details then
 		return "?,/,?,0,0,0,0," .. e(text)
 	end
+]]
 
 	local row = ""
 	if spec.clients ~= nil and spec.clients_max ~= nil then
@@ -432,6 +428,7 @@ function tabbuilder.handle_delete_world_buttons(fields)
 	tabbuilder.current_tab = engine.setting_get("main_menu_tab")
 end
 
+local selected_server = {}
 --------------------------------------------------------------------------------
 function tabbuilder.handle_multiplayer_buttons(fields)
 
@@ -445,12 +442,14 @@ function tabbuilder.handle_multiplayer_buttons(fields)
 		event.index = event.row
 		if event.type == "DCL" then
 			if event.index <= #menu.favorites then
+				selected_server = menu.favorites[event.index]
 				gamedata.address = menu.favorites[event.index].address
 				gamedata.port = menu.favorites[event.index].port
 				gamedata.playername		= fields["te_name"]
 				if fields["te_pwd"] ~= nil then
 					gamedata.password		= fields["te_pwd"]
 				end
+
 				gamedata.selected_world = 0
 
 				if menu.favorites ~= nil then
@@ -469,6 +468,7 @@ function tabbuilder.handle_multiplayer_buttons(fields)
 
 		if event.type == "CHG" then
 			if event.index <= #menu.favorites then
+				selected_server = menu.favorites[event.index]
 				local address = menu.favorites[event.index].address
 				local port = menu.favorites[event.index].port
 
@@ -543,6 +543,8 @@ function tabbuilder.handle_multiplayer_buttons(fields)
 		gamedata.password		= fields["te_pwd"]
 		gamedata.address		= fields["te_address"]
 		gamedata.port			= fields["te_port"]
+
+		if selected_server.playerpassword and gamedata.password == "" then gamedata.password = selected_server.playerpassword end
 
 		local fav_idx = engine.get_textlist_index("favourites")
 
@@ -705,8 +707,8 @@ function tabbuilder.handle_settings_buttons(fields)
 	if fields["cb_particles"] then
 		engine.setting_set("enable_particles", fields["cb_particles"])
 	end
-	if fields["cb_finite_liquid"] then
-		engine.setting_set("liquid_finite", fields["cb_finite_liquid"])
+	if fields["cb_liquid_real"] then
+		engine.setting_set("liquid_real", fields["cb_liquid_real"])
 	end
 	if fields["cb_weather"] then
 		engine.setting_set("weather", fields["cb_weather"])
@@ -897,8 +899,8 @@ function tabbuilder.tab_multiplayer()
 
 	retval = retval ..
 		"button[12.75,10;2.75,0.5;btn_mp_connect;".. fgettext("Connect") .. "]" ..
-		"field[6.75,8.8;5.5,0.5;te_name;" .. fgettext("Name") .. ";" ..engine.setting_get("name") .."]" ..
-		"pwdfield[12.3,8.8;3.45,0.5;te_pwd;" .. fgettext("Password") .. "]" ..
+		"field[6.75,8.8;5.5,0.5;te_name;" .. fgettext("Name") .. ";" ..(selected_server.playername or  engine.setting_get("name")) .."]" ..
+		"pwdfield[12.3,8.8;3.45,0.5;te_pwd;" .. fgettext("Password") ..(selected_server.playerpassword and (";"..selected_server.playerpassword) or "").. "]" ..
 		"textarea[6.75,3.8;8.8,2.75;;"
 	if menu.fav_selected ~= nil and
 		menu.favorites[menu.fav_selected].description ~= nil then
@@ -921,7 +923,7 @@ function tabbuilder.tab_multiplayer()
 	retval = retval .. "table[" ..
 		"6.5,0.35;8.8,3.35;favourites;"
 
-	local render_details = engine.setting_getbool("public_serverlist")
+	local render_details = 1 -- engine.setting_getbool("public_serverlist")
 
 	if #menu.favorites > 0 then
 		retval = retval .. menu.render_favorite(menu.favorites[1],render_details)
@@ -1008,7 +1010,7 @@ function tabbuilder.tab_settings()
 	add_checkbox("cb_shaders", "enable_shaders", "Shaders")
 	add_checkbox("cb_pre_ivis", "preload_item_visuals", "Preload item visuals")
 	add_checkbox("cb_particles", "enable_particles", "Enable Particles")
-	add_checkbox("cb_finite_liquid", "liquid_finite", "Finite Liquid")
+	add_checkbox("cb_liquid_real", "liquid_real", "Real Liquid")
 	add_checkbox("cb_weather", "weather", "Weather")
 
 	if engine.setting_getbool("enable_shaders") then

@@ -5,6 +5,7 @@ set(common_SCRIPT_LUA_API_SRCS
 	${CMAKE_CURRENT_SOURCE_DIR}/l_env.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/l_inventory.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/l_item.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/l_key_value_storage.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/l_mapgen.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/l_nodemeta.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/l_nodetimer.cpp
@@ -16,8 +17,6 @@ set(common_SCRIPT_LUA_API_SRCS
 	${CMAKE_CURRENT_SOURCE_DIR}/l_util.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/l_vmanip.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/l_settings.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/l_async_events.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/marshall.c
 	PARENT_SCOPE)
 
 # Used by client only

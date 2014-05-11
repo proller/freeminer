@@ -91,7 +91,7 @@ void LuaABM::trigger(ServerEnvironment *env, v3s16 p, MapNode n,
 
 // Exported functions
 
-// minetest.set_node(pos, node)
+// minetest.set_node(pos, node, fast)
 // pos = {x=num, y=num, z=num}
 int ModApiEnvMod::l_set_node(lua_State *L)
 {
@@ -799,8 +799,8 @@ int ModApiEnvMod::l_transforming_liquid_add(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 p0 = read_v3s16(L, 1);
-	env->getMap().transforming_liquid_push_back(p0);
+	auto pos = read_v3s16(L, 1);
+	env->getMap().transforming_liquid_push_back(pos);
 	return 1;
 }
 
@@ -810,7 +810,7 @@ int ModApiEnvMod::l_get_heat(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 pos = read_v3s16(L, 1);
+	auto pos = read_v3s16(L, 1);
 	lua_pushnumber(L, env->getServerMap().updateBlockHeat(env, pos));
 	return 1;
 }
@@ -821,7 +821,7 @@ int ModApiEnvMod::l_get_humidity(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 pos = read_v3s16(L, 1);
+	auto pos = read_v3s16(L, 1);
 	lua_pushnumber(L, env->getServerMap().updateBlockHumidity(env, pos));
 	return 1;
 }

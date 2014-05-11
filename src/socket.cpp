@@ -30,6 +30,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 	#ifndef _WIN32_WINNT
 		#define _WIN32_WINNT 0x0501
 	#endif
+	#define NOMINMAX
 	#include <windows.h>
 	#include <winsock2.h>
 	#include <ws2tcpip.h>
@@ -146,6 +147,15 @@ bool Address::operator!=(Address &address)
 
 void Address::Resolve(const char *name)
 {
+	if (!name || name[0] == 0) {
+		if (m_addr_family == AF_INET) {
+			setAddress((u32) 0);
+		} else if (m_addr_family == AF_INET6) {
+			setAddress((IPv6AddressBytes*) 0);
+		}
+		return;
+	}
+
 	struct addrinfo *resolved, hints;
 	memset(&hints, 0, sizeof(hints));
 	
@@ -196,7 +206,8 @@ std::string Address::serializeString() const
 #ifdef _WIN32
 	if(m_addr_family == AF_INET)
 	{
-		u8 a, b, c, d, addr;
+		u8 a, b, c, d;
+		u32 addr;
 		addr = ntohl(m_address.ipv4.sin_addr.s_addr);
 		a = (addr & 0xFF000000) >> 24;
 		b = (addr & 0x00FF0000) >> 16;
@@ -252,6 +263,18 @@ int Address::getFamily() const
 bool Address::isIPv6() const
 {
 	return m_addr_family == AF_INET6;
+}
+
+bool Address::isZero() const
+{
+	if (m_addr_family == AF_INET) {
+		return m_address.ipv4.sin_addr.s_addr == 0;
+	} else if (m_addr_family == AF_INET6) {
+		static const char zero[16] = {0};
+		return memcmp(m_address.ipv6.sin6_addr.s6_addr,
+		              zero, 16) == 0;
+	}
+	return false;
 }
 
 void Address::setAddress(u32 address)

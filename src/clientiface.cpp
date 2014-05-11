@@ -20,6 +20,8 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <sstream>
+
 #include "clientiface.h"
 #include "player.h"
 #include "settings.h"
@@ -39,6 +41,7 @@ void RemoteClient::GetNextBlocks(
 		ServerEnvironment *env,
 		EmergeManager * emerge,
 		float dtime,
+		double m_uptime,
 		std::vector<PrioritySortedBlockTransfer> &dest)
 {
 	DSTACK(__FUNCTION_NAME);
@@ -65,6 +68,8 @@ void RemoteClient::GetNextBlocks(
 
 	v3f playerpos = player->getPosition();
 	v3f playerspeed = player->getSpeed();
+	if(playerspeed.getLength() > 1000.0*BS) //cheater or bug, ignore him
+		return;
 	v3f playerspeeddir(0,0,0);
 	if(playerspeed.getLength() > 1.0*BS)
 		playerspeeddir = playerspeed / playerspeed.getLength();
@@ -142,14 +147,16 @@ void RemoteClient::GetNextBlocks(
 	*/
 	s32 new_nearest_unsent_d = -1;
 
-	s16 d_max = g_settings->getS16("max_block_send_distance");
-	s16 d_max_gen = g_settings->getS16("max_block_generate_distance");
-
+	s16 full_d_max = g_settings->getS16("max_block_send_distance");
 	if (wanted_range) {
 		s16 wanted_blocks = wanted_range / MAP_BLOCKSIZE + 1;
-		if (wanted_blocks < d_max)
-			d_max = wanted_blocks;
+		if (wanted_blocks < full_d_max)
+			full_d_max = wanted_blocks;
 	}
+
+	s16 d_max = full_d_max;
+	s16 d_max_gen = g_settings->getS16("max_block_generate_distance");
+
 	// Don't loop very much at a time
 	s16 max_d_increment_at_time = 5;
 	if(d_max > d_start + max_d_increment_at_time)
@@ -267,7 +274,7 @@ void RemoteClient::GetNextBlocks(
 					generate = false;*/
 
 				// Limit the send area vertically to 1/2
-				if(can_skip && abs(p.Y - center.Y) > d_max / 2)
+				if(can_skip && abs(p.Y - center.Y) > full_d_max / 2)
 					generate = false;
 			}
 
@@ -289,8 +296,7 @@ void RemoteClient::GetNextBlocks(
 				Don't send already sent blocks
 			*/
 			{
-				if(m_blocks_sent.find(p) != m_blocks_sent.end())
-				{
+				if(m_blocks_sent.find(p) != m_blocks_sent.end() && m_blocks_sent[p] > 0 && m_blocks_sent[p] + (d <= 2 ? 1 : d*d) > m_uptime) {
 					continue;
 				}
 			}
@@ -304,6 +310,11 @@ void RemoteClient::GetNextBlocks(
 			bool block_is_invalid = false;
 			if(block != NULL)
 			{
+
+				if (m_blocks_sent[p] > 0 && m_blocks_sent[p] >= block->m_changed_timestamp) {
+					continue;
+				}
+
 				// Reset usage timer, this block will be of use in the future.
 				block->resetUsageTimer();
 
@@ -383,7 +394,12 @@ void RemoteClient::GetNextBlocks(
 	}
 queue_full_break:
 
-	//infostream<<"Stopped at "<<d<<" d_start="<<d_start<<" nearest_emerged_d="<<nearest_emerged_d<<" nearest_emergefull_d="<<nearest_emergefull_d<< " new_nearest_unsent_d="<<new_nearest_unsent_d<< " sel="<<num_blocks_selected<<std::endl;
+	//infostream<<"Stopped at "<<d<<" d_start="<<d_start<< " d_max="<<d_max<<" nearest_emerged_d="<<nearest_emerged_d<<" nearest_emergefull_d="<<nearest_emergefull_d<< " new_nearest_unsent_d="<<new_nearest_unsent_d<< " sel="<<num_blocks_selected<<std::endl;
+	if(!num_blocks_selected && d_start == d) {
+		//new_nearest_unsent_d = 0;
+		m_nothing_to_send_pause_timer = 1.0;
+	}
+		
 
 	// If nothing was found for sending and nothing was queued for
 	// emerging, continue next time browsing from here
@@ -392,7 +408,7 @@ queue_full_break:
 	} else if(nearest_emergefull_d != -1){
 		new_nearest_unsent_d = nearest_emergefull_d;
 	} else {
-		if(d > g_settings->getS16("max_block_send_distance")){
+		if(d > full_d_max){
 			new_nearest_unsent_d = 0;
 			m_nothing_to_send_pause_timer = 2.0;
 		} else {
@@ -407,7 +423,7 @@ queue_full_break:
 		m_nearest_unsent_d = new_nearest_unsent_d;
 }
 
-void RemoteClient::GotBlock(v3s16 p)
+void RemoteClient::GotBlock(v3s16 p, double time)
 {
 	if(m_blocks_sending.find(p) != m_blocks_sending.end())
 		m_blocks_sending.erase(p);
@@ -415,7 +431,7 @@ void RemoteClient::GotBlock(v3s16 p)
 	{
 		m_excess_gotblocks++;
 	}
-	m_blocks_sent.insert(p);
+	m_blocks_sent[p] = time;
 }
 
 void RemoteClient::SentBlock(v3s16 p)
@@ -433,34 +449,31 @@ void RemoteClient::SetBlockNotSent(v3s16 p)
 
 	if(m_blocks_sending.find(p) != m_blocks_sending.end())
 		m_blocks_sending.erase(p);
-	if(m_blocks_sent.find(p) != m_blocks_sent.end())
-		m_blocks_sent.erase(p);
 }
 
 void RemoteClient::SetBlocksNotSent(std::map<v3s16, MapBlock*> &blocks)
 {
-	if (blocks.size())
-		++m_nearest_unsent_nearest;
-
 	for(std::map<v3s16, MapBlock*>::iterator
 			i = blocks.begin();
 			i != blocks.end(); ++i)
 	{
 		v3s16 p = i->first;
-
-		if(m_blocks_sending.find(p) != m_blocks_sending.end())
-			m_blocks_sending.erase(p);
-		if(m_blocks_sent.find(p) != m_blocks_sent.end())
-			m_blocks_sent.erase(p);
+		SetBlockNotSent(p);
 	}
+}
+
+void RemoteClient::SetBlockDeleted(v3s16 p) {
+	SetBlockNotSent(p);
+	m_blocks_sent.erase(p);
 }
 
 void RemoteClient::notifyEvent(ClientStateEvent event)
 {
+	std::ostringstream myerror;
 	switch (m_state)
 	{
 	case Invalid:
-		//assert("State update for client in invalid state" != 0);
+		//intentionally do nothing
 		break;
 
 	case Created:
@@ -480,8 +493,8 @@ void RemoteClient::notifyEvent(ClientStateEvent event)
 
 		/* GotInit2 SetDefinitionsSent SetMediaSent */
 		default:
-			break;
-			//assert("Invalid client state transition!" == 0);
+			myerror << "Created: Invalid client state transition! " << event;
+			throw ClientStateError(myerror.str());
 		}
 		break;
 
@@ -507,8 +520,8 @@ void RemoteClient::notifyEvent(ClientStateEvent event)
 
 		/* Init SetDefinitionsSent SetMediaSent */
 		default:
-			break;
-			//assert("Invalid client state transition!" == 0);
+			myerror << "InitSent: Invalid client state transition! " << event;
+			throw ClientStateError(myerror.str());
 		}
 		break;
 
@@ -529,15 +542,15 @@ void RemoteClient::notifyEvent(ClientStateEvent event)
 
 		/* Init GotInit2 SetMediaSent */
 		default:
-			break;
-			//assert("Invalid client state transition!" == 0);
+			myerror << "InitDone: Invalid client state transition! " << event;
+			throw ClientStateError(myerror.str());
 		}
 		break;
 
 	case DefinitionsSent:
 		switch(event)
 		{
-		case SetMediaSent:
+		case SetClientReady:
 			m_state = Active;
 			break;
 
@@ -551,8 +564,8 @@ void RemoteClient::notifyEvent(ClientStateEvent event)
 
 		/* Init GotInit2 SetDefinitionsSent */
 		default:
-			break;
-			//assert("Invalid client state transition!" == 0);
+			myerror << "DefinitionsSent: Invalid client state transition! " << event;
+			throw ClientStateError(myerror.str());
 		}
 		break;
 
@@ -569,7 +582,8 @@ void RemoteClient::notifyEvent(ClientStateEvent event)
 
 		/* Init GotInit2 SetDefinitionsSent SetMediaSent SetDenied */
 		default:
-			//assert("Invalid client state transition!" == 0);
+			myerror << "Active: Invalid client state transition! " << event;
+			throw ClientStateError(myerror.str());
 			break;
 		}
 		break;
@@ -578,6 +592,11 @@ void RemoteClient::notifyEvent(ClientStateEvent event)
 		/* we are already disconnecting */
 		break;
 	}
+}
+
+u32 RemoteClient::uptime()
+{
+	return getTime(PRECISION_SECONDS) - m_connection_time;
 }
 
 ClientInterface::ClientInterface(con::Connection* con)
@@ -793,7 +812,7 @@ void ClientInterface::CreateClient(u16 peer_id)
 	if(n != m_clients.end()) return;
 
 	// Create client
-	RemoteClient *client = new RemoteClient();
+	RemoteClient *client = new RemoteClient(m_env);
 	client->peer_id = peer_id;
 	m_clients[client->peer_id] = client;
 }
@@ -813,7 +832,7 @@ void ClientInterface::event(u16 peer_id, ClientStateEvent event)
 		n->second->notifyEvent(event);
 	}
 
-	if ((event == SetMediaSent) || (event == Disconnect) || (event == SetDenied))
+	if ((event == SetClientReady) || (event == Disconnect) || (event == SetDenied))
 	{
 		UpdatePlayerList();
 	}
@@ -827,9 +846,24 @@ u16 ClientInterface::getProtocolVersion(u16 peer_id)
 	std::map<u16, RemoteClient*>::iterator n;
 	n = m_clients.find(peer_id);
 
-	// No client to deliver event
+	// No client to get version
 	if (n == m_clients.end())
 		return 0;
 
 	return n->second->net_proto_version;
+}
+
+void ClientInterface::setClientVersion(u16 peer_id, u8 major, u8 minor, u8 patch, std::string full)
+{
+	JMutexAutoLock conlock(m_clients_mutex);
+
+	// Error check
+	std::map<u16, RemoteClient*>::iterator n;
+	n = m_clients.find(peer_id);
+
+	// No client to set versions
+	if (n == m_clients.end())
+		return;
+
+	n->second->setVersionInfo(major,minor,patch,full);
 }
