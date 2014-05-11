@@ -57,8 +57,8 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 		m_pos(pos),
 		m_gamedef(gamedef),
 		m_modified(MOD_STATE_CLEAN),
-		m_modified_reason("initial"),
-		m_modified_reason_too_long(false),
+		//m_modified_reason("initial"),
+		//m_modified_reason_too_long(false),
 		is_underground(false),
 		m_lighting_expired(true),
 		m_day_night_differs(false),
@@ -82,6 +82,7 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 
 MapBlock::~MapBlock()
 {
+	auto lock = lock_unique();
 #ifndef SERVER
 	delMesh();
 #endif
@@ -111,6 +112,7 @@ MapNode MapBlock::getNodeParent(v3s16 p)
 	{
 		if(data == NULL)
 			throw InvalidPositionException();
+		auto lock = lock_shared_int();
 		return data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X];
 	}
 }
@@ -125,6 +127,7 @@ void MapBlock::setNodeParent(v3s16 p, MapNode & n)
 	{
 		if(data == NULL)
 			throw InvalidPositionException();
+		auto lock = lock_unique_int();
 		data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X] = n;
 	}
 }
@@ -147,6 +150,7 @@ MapNode MapBlock::getNodeParentNoEx(v3s16 p)
 		{
 			return MapNode(CONTENT_IGNORE);
 		}
+		auto lock = lock_shared_int();
 		return data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X];
 	}
 }
@@ -173,6 +177,8 @@ MapNode MapBlock::getNodeParentNoEx(v3s16 p)
 bool MapBlock::propagateSunlight(std::set<v3s16> & light_sources,
 		bool remove_light, bool *black_air_left)
 {
+	auto lock = lock_unique_int();
+
 	INodeDefManager *nodemgr = m_gamedef->ndef();
 
 	// Whether the sunlight at the top of the bottom block is valid
@@ -343,6 +349,7 @@ bool MapBlock::propagateSunlight(std::set<v3s16> & light_sources,
 
 void MapBlock::copyTo(VoxelManipulator &dst)
 {
+	auto lock = lock_shared();
 	v3s16 data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
 	VoxelArea data_area(v3s16(0,0,0), data_size - v3s16(1,1,1));
 	
@@ -353,6 +360,7 @@ void MapBlock::copyTo(VoxelManipulator &dst)
 
 void MapBlock::copyFrom(VoxelManipulator &dst)
 {
+	auto lock = lock_unique();
 	v3s16 data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
 	VoxelArea data_area(v3s16(0,0,0), data_size - v3s16(1,1,1));
 	
@@ -427,6 +435,7 @@ void MapBlock::expireDayNightDiff()
 
 s16 MapBlock::getGroundLevel(v2s16 p2d)
 {
+	auto lock = lock_shared_int();
 	if(isDummy())
 		return -3;
 	try
@@ -548,6 +557,7 @@ static void correctBlockNodeIds(const NameIdMapping *nimap, MapNode *nodes,
 
 void MapBlock::serialize(std::ostream &os, u8 version, bool disk)
 {
+	auto lock = lock_shared_int();
 	if(!ser_ver_supported(version))
 		throw VersionMismatchException("ERROR: MapBlock format not supported");
 	
@@ -654,6 +664,7 @@ void MapBlock::serializeNetworkSpecific(std::ostream &os, u16 net_proto_version)
 
 void MapBlock::deSerialize(std::istream &is, u8 version, bool disk)
 {
+	auto lock = lock_unique_int();
 	if(!ser_ver_supported(version))
 		throw VersionMismatchException("ERROR: MapBlock format not supported");
 	
@@ -802,9 +813,9 @@ void MapBlock::pushElementsToCircuit(Circuit* circuit)
 
 #ifndef SERVER
 MapBlockMesh* MapBlock::getMesh(int step) {
-	if (step >= 128 && mesh128) return mesh128;
-	if (step >= 64 && mesh64) return mesh64;
-	if (step >= 32 && mesh32) return mesh32;
+	if (step == 128 && mesh128) return mesh128;
+	if (step == 64 && mesh64) return mesh64;
+	if (step == 32 && mesh32) return mesh32;
 
 	if (step >= 16 && mesh16) return mesh16;
 	if (step >= 8  && mesh8)  return mesh8;
@@ -817,10 +828,11 @@ MapBlockMesh* MapBlock::getMesh(int step) {
 	if (mesh16) return mesh16;
 
 	//bad idea (scaled):
+/*
 	if (mesh32) return mesh32;
 	if (mesh64) return mesh64;
 	if (mesh128)return mesh128;
-
+*/
 	return mesh;
 }
 
@@ -1131,6 +1143,7 @@ std::string analyze_block(MapBlock *block)
 	if(block == NULL)
 		return "NULL";
 
+	auto lock = block->lock_shared_int();
 	std::ostringstream desc;
 	
 	v3s16 p = block->getPos();

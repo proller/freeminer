@@ -50,11 +50,12 @@ int getFarmeshStep(MapDrawControl& draw_control, int range) {
 	if (draw_control.farmesh) {
 		//if (range >= draw_control.farmesh+draw_control.farmesh_step*4)	return 64;
 		//if (range >= draw_control.farmesh+draw_control.farmesh_step*2)	return 32;
-/*		if		(range >= draw_control.farmesh+draw_control.farmesh_step*14)return 128;
-		else if	(range >= draw_control.farmesh+draw_control.farmesh_step*10)return 64;
-		else if (range >= draw_control.farmesh+draw_control.farmesh_step*8)	return 32;
+// /*
+		if		(range >= draw_control.farmesh+draw_control.farmesh_step*10)return 128;
+		else if	(range >= draw_control.farmesh+draw_control.farmesh_step*6)return 64;
+		else if (range >= draw_control.farmesh+draw_control.farmesh_step*4)	return 32;
 		else
-*/
+// */
 		     if (range >= draw_control.farmesh+draw_control.farmesh_step*3)	return 16;
 		else if (range >= draw_control.farmesh+draw_control.farmesh_step*2)	return 8;
 		else if (range >= draw_control.farmesh+draw_control.farmesh_step*1)	return 4;
@@ -67,20 +68,22 @@ int getFarmeshStep(MapDrawControl& draw_control, int range) {
 	MeshMakeData
 */
 
-MeshMakeData::MeshMakeData(IGameDef *gamedef, MapDrawControl& draw_control_):
-	m_vmanip(),
+MeshMakeData::MeshMakeData(IGameDef *gamedef, Map & map_, MapDrawControl& draw_control_):
+	m_vmanip(map_),
 	m_blockpos(-1337,-1337,-1337),
 	m_crack_pos_relative(-1337, -1337, -1337),
 	m_smooth_lighting(false),
 	m_gamedef(gamedef)
-	,step(1)
-	,draw_control(draw_control_)
+	,step(1),
+	map(map_),
+	draw_control(draw_control_)
 {}
 
 void MeshMakeData::fill(MapBlock *block)
 {
 	m_blockpos = block->getPos();
 
+#if 0
 	v3s16 blockpos_nodes = m_blockpos*MAP_BLOCKSIZE;
 	
 	/*
@@ -120,12 +123,14 @@ void MeshMakeData::fill(MapBlock *block)
 				b->copyTo(m_vmanip);
 		}
 	}
+#endif
 }
 
 void MeshMakeData::fillSingleNode(MapNode *node)
 {
 	m_blockpos = v3s16(0,0,0);
-	
+
+#if 0
 	v3s16 blockpos_nodes = v3s16(0,0,0);
 	VoxelArea area(blockpos_nodes-v3s16(1,1,1)*MAP_BLOCKSIZE,
 			blockpos_nodes+v3s16(1,1,1)*MAP_BLOCKSIZE*2-v3s16(1,1,1));
@@ -151,6 +156,7 @@ void MeshMakeData::fillSingleNode(MapNode *node)
 	}
 	m_vmanip.copyFrom(data, area, area.MinEdge, area.MinEdge, area.getExtent());
 	delete[] data;
+#endif
 }
 
 void MeshMakeData::setCrack(int crack_level, v3s16 crack_pos)
@@ -789,7 +795,8 @@ static void getTileInfo(
 		,int step
 	)
 {
-	VoxelManipulator &vmanip = data->m_vmanip;
+	//VoxelManipulator &vmanip = data->m_vmanip;
+	Map &vmanip = data->m_vmanip;
 	INodeDefManager *ndef = data->m_gamedef->ndef();
 	v3s16 blockpos_nodes = data->m_blockpos * MAP_BLOCKSIZE;
 
