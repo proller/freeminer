@@ -811,24 +811,26 @@ void MapBlock::pushElementsToCircuit(Circuit* circuit)
 
 #ifndef SERVER
 MapBlockMesh* MapBlock::getMesh(int step) {
-	if (step >= 128 && mesh128) return mesh128;
-	if (step >= 64 && mesh64) return mesh64;
-	if (step >= 32 && mesh32) return mesh32;
+	if (step == 128 && mesh128)	return mesh128;
+	if (step == 64 && mesh64)	return mesh64;
+	if (step == 32 && mesh32)	return mesh32;
 
-	if (step >= 16 && mesh16) return mesh16;
-	if (step >= 8  && mesh8)  return mesh8;
-	if (step >= 4  && mesh4)  return mesh4;
-	if (step >= 2  && mesh2)  return mesh2;
-	if (step >= 1  && mesh)   return mesh;
-	if (mesh2)  return mesh2;
-	if (mesh4)  return mesh4;
-	if (mesh8)  return mesh8;
-	if (mesh16) return mesh16;
+	if (step > 16)	return nullptr;
+
+	if (step >= 16 && mesh16)	return mesh16;
+	if (step >= 8  && mesh8)	return mesh8;
+	if (step >= 4  && mesh4)	return mesh4;
+	if (step >= 2  && mesh2)	return mesh2;
+	if (step >= 1  && mesh)		return mesh;
+	if (mesh2)	return mesh2;
+	if (mesh4)	return mesh4;
+	if (mesh8)	return mesh8;
+	if (mesh16)	return mesh16;
 
 	//bad idea (scaled):
-	if (mesh32) return mesh32;
+/*	if (mesh32) return mesh32;
 	if (mesh64) return mesh64;
-	if (mesh128)return mesh128;
+	if (mesh128)return mesh128;*/
 
 	return mesh;
 }
@@ -846,15 +848,15 @@ void MapBlock::setMesh(MapBlockMesh* rmesh) {
 }
 
 void MapBlock::delMesh() {
-	if (mesh128){delete mesh128;mesh128= NULL;}
-	if (mesh64) {delete mesh64; mesh64 = NULL;}
-	if (mesh32) {delete mesh32; mesh32 = NULL;}
+	if (mesh128){delete mesh128;mesh128= nullptr;}
+	if (mesh64) {delete mesh64; mesh64 = nullptr;}
+	if (mesh32) {delete mesh32; mesh32 = nullptr;}
 
-	if (mesh16) {delete mesh16; mesh16 = NULL;}
-	if (mesh8)  {delete mesh8;  mesh8  = NULL;}
-	if (mesh4)  {delete mesh4;  mesh4  = NULL;}
-	if (mesh2)  {delete mesh2;  mesh2  = NULL;}
-	if (mesh)   {delete mesh;   mesh   = NULL;}
+	if (mesh16) {delete mesh16; mesh16 = nullptr;}
+	if (mesh8)  {delete mesh8;  mesh8  = nullptr;}
+	if (mesh4)  {delete mesh4;  mesh4  = nullptr;}
+	if (mesh2)  {delete mesh2;  mesh2  = nullptr;}
+	if (mesh)   {delete mesh;   mesh   = nullptr;}
 }
 #endif
 

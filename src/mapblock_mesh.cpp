@@ -48,13 +48,11 @@ float srgb_linear_multiply(float f, float m, float max)
 
 int getFarmeshStep(MapDrawControl& draw_control, int range) {
 	if (draw_control.farmesh) {
-		//if (range >= draw_control.farmesh+draw_control.farmesh_step*4)	return 64;
-		//if (range >= draw_control.farmesh+draw_control.farmesh_step*2)	return 32;
-/*		if		(range >= draw_control.farmesh+draw_control.farmesh_step*14)return 128;
-		else if	(range >= draw_control.farmesh+draw_control.farmesh_step*10)return 64;
-		else if (range >= draw_control.farmesh+draw_control.farmesh_step*8)	return 32;
+		if		(range >= draw_control.farmesh+draw_control.farmesh_step*10)return 128;
+		else if	(range >= draw_control.farmesh+draw_control.farmesh_step*6)return 64;
+		else if (range >= draw_control.farmesh+draw_control.farmesh_step*4)	return 32;
 		else
-*/
+
 		     if (range >= draw_control.farmesh+draw_control.farmesh_step*3)	return 16;
 		else if (range >= draw_control.farmesh+draw_control.farmesh_step*2)	return 8;
 		else if (range >= draw_control.farmesh+draw_control.farmesh_step*1)	return 4;
