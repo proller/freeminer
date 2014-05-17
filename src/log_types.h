@@ -1,9 +1,4 @@
 /*
-mapsector.h
-Copyright (C) 2013 celeron55, Perttu Ahola <celeron55@gmail.com>
-*/
-
-/*
 This file is part of Freeminer.
 
 Freeminer is free software: you can redistribute it and/or modify
@@ -20,8 +15,17 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef MAPSECTOR_HEADER
-#define MAPSECTOR_HEADER
+#ifndef LOG_TYPES_HEADER
+#define LOG_TYPES_HEADER
+
+#include "log.h" //for replacing log.h to log_types.h in includes
+
+#include "irr_v3d.h"
+
+#include <ostream>
+std::ostream & operator<<(std::ostream & s, v3s16 p);
+
+#include <map>
+std::ostream & operator<<(std::ostream & s, std::map<v3s16, unsigned int> & p);
 
 #endif
-

@@ -200,6 +200,14 @@ struct LocalFormspecHandler : public TextDest
 			}
 		}
 
+		// don't show error message for unhandled cursor keys
+		if ( (fields.find("key_up") != fields.end()) ||
+			(fields.find("key_down") != fields.end()) ||
+			(fields.find("key_left") != fields.end()) ||
+			(fields.find("key_right") != fields.end())) {
+			return;
+		}
+
 		errorstream << "LocalFormspecHandler::gotText unhandled >" << m_formname << "< event" << std::endl;
 		int i = 0;
 		for (std::map<std::string,std::string>::iterator iter = fields.begin();
@@ -3573,9 +3581,8 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 			changed much
 		*/
 		update_draw_list_timer += dtime;
-//errorstream<<"PosD="<<update_draw_list_last_cam_pos.getDistanceFrom(camera_position)<<" M="<<MAP_BLOCKSIZE*1*BS<<std::endl;
-		if(!no_output)
-			if(client.getEnv().getClientMap().m_drawlist_last || update_draw_list_timer >= 3 ||
+		if (!no_output)
+			if (client.getEnv().getClientMap().m_drawlist_last || update_draw_list_timer >= 3 ||
 				(draw_control.camera_fov_blocks>0 && update_draw_list_last_cam_dir.getDistanceFrom(camera_direction) > 0.2) ||
 				update_draw_list_last_cam_pos.getDistanceFrom(camera_position) > MAP_BLOCKSIZE*1*BS ||
 				update_draw_list_last_vrange != draw_control.wanted_range ||
@@ -3857,6 +3864,10 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 		}
 	}
 
+	guitext->remove();
+	guitext2->remove();
+	guitext_info->remove();
+	guitext_profiler->remove();
 	/*
 		Drop stuff
 	*/
