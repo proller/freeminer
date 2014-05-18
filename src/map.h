@@ -339,13 +339,14 @@ public:
 // from old mapsector:
 	MapBlock *m_block_cache;
 	v3s16 m_block_cache_p;
+	try_shared_mutex m_block_cache_mutex;
 	typedef shared_map<v3s16, MapBlock*> m_blocks_type;
 	m_blocks_type m_blocks;
 	//MapBlock * getBlockNoCreateNoEx(v3s16 & p);
 	MapBlock * createBlankBlockNoInsert(v3s16 & p);
 	MapBlock * createBlankBlock(v3s16 & p);
 	void insertBlock(MapBlock *block);
-	void deleteBlock(MapBlock *block);
+	void deleteBlock(MapBlock *block, bool now = 0);
 	std::map<MapBlock *, int> * m_blocks_delete;
 	std::map<MapBlock *, int> m_blocks_delete_1, m_blocks_delete_2;
 	//void getBlocks(std::list<MapBlock*> &dest);

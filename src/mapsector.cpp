@@ -28,8 +28,10 @@ MapBlock * Map::getBlockBuffered(v3s16 & p)
 {
 	MapBlock *block;
 
-	if(m_block_cache != NULL && p == m_block_cache_p){
-		return m_block_cache;
+	{
+		auto lock = try_shared_lock(m_block_cache_mutex);
+		if(m_block_cache && p == m_block_cache_p)
+			return m_block_cache;
 	}
 	
 	// If block doesn't exist, return NULL
@@ -47,6 +49,7 @@ MapBlock * Map::getBlockBuffered(v3s16 & p)
 	}
 	
 	// Cache the last result
+	auto lock = unique_lock(m_block_cache_mutex);
 	m_block_cache_p = p;
 	m_block_cache = block;
 	
@@ -94,11 +97,14 @@ void Map::insertBlock(MapBlock *block)
 	m_blocks[block_p] = block;
 }
 
-void Map::deleteBlock(MapBlock *block)
+void Map::deleteBlock(MapBlock *block, bool now)
 {
 	auto block_p = block->getPos();
 	m_block_cache = nullptr;
-	(*m_blocks_delete)[block] = 1;
+	if (now)
+		delete block;
+	else
+		(*m_blocks_delete)[block] = 1;
 	m_blocks.erase(block_p);
 }
 
