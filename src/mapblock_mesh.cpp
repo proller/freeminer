@@ -803,7 +803,7 @@ static void getTileInfo(
 //if (step> 16) step = 16, stp=1;
 	MapNode n0 = vmanip.getNodeNoEx(blockpos_nodes + p*step);
 	MapNode n1 = vmanip.getNodeNoEx(blockpos_nodes + p*step + face_dir*step);
-	// if(data->debug) infostream<<" GN "<<n0<< n1<< blockpos_nodes<<blockpos_nodes + p*step<<blockpos_nodes + p*step + face_dir*step<<std::endl;
+	if(data->debug) infostream<<" GN "<<" step="<<step<<" "<<n0<< n1<< blockpos_nodes<<blockpos_nodes + p*step<<blockpos_nodes + p*step + face_dir*step<<std::endl;
 	TileSpec tile0 = getNodeTile(n0, p, face_dir, data);
 	TileSpec tile1 = getNodeTile(n1, p + face_dir, -face_dir, data);
 
@@ -1108,7 +1108,8 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	}
 	// End of slow part
 
-	//if (data->debug) infostream<<" step="<<step<<" fastfaces_new.size="<<fastfaces_new.size()<<std::endl;
+	if (step>16)data->debug=1;
+	if (data->debug) infostream<<" step="<<step<<" fastfaces_new.size="<<fastfaces_new.size()<<std::endl;
 
 	/*
 		Convert FastFaces to MeshCollector
