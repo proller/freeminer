@@ -26,33 +26,24 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 MapBlock * Map::getBlockBuffered(v3s16 & p)
 {
-	MapBlock *block;
-
 	{
 		auto lock = try_shared_lock(m_block_cache_mutex);
 		if(m_block_cache && p == m_block_cache_p)
 			return m_block_cache;
 	}
 	
-	// If block doesn't exist, return NULL
+	MapBlock *block;
 	{
-	auto lock = m_blocks.lock_shared_rec();
-	auto n = m_blocks.find(p);
-	if(n == m_blocks.end())
-	{
-		block = NULL;
-	}
-	// If block exists, return it
-	else{
+		auto lock_blocks = m_blocks.lock_shared_rec();
+		auto n = m_blocks.find(p);
+		if(n == m_blocks.end())
+			return nullptr;
 		block = n->second;
 	}
-	}
-	
-	// Cache the last result
-	auto lock = unique_lock(m_block_cache_mutex);
+
+	auto lock_cache = unique_lock(m_block_cache_mutex);
 	m_block_cache_p = p;
 	m_block_cache = block;
-	
 	return block;
 }
 
@@ -65,7 +56,7 @@ MapBlock * Map::createBlankBlockNoInsert(v3s16 & p)
 {
 	MapBlock *block = getBlockBuffered(p);
 	if (block != NULL) {
-		errorstream<<"Block already created"<<"std::endl";
+		infostream<<"Block already created "<<block->getPos()<<std::endl;
 		return block;
 	}
 	
@@ -91,6 +82,7 @@ void Map::insertBlock(MapBlock *block)
 	if(block2){
 		//throw AlreadyExistsException("Block already exists");
 		infostream<<"Block already exists " << block_p <<std::endl;
+		return; // memory leak, but very rare|impossible
 	}
 
 	// Insert into container
@@ -100,12 +92,12 @@ void Map::insertBlock(MapBlock *block)
 void Map::deleteBlock(MapBlock *block, bool now)
 {
 	auto block_p = block->getPos();
-	m_block_cache = nullptr;
 	if (now)
 		delete block;
 	else
 		(*m_blocks_delete)[block] = 1;
 	m_blocks.erase(block_p);
+	m_block_cache = nullptr;
 }
 
 //END

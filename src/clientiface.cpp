@@ -35,7 +35,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/numeric.h"
 #include "util/mathconstants.h"
 
+#include "profiler.h"
 #include "main.h"                      // for g_settings
+
+#include "log_types.h"
 
 void RemoteClient::GetNextBlocks(
 		ServerEnvironment *env,
@@ -274,9 +277,11 @@ void RemoteClient::GetNextBlocks(
 				if(abs(p.Y - center.Y) > d_max_gen - d_max_gen / 3)
 					generate = false;*/
 
+				/* maybe good idea (if not use block culling) but brokes far (25+) area generate by flooding emergequeue with no generate blocks
 				// Limit the send area vertically to 1/2
 				if(can_skip && abs(p.Y - center.Y) > full_d_max / 2)
 					generate = false;
+				*/
 			}
 
 
@@ -297,7 +302,7 @@ void RemoteClient::GetNextBlocks(
 				Don't send already sent blocks
 			*/
 			{
-				if(m_blocks_sent.find(p) != m_blocks_sent.end() && m_blocks_sent[p] > 0 && m_blocks_sent[p] + (d <= 2 ? 1 : d*d) > m_uptime) {
+				if(m_blocks_sent.find(p) != m_blocks_sent.end() && m_blocks_sent[p] > 0 && m_blocks_sent[p] + (d <= 2 ? 1 : d*d*d) > m_uptime) {
 					continue;
 				}
 			}
@@ -326,6 +331,9 @@ void RemoteClient::GetNextBlocks(
 					surely_not_found_on_disk = true;
 				}
 
+				if (block->getLightingExpired()) {
+					continue;
+				}
 				// Block is valid if lighting is up-to-date and data exists
 				if(block->isValid() == false)
 				{
@@ -333,7 +341,9 @@ void RemoteClient::GetNextBlocks(
 				}
 
 				if(block->isGenerated() == false)
-					block_is_invalid = true;
+				{
+					continue;
+				}
 
 				/*
 					If block is not close, don't send it unless it is near
@@ -366,6 +376,8 @@ void RemoteClient::GetNextBlocks(
 			*/
 			if(block == NULL || surely_not_found_on_disk || block_is_invalid)
 			{
+				//infostream<<"start gen d="<<d<<" p="<<p<<" notfound="<<surely_not_found_on_disk<<" invalid="<< block_is_invalid<<" block="<<block<<" generate="<<generate<<std::endl;
+
 				if (emerge->enqueueBlockEmerge(peer_id, p, generate)) {
 					if (nearest_emerged_d == -1)
 						nearest_emerged_d = d;
@@ -649,6 +661,7 @@ std::vector<std::string> ClientInterface::getPlayerNames()
 
 void ClientInterface::step(float dtime)
 {
+	g_profiler->add("Server: Clients:", m_clients.size());
 	m_print_info_timer += dtime;
 	if(m_print_info_timer >= 30.0)
 	{
@@ -666,7 +679,7 @@ void ClientInterface::UpdatePlayerList()
 
 
 		if(clients.size() != 0)
-			infostream<<"Players:"<<std::endl;
+			infostream<<"Players ["<<clients.size()<<"]:"<<std::endl;
 		for(std::list<u16>::iterator
 			i = clients.begin();
 			i != clients.end(); ++i)
