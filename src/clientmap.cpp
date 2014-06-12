@@ -25,7 +25,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mapblock_mesh.h"
 #include <IMaterialRenderer.h>
 #include <matrix4.h>
-#include "log.h"
+#include "log_types.h"
 #include "main.h" // dout_client, g_settings
 #include "nodedef.h"
 #include "mapblock.h"
@@ -223,16 +223,24 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 			int mesh_step_actual = 1;
 			if (block->getMesh(mesh_step))
 				mesh_step_actual = block->getMesh(mesh_step)->step;
+
+			if ((bp.X % mesh_step_actual || bp.Y % mesh_step_actual || bp.Z % mesh_step_actual))
+				continue;
+
+/*
 			if (mesh_step_actual == 32 && (bp.X % 2 || bp.Y % 2 || bp.Z % 2))
 				continue;
 			if (mesh_step_actual == 64 && (bp.X % 4 || bp.Y % 4 || bp.Z % 4))
 				continue;
 			if (mesh_step_actual == 128 && (bp.X % 8 || bp.Y % 8 || bp.Z % 8))
 				continue;
+*/
+
 			/*
 				Compare block position to camera position, skip
 				if not seen on display
 			*/
+
 			
 			float range = 100000 * BS;
 			if(m_control.range_all == false)
@@ -311,6 +319,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 					step, stepfac, startoff, endoff, needed_count, nodemgr)
 			)
 			{
+infostream<<"culled "<< spn<<" "<<blocks_occlusion_culled<<std::endl;
 				blocks_occlusion_culled++;
 				continue;
 			}

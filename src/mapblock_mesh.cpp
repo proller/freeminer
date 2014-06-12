@@ -50,7 +50,7 @@ float srgb_linear_multiply(float f, float m, float max)
 int getFarmeshStep(MapDrawControl& draw_control, int range) {
 	if (draw_control.farmesh) {
 		if		(range >= draw_control.farmesh+draw_control.farmesh_step*10)return 128;
-		else if	(range >= draw_control.farmesh+draw_control.farmesh_step*6)return 64;
+		else if	(range >= draw_control.farmesh+draw_control.farmesh_step*6) return 64;
 		else if (range >= draw_control.farmesh+draw_control.farmesh_step*4)	return 32;
 		else
 
@@ -799,11 +799,11 @@ static void getTileInfo(
 	INodeDefManager *ndef = data->m_gamedef->ndef();
 	v3s16 blockpos_nodes = data->m_blockpos * MAP_BLOCKSIZE;
 
-//int stp = 0;
-//if (step> 16) step = 16, stp=1;
-	MapNode n0 = vmanip.getNodeNoEx(blockpos_nodes + p*step);
-	MapNode n1 = vmanip.getNodeNoEx(blockpos_nodes + p*step + face_dir*step);
-	if(data->debug) infostream<<" GN "<<" step="<<step<<" "<<n0<< n1<< blockpos_nodes<<blockpos_nodes + p*step<<blockpos_nodes + p*step + face_dir*step<<std::endl;
+	int s = sqrt(step);
+	MapNode n0 = vmanip.getNodeNoEx(blockpos_nodes + p*s);
+	MapNode n1 = vmanip.getNodeNoEx(blockpos_nodes + p*s + face_dir*s);
+	//if(data->debug) infostream<<" GN "<<" step="<<step<<" s="<<s<<" p="<<p<<" n="<<n0<< n1<< blockpos_nodes<<blockpos_nodes + p*step<<blockpos_nodes + p*step + face_dir*step<<std::endl;
+	if(data->debug) infostream<<" GN "<<" step="<<step<<" s="<<s<<" p="<<p<<" n="<<n0<< n1<<" bpn="<<blockpos_nodes<<blockpos_nodes + p*s<<blockpos_nodes + p*s + face_dir*s<<std::endl;
 	TileSpec tile0 = getNodeTile(n0, p, face_dir, data);
 	TileSpec tile1 = getNodeTile(n1, p + face_dir, -face_dir, data);
 
@@ -896,8 +896,9 @@ static void updateFastFaceRow(
 			makes_face, p_corrected, face_dir_corrected,
 			lights, tile, light_source, step);
 
-	u16 to = MAP_BLOCKSIZE/step;
-	if (!to) { to = 1; /*makes_face= 1;*/}
+	//u16 to = MAP_BLOCKSIZE/step;
+	//if (!to) { to = 1; /*makes_face= 1;*/}
+	u16 to = MAP_BLOCKSIZE;
 //if (step>16)errorstream<<"to="<<to<<std::endl;
 	for(u16 j=0; j<to; j++)
 	{
@@ -1025,8 +1026,9 @@ static void updateAllFastFaceRows(MeshMakeData *data,
 {
 //if (step> 16) step = 16;
 
-	s16 to = MAP_BLOCKSIZE/step;
-	if (!to) to = 1;
+	//s16 to = MAP_BLOCKSIZE/step;
+	//if (!to) to = 1;
+	s16 to = MAP_BLOCKSIZE;
 	/*
 		Go through every y,z and get top(y+) faces in rows of x+
 	*/
@@ -1093,6 +1095,9 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	// 24-155ms for MAP_BLOCKSIZE=32  (NOTE: probably outdated)
 	//TimeTaker timer1("MapBlockMesh()");
 
+//step = 1;
+	if (step>16) data->debug=1;
+
 	std::vector<FastFace> fastfaces_new;
 	/*
 		We are including the faces of the trailing edges of the block.
@@ -1108,7 +1113,6 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	}
 	// End of slow part
 
-	if (step>16)data->debug=1;
 	if (data->debug) infostream<<" step="<<step<<" fastfaces_new.size="<<fastfaces_new.size()<<std::endl;
 
 	/*

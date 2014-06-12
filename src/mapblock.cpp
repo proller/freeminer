@@ -72,9 +72,9 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 		reallocate();
 	
 #ifndef SERVER
-	mesh = NULL;
-	mesh2 = mesh4 = mesh8 = mesh16 = NULL;
-	mesh32 = mesh64 = mesh128 = NULL;
+	mesh = nullptr;
+	mesh2 = mesh4 = mesh8 = mesh16 = nullptr;
+	mesh32 = mesh64 = mesh128 = nullptr;
 #endif
 }
 
@@ -815,22 +815,27 @@ MapBlockMesh* MapBlock::getMesh(int step) {
 	if (step == 64 && mesh64)	return mesh64;
 	if (step == 32 && mesh32)	return mesh32;
 
-	if (step > 16)	return nullptr;
+	//if (step > 16)	return nullptr;
 
-	if (step >= 16 && mesh16)	return mesh16;
-	if (step >= 8  && mesh8)	return mesh8;
-	if (step >= 4  && mesh4)	return mesh4;
-	if (step >= 2  && mesh2)	return mesh2;
-	if (step >= 1  && mesh)		return mesh;
+	if (step == 16 && mesh16)	return mesh16;
+	if (step == 8  && mesh8)	return mesh8;
+	if (step == 4  && mesh4)	return mesh4;
+	if (step == 2  && mesh2)	return mesh2;
+	if (step == 1  && mesh)		return mesh;
+
+//	/*
 	if (mesh2)	return mesh2;
 	if (mesh4)	return mesh4;
 	if (mesh8)	return mesh8;
 	if (mesh16)	return mesh16;
+//	*/
 
 	//bad idea (scaled):
-/*	if (mesh32) return mesh32;
+//	/*
+	if (mesh32) return mesh32;
 	if (mesh64) return mesh64;
-	if (mesh128)return mesh128;*/
+	if (mesh128)return mesh128;
+//	*/
 
 	return mesh;
 }
@@ -839,7 +844,7 @@ void MapBlock::setMesh(MapBlockMesh* rmesh) {
 	     if (rmesh->step == 128){if (mesh128) delete mesh128;  mesh128 = rmesh;}
 	else if (rmesh->step == 64) {if (mesh64) delete mesh64;  mesh64 = rmesh;}
 	else if (rmesh->step == 32) {if (mesh32) delete mesh32;  mesh32 = rmesh;}
-	else 
+	else
 	     if (rmesh->step == 16) {if (mesh16) delete mesh16;  mesh16 = rmesh;}
 	else if (rmesh->step == 8 ) {if (mesh8)  delete mesh8;   mesh8  = rmesh;}
 	else if (rmesh->step == 4 ) {if (mesh4)  delete mesh4;   mesh4  = rmesh;}
