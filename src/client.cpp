@@ -34,7 +34,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "settings.h"
 #include "profiler.h"
 #include "gettext.h"
-#include "log.h"
+#include "log_types.h"
 #include "nodemetadata.h"
 #include "nodedef.h"
 #include "itemdef.h"
@@ -2484,7 +2484,9 @@ void Client::addUpdateMeshTask(v3s16 p, bool ack_to_server, bool urgent, bool la
 		data->setCrack(m_crack_level, m_crack_pos);
 		data->setSmoothLighting(g_settings->getBool("smooth_lighting"));
 		data->step = getFarmeshStep(data->draw_control, getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p));
-data->step = 32;
+if (data->step>4)
+infostream<<"meshmake "<<" s="<<data->step<< " p="<<p<<" rng="<<getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p)<<std::endl;
+//data->step = 32;
 	}
 	
 	// Add task to queue
@@ -2500,6 +2502,7 @@ void Client::addUpdateMeshTaskWithEdge(v3s16 blockpos, bool ack_to_server, bool 
 	}
 	catch(InvalidPositionException &e){}
 
+// TODO: skip edges if step>1
 	// Leading edge
 	for (int i=0;i<6;i++)
 	{

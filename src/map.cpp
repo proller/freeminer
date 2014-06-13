@@ -105,8 +105,9 @@ Map::~Map()
 
 #ifndef SERVER
 		// We dont have gamedef here anymore, so we cant remove the hardwarebuffers
-		if(i.second->mesh)
-			i.second->mesh->clearHardwareBuffer = false;
+	for(auto &m : i.second->mesh)
+		if(m)
+			m->clearHardwareBuffer = false;
 #endif
 		delete i.second;
 

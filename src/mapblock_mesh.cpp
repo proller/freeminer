@@ -49,15 +49,37 @@ float srgb_linear_multiply(float f, float m, float max)
 
 int getFarmeshStep(MapDrawControl& draw_control, int range) {
 	if (draw_control.farmesh) {
-		if		(range >= draw_control.farmesh+draw_control.farmesh_step*10)return 128;
-		else if	(range >= draw_control.farmesh+draw_control.farmesh_step*6) return 64;
-		else if (range >= draw_control.farmesh+draw_control.farmesh_step*4)	return 32;
+
+
+		//if		(range >= draw_control.farmesh+draw_control.farmesh_step*(FARMESH_STEP_MAX-1))	return FARMESH_STEP_MAX;
+//auto org = range;
+//return 3;
+
+		range -= draw_control.farmesh;
+		if (range < 1)
+			return 1;
+		range /= draw_control.farmesh_step;
+		range+=2;
+
+//infostream<<"getFarmeshStep "<<org<<" = "<< range <<" min="<<draw_control.farmesh<<" step="<<draw_control.farmesh_step<<std::endl;
+		if (range > FARMESH_STEP_MAX)
+			return FARMESH_STEP_MAX;
+
+		if (range <= 1)
+			return 1;
+		return range;
+
+/*
+		if		(range >= draw_control.farmesh+draw_control.farmesh_step*6)	return 7;
+		else if	(range >= draw_control.farmesh+draw_control.farmesh_step*5)	return 6;
+		else if (range >= draw_control.farmesh+draw_control.farmesh_step*4)	return 5;
 		else
 
-		     if (range >= draw_control.farmesh+draw_control.farmesh_step*3)	return 16;
-		else if (range >= draw_control.farmesh+draw_control.farmesh_step*2)	return 8;
-		else if (range >= draw_control.farmesh+draw_control.farmesh_step*1)	return 4;
-		else if (range >= draw_control.farmesh)								return 2;
+		     if (range >= draw_control.farmesh+draw_control.farmesh_step*3)	return 4;
+		else if (range >= draw_control.farmesh+draw_control.farmesh_step*2)	return 3;
+		else if (range >= draw_control.farmesh+draw_control.farmesh_step*1)	return 2;
+		else if (range >= draw_control.farmesh)								return 1;
+*/
 	}
 	return 1;
 };
@@ -799,11 +821,11 @@ static void getTileInfo(
 	INodeDefManager *ndef = data->m_gamedef->ndef();
 	v3s16 blockpos_nodes = data->m_blockpos * MAP_BLOCKSIZE;
 
-	int s = sqrt(step);
-	MapNode n0 = vmanip.getNodeNoEx(blockpos_nodes + p*s);
-	MapNode n1 = vmanip.getNodeNoEx(blockpos_nodes + p*s + face_dir*s);
-	//if(data->debug) infostream<<" GN "<<" step="<<step<<" s="<<s<<" p="<<p<<" n="<<n0<< n1<< blockpos_nodes<<blockpos_nodes + p*step<<blockpos_nodes + p*step + face_dir*step<<std::endl;
-	if(data->debug) infostream<<" GN "<<" step="<<step<<" s="<<s<<" p="<<p<<" n="<<n0<< n1<<" bpn="<<blockpos_nodes<<blockpos_nodes + p*s<<blockpos_nodes + p*s + face_dir*s<<std::endl;
+	//int s = sqrt(step);
+	MapNode n0 = vmanip.getNodeNoEx(blockpos_nodes + p*step);
+	MapNode n1 = vmanip.getNodeNoEx(blockpos_nodes + p*step + face_dir*step);
+	//if(data->debug) infostream<<" GN "<<" step="<<step<<" p="<<p<<" n="<<n0<< n1<< blockpos_nodes<<blockpos_nodes + p*step<<blockpos_nodes + p*step + face_dir*step<<std::endl;
+	//if(data->debug) infostream<<" GN "<<" step="<<step<<" s="<<s<<" p="<<p<<" n="<<n0<< n1<<" bpn="<<blockpos_nodes<<blockpos_nodes + p*s<<blockpos_nodes + p*s + face_dir*s<<std::endl;
 	TileSpec tile0 = getNodeTile(n0, p, face_dir, data);
 	TileSpec tile1 = getNodeTile(n1, p + face_dir, -face_dir, data);
 
@@ -1096,7 +1118,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	//TimeTaker timer1("MapBlockMesh()");
 
 //step = 1;
-	if (step>16) data->debug=1;
+	if (step>3) data->debug=1;
 
 	std::vector<FastFace> fastfaces_new;
 	/*
@@ -1327,26 +1349,36 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 	v3f t = v3f(0,0,0);
 	if (step>1) {
-		scaleMesh(m_mesh, v3f(step,step,step));
+		float scale = pow(2,step-1);
+		//float scale = step;
+		translateMesh(m_mesh, v3f(-BS/2, -BS/2, -BS/2));
+		//translateMesh(m_mesh, v3f(BS/2, BS/2, BS/2));
+		scaleMesh(m_mesh, v3f(scale,scale,scale)); // SPOW
 		// TODO: remove this wrong numbers, find formula   good test: fly above ocean
-		if (step == 2)	t = v3f(BS/2,		 BS/2,		BS/2);
-		if (step == 4)	t = v3f(BS*1.666,	-BS/3.0,	BS*1.666);
-		if (step == 8)	t = v3f(BS*2.666,	-BS*2.4,	BS*2.666);
-		if (step == 16)	t = v3f(BS*6.4,		-BS*6.4,	BS*6.4);
-		if (step == 32)	t = v3f(BS*18,		-BS*18,		BS*18);
-		if (step == 64)	t = v3f(BS*40,		-BS*40,		BS*40);
-		if (step == 128)t = v3f(BS*80,		-BS*80,		BS*80);
+		//t = v3f(scale*BS/2,		 scale*BS/2,		scale*BS/2);
+		//t = v3f(-scale*BS/2,		 -scale*BS/2,		-scale*BS/2);
+		//t = v3f(-scale*BS*2,		 -scale*BS*2,		-scale*BS*2);
+/*
+		if (step == 1)	t = v3f(BS/2,		 BS/2,		BS/2);
+		if (step == 2)	t = v3f(BS*1.666,	-BS/3.0,	BS*1.666);
+		if (step == 3)	t = v3f(BS*2.666,	-BS*2.4,	BS*2.666);
+		if (step == 4)	t = v3f(BS*6.4,		-BS*6.4,	BS*6.4);
+		if (step == 5)	t = v3f(BS*18,		-BS*18,		BS*18);
+		if (step == 6)	t = v3f(BS*40,		-BS*40,		BS*40);
+		if (step == 7)	t = v3f(BS*80,		-BS*80,		BS*80);
+*/
 	}
 	translateMesh(m_mesh, intToFloat(data->m_blockpos * MAP_BLOCKSIZE - camera_offset, BS) + t);
 
 	if(m_mesh)
 	{
-#if 0
+//#if 0
 		// Usually 1-700 faces and 1-7 materials
 		std::cout<<"Updated MapBlock has "<<fastfaces_new.size()<<" faces "
+				<<" step="<<step<<" "
 				<<"and uses "<<m_mesh->getMeshBufferCount()
 				<<" materials (meshbuffers)"<<std::endl;
-#endif
+//#endif
 	}
 	
 	//std::cout<<"added "<<fastfaces.getSize()<<" faces."<<std::endl;

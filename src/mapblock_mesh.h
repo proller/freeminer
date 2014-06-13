@@ -35,7 +35,7 @@ class Map;
 /*
 	Mesh making stuff
 */
-
+#define FARMESH_STEP_MAX 5
 int getFarmeshStep(MapDrawControl& draw_control, int range);
 
 class MapBlock;

@@ -216,17 +216,25 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 			|| bp.Z < p_blocks_min.Z
 			|| bp.Y < p_blocks_min.Y
 			|| bp.Y > p_blocks_max.Y)
+{
+infostream<<" skiprange0 "<<bp<<p_blocks_min<<p_blocks_max<<std::endl;
 				continue;
+}
 		}
 
 			int mesh_step = getFarmeshStep(m_control, getNodeBlockPos(cam_pos_nodes).getDistanceFrom(bp));
-			int mesh_step_actual = 1;
-			if (block->getMesh(mesh_step))
-				mesh_step_actual = block->getMesh(mesh_step)->step;
-
-			if ((bp.X % mesh_step_actual || bp.Y % mesh_step_actual || bp.Z % mesh_step_actual))
+			//int mesh_step_actual = 1;
+			//mesh_step_actual = block->getMesh(mesh_step)->step;
+			int skip = pow(2, mesh_step-1);
+			if ((bp.X % skip || bp.Y % skip || bp.Z % skip))
+			//if ((bp.X % mesh_step_actual || bp.Y % mesh_step_actual || bp.Z % mesh_step_actual))
+			//if ((bp.X % (mesh_step*mesh_step) || bp.Y % (mesh_step*mesh_step) || bp.Z % (mesh_step*mesh_step)))
+{
+//infostream<<" skipblock%="<<bp<< mesh_step<<std::endl;
 				continue;
-
+}
+//if (mesh_step>1)
+//infostream<<" drawblock="<<bp<<"s="<< mesh_step<<" sk="<<skip<<" rng="<<getNodeBlockPos(cam_pos_nodes).getDistanceFrom(bp)<<std::endl;
 /*
 			if (mesh_step_actual == 32 && (bp.X % 2 || bp.Y % 2 || bp.Z % 2))
 				continue;
@@ -251,7 +259,8 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 					camera_direction, camera_fov,
 					range, &d) == false)
 			{
-				continue;
+infostream<<" skipSight1 "<<bp<<" step="<<mesh_step<<std::endl;
+//				continue;
 			}
 
 			// This is ugly (spherical distance limit?)
@@ -261,18 +270,6 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 
 			blocks_in_range++;
 			
-			/*
-				Ignore if mesh doesn't exist
-			*/
-			{
-				//JMutexAutoLock lock(block->mesh_mutex);
-
-				if(block->getMesh(mesh_step) == NULL){
-					blocks_in_range_without_mesh++;
-					continue;
-				}
-			}
-
 			/*
 				Occlusion culling
 			*/
@@ -327,15 +324,21 @@ infostream<<"culled "<< spn<<" "<<blocks_occlusion_culled<<std::endl;
 			// This block is in range. Reset usage timer.
 			block->resetUsageTimer();
 
+/*
 			// Limit block count in case of a sudden increase
 			blocks_would_have_drawn++;
 			if(blocks_drawn >= m_control.wanted_max_blocks
 					&& m_control.range_all == false
 					&& d > m_control.wanted_min_range * BS)
 				continue;
+*/
 
-			if (m_control.farmesh && mesh_step != block->getMesh(mesh_step)->step) { //&& !block->mesh->transparent
+			if (m_control.farmesh && (!block->getMesh(mesh_step) || mesh_step != block->getMesh(mesh_step)->step)) { //&& !block->mesh->transparent
+if(mesh_step>4)
+infostream<<" making mesh for new step="<<mesh_step<<std::endl;
+				blocks_in_range_without_mesh++;
 				m_client->addUpdateMeshTask(block->getPos(), false, mesh_step == 1);
+				continue;
 			}
 
 			block->getMesh(mesh_step)->incrementUsageTimer(dtime);

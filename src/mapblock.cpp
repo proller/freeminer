@@ -72,9 +72,8 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 		reallocate();
 	
 #ifndef SERVER
-	mesh = nullptr;
-	mesh2 = mesh4 = mesh8 = mesh16 = nullptr;
-	mesh32 = mesh64 = mesh128 = nullptr;
+	mesh.resize(FARMESH_STEP_MAX+1);
+	//for (auto & i : mesh) i = nullptr;
 #endif
 }
 
@@ -811,6 +810,14 @@ void MapBlock::pushElementsToCircuit(Circuit* circuit)
 
 #ifndef SERVER
 MapBlockMesh* MapBlock::getMesh(int step) {
+//infostream<<" getmesh"<<mesh[step]<<std::endl;
+	if (mesh[step])
+		return mesh[step];
+//	while (--step)
+//		if (mesh[step])
+//			return mesh[step];
+	return nullptr;
+#if 0
 	if (step == 128 && mesh128)	return mesh128;
 	if (step == 64 && mesh64)	return mesh64;
 	if (step == 32 && mesh32)	return mesh32;
@@ -838,30 +845,21 @@ MapBlockMesh* MapBlock::getMesh(int step) {
 //	*/
 
 	return mesh;
+#endif
 }
 
 void MapBlock::setMesh(MapBlockMesh* rmesh) {
-	     if (rmesh->step == 128){if (mesh128) delete mesh128;  mesh128 = rmesh;}
-	else if (rmesh->step == 64) {if (mesh64) delete mesh64;  mesh64 = rmesh;}
-	else if (rmesh->step == 32) {if (mesh32) delete mesh32;  mesh32 = rmesh;}
-	else
-	     if (rmesh->step == 16) {if (mesh16) delete mesh16;  mesh16 = rmesh;}
-	else if (rmesh->step == 8 ) {if (mesh8)  delete mesh8;   mesh8  = rmesh;}
-	else if (rmesh->step == 4 ) {if (mesh4)  delete mesh4;   mesh4  = rmesh;}
-	else if (rmesh->step == 2 ) {if (mesh2)  delete mesh2;   mesh2  = rmesh;}
-	else                        {if (mesh)   delete mesh;    mesh   = rmesh;}
+	if (mesh[rmesh->step])
+		delete mesh[rmesh->step];
+	mesh[rmesh->step] = rmesh;
 }
 
 void MapBlock::delMesh() {
-	if (mesh128){delete mesh128;mesh128= nullptr;}
-	if (mesh64) {delete mesh64; mesh64 = nullptr;}
-	if (mesh32) {delete mesh32; mesh32 = nullptr;}
-
-	if (mesh16) {delete mesh16; mesh16 = nullptr;}
-	if (mesh8)  {delete mesh8;  mesh8  = nullptr;}
-	if (mesh4)  {delete mesh4;  mesh4  = nullptr;}
-	if (mesh2)  {delete mesh2;  mesh2  = nullptr;}
-	if (mesh)   {delete mesh;   mesh   = nullptr;}
+	for (auto & i : mesh) {
+		if (i)
+			delete i;
+		i = nullptr;
+	}
 }
 #endif
 
