@@ -48,41 +48,23 @@ float srgb_linear_multiply(float f, float m, float max)
 }
 
 int getFarmeshStep(MapDrawControl& draw_control, int range) {
+	int i = 1;
 	if (draw_control.farmesh) {
-
-
-		//if		(range >= draw_control.farmesh+draw_control.farmesh_step*(FARMESH_STEP_MAX-1))	return FARMESH_STEP_MAX;
-//auto org = range;
-//return 3;
-
 		range -= draw_control.farmesh;
-		if (range < 1)
-			return 1;
-		range /= draw_control.farmesh_step;
-		range+=2;
-
-//infostream<<"getFarmeshStep "<<org<<" = "<< range <<" min="<<draw_control.farmesh<<" step="<<draw_control.farmesh_step<<std::endl;
-		if (range > FARMESH_STEP_MAX)
-			return FARMESH_STEP_MAX;
-
+		for(; i <= FARMESH_STEP_MAX; ++i) {
+		range -= pow(2, i);
 		if (range <= 1)
-			return 1;
-		return range;
-
-/*
-		if		(range >= draw_control.farmesh+draw_control.farmesh_step*6)	return 7;
-		else if	(range >= draw_control.farmesh+draw_control.farmesh_step*5)	return 6;
-		else if (range >= draw_control.farmesh+draw_control.farmesh_step*4)	return 5;
-		else
-
-		     if (range >= draw_control.farmesh+draw_control.farmesh_step*3)	return 4;
-		else if (range >= draw_control.farmesh+draw_control.farmesh_step*2)	return 3;
-		else if (range >= draw_control.farmesh+draw_control.farmesh_step*1)	return 2;
-		else if (range >= draw_control.farmesh)								return 1;
-*/
+			break;
+		}
+//infostream<<"getFarmeshStep "<<org<<" = "<< range <<" i="<<i<<" min="<<draw_control.farmesh<<" step="<<draw_control.farmesh_step<<std::endl;
 	}
-	return 1;
+	return i;
 };
+
+bool getFarmeshGrid(v3s16 blockpos, int step) {
+	int skip = pow(2, step - 1);
+	return !(blockpos.X % skip || blockpos.Y % skip || blockpos.Z % skip);
+}
 
 /*
 	MeshMakeData
@@ -1374,7 +1356,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	{
 //#if 0
 		// Usually 1-700 faces and 1-7 materials
-		std::cout<<"Updated MapBlock has "<<fastfaces_new.size()<<" faces "
+		infostream<<"Updated MapBlock has "<<fastfaces_new.size()<<" faces "
 				<<" step="<<step<<" "
 				<<"and uses "<<m_mesh->getMeshBufferCount()
 				<<" materials (meshbuffers)"<<std::endl;

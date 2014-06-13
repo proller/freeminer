@@ -216,33 +216,12 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 			|| bp.Z < p_blocks_min.Z
 			|| bp.Y < p_blocks_min.Y
 			|| bp.Y > p_blocks_max.Y)
-{
-infostream<<" skiprange0 "<<bp<<p_blocks_min<<p_blocks_max<<std::endl;
 				continue;
-}
 		}
 
 			int mesh_step = getFarmeshStep(m_control, getNodeBlockPos(cam_pos_nodes).getDistanceFrom(bp));
-			//int mesh_step_actual = 1;
-			//mesh_step_actual = block->getMesh(mesh_step)->step;
-			int skip = pow(2, mesh_step-1);
-			if ((bp.X % skip || bp.Y % skip || bp.Z % skip))
-			//if ((bp.X % mesh_step_actual || bp.Y % mesh_step_actual || bp.Z % mesh_step_actual))
-			//if ((bp.X % (mesh_step*mesh_step) || bp.Y % (mesh_step*mesh_step) || bp.Z % (mesh_step*mesh_step)))
-{
-//infostream<<" skipblock%="<<bp<< mesh_step<<std::endl;
+			if (!getFarmeshGrid(bp, mesh_step))
 				continue;
-}
-//if (mesh_step>1)
-//infostream<<" drawblock="<<bp<<"s="<< mesh_step<<" sk="<<skip<<" rng="<<getNodeBlockPos(cam_pos_nodes).getDistanceFrom(bp)<<std::endl;
-/*
-			if (mesh_step_actual == 32 && (bp.X % 2 || bp.Y % 2 || bp.Z % 2))
-				continue;
-			if (mesh_step_actual == 64 && (bp.X % 4 || bp.Y % 4 || bp.Z % 4))
-				continue;
-			if (mesh_step_actual == 128 && (bp.X % 8 || bp.Y % 8 || bp.Z % 8))
-				continue;
-*/
 
 			/*
 				Compare block position to camera position, skip
@@ -259,8 +238,8 @@ infostream<<" skiprange0 "<<bp<<p_blocks_min<<p_blocks_max<<std::endl;
 					camera_direction, camera_fov,
 					range, &d) == false)
 			{
-infostream<<" skipSight1 "<<bp<<" step="<<mesh_step<<std::endl;
-//				continue;
+//infostream<<" skipSight1 "<<bp<<" step="<<mesh_step<<std::endl;
+				continue;
 			}
 
 			// This is ugly (spherical distance limit?)
@@ -505,7 +484,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 
 		int mesh_step = getFarmeshStep(m_control, getNodeBlockPos(cam_pos_nodes).getDistanceFrom(block->getPos()));
 		// If the mesh of the block happened to get deleted, ignore it
-		if(block->getMesh(mesh_step) == NULL)
+		if(!block->getMesh(mesh_step))
 			continue;
 		
 		float d = 0.0;

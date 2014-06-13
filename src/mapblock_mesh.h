@@ -37,6 +37,7 @@ class Map;
 */
 #define FARMESH_STEP_MAX 5
 int getFarmeshStep(MapDrawControl& draw_control, int range);
+bool getFarmeshGrid(v3s16 blockpos, int step);
 
 class MapBlock;
 
