@@ -178,11 +178,11 @@ void ContentFeatures::reset()
 	/*
 		Cached stuff
 	*/
-#ifndef SERVER
+//#ifndef SERVER
 	solidness = 2;
 	visual_solidness = 0;
 	backface_culling = true;
-#endif
+//#endif
 	has_on_construct = false;
 	has_on_destruct = false;
 	has_after_destruct = false;
@@ -644,7 +644,8 @@ public:
 	}
 	virtual void updateTextures(ITextureSource *tsrc)
 	{
-#ifndef SERVER
+
+//#ifndef SERVER
 		infostream<<"CNodeDefManager::updateTextures(): Updating "
 				<<"textures in node definitions"<<std::endl;
 
@@ -741,6 +742,8 @@ public:
 			if (is_liquid)
 				material_type = (f->alpha == 255) ? TILE_MATERIAL_LIQUID_OPAQUE : TILE_MATERIAL_LIQUID_TRANSPARENT;
 
+#ifndef SERVER
+			if (tsrc) {
 			// Tiles (fill in f->tiles[])
 			for(u16 j=0; j<6; j++){
 				// Texture
@@ -826,8 +829,10 @@ public:
 					}
 				}
 			}
-		}
+			}
 #endif
+		}
+//#endif
 	}
 	void serialize(std::ostream &os, u16 protocol_version)
 	{

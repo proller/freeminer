@@ -40,6 +40,42 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "log_types.h"
 
+//COPYPASTE!
+static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
+		float start_off, float end_off, u32 needed_count, INodeDefManager *nodemgr)
+{
+	float d0 = (float)BS * p0.getDistanceFrom(p1);
+	v3s16 u0 = p1 - p0;
+	v3f uf = v3f(u0.X, u0.Y, u0.Z) * BS;
+	uf.normalize();
+	v3f p0f = v3f(p0.X, p0.Y, p0.Z) * BS;
+	u32 count = 0;
+//infostream<<"occcy "<< start_off<<" "<<d0<<" "<<end_off<<" "<<step<<std::endl;
+	for(float s=start_off; s<d0+end_off; s+=step){
+		v3f pf = p0f + uf * s;
+		v3s16 p = floatToInt(pf, BS);
+		MapNode n = map->getNodeNoEx(p);
+		if (n.getContent() == CONTENT_IGNORE)
+			return true;//false;
+		bool is_transparent = false;
+		const ContentFeatures &f = nodemgr->get(n);
+		if(f.solidness == 0)
+			is_transparent = (f.visual_solidness != 2);
+		else
+			is_transparent = (f.solidness != 2);
+//infostream<<"occtest "<<" p="<<p<<" n="<<n<<"tra="<<is_transparent<<" count="<<count<<std::endl;
+		if(!is_transparent){
+			count++;
+			if(count >= needed_count)
+				return true;
+		}
+		step *= stepfac;
+	}
+	return false;
+}
+
+
+
 void RemoteClient::GetNextBlocks(
 		ServerEnvironment *env,
 		EmergeManager * emerge,
@@ -177,6 +213,7 @@ void RemoteClient::GetNextBlocks(
 
 	f32 speed_in_blocks = (playerspeed/(MAP_BLOCKSIZE*BS)).getLength();
 
+	int blocks_occlusion_culled = 0;
 	s16 d;
 	for(d = d_start; d <= d_max; d++)
 	{
@@ -307,6 +344,11 @@ void RemoteClient::GetNextBlocks(
 				}
 			}
 
+
+
+
+
+
 			/*
 				Check if map has this block
 			*/
@@ -320,6 +362,82 @@ void RemoteClient::GetNextBlocks(
 				if (m_blocks_sent[p] > 0 && m_blocks_sent[p] >= block->m_changed_timestamp) {
 					continue;
 				}
+
+
+
+
+
+
+{
+			/*
+				Occlusion culling
+			*/
+			auto cpn = p;
+			auto cam_pos_nodes = center_nodepos;
+			auto nodemgr = env->getGameDef()->getNodeDefManager();
+
+			// No occlusion culling when free_move is on and camera is
+			// inside ground
+			bool occlusion_culling_enabled = true;
+			if (d <= 2)
+				occlusion_culling_enabled = false;
+				
+// /*
+//			if(g_settings->getBool("free_move")){
+//			if (occlusion_culling_enabled) {
+				MapNode n = env->getMap().getNodeNoEx(cam_pos_nodes);
+				if(n.getContent() == CONTENT_IGNORE ||
+						nodemgr->get(n).solidness == 2)
+					occlusion_culling_enabled = false;
+//			}
+// */
+
+			cpn += v3s16(MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2);
+
+			float step = BS*1;
+			float stepfac = 1.1;
+			float startoff = BS*1;
+			float endoff = -BS*MAP_BLOCKSIZE*1.42*1.42;
+			v3s16 spn = cam_pos_nodes + v3s16(0,0,0);
+			s16 bs2 = MAP_BLOCKSIZE/2 + 1;
+			u32 needed_count = 1;
+//infostream<<" occparams "<<" p="<<cam_pos_nodes<<" en="<<occlusion_culling_enabled<<" d="<<d<<" pnod="<<n<<" solid="<<(int)nodemgr->get(n).solidness<<std::endl;
+			if(
+				occlusion_culling_enabled &&
+				isOccluded(&env->getMap(), spn, cpn + v3s16(0,0,0),
+					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+				isOccluded(&env->getMap(), spn, cpn + v3s16(bs2,bs2,bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+				isOccluded(&env->getMap(), spn, cpn + v3s16(bs2,bs2,-bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+				isOccluded(&env->getMap(), spn, cpn + v3s16(bs2,-bs2,bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+				isOccluded(&env->getMap(), spn, cpn + v3s16(bs2,-bs2,-bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+				isOccluded(&env->getMap(), spn, cpn + v3s16(-bs2,bs2,bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+				isOccluded(&env->getMap(), spn, cpn + v3s16(-bs2,bs2,-bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+				isOccluded(&env->getMap(), spn, cpn + v3s16(-bs2,-bs2,bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+				isOccluded(&env->getMap(), spn, cpn + v3s16(-bs2,-bs2,-bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr)
+			)
+			{
+infostream<<" occlusion player="<<cam_pos_nodes<<" d="<<d<<" block="<<cpn<<" total="<<blocks_occlusion_culled<<std::endl;
+				blocks_occlusion_culled++;
+				continue;
+			}
+}
+
+
+
+
+
+
+
+
+
 
 				// Reset usage timer, this block will be of use in the future.
 				block->resetUsageTimer();
@@ -407,7 +525,7 @@ void RemoteClient::GetNextBlocks(
 	}
 queue_full_break:
 
-	//infostream<<"Stopped at "<<d<<" d_start="<<d_start<< " d_max="<<d_max<<" nearest_emerged_d="<<nearest_emerged_d<<" nearest_emergefull_d="<<nearest_emergefull_d<< " new_nearest_unsent_d="<<new_nearest_unsent_d<< " sel="<<num_blocks_selected<< "+"<<num_blocks_sending <<std::endl;
+	infostream<<"Stopped at "<<d<<" d_start="<<d_start<< " d_max="<<d_max<<" nearest_emerged_d="<<nearest_emerged_d<<" nearest_emergefull_d="<<nearest_emergefull_d<< " new_nearest_unsent_d="<<new_nearest_unsent_d<< " sel="<<num_blocks_selected<< "+"<<num_blocks_sending <<std::endl;
 	num_blocks_selected += num_blocks_sending;
 	if(!num_blocks_selected && d_start == d) {
 		//new_nearest_unsent_d = 0;
