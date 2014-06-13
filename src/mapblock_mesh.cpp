@@ -51,7 +51,7 @@ int getFarmeshStep(MapDrawControl& draw_control, int range) {
 	int i = 1;
 	if (draw_control.farmesh) {
 		range -= draw_control.farmesh;
-		for(; i <= FARMESH_STEP_MAX; ++i) {
+		for(; i < FARMESH_STEP_MAX; ++i) {
 		range -= pow(2, i);
 		if (range <= 1)
 			break;

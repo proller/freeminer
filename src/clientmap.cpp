@@ -293,7 +293,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 					step, stepfac, startoff, endoff, needed_count, nodemgr)
 			)
 			{
-infostream<<"culled "<< spn<<" "<<"step="<<mesh_step<<" total="<<blocks_occlusion_culled<<std::endl;
+//infostream<<"culled "<< spn<<" "<<cpn<<"step="<<mesh_step<<" total="<<blocks_occlusion_culled<<std::endl;
 				blocks_occlusion_culled++;
 				continue;
 			}
@@ -531,7 +531,6 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 			//JMutexAutoLock lock(block->mesh_mutex);
 
 			MapBlockMesh *mapBlockMesh = block->getMesh(mesh_step);
-			assert(mapBlockMesh);
 
 			mapBlockMesh->updateCameraOffset(m_camera_offset);
 
