@@ -46,7 +46,6 @@ MapDrawControl::MapDrawControl():
 		blocks_would_have_drawn(0),
 		farthest_drawn(0)
 		,farmesh(0)
-		,farmesh_step(1)
 		,fps(30)
 		,fps_avg(30)
 		,fps_wanted(30)
@@ -54,7 +53,6 @@ MapDrawControl::MapDrawControl():
 		,camera_fov_blocks(0)
 	{
 		farmesh = g_settings->getS32("farmesh");
-		farmesh_step = g_settings->getS32("farmesh_step");
 	}
 
 ClientMap::ClientMap(
@@ -255,7 +253,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 
 			// No occlusion culling when free_move is on and camera is
 			// inside ground
-			bool occlusion_culling_enabled = true;
+			bool occlusion_culling_enabled = mesh_step <= 1;
 			if(g_settings->getBool("free_move")){
 				MapNode n = getNodeNoEx(cam_pos_nodes);
 				if(n.getContent() == CONTENT_IGNORE ||
@@ -295,7 +293,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 					step, stepfac, startoff, endoff, needed_count, nodemgr)
 			)
 			{
-infostream<<"culled "<< spn<<" "<<blocks_occlusion_culled<<std::endl;
+infostream<<"culled "<< spn<<" "<<"step="<<mesh_step<<" total="<<blocks_occlusion_culled<<std::endl;
 				blocks_occlusion_culled++;
 				continue;
 			}
@@ -312,8 +310,9 @@ infostream<<"culled "<< spn<<" "<<blocks_occlusion_culled<<std::endl;
 				continue;
 */
 
-			if (m_control.farmesh && (!block->getMesh(mesh_step) || mesh_step != block->getMesh(mesh_step)->step)) { //&& !block->mesh->transparent
-if(mesh_step>4)
+			//if (m_control.farmesh && (!block->getMesh(mesh_step) || mesh_step != block->getMesh(mesh_step)->step)) { //&& !block->mesh->transparent
+			if (!block->getMesh(mesh_step)) { //&& !block->mesh->transparent
+if(mesh_step>=3)
 infostream<<" making mesh for new step="<<mesh_step<<std::endl;
 				blocks_in_range_without_mesh++;
 				m_client->addUpdateMeshTask(block->getPos(), false, mesh_step == 1);
@@ -499,7 +498,6 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 		{
 			//JMutexAutoLock lock(block->mesh_mutex);
 			MapBlockMesh *mapBlockMesh = block->getMesh(mesh_step);
-			assert(mapBlockMesh);
 
 			mapBlockMesh->updateCameraOffset(m_camera_offset);
 

@@ -56,7 +56,7 @@ int getFarmeshStep(MapDrawControl& draw_control, int range) {
 		if (range <= 1)
 			break;
 		}
-//infostream<<"getFarmeshStep "<<org<<" = "<< range <<" i="<<i<<" min="<<draw_control.farmesh<<" step="<<draw_control.farmesh_step<<std::endl;
+//infostream<<"getFarmeshStep "<<org<<" = "<< range <<" i="<<i<<" min="<<draw_control.farmesh<<std::endl;
 	}
 	return i;
 };
@@ -1354,13 +1354,13 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 	if(m_mesh)
 	{
-//#if 0
+#if 0
 		// Usually 1-700 faces and 1-7 materials
 		infostream<<"Updated MapBlock has "<<fastfaces_new.size()<<" faces "
 				<<" step="<<step<<" "
 				<<"and uses "<<m_mesh->getMeshBufferCount()
 				<<" materials (meshbuffers)"<<std::endl;
-//#endif
+#endif
 	}
 	
 	//std::cout<<"added "<<fastfaces.getSize()<<" faces."<<std::endl;

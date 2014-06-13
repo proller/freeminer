@@ -568,7 +568,6 @@ void Camera::updateViewingRange(f32 frametime_in, f32 busytime_in)
 		m_cameranode->setFarValue(viewing_range_max * BS * 10);
 
 	int farmesh = g_settings->getS32("farmesh");
-	int farmesh_step = g_settings->getS32("farmesh_step");
 	int farmesh_wanted = g_settings->getS32("farmesh_wanted");
 
 	f32 wanted_fps = g_settings->getFloat("wanted_fps");
@@ -603,8 +602,6 @@ void Camera::updateViewingRange(f32 frametime_in, f32 busytime_in)
 			if (m_draw_control.fps > wanted_fps && m_draw_control.fps_avg >= wanted_fps*1.4) {
 				if (m_draw_control.wanted_range >= farmesh_wanted)
 					m_draw_control.farmesh = (int)m_draw_control.farmesh + 1;
-				if (m_draw_control.farmesh >= farmesh*1.3 && m_draw_control.farmesh_step < farmesh_step)
-					++m_draw_control.farmesh_step;
 			} else if (m_draw_control.fps <= wanted_fps*0.8){
 				float farmesh_was = m_draw_control.farmesh;
 				if (m_draw_control.fps <= wanted_fps*0.6)
@@ -617,8 +614,6 @@ void Camera::updateViewingRange(f32 frametime_in, f32 busytime_in)
 					m_draw_control.farmesh -= 1;
 				if (m_draw_control.farmesh < farmesh)
 					m_draw_control.farmesh = farmesh;
-				if (m_draw_control.farmesh <= farmesh && m_draw_control.farmesh_step > 1 && m_draw_control.fps <= wanted_fps*0.3)
-					--m_draw_control.farmesh_step;
 				if (farmesh_was != m_draw_control.farmesh)
 					return;
 			}

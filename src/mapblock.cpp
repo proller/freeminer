@@ -811,41 +811,12 @@ void MapBlock::pushElementsToCircuit(Circuit* circuit)
 #ifndef SERVER
 MapBlockMesh* MapBlock::getMesh(int step) {
 //infostream<<" getmesh"<<mesh[step]<<std::endl;
-	if (mesh[step])
+//	if (mesh[step])
 		return mesh[step];
 //	while (--step)
 //		if (mesh[step])
 //			return mesh[step];
-	return nullptr;
-#if 0
-	if (step == 128 && mesh128)	return mesh128;
-	if (step == 64 && mesh64)	return mesh64;
-	if (step == 32 && mesh32)	return mesh32;
-
-	//if (step > 16)	return nullptr;
-
-	if (step == 16 && mesh16)	return mesh16;
-	if (step == 8  && mesh8)	return mesh8;
-	if (step == 4  && mesh4)	return mesh4;
-	if (step == 2  && mesh2)	return mesh2;
-	if (step == 1  && mesh)		return mesh;
-
-//	/*
-	if (mesh2)	return mesh2;
-	if (mesh4)	return mesh4;
-	if (mesh8)	return mesh8;
-	if (mesh16)	return mesh16;
-//	*/
-
-	//bad idea (scaled):
-//	/*
-	if (mesh32) return mesh32;
-	if (mesh64) return mesh64;
-	if (mesh128)return mesh128;
-//	*/
-
-	return mesh;
-#endif
+//	return nullptr;
 }
 
 void MapBlock::setMesh(MapBlockMesh* rmesh) {

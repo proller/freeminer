@@ -3409,7 +3409,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 */
 				<<std::setprecision(1)
 				<<", v_range = "<<draw_control.wanted_range
-				<<", farmesh = "<<draw_control.farmesh<<":"<<draw_control.farmesh_step
+				<<", farmesh = "<<draw_control.farmesh
 				<<std::setprecision(3)
 				<<", RTT = "<<client.getRTT();
 			guitext->setText(narrow_to_wide(os.str()).c_str());
