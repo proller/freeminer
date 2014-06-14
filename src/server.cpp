@@ -1243,9 +1243,6 @@ int Server::AsyncRunMapStep(bool initial_step) {
 		dtime = m_step_dtime;
 	}
 
-	f32 dedicated_server_step = g_settings->getFloat("dedicated_server_step");
-	//u32 max_cycle_ms = 1000 * (m_lag > dedicated_server_step ? dedicated_server_step/(m_lag/dedicated_server_step) : dedicated_server_step);
-	//u32 max_cycle_ms = 1000 * (dedicated_server_step/(m_lag/dedicated_server_step));
 	u32 max_cycle_ms = 500;
 
 	const float map_timer_and_unload_dtime = 10.92;
@@ -1986,7 +1983,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		m_script->on_joinplayer(playersao);
 
 	}
-	else if(command == TOSERVER_GOTBLOCKS)
+	else if(command == TOSERVER_GOTBLOCKS) // TODO: REMOVE IN NEXT, move wanted_range to new packet
 	{
 		if(datasize < 2+1)
 			return;
@@ -2007,10 +2004,9 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			if((s16)datasize < 2+1+(i+1)*6)
 				throw con::InvalidIncomingDataException
 					("GOTBLOCKS length is too short");
-			v3s16 p = readV3S16(&data[2+1+i*6]);
+			readV3S16(&data[2+1+i*6]);
 			/*infostream<<"Server: GOTBLOCKS ("
 					<<p.X<<","<<p.Y<<","<<p.Z<<")"<<std::endl;*/
-			client->GotBlock(p, m_uptime.get() + m_env->m_game_time_start);
 		}
 		if((s16)datasize > 2+1+(count)*6) // only freeminer client
 			client->wanted_range = readU16(&data[2+1+(count*6)]);
@@ -4059,6 +4055,7 @@ void Server::SendBlockNoLock(u16 peer_id, MapBlock *block, u8 ver, u16 net_proto
 	/*infostream<<"Server: Sending block ("<<p.X<<","<<p.Y<<","<<p.Z<<")"
 			<<":  \tpacket size: "<<replysize<<std::endl;*/
 
+	JMutexAutoLock lock(m_env_mutex);
 	/*
 		Send packet
 	*/
@@ -4077,8 +4074,6 @@ void Server::SendBlocks(float dtime)
 
 	std::vector<PrioritySortedBlockTransfer> queue;
 
-	s32 total_sending = 0;
-
 	{
 		//ScopeProfiler sp(g_profiler, "Server: selecting blocks for sending");
 
@@ -4094,7 +4089,6 @@ void Server::SendBlocks(float dtime)
 			if (client == NULL)
 				return;
 
-			total_sending += client->SendingCount();
 			client->GetNextBlocks(m_env,m_emerge, dtime, m_uptime.get() + m_env->m_game_time_start, queue);
 		}
 		//m_clients.Unlock();
@@ -4131,7 +4125,6 @@ void Server::SendBlocks(float dtime)
 		SendBlockNoLock(q.peer_id, block, client->serialization_version, client->net_proto_version, 1);
 
 		client->SentBlock(q.pos, m_uptime.get() + m_env->m_game_time_start);
-		total_sending++;
 	}
 	//m_clients.Unlock();
 }
