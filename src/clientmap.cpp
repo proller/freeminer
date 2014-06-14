@@ -315,7 +315,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 if(mesh_step>=3)
 infostream<<" making mesh for new step="<<mesh_step<<" bp="<<bp<<std::endl;
 				blocks_in_range_without_mesh++;
-				m_client->addUpdateMeshTask(block->getPos(), false, true, true); //,mesh_step == 1
+				m_client->addUpdateMeshTask(block->getPos(), false, 1, 1); //,mesh_step == 1
 				continue;
 			}
 
