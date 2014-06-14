@@ -24,9 +24,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <ostream>
 std::ostream & operator<<(std::ostream & s, v3s16 p);
+std::ostream & operator<<(std::ostream & s, v3f p);
 
 #include <map>
 std::ostream & operator<<(std::ostream & s, std::map<v3s16, unsigned int> & p);
+std::ostream & operator<<(std::ostream & s, std::map<v3f, unsigned int> & p);
 
 
 struct MapNode;

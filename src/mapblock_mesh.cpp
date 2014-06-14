@@ -56,7 +56,7 @@ inline int radius_box(const v3s16 & a, const v3s16 & b) {
 int getFarmeshStep(MapDrawControl& draw_control, const v3s16 & player_pos, const v3s16 & block_pos) {
 	if (!draw_control.farmesh)
 		return 1;
-
+//return 3;
 	int range = radius_box(player_pos, block_pos);
 //auto range_orig = range;
 	range -= draw_control.farmesh;
@@ -1341,11 +1341,20 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	v3f t = v3f(0,0,0);
 	if (step>1) {
 		float scale = pow(2,step-1);
+//scale *=0.9;
 		//float scale = step;
-		translateMesh(m_mesh, v3f(-BS/2, -BS/2, -BS/2));
+		//translateMesh(m_mesh, v3f(-BS/2, -BS/2, -BS/2));
 		//translateMesh(m_mesh, v3f(BS/2, BS/2, BS/2));
+		//float mv = 2.5;
+		//float mv = BS/(2*scale); //ok2
+		//float mv = BS/2;
+		float mv = -BS/4; // TODO BUGgy
+		//float mv = -BS/(4*scale);
+		translateMesh(m_mesh, v3f(mv, mv, mv)); // TODO move to after translate
+		//translateMesh(m_mesh, v3f(-BS, -BS, -BS));
 		scaleMesh(m_mesh, v3f(scale,scale,scale)); // SPOW
 		// TODO: remove this wrong numbers, find formula   good test: fly above ocean
+		//t = v3f(scale*mv,		 scale*mv,		scale*mv); //ok2
 		//t = v3f(scale*BS/2,		 scale*BS/2,		scale*BS/2);
 		//t = v3f(-scale*BS/2,		 -scale*BS/2,		-scale*BS/2);
 		//t = v3f(-scale*BS*2,		 -scale*BS*2,		-scale*BS*2);

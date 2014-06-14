@@ -22,7 +22,18 @@ std::ostream & operator<<(std::ostream & s, v3s16 p) {
 	return s;
 }
 
+std::ostream & operator<<(std::ostream & s, v3f p) {
+	s << "(" << p.X << "," << p.Y << "," << p.Z << ")";
+	return s;
+}
+
 std::ostream & operator<<(std::ostream & s, std::map<v3s16, unsigned int> & p) {
+	for (auto & i: p)
+		s << i.first << "=" << i.second<<" ";
+	return s;
+}
+
+std::ostream & operator<<(std::ostream & s, std::map<v3f, unsigned int> & p) {
 	for (auto & i: p)
 		s << i.first << "=" << i.second<<" ";
 	return s;

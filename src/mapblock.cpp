@@ -810,13 +810,7 @@ void MapBlock::pushElementsToCircuit(Circuit* circuit)
 
 #ifndef SERVER
 MapBlockMesh* MapBlock::getMesh(int step) {
-//infostream<<" getmesh"<<mesh[step]<<std::endl;
-//	if (mesh[step])
-		return mesh[step];
-//	while (--step)
-//		if (mesh[step])
-//			return mesh[step];
-//	return nullptr;
+	return mesh[step];
 }
 
 void MapBlock::setMesh(MapBlockMesh* rmesh) {
@@ -833,7 +827,6 @@ void MapBlock::delMesh() {
 	}
 }
 #endif
-
 
 /*
 	Legacy serialization
