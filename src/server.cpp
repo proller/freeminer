@@ -2007,7 +2007,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			if((s16)datasize < 2+1+(i+1)*6)
 				throw con::InvalidIncomingDataException
 					("GOTBLOCKS length is too short");
-			v3s16 p = readV3S16(&data[2+1+i*6]);
+			readV3S16(&data[2+1+i*6]);
 			/*infostream<<"Server: GOTBLOCKS ("
 					<<p.X<<","<<p.Y<<","<<p.Z<<")"<<std::endl;*/
 		}
