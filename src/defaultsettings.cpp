@@ -344,7 +344,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("max_objects_per_block", "100");
 	settings->setDefault("preload_item_visuals", "false");
 	settings->setDefault("sqlite_synchronous", "1");
-	settings->setDefault("farmesh", "2");
+	settings->setDefault("farmesh", "1");
 	settings->setDefault("farmesh_wanted", "500");
 	settings->setDefault("enable_any_name", "0"); //WARNING!!! SECURITY RISK WITH SOME MODULES
 	settings->setDefault("password_save", "1");

@@ -672,7 +672,7 @@ function tabbuilder.handle_settings_buttons(fields)
 	end
 	if fields["cb_farmesh"] then
 		if fields["cb_farmesh"] == "true" then
-			engine.setting_set("farmesh", 3)
+			engine.setting_set("farmesh", 1)
 		else
 			engine.setting_set("farmesh", 0)
 		end

@@ -78,7 +78,6 @@
 #viewing_range_nodes_min = 35
 #Start optimizing far blocks, in blocks. good values 2 - 5 . 0 = disable
 #farmesh = 0
-#farmesh_step = 2
 # Initial window size
 #screenW = 800
 #screenH = 600

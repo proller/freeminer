@@ -54,19 +54,20 @@ inline int radius_box(const v3s16 & a, const v3s16 & b) {
 }
 
 int getFarmeshStep(MapDrawControl& draw_control, const v3s16 & player_pos, const v3s16 & block_pos) {
-	//int range = player_pos.getDistanceFrom(block_pos);
+	if (!draw_control.farmesh)
+		return 1;
+
 	int range = radius_box(player_pos, block_pos);
-	int i = 1;
-	if (draw_control.farmesh) {
-		range -= draw_control.farmesh;
-		for(i = 1; i < FARMESH_STEP_MAX && range > 1; ++i) {
-			range -= pow(2, i);
-			//if (range <= 1)
-			//	break;
-		}
-//infostream<<"getFarmeshStep "<<org<<" = "<< range <<" i="<<i<<" min="<<draw_control.farmesh<<std::endl;
-	}
-	return i;
+//auto range_orig = range;
+	range -= draw_control.farmesh;
+	if (range <= 1)
+		return 1;
+	int s = log(range)/log(2);
+	++s;
+	if (s > FARMESH_STEP_MAX)
+		s = FARMESH_STEP_MAX;
+//infostream<<"getFarmeshStep "<<range_orig<<" => "<< range <<" step="<<s<<" min="<<draw_control.farmesh<<std::endl;
+	return s;
 };
 
 bool getFarmeshGrid(v3s16 blockpos, int step) {
