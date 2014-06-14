@@ -72,7 +72,8 @@ int getFarmeshStep(MapDrawControl& draw_control, const v3s16 & player_pos, const
 
 bool getFarmeshGrid(v3s16 blockpos, int step) {
 	int skip = pow(2, step - 1);
-	return !(blockpos.X % skip || blockpos.Y % skip || blockpos.Z % skip);
+	//return !(blockpos.X % skip || blockpos.Y % skip || blockpos.Z % skip);
+	return !(abs(blockpos.X) % skip || abs(blockpos.Y) % skip || abs(blockpos.Z) % skip);
 }
 
 /*
@@ -1341,7 +1342,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	v3f t = v3f(0,0,0);
 	if (step>1) {
 		float scale = pow(2,step-1);
-//scale *=0.9;
+scale *=0.9; //debug
 		//float scale = step;
 		//translateMesh(m_mesh, v3f(-BS/2, -BS/2, -BS/2));
 		//translateMesh(m_mesh, v3f(BS/2, BS/2, BS/2));
@@ -1372,13 +1373,14 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 	if(m_mesh)
 	{
-#if 0
+//#if 0
 		// Usually 1-700 faces and 1-7 materials
+if (step >=3)
 		infostream<<"Updated MapBlock has "<<fastfaces_new.size()<<" faces "
-				<<" step="<<step<<" "
+				<<" step="<<step<<" p="<<data->m_blockpos
 				<<"and uses "<<m_mesh->getMeshBufferCount()
 				<<" materials (meshbuffers)"<<std::endl;
-#endif
+//#endif
 	}
 	
 	//std::cout<<"added "<<fastfaces.getSize()<<" faces."<<std::endl;
