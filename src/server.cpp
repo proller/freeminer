@@ -4130,7 +4130,7 @@ void Server::SendBlocks(float dtime)
 		// maybe sometimes blocks will not load (must wait 1+ minute), but reduce network load: q.priority<=4
 		SendBlockNoLock(q.peer_id, block, client->serialization_version, client->net_proto_version, 1);
 
-		client->SentBlock(q.pos);
+		client->SentBlock(q.pos, m_uptime.get() + m_env->m_game_time_start);
 		total_sending++;
 	}
 	//m_clients.Unlock();

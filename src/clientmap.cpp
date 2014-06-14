@@ -313,7 +313,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 			//if (m_control.farmesh && (!block->getMesh(mesh_step) || mesh_step != block->getMesh(mesh_step)->step)) { //&& !block->mesh->transparent
 			if (!block->getMesh(mesh_step)) { //&& !block->mesh->transparent
 if(mesh_step>=3)
-infostream<<" making mesh for new step="<<mesh_step<<std::endl;
+infostream<<" making mesh for new step="<<mesh_step<<" bp="<<bp<<std::endl;
 				blocks_in_range_without_mesh++;
 				m_client->addUpdateMeshTask(block->getPos(), false, mesh_step == 1);
 				continue;

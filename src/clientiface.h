@@ -256,7 +256,7 @@ public:
 
 	void GotBlock(v3s16 p, double time);
 
-	void SentBlock(v3s16 p);
+	void SentBlock(v3s16 p, double time);
 
 	void SetBlockNotSent(v3s16 p);
 	void SetBlocksNotSent(std::map<v3s16, MapBlock*> &blocks);

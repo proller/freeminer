@@ -439,22 +439,11 @@ queue_full_break:
 
 void RemoteClient::GotBlock(v3s16 p, double time)
 {
-	if(m_blocks_sending.find(p) != m_blocks_sending.end())
-		m_blocks_sending.erase(p);
-	else
-	{
-		m_excess_gotblocks++;
-	}
-	m_blocks_sent[p] = time;
 }
 
-void RemoteClient::SentBlock(v3s16 p)
+void RemoteClient::SentBlock(v3s16 p, double time)
 {
-	if(m_blocks_sending.find(p) == m_blocks_sending.end())
-		m_blocks_sending[p] = 0.0;
-	else
-		infostream<<"RemoteClient::SentBlock(): Sent block"
-				" already in m_blocks_sending"<<std::endl;
+	m_blocks_sent[p] = time;
 }
 
 void RemoteClient::SetBlockNotSent(v3s16 p)
