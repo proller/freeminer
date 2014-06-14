@@ -59,10 +59,10 @@ int getFarmeshStep(MapDrawControl& draw_control, const v3s16 & player_pos, const
 	int i = 1;
 	if (draw_control.farmesh) {
 		range -= draw_control.farmesh;
-		for(; i < FARMESH_STEP_MAX; ++i) {
-		range -= pow(2, i);
-		if (range <= 1)
-			break;
+		for(i = 1; i < FARMESH_STEP_MAX && range > 1; ++i) {
+			range -= pow(2, i);
+			//if (range <= 1)
+			//	break;
 		}
 //infostream<<"getFarmeshStep "<<org<<" = "<< range <<" i="<<i<<" min="<<draw_control.farmesh<<std::endl;
 	}
