@@ -36,6 +36,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/directiontables.h"
 #include "clientmap.h"
 #include "log_types.h"
+#include <algorithm>
+
 
 float srgb_linear_multiply(float f, float m, float max)
 {
@@ -47,7 +49,13 @@ float srgb_linear_multiply(float f, float m, float max)
 	return f;
 }
 
-int getFarmeshStep(MapDrawControl& draw_control, int range) {
+inline int radius_box(const v3s16 & a, const v3s16 & b) {
+	return std::max(std::max(abs(a.X - b.X), abs(a.Y - b.Y)), abs(a.Z - b.Z));
+}
+
+int getFarmeshStep(MapDrawControl& draw_control, const v3s16 & player_pos, const v3s16 & block_pos) {
+	//int range = player_pos.getDistanceFrom(block_pos);
+	int range = radius_box(player_pos, block_pos);
 	int i = 1;
 	if (draw_control.farmesh) {
 		range -= draw_control.farmesh;

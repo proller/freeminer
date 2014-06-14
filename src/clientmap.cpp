@@ -217,7 +217,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 				continue;
 		}
 
-			int mesh_step = getFarmeshStep(m_control, getNodeBlockPos(cam_pos_nodes).getDistanceFrom(bp));
+			int mesh_step = getFarmeshStep(m_control, getNodeBlockPos(cam_pos_nodes), bp);
 			if (!getFarmeshGrid(bp, mesh_step))
 				continue;
 
@@ -481,7 +481,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 	for(auto & ir : *m_drawlist) {
 		MapBlock *block = ir.second;
 
-		int mesh_step = getFarmeshStep(m_control, getNodeBlockPos(cam_pos_nodes).getDistanceFrom(block->getPos()));
+		int mesh_step = getFarmeshStep(m_control, getNodeBlockPos(cam_pos_nodes), block->getPos());
 		// If the mesh of the block happened to get deleted, ignore it
 		if(!block->getMesh(mesh_step))
 			continue;
