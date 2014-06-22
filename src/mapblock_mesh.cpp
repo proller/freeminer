@@ -53,27 +53,25 @@ inline int radius_box(const v3s16 & a, const v3s16 & b) {
 	return std::max(std::max(abs(a.X - b.X), abs(a.Y - b.Y)), abs(a.Z - b.Z));
 }
 
-int getFarmeshStep(MapDrawControl& draw_control, const v3s16 & player_pos, const v3s16 & block_pos) {
+int getFarmeshStep(MapDrawControl& draw_control, const v3s16 & playerpos, const v3s16 & blockpos) {
 	if (!draw_control.farmesh)
 		return 1;
-//return 3;
-	int range = radius_box(player_pos, block_pos);
-//auto range_orig = range;
+	int range = radius_box(playerpos, blockpos);
 	range -= draw_control.farmesh;
 	if (range <= 1)
 		return 1;
 	int s = log(range)/log(2);
 	++s;
+	if (s>1 && (playerpos.X > blockpos.X || playerpos.Y > blockpos.Y || playerpos.Z > blockpos.Z))
+		--s;
 	if (s > FARMESH_STEP_MAX)
 		s = FARMESH_STEP_MAX;
-//infostream<<"getFarmeshStep "<<range_orig<<" => "<< range <<" step="<<s<<" min="<<draw_control.farmesh<<std::endl;
 	return s;
 };
 
 bool getFarmeshGrid(v3s16 blockpos, int step) {
 	int skip = pow(2, step - 1);
-	//return !(blockpos.X % skip || blockpos.Y % skip || blockpos.Z % skip);
-	return !(abs(blockpos.X) % skip || abs(blockpos.Y) % skip || abs(blockpos.Z) % skip);
+	return !(blockpos.X % skip || blockpos.Y % skip || blockpos.Z % skip);
 }
 
 /*
@@ -1328,7 +1326,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	v3f t = v3f(0,0,0);
 	if (step>1) {
 		float scale = pow(2,step-1);
-scale *=0.9; //debug
+//scale *=0.9; //debug
 		//float scale = step;
 		//translateMesh(m_mesh, v3f(-BS/2, -BS/2, -BS/2));
 		//translateMesh(m_mesh, v3f(BS/2, BS/2, BS/2));
