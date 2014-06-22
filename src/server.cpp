@@ -105,12 +105,16 @@ public:
 					std::this_thread::sleep_for(std::chrono::milliseconds(100));
 				else
 					std::this_thread::sleep_for(std::chrono::milliseconds(10));
+#ifdef NDEBUG
 			} catch (BaseException &e) {
-				errorstream<<"Server: MapThread: exception: "<<e.what()<<std::endl;
+				errorstream<<"MapThread: exception: "<<e.what()<<std::endl;
 			} catch(std::exception &e) {
-				errorstream<<"Server: exception: "<<e.what()<<std::endl;
+				errorstream<<"MapThread: exception: "<<e.what()<<std::endl;
 			} catch (...) {
-				errorstream<<"Ooops..."<<std::endl;
+				errorstream<<"MapThread: Ooops..."<<std::endl;
+#else
+			} catch (int) { //nothing
+#endif
 			}
 		}
 		END_DEBUG_EXCEPTION_HANDLER(errorstream)
@@ -145,12 +149,16 @@ public:
 				m_server->SendBlocks((porting::getTimeMs() - time)/1000.0f);
 				time = porting::getTimeMs();
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+#ifdef NDEBUG
 			} catch (BaseException &e) {
-				errorstream<<"Server: SendBlocksThread: exception: "<<e.what()<<std::endl;
+				errorstream<<"SendBlocksThread: exception: "<<e.what()<<std::endl;
 			} catch(std::exception &e) {
-				errorstream<<"Server: exception: "<<e.what()<<std::endl;
+				errorstream<<"SendBlocksThread: exception: "<<e.what()<<std::endl;
 			} catch (...) {
-				errorstream<<"Ooops..."<<std::endl;
+				errorstream<<"SendBlocksThread: Ooops..."<<std::endl;
+#else
+			} catch (int) { //nothing
+#endif
 			}
 		}
 		END_DEBUG_EXCEPTION_HANDLER(errorstream)
@@ -222,8 +230,12 @@ void * ServerThread::Thread()
 		catch(LuaError &e)
 		{
 			m_server->setAsyncFatalError(e.what());
+#ifdef NDEBUG
+		} catch(std::exception &e) {
+				errorstream<<"ServerThread: exception: "<<e.what()<<std::endl;
 		} catch (...) {
-				errorstream<<"Ooops..."<<std::endl;
+				errorstream<<"ServerThread: Ooops..."<<std::endl;
+#endif
 		}
 	}
 
@@ -580,9 +592,13 @@ void Server::start(Address bind_addr)
 	m_map_thread->Start();
 	m_sendblocks->Start();
 
-	actionstream << "\033[1mfree\033[1;33mminer \033[1;36mv" << minetest_version_hash << "\033[0m     "
-			<< " cpp="<<__cplusplus<<"    "
-			<< " cores="<< porting::getNumberOfProcessors()<< std::endl;
+	actionstream << "\033[1mfree\033[1;33mminer \033[1;36mv" << minetest_version_hash << "\033[0m \t"
+#ifndef NDEBUG
+			<< " DEBUG \t"
+#endif
+			<< " cpp="<<__cplusplus<<" \t"
+			<< " cores="<< porting::getNumberOfProcessors()
+			<< std::endl;
 	actionstream<<"World at ["<<m_path_world<<"]"<<std::endl;
 	actionstream<<"Server for gameid=\""<<m_gamespec.id
 			<<"\" mapgen=\""<<m_emerge->params.mg_name
@@ -1373,6 +1389,11 @@ u16 Server::Receive()
 				"InvalidIncomingDataException: what()="
 				<<e.what()<<std::endl;
 	}
+	catch(SerializationError &e) {
+		infostream<<"Server::Receive(): "
+				"SerializationError: what()="
+				<<e.what()<<std::endl;
+	}
 	catch(con::PeerNotFoundException &e)
 	{
 		//NOTE: This is not needed anymore
@@ -1497,9 +1518,7 @@ PlayerSAO* Server::StageTwoClientInit(u16 peer_id)
 			actionstream << *i << " ";
 		}
 
-		actionstream<<player->getName();
-
-		actionstream<<std::endl;
+		actionstream << player->getName() <<std::endl;
 	}
 	return playersao;
 }
@@ -1922,7 +1941,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 	}
 
 	u8 peer_ser_ver = getClient(peer_id,InitDone)->serialization_version;
-	//u16 peer_proto_ver = getClient(peer_id,InitDone)->net_proto_version;
+	u16 peer_proto_ver = getClient(peer_id,InitDone)->net_proto_version;
 
 	if(peer_ser_ver == SER_FMT_VER_INVALID)
 	{
@@ -1960,7 +1979,13 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 	else if(command == TOSERVER_CLIENT_READY) {
 		// clients <= protocol version 22 did not send ready message,
 		// they're already initialized
-		//assert(peer_proto_ver > 22);
+		if (peer_proto_ver <= 22) {
+			infostream << "Client sent message not expected by a "
+				<< "client using protocol version <= 22,"
+				<< "disconnecing peer_id: " << peer_id << std::endl;
+			m_con.DisconnectPeer(peer_id);
+			return;
+		}
 
 		PlayerSAO* playersao = StageTwoClientInit(peer_id);
 
@@ -4774,24 +4799,25 @@ bool Server::showFormspec(const char *playername, const std::string &formspec, c
 u32 Server::hudAdd(Player *player, HudElement *form) {
 	if (!player)
 		return -1;
-
-	u32 id = player->getFreeHudID();
-	if (id < player->hud.size())
-		player->hud[id] = form;
-	else
-		player->hud.push_back(form);
 	
+	u32 id = player->addHud(form);
+
 	SendHUDAdd(player->peer_id, id, form);
+
 	return id;
 }
 
 bool Server::hudRemove(Player *player, u32 id) {
-	if (!player || id >= player->hud.size() || !player->hud[id])
+	if (!player)
 		return false;
 
-	delete player->hud[id];
-	player->hud[id] = NULL;
+	HudElement* todel = player->removeHud(id);
+
+	if (!todel)
+		return false;
 	
+	delete todel;
+
 	SendHUDRemove(player->peer_id, id);
 	return true;
 }
@@ -5270,7 +5296,7 @@ PlayerSAO* Server::emergePlayer(const char *name, u16 peer_id)
 			isSingleplayer());
 
 	/* Clean up old HUD elements from previous sessions */
-	player->hud.clear();
+	player->clearHud();
 
 	/* Add object to environment */
 	m_env->addActiveObject(playersao);
