@@ -105,12 +105,16 @@ public:
 					std::this_thread::sleep_for(std::chrono::milliseconds(100));
 				else
 					std::this_thread::sleep_for(std::chrono::milliseconds(10));
+#ifdef NDEBUG
 			} catch (BaseException &e) {
-				errorstream<<"Server: MapThread: exception: "<<e.what()<<std::endl;
+				errorstream<<"MapThread: exception: "<<e.what()<<std::endl;
 			} catch(std::exception &e) {
-				errorstream<<"Server: exception: "<<e.what()<<std::endl;
+				errorstream<<"MapThread: exception: "<<e.what()<<std::endl;
 			} catch (...) {
-				errorstream<<"Ooops..."<<std::endl;
+				errorstream<<"MapThread: Ooops..."<<std::endl;
+#else
+			} catch (int) { //nothing
+#endif
 			}
 		}
 		END_DEBUG_EXCEPTION_HANDLER(errorstream)
@@ -145,12 +149,16 @@ public:
 				m_server->SendBlocks((porting::getTimeMs() - time)/1000.0f);
 				time = porting::getTimeMs();
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+#ifdef NDEBUG
 			} catch (BaseException &e) {
-				errorstream<<"Server: SendBlocksThread: exception: "<<e.what()<<std::endl;
+				errorstream<<"SendBlocksThread: exception: "<<e.what()<<std::endl;
 			} catch(std::exception &e) {
-				errorstream<<"Server: exception: "<<e.what()<<std::endl;
+				errorstream<<"SendBlocksThread: exception: "<<e.what()<<std::endl;
 			} catch (...) {
-				errorstream<<"Ooops..."<<std::endl;
+				errorstream<<"SendBlocksThread: Ooops..."<<std::endl;
+#else
+			} catch (int) { //nothing
+#endif
 			}
 		}
 		END_DEBUG_EXCEPTION_HANDLER(errorstream)
@@ -222,8 +230,12 @@ void * ServerThread::Thread()
 		catch(LuaError &e)
 		{
 			m_server->setAsyncFatalError(e.what());
+#ifdef NDEBUG
+		} catch(std::exception &e) {
+				errorstream<<"ServerThread: exception: "<<e.what()<<std::endl;
 		} catch (...) {
-				errorstream<<"Ooops..."<<std::endl;
+				errorstream<<"ServerThread: Ooops..."<<std::endl;
+#endif
 		}
 	}
 
@@ -450,7 +462,7 @@ Server::Server(
 
 	// Initialize Environment
 	ServerMap *servermap = new ServerMap(path_world, this, m_emerge, m_circuit);
-	m_env = new ServerEnvironment(path_world, servermap, m_script, m_circuit, this);
+	m_env = new ServerEnvironment(servermap, m_script, m_circuit, this, m_path_world);
 	m_emerge->env = m_env;
 
 	m_clients.setEnv(m_env);
@@ -468,15 +480,13 @@ Server::Server(
 	servermap->addEventReceiver(this);
 
 	// If file exists, load environment metadata
-	if(fs::PathExists(m_path_world+DIR_DELIM+"env_meta.txt"))
+	if(fs::PathExists(m_path_world + DIR_DELIM "env_meta.txt"))
 	{
 		infostream<<"Server: Loading environment metadata"<<std::endl;
-		m_env->loadMeta(m_path_world);
+		m_env->loadMeta();
 	}
 
-	/*
-		Add some test ActiveBlockModifiers to environment
-	*/
+	// Add some test ActiveBlockModifiers to environment
 	add_legacy_abms(m_env, m_nodedef);
 
 	m_liquid_transform_interval = g_settings->getFloat("liquid_update");
@@ -487,42 +497,23 @@ Server::~Server()
 {
 	infostream<<"Server destructing"<<std::endl;
 
-	/*
-		Send shutdown message
-	*/
-	{
-		std::wstring line = L"*** Server shutting down";
-		SendChatMessage(PEER_ID_INEXISTENT, line);
-	}
+	// Send shutdown message
+	SendChatMessage(PEER_ID_INEXISTENT, L"*** Server shutting down");
 
 	{
 		JMutexAutoLock envlock(m_env_mutex);
 
-		/*
-			Execute script shutdown hooks
-		*/
+		// Execute script shutdown hooks
 		m_script->on_shutdown();
-	}
 
-	{
-		JMutexAutoLock envlock(m_env_mutex);
-
-		/*
-			Save players
-		*/
 		infostream<<"Server: Saving players"<<std::endl;
-		m_env->serializePlayers(m_path_world);
+		m_env->saveLoadedPlayers();
 
-		/*
-			Save environment metadata
-		*/
 		infostream<<"Server: Saving environment metadata"<<std::endl;
-		m_env->saveMeta(m_path_world);
+		m_env->saveMeta();
 	}
 
-	/*
-		Stop threads
-	*/
+	// Stop threads
 	stop();
 	delete m_thread;
 
@@ -552,12 +543,10 @@ Server::~Server()
 	delete m_script;
 
 	// Delete detached inventories
-	{
-		for(std::map<std::string, Inventory*>::iterator
-				i = m_detached_inventories.begin();
-				i != m_detached_inventories.end(); i++){
-			delete i->second;
-		}
+	for (std::map<std::string, Inventory*>::iterator
+			i = m_detached_inventories.begin();
+			i != m_detached_inventories.end(); i++) {
+		delete i->second;
 	}
 }
 
@@ -581,9 +570,13 @@ void Server::start(Address bind_addr)
 	m_map_thread->Start();
 	m_sendblocks->Start();
 
-	actionstream << "\033[1mfree\033[1;33mminer \033[1;36mv" << minetest_version_hash << "\033[0m     "
-			<< " cpp="<<__cplusplus<<"    "
-			<< " cores="<< porting::getNumberOfProcessors()<< std::endl;
+	actionstream << "\033[1mfree\033[1;33mminer \033[1;36mv" << minetest_version_hash << "\033[0m \t"
+#ifndef NDEBUG
+			<< " DEBUG \t"
+#endif
+			<< " cpp="<<__cplusplus<<" \t"
+			<< " cores="<< porting::getNumberOfProcessors()
+			<< std::endl;
 	actionstream<<"World at ["<<m_path_world<<"]"<<std::endl;
 	actionstream<<"Server for gameid=\""<<m_gamespec.id
 			<<"\" mapgen=\""<<m_emerge->params.mg_name
@@ -1244,9 +1237,7 @@ int Server::AsyncRunMapStep(bool initial_step) {
 		dtime = m_step_dtime;
 	}
 
-	f32 dedicated_server_step = g_settings->getFloat("dedicated_server_step");
-	//u32 max_cycle_ms = 1000 * (m_lag > dedicated_server_step ? dedicated_server_step/(m_lag/dedicated_server_step) : dedicated_server_step);
-	u32 max_cycle_ms = 1000 * (dedicated_server_step/(m_lag/dedicated_server_step));
+	u32 max_cycle_ms = 500;
 
 	const float map_timer_and_unload_dtime = 10.92;
 	if(m_map_timer_and_unload_interval.step(dtime, map_timer_and_unload_dtime))
@@ -1333,9 +1324,10 @@ int Server::AsyncRunMapStep(bool initial_step) {
 
 			ScopeProfiler sp(g_profiler, "Server: saving stuff");
 
-			//Ban stuff
-			if(m_banmanager->isModified())
+			// Save ban file
+			if (m_banmanager->isModified()) {
 				m_banmanager->save();
+			}
 
 
 			// Save changed parts of map
@@ -1347,10 +1339,10 @@ int Server::AsyncRunMapStep(bool initial_step) {
 			}
 
 			// Save players
-			m_env->serializePlayers(m_path_world);
+			m_env->saveLoadedPlayers();
 
 			// Save environment metadata
-			m_env->saveMeta(m_path_world);
+			m_env->saveMeta();
 		}
 		save_break:;
 	}
@@ -1376,26 +1368,20 @@ u16 Server::Receive()
 				"InvalidIncomingDataException: what()="
 				<<e.what()<<std::endl;
 	}
-	catch(con::PeerNotFoundException &e)
-	{
-		//NOTE: This is not needed anymore
-
-		// The peer has been disconnected.
-		// Find the associated player and remove it.
-
-		/*JMutexAutoLock envlock(m_env_mutex);
-
-		infostream<<"ServerThread: peer_id="<<peer_id
-				<<" has apparently closed connection. "
-				<<"Removing player."<<std::endl;
-
-		m_env->removePlayer(peer_id);*/
+	catch(SerializationError &e) {
+		infostream<<"Server::Receive(): "
+				"SerializationError: what()="
+				<<e.what()<<std::endl;
 	}
 	catch(ClientStateError &e)
 	{
 		errorstream << "ProcessData: peer=" << peer_id  << e.what() << std::endl;
 		DenyAccess(peer_id, L"Your client sent something server didn't expect."
 				L"Try reconnecting or updating your client");
+	}
+	catch(con::PeerNotFoundException &e)
+	{
+		// Do nothing
 	}
 	return received;
 }
@@ -1500,9 +1486,7 @@ PlayerSAO* Server::StageTwoClientInit(u16 peer_id)
 			actionstream << *i << " ";
 		}
 
-		actionstream<<player->getName();
-
-		actionstream<<std::endl;
+		actionstream << player->getName() <<std::endl;
 	}
 	return playersao;
 }
@@ -1925,7 +1909,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 	}
 
 	u8 peer_ser_ver = getClient(peer_id,InitDone)->serialization_version;
-	//u16 peer_proto_ver = getClient(peer_id,InitDone)->net_proto_version;
+	u16 peer_proto_ver = getClient(peer_id,InitDone)->net_proto_version;
 
 	if(peer_ser_ver == SER_FMT_VER_INVALID)
 	{
@@ -1963,7 +1947,13 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 	else if(command == TOSERVER_CLIENT_READY) {
 		// clients <= protocol version 22 did not send ready message,
 		// they're already initialized
-		//assert(peer_proto_ver > 22);
+		if (peer_proto_ver <= 22) {
+			infostream << "Client sent message not expected by a "
+				<< "client using protocol version <= 22,"
+				<< "disconnecing peer_id: " << peer_id << std::endl;
+			m_con.DisconnectPeer(peer_id);
+			return;
+		}
 
 		PlayerSAO* playersao = StageTwoClientInit(peer_id);
 
@@ -1986,7 +1976,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		m_script->on_joinplayer(playersao);
 
 	}
-	else if(command == TOSERVER_GOTBLOCKS)
+	else if(command == TOSERVER_GOTBLOCKS) // TODO: REMOVE IN NEXT, move wanted_range to new packet
 	{
 		if(datasize < 2+1)
 			return;
@@ -2007,10 +1997,9 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			if((s16)datasize < 2+1+(i+1)*6)
 				throw con::InvalidIncomingDataException
 					("GOTBLOCKS length is too short");
-			v3s16 p = readV3S16(&data[2+1+i*6]);
+			readV3S16(&data[2+1+i*6]);
 			/*infostream<<"Server: GOTBLOCKS ("
 					<<p.X<<","<<p.Y<<","<<p.Z<<")"<<std::endl;*/
-			client->GotBlock(p, m_uptime.get() + m_env->m_game_time_start);
 		}
 		if((s16)datasize > 2+1+(count)*6) // only freeminer client
 			client->wanted_range = readU16(&data[2+1+(count*6)]);
@@ -4059,6 +4048,7 @@ void Server::SendBlockNoLock(u16 peer_id, MapBlock *block, u8 ver, u16 net_proto
 	/*infostream<<"Server: Sending block ("<<p.X<<","<<p.Y<<","<<p.Z<<")"
 			<<":  \tpacket size: "<<replysize<<std::endl;*/
 
+	JMutexAutoLock lock(m_env_mutex);
 	/*
 		Send packet
 	*/
@@ -4077,8 +4067,6 @@ void Server::SendBlocks(float dtime)
 
 	std::vector<PrioritySortedBlockTransfer> queue;
 
-	s32 total_sending = 0;
-
 	{
 		//ScopeProfiler sp(g_profiler, "Server: selecting blocks for sending");
 
@@ -4094,7 +4082,6 @@ void Server::SendBlocks(float dtime)
 			if (client == NULL)
 				return;
 
-			total_sending += client->SendingCount();
 			client->GetNextBlocks(m_env,m_emerge, dtime, m_uptime.get() + m_env->m_game_time_start, queue);
 		}
 		//m_clients.Unlock();
@@ -4130,8 +4117,7 @@ void Server::SendBlocks(float dtime)
 		// maybe sometimes blocks will not load (must wait 1+ minute), but reduce network load: q.priority<=4
 		SendBlockNoLock(q.peer_id, block, client->serialization_version, client->net_proto_version, 1);
 
-		client->SentBlock(q.pos);
-		total_sending++;
+		client->SentBlock(q.pos, m_uptime.get() + m_env->m_game_time_start);
 	}
 	//m_clients.Unlock();
 }
@@ -4781,24 +4767,25 @@ bool Server::showFormspec(const char *playername, const std::string &formspec, c
 u32 Server::hudAdd(Player *player, HudElement *form) {
 	if (!player)
 		return -1;
-
-	u32 id = player->getFreeHudID();
-	if (id < player->hud.size())
-		player->hud[id] = form;
-	else
-		player->hud.push_back(form);
 	
+	u32 id = player->addHud(form);
+
 	SendHUDAdd(player->peer_id, id, form);
+
 	return id;
 }
 
 bool Server::hudRemove(Player *player, u32 id) {
-	if (!player || id >= player->hud.size() || !player->hud[id])
+	if (!player)
 		return false;
 
-	delete player->hud[id];
-	player->hud[id] = NULL;
+	HudElement* todel = player->removeHud(id);
+
+	if (!todel)
+		return false;
 	
+	delete todel;
+
 	SendHUDRemove(player->peer_id, id);
 	return true;
 }
@@ -5250,15 +5237,16 @@ PlayerSAO* Server::emergePlayer(const char *name, u16 peer_id)
 		return NULL;
 	}
 
-	/*
-		Create a new player if it doesn't exist yet
-	*/
-	if(player == NULL)
-	{
+	// Load player if it isn't already loaded
+	if (!player) {
+		player = static_cast<RemotePlayer*>(m_env->loadPlayer(name));
+	}
+
+	// Create player if it doesn't exist
+	if (!player) {
 		newplayer = true;
 		player = new RemotePlayer(this);
 		player->updateName(name);
-
 		/* Set player position */
 		infostream<<"Server: Finding spawn place for player \""
 				<<name<<"\""<<std::endl;
@@ -5269,22 +5257,21 @@ PlayerSAO* Server::emergePlayer(const char *name, u16 peer_id)
 		m_env->addPlayer(player);
 	}
 
-	/*
-		Create a new player active object
-	*/
+	// Create a new player active object
 	PlayerSAO *playersao = new PlayerSAO(m_env, player, peer_id,
 			getPlayerEffectivePrivs(player->getName()),
 			isSingleplayer());
 
 	/* Clean up old HUD elements from previous sessions */
-	player->hud.clear();
+	player->clearHud();
 
 	/* Add object to environment */
 	m_env->addActiveObject(playersao);
 
 	/* Run scripts */
-	if(newplayer)
+	if (newplayer) {
 		m_script->on_newplayer(playersao);
+	}
 
 	return playersao;
 }

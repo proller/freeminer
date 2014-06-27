@@ -24,6 +24,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "porting.h"
 #include "filesys.h"
 #include "config.h"
+#include "constants.h"
+#include "porting.h"
 
 void set_default_settings(Settings *settings)
 {
@@ -62,13 +64,14 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("keymap_increase_viewing_range_min", "+");
 	settings->setDefault("keymap_decrease_viewing_range_min", "-");
 	settings->setDefault("keymap_playerlist", "KEY_TAB");
-	settings->setDefault("anaglyph", "false");
-	settings->setDefault("anaglyph_strength", "0.1");
+	settings->setDefault("3d_mode", "none");
+	settings->setDefault("3d_paralax_strength", "0.025");
 	settings->setDefault("aux1_descends", "false");
 	settings->setDefault("doubletap_jump", "false");
 	settings->setDefault("always_fly_fast", "true");
 	settings->setDefault("zoom_fov", "15");
 	settings->setDefault("directional_colored_fog", "true");
+	settings->setDefault("tooltip_show_delay", "400");	
 
 	// Some (temporary) keys for debugging
 	settings->setDefault("keymap_print_debug_stacks", "KEY_KEY_P");
@@ -162,6 +165,7 @@ void set_default_settings(Settings *settings)
 
 	settings->setDefault("curl_timeout", "5000");
 	settings->setDefault("curl_parallel_limit", "8");
+	settings->setDefault("curl_file_download_timeout", "300000");
 
 	settings->setDefault("enable_remote_media_server", "true");
 
@@ -176,13 +180,11 @@ void set_default_settings(Settings *settings)
 #if USE_FREETYPE
 	settings->setDefault("freetype", "true");
 	settings->setDefault("font_path", porting::getDataPath("fonts" DIR_DELIM "liberationsans.ttf"));
-	settings->setDefault("font_size", "13");
 	settings->setDefault("font_shadow", "1");
 	settings->setDefault("font_shadow_alpha", "128");
 	settings->setDefault("mono_font_path", porting::getDataPath("fonts" DIR_DELIM "liberationmono.ttf"));
-	settings->setDefault("mono_font_size", "13");
 	settings->setDefault("fallback_font_path", porting::getDataPath("fonts" DIR_DELIM "DroidSansFallbackFull.ttf"));
-	settings->setDefault("fallback_font_size", "13");
+
 	settings->setDefault("fallback_font_shadow", "1");
 	settings->setDefault("fallback_font_shadow_alpha", "128");
 #else
@@ -242,9 +244,6 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("full_block_send_enable_min_time_from_building", "2.0");
 	settings->setDefault("dedicated_server_step", "0.1");
 	settings->setDefault("ignore_world_load_errors", "false");
-	settings->setDefault("congestion_control_aim_rtt", "0.2");
-	settings->setDefault("congestion_control_max_rate", "400");
-	settings->setDefault("congestion_control_min_rate", "10");
 	settings->setDefault("remote_media", "");
 	settings->setDefault("debug_log_level", "2");
 	settings->setDefault("time_taker_enabled",
@@ -258,7 +257,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("emergequeue_limit_diskonly", "32");
 	settings->setDefault("emergequeue_limit_generate", "32");
 	settings->setDefault("num_emerge_threads", "1");
-	
+
 	// physics stuff
 	settings->setDefault("movement_acceleration_default", "3");
 	settings->setDefault("movement_acceleration_air", "2");
@@ -323,6 +322,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("mg_flags", "trees, caves, v6_biome_blend, v6_jungles, dungeons");
 	settings->setDefault("max_users", "100");
 	settings->setDefault("server_map_save_interval", "300");
+	settings->setDefault("server_unload_unused_data_timeout", "610"); //more than client
 	settings->setDefault("ignore_world_load_errors", "true");
 	settings->setDefault("active_block_range", "4");
 	settings->setDefault("max_block_send_distance", "30");
@@ -351,6 +351,22 @@ void set_default_settings(Settings *settings)
 
 #if !defined(_WIN32) && !CMAKE_USE_IPV4_DEFAULT
 	settings->setDefault("ipv6_server", "true"); // problems on all windows versions (unable to play in local game)
+#endif
+}
+
+void late_init_default_settings(Settings* settings)
+{
+#ifndef SERVER
+	std::stringstream fontsize;
+	fontsize << floor(
+			DEFAULT_FONT_SIZE *
+			porting::getDisplayDensity() *
+			settings->getFloat("gui_scaling")
+			);
+
+	settings->setDefault("font_size", fontsize.str());
+	settings->setDefault("mono_font_size", fontsize.str());
+	settings->setDefault("fallback_font_size", fontsize.str());
 #endif
 }
 

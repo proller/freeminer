@@ -42,6 +42,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mapnode.h"
 #include "mapblock.h"
 #include "fmbitset.h"
+#include "util/lock.h"
 
 class ServerEnvironment;
 class ActiveBlockModifier;
@@ -75,6 +76,7 @@ public:
 
 	virtual void addPlayer(Player *player);
 	void removePlayer(u16 peer_id);
+	void removePlayer(const std::string &name);
 	Player * getPlayer(u16 peer_id);
 	Player * getPlayer(const std::string &name);
 	Player * getRandomConnectedPlayer();
@@ -99,11 +101,9 @@ public:
 
 	void stepTimeOfDay(float dtime);
 
-	void setTimeOfDaySpeed(float speed)
-	{ m_time_of_day_speed = speed; }
+	void setTimeOfDaySpeed(float speed);
 	
-	float getTimeOfDaySpeed()
-	{ return m_time_of_day_speed; }
+	float getTimeOfDaySpeed();
 
 	void setDayNightRatioOverride(bool enable, u32 value)
 	{
@@ -127,6 +127,9 @@ protected:
 	// Overriding the day-night ratio is useful for custom sky visuals
 	bool m_enable_day_night_ratio_override;
 	u32 m_day_night_ratio_override;
+	
+private:
+	locker m_lock;
 
 };
 
@@ -234,9 +237,9 @@ public:
 class ServerEnvironment : public Environment
 {
 public:
-	ServerEnvironment(const std::string &savedir, ServerMap *map, GameScripting *scriptIface,
+	ServerEnvironment(ServerMap *map, GameScripting *scriptIface,
 			Circuit* circuit,
-			IGameDef *gamedef);
+			IGameDef *gamedef, const std::string &path_world);
 	~ServerEnvironment();
 
 	Map & getMap();
@@ -253,21 +256,21 @@ public:
 	float getSendRecommendedInterval()
 		{ return m_recommended_send_interval; }
 
-	Player * getPlayer(u16 peer_id) { return Environment::getPlayer(peer_id); };
-	Player * getPlayer(const std::string &name);
+	//Player * getPlayer(u16 peer_id) { return Environment::getPlayer(peer_id); };
+	//Player * getPlayer(const std::string &name);
 
 	KeyValueStorage *getKeyValueStorage();
-	/*
-		Save players
-	*/
-	void serializePlayers(const std::string &savedir);
-	Player * deSerializePlayer(const std::string &name);
+
+	// Save players
+	void saveLoadedPlayers();
+	void savePlayer(const std::string &playername);
+	Player *loadPlayer(const std::string &playername);
 
 	/*
 		Save and load time of day and game timer
 	*/
-	void saveMeta(const std::string &savedir);
-	void loadMeta(const std::string &savedir);
+	void saveMeta();
+	void loadMeta();
 
 	/*
 		External ActiveObject interface
@@ -409,8 +412,6 @@ private:
 		Member variables
 	*/
 
-	std::string m_savedir;
-
 	// The map
 	ServerMap *m_map;
 	// Lua state
@@ -422,6 +423,8 @@ private:
 	// Key-value storage
 	KeyValueStorage *m_key_value_storage;
 	KeyValueStorage *m_players_storage;
+	// World path
+	const std::string m_path_world;
 	// Active object list
 	std::map<u16, ServerActiveObject*> m_active_objects;
 	// Outgoing network message buffer for active objects
@@ -554,7 +557,7 @@ public:
 	// Get event from queue. CEE_NONE is returned if queue is empty.
 	ClientEnvEvent getClientEvent();
 
-	std::vector<core::vector2d<int> > attachment_list; // X is child ID, Y is parent ID
+	u16 m_attachements[USHRT_MAX];
 
 	std::list<std::string> getPlayerNames()
 	{ return m_player_names; }
