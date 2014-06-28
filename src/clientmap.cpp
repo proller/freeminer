@@ -155,8 +155,8 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 	// Or maybe they aren't? Well whatever.
 	camera_fov *= 1.2;
 
-	if(m_control.fps_avg > m_control.fps_wanted *0.7)
-		camera_fov = 0;
+	//if(m_control.fps_avg > m_control.fps_wanted *0.7)
+	//	camera_fov = 0;
 
 	m_control.camera_fov_blocks = camera_fov;
 
@@ -252,7 +252,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 
 			// No occlusion culling when free_move is on and camera is
 			// inside ground
-			bool occlusion_culling_enabled = mesh_step <= 1;
+			bool occlusion_culling_enabled = true; //mesh_step <= 1;
 			if(g_settings->getBool("free_move")){
 				MapNode n = getNodeNoEx(cam_pos_nodes);
 				if(n.getContent() == CONTENT_IGNORE ||
@@ -269,6 +269,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 			float endoff = -BS*MAP_BLOCKSIZE*1.42*1.42;
 			v3s16 spn = cam_pos_nodes + v3s16(0,0,0);
 			s16 bs2 = MAP_BLOCKSIZE/2 + 1;
+			bs2 *= mesh_step;
 			u32 needed_count = 1;
 			if(
 				occlusion_culling_enabled &&
@@ -439,6 +440,9 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 	f32 camera_fov = m_camera_fov;
 	m_camera_mutex.Unlock();
 
+	//if(m_control.fps_avg > m_control.fps_wanted *0.7)
+	//	camera_fov = 0;
+
 	/*
 		Get all blocks and draw all visible ones
 	*/
@@ -494,7 +498,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 
 		float d = 0.0;
 		if(isBlockInSight(block->getPos(), camera_position,
-				camera_direction, 0 /*camera_fov*/,
+				camera_direction, camera_fov,
 				100000*BS, &d) == false)
 		{
 			continue;
