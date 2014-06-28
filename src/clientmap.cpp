@@ -233,7 +233,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 			float d = 0.0;
 			if(isBlockInSight(block->getPos(), camera_position,
 					camera_direction, camera_fov,
-					range, &d) == false)
+					range, &d) == false && d > MAP_BLOCKSIZE*BS)
 			{
 //infostream<<" skipSight1 "<<bp<<" step="<<mesh_step<<std::endl;
 				continue;
