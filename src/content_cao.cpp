@@ -673,6 +673,7 @@ GenericCAO::~GenericCAO()
 	{
 		m_env->removePlayerName(m_name);
 	}
+	removeFromScene(true);
 }
 
 core::aabbox3d<f32>* GenericCAO::getSelectionBox()
@@ -738,7 +739,7 @@ ClientActiveObject* GenericCAO::getParent()
 
 void GenericCAO::removeFromScene(bool permanent)
 {
-	if(permanent) // Should be true when removing the object permanently and false when refreshing (eg: updating visuals)
+	if((m_env != 0) && (permanent)) // Should be true when removing the object permanently and false when refreshing (eg: updating visuals)
 	{
 		for(std::vector<u16>::iterator ci = m_children.begin();
 						ci != m_children.end(); ci++)
@@ -754,6 +755,7 @@ void GenericCAO::removeFromScene(bool permanent)
 	if(m_meshnode)
 	{
 		m_meshnode->remove();
+		m_meshnode->drop();
 		m_meshnode = NULL;
 	}
 	if(m_animated_meshnode)
@@ -765,7 +767,14 @@ void GenericCAO::removeFromScene(bool permanent)
 	if(m_spritenode)
 	{
 		m_spritenode->remove();
+		m_spritenode->drop();
 		m_spritenode = NULL;
+	}
+	if (m_textnode)
+	{
+		m_textnode->remove();
+		m_textnode->drop();
+		m_textnode = NULL;
 	}
 }
 
@@ -792,6 +801,7 @@ void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 */
 		m_spritenode = smgr->addBillboardSceneNode(
 				NULL, v2f(1, 1), v3f(0,0,0), -1);
+		m_spritenode->grab();
 		m_spritenode->setMaterialTexture(0,
 				tsrc->getTexture("unknown_node.png"));
 		m_spritenode->setMaterialFlag(video::EMF_LIGHTING, false);
@@ -857,6 +867,7 @@ void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 		buf->drop();
 		}
 		m_meshnode = smgr->addMeshSceneNode(mesh, NULL);
+		m_meshnode->grab();
 		mesh->drop();
 		// Set it to use the materials of the meshbuffers directly.
 		// This is needed for changing the texture in the future
@@ -866,6 +877,7 @@ void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 		infostream<<"GenericCAO::addToScene(): cube"<<std::endl;
 		scene::IMesh *mesh = createCubeMesh(v3f(BS,BS,BS));
 		m_meshnode = smgr->addMeshSceneNode(mesh, NULL);
+		m_meshnode->grab();
 		mesh->drop();
 		
 		m_meshnode->setScale(v3f(m_prop.visual_size.X,
@@ -917,6 +929,7 @@ void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 			scene::IMesh *mesh = manip->createMeshUniquePrimitives(item_mesh);
 
 			m_meshnode = smgr->addMeshSceneNode(mesh, NULL);
+			m_meshnode->grab();
 			mesh->drop();
 			
 			m_meshnode->setScale(v3f(m_prop.visual_size.X/2,
@@ -944,6 +957,7 @@ void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 		std::wstring wname = narrow_to_wide(m_name);
 		m_textnode = smgr->addTextSceneNode(gui->getBuiltInFont(),
 				wname.c_str(), video::SColor(255,255,255,255), node);
+		m_textnode->grab();
 		m_textnode->setPosition(v3f(0, BS*1.1, 0));
 	}
 
