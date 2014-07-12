@@ -1492,6 +1492,7 @@ u32 Map::timerUpdate(float uptime, float unload_timeout,
 	u32 n = 0, calls = 0, end_ms = porting::getTimeMs() + max_cycle_ms;
 
 	std::vector<MapBlock *> blocks_delete;
+	int save_started = 0;
 	{
 	auto lock = m_blocks.lock_shared();
 	for(auto ir : m_blocks) {
@@ -1515,13 +1516,13 @@ u32 Map::timerUpdate(float uptime, float unload_timeout,
 				v3s16 p = block->getPos();
 				//infostream<<" deleting block p="<<p<<" ustimer="<<block->getUsageTimer() <<" to="<< unload_timeout<<" inc="<<(uptime - block->m_uptime_timer_last)<<" state="<<block->getModified()<<std::endl;
 				// Save if modified
-				if(block->getModified() != MOD_STATE_CLEAN
-						&& save_before_unloading)
+				if (block->getModified() != MOD_STATE_CLEAN && save_before_unloading)
 				{
 					//modprofiler.add(block->getModifiedReason(), 1);
-					beginSave();
-					saveBlock(block);
-					endSave();
+					if(!save_started++)
+						beginSave();
+					if (!saveBlock(block))
+						continue;
 					saved_blocks_count++;
 				}
 
@@ -1563,6 +1564,8 @@ u32 Map::timerUpdate(float uptime, float unload_timeout,
 
 	}
 	}
+	if(save_started)
+		endSave();
 
 	if (!calls)
 		m_blocks_update_last = 0;
@@ -2053,7 +2056,7 @@ u32 Map::transformLiquidsFinite(Server *m_server, std::map<v3s16, MapBlock*> & m
 			if(block != NULL) {
 				modified_blocks[blockpos] = block;
 				if(!nodemgr->get(neighbors[i].n).light_propagates || nodemgr->get(neighbors[i].n).light_source) // better to update always
-					lighting_modified_blocks[block->getPos()] = block;
+					lighting_modified_blocks.set(block->getPos(), block);
 			}
 			must_reflow.push_back(neighbors[i].p);
 
@@ -2362,7 +2365,7 @@ u32 Map::transformLiquids(Server *m_server, std::map<v3s16, MapBlock*> & modifie
 			// If new or old node emits light, MapBlock requires lighting update
 			if(nodemgr->get(n0).light_source != 0 ||
 					nodemgr->get(n00).light_source != 0)
-				lighting_modified_blocks[block->getPos()] = block;
+				lighting_modified_blocks.set(block->getPos(), block);
 		}
 
 		/*
@@ -2828,7 +2831,7 @@ void ServerMap::finishBlockMake(BlockMakeData *data,
 	{
 		// 70ms @cs=8
 		//TimeTaker timer("finishBlockMake() blitBackAll");
-		data->vmanip->blitBackAll(&changed_blocks);
+		data->vmanip->blitBackAll(&changed_blocks, false);
 	}
 
 	EMERGE_DBG_OUT("finishBlockMake: changed_blocks.size()=" << changed_blocks.size());
@@ -3305,18 +3308,20 @@ void ServerMap::loadMapMeta()
 		<< m_emerge->params.seed<<std::endl;
 }
 
-void ServerMap::beginSave() {
+void ServerMap::beginSave()
+{
 	dbase->beginSave();
 }
 
-void ServerMap::endSave() {
+void ServerMap::endSave()
+{
 	dbase->endSave();
 }
 
-void ServerMap::saveBlock(MapBlock *block)
+bool ServerMap::saveBlock(MapBlock *block)
 {
-  auto lock = block->lock_shared_rec();
-  dbase->saveBlock(block);
+	auto lock = block->lock_shared_rec();
+	return dbase->saveBlock(block);
 }
 
 MapBlock* ServerMap::loadBlock(v3s16 blockpos)
@@ -3419,8 +3424,8 @@ int ServerMap::getSurface(v3s16 basepos, int searchup, bool walkable_only) {
 
 ManualMapVoxelManipulator::ManualMapVoxelManipulator(Map *map):
 		VoxelManipulator(),
-		m_create_area(false),
 		replace_generated(true),
+		m_create_area(false),
 		m_map(map)
 {
 }
@@ -3432,7 +3437,7 @@ ManualMapVoxelManipulator::~ManualMapVoxelManipulator()
 void ManualMapVoxelManipulator::initialEmerge(v3s16 blockpos_min,
 						v3s16 blockpos_max, bool load_if_inexistent)
 {
-	TimeTaker timer1("initialEmerge", &emerge_time);
+	TimeTaker timer1("initialEmerge");
 
 	// Units of these are MapBlocks
 	v3s16 p_min = blockpos_min;
@@ -3468,7 +3473,7 @@ void ManualMapVoxelManipulator::initialEmerge(v3s16 blockpos_min,
 		bool block_data_inexistent = false;
 		try
 		{
-			TimeTaker timer1("emerge load", &emerge_load_time);
+			TimeTaker timer1("emerge load");
 
 			block = m_map->getBlockNoCreate(p);
 			if(block->isDummy())
@@ -3518,7 +3523,8 @@ void ManualMapVoxelManipulator::initialEmerge(v3s16 blockpos_min,
 }
 
 void ManualMapVoxelManipulator::blitBackAll(
-		std::map<v3s16, MapBlock*> * modified_blocks)
+		std::map<v3s16, MapBlock*> *modified_blocks,
+		bool overwrite_generated)
 {
 	if(m_area.getExtent() == v3s16(0,0,0))
 		return;
@@ -3533,11 +3539,10 @@ void ManualMapVoxelManipulator::blitBackAll(
 		v3s16 p = i->first;
 		MapBlock *block = m_map->getBlockNoCreateNoEx(p);
 		bool existed = !(i->second & VMANIP_BLOCK_DATA_INEXIST);
-		if((existed == false) || (block == NULL))
-		{
+		if ((existed == false) || (block == NULL) ||
+			(overwrite_generated == false && block->isGenerated() == true))
 			continue;
-		}
-		if (!replace_generated && block->isGenerated())
+		if (!replace_generated && block->isGenerated()) // todo: remove replace_generated
 			continue;
 
 		block->copyFrom(*this);

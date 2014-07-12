@@ -34,4 +34,7 @@ std::ostream & operator<<(std::ostream & s, std::map<v3f, unsigned int> & p);
 struct MapNode;
 std::ostream & operator<<(std::ostream & s, MapNode n);
 
+struct NoiseParams;
+std::ostream & operator<<(std::ostream & s, NoiseParams np);
+
 #endif

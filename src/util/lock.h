@@ -66,13 +66,13 @@ template<class T>
 class lock_rec {
 public:
 	T & lock;
-	int &r;
-	std::thread::id & thread_id;
-	lock_rec(T & lock_, int & r_, std::thread::id & thread_id_):
+	std::atomic_int &r;
+	std::atomic<std::size_t> & thread_id;
+	lock_rec(T & lock_, std::atomic_int & r_, std::atomic<std::size_t> & thread_id_):
 		lock(lock_),
 		r(r_),
 		thread_id(thread_id_) {
-		auto thread_me = std::this_thread::get_id();
+		auto thread_me = std::hash<std::thread::id>()(std::this_thread::get_id());
 		if(!r || thread_me != thread_id) {
 			lock.lock();
 			thread_id = thread_me;
@@ -90,8 +90,8 @@ class locker {
 public:
 	try_shared_mutex mtx;
 	//semaphore sem;
-	int r;
-	std::thread::id thread_id;
+	std::atomic_int r;
+	std::atomic<std::size_t> thread_id;
 
 	locker() {
 		r = 0;
@@ -134,12 +134,12 @@ public:
 
 	mapped_type& get(const key_type& k) {
 		auto lock = lock_shared();
-		return (*this)[k];
+		return full_type::operator[](k);
 	}
 
 	void set(const key_type& k, const mapped_type& v) {
 		auto lock = lock_unique();
-		(*this)[k] = v;
+		full_type::operator[](k) = v;
 	}
 
 	bool      empty() {
@@ -157,15 +157,9 @@ public:
 		return full_type::count(k);
 	}
 
-	mapped_type& operator[](const key_type& k) {
-		auto lock = lock_unique();
-		return full_type::operator[](k);
-	}
+	mapped_type& operator[](const key_type& k) = delete;
 
-	mapped_type& operator[](key_type&& k) {
-		auto lock = lock_unique();
-		return full_type::operator[](k);
-	}
+	mapped_type& operator[](key_type&& k) = delete;
 
 	typename full_type::iterator  erase(const_iterator position) {
 		auto lock = lock_unique();
