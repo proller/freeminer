@@ -780,15 +780,15 @@ void Server::AsyncRunStep(bool initial_step)
 	{
 		float &counter = m_masterserver_timer;
 		if(!isSingleplayer() && (!counter || counter >= 300.0) &&
-				g_settings->getBool("server_announce") == true)
+				g_settings->getBool("server_announce"))
 		{
-			ServerList::sendAnnounce(!counter ? "start" : "update",
-										m_clients.getPlayerNames(),
-										m_uptime.get(),
-										m_env->getGameTime(),
-										m_lag,
-										m_gamespec.id,
-										m_mods);
+			ServerList::sendAnnounce(counter ? "update" : "start",
+					m_clients.getPlayerNames(),
+					m_uptime.get(),
+					m_env->getGameTime(),
+					m_lag,
+					m_gamespec.id,
+					m_mods);
 			counter = 0.01;
 		}
 		counter += dtime;
@@ -804,7 +804,7 @@ void Server::AsyncRunStep(bool initial_step)
 		JMutexAutoLock envlock(m_env_mutex);
 
 		m_clients.Lock();
-		std::map<u16, RemoteClient*> clients = m_clients.getClientList();
+		auto & clients = m_clients.getClientList();
 		ScopeProfiler sp(g_profiler, "Server: checking added and deleted objs");
 
 		// Radius inside which objects are active
@@ -812,7 +812,7 @@ void Server::AsyncRunStep(bool initial_step)
 		radius *= MAP_BLOCKSIZE;
 		s16 radius_deactivate = radius*3;
 
-		for(std::map<u16, RemoteClient*>::iterator
+		for(auto
 			i = clients.begin();
 			i != clients.end(); ++i)
 		{
@@ -991,9 +991,9 @@ void Server::AsyncRunStep(bool initial_step)
 		}
 
 		m_clients.Lock();
-		std::map<u16, RemoteClient*> clients = m_clients.getClientList();
+		auto & clients = m_clients.getClientList();
 		// Route data to every client
-		for(std::map<u16, RemoteClient*>::iterator
+		for(auto
 			i = clients.begin();
 			i != clients.end(); ++i)
 		{
@@ -1293,7 +1293,7 @@ int Server::AsyncRunMapStep(bool initial_step) {
 			goto no_send;
 		}
 
-		for (std::map<u16, RemoteClient*>::iterator i = m_clients.getClientList().begin(); i != m_clients.getClientList().end(); ++i)
+		for (auto i = m_clients.getClientList().begin(); i != m_clients.getClientList().end(); ++i)
 			if (i->second->m_nearest_unsent_nearest) {
 				i->second->m_nearest_unsent_d = 0;
 				i->second->m_nearest_unsent_nearest = 0;
@@ -2017,20 +2017,22 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 	}
 
 	Player *player = m_env->getPlayer(peer_id);
-	if(player == NULL){
+	if(player == NULL) {
 /*
 		verbosestream<<"Server::ProcessData(): Cancelling: "
 				"No player for peer_id="<<peer_id
-				<<std::endl;
+				<< " disconnecting peer!" <<std::endl;
 */
+		m_con.DisconnectPeer(peer_id);
 		return;
 	}
 
 	PlayerSAO *playersao = player->getPlayerSAO();
-	if(playersao == NULL){
+	if(playersao == NULL) {
 		errorstream<<"Server::ProcessData(): Cancelling: "
 				"No player object for peer_id="<<peer_id
-				<<std::endl;
+				<< " disconnecting peer!" <<std::endl;
+		m_con.DisconnectPeer(peer_id);
 		return;
 	}
 
@@ -3366,10 +3368,11 @@ void Server::SendShowFormspecMessage(u16 peer_id, const std::string &formspec,
 	std::ostringstream os(std::ios_base::binary);
 	u8 buf[12];
 
+
 	// Write command
 	writeU16(buf, TOCLIENT_SHOW_FORMSPEC);
 	os.write((char*)buf, 2);
-	os<<serializeLongString(formspec);
+	os<<serializeLongString(FORMSPEC_VERSION_STRING + formspec);
 	os<<serializeString(formname);
 
 	// Make data buffer
@@ -3772,7 +3775,7 @@ void Server::SendPlayerInventoryFormspec(u16 peer_id)
 
 	std::ostringstream os(std::ios_base::binary);
 	writeU16(os, TOCLIENT_INVENTORY_FORMSPEC);
-	os<<serializeLongString(player->inventory_formspec);
+	os<<serializeLongString(FORMSPEC_VERSION_STRING + player->inventory_formspec);
 
 	// Make data buffer
 	std::string s = os.str();

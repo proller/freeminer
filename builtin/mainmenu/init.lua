@@ -37,7 +37,7 @@ function menu.render_favorite(spec,render_details)
 	local e = core.formspec_escape
 	local text = ""
 
-	if spec.name ~= "" then
+	if spec.name and spec.name ~= "" then
 		text = text .. spec.name:trim()
 	else
 		if spec.address ~= "" then
@@ -1102,7 +1102,7 @@ function tabbuilder.tab_credits()
 			"Ilya Zhuravlev (xyz) <xyz@minetest.net>,"..
 			"Lisa Milne (darkrose) <lisa@ltmnet.com>,"..
 			"Maciej Kasatkin (RealBadAngel) <mk@realbadangel.pl>,"..
-			"proller <proler@gmail.com>,"..
+			"proller,"..
 			"sfan5 <sfan5@live.de>,"..
 			"kahrl <kahrl@gmx.net>,"..
 			"sapier,"..

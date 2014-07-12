@@ -75,12 +75,10 @@ public:
 	virtual Map & getMap() = 0;
 
 	virtual void addPlayer(Player *player);
-	void removePlayer(u16 peer_id);
-	void removePlayer(const std::string &name);
+	//void removePlayer(u16 peer_id);
+	//void removePlayer(const std::string &name);
 	Player * getPlayer(u16 peer_id);
 	Player * getPlayer(const std::string &name);
-	Player * getRandomConnectedPlayer();
-	Player * getNearestConnectedPlayer(v3f pos);
 	std::list<Player*> getPlayers();
 	std::list<Player*> getPlayers(bool ignore_disconnected);
 	
@@ -118,7 +116,7 @@ protected:
 	// peer_ids in here should be unique, except that there may be many 0s
 	std::list<Player*> m_players;
 	// Time of day in milli-hours (0-23999); determines day and night
-	u32 m_time_of_day;
+	std::atomic_int m_time_of_day;
 	// Time of day in 0...1
 	float m_time_of_day_f;
 	float m_time_of_day_speed;

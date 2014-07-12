@@ -1069,4 +1069,3 @@ void ContentFeatures::deSerializeOld(std::istream &is, int version)
 		throw SerializationError("unsupported ContentFeatures version");
 	}
 }
-

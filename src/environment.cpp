@@ -88,6 +88,7 @@ void Environment::addPlayer(Player *player)
 	m_players.push_back(player);
 }
 
+/*
 void Environment::removePlayer(u16 peer_id)
 {
 	DSTACK(__FUNCTION_NAME);
@@ -116,6 +117,7 @@ void Environment::removePlayer(const std::string &name)
 		}
 	}
 }
+*/
 
 Player * Environment::getPlayer(u16 peer_id)
 {
@@ -136,45 +138,6 @@ Player * Environment::getPlayer(const std::string &name)
 			return player;
 	}
 	return NULL;
-}
-
-Player * Environment::getRandomConnectedPlayer()
-{
-	std::list<Player*> connected_players = getPlayers(true);
-	u32 chosen_one = myrand() % connected_players.size();
-	u32 j = 0;
-	for(std::list<Player*>::iterator
-			i = connected_players.begin();
-			i != connected_players.end(); ++i)
-	{
-		if(j == chosen_one)
-		{
-			Player *player = *i;
-			return player;
-		}
-		j++;
-	}
-	return NULL;
-}
-
-Player * Environment::getNearestConnectedPlayer(v3f pos)
-{
-	std::list<Player*> connected_players = getPlayers(true);
-	f32 nearest_d = 0;
-	Player *nearest_player = NULL;
-	for(std::list<Player*>::iterator
-			i = connected_players.begin();
-			i != connected_players.end(); ++i)
-	{
-		Player *player = *i;
-		f32 d = player->getPosition().getDistanceFrom(pos);
-		if(d < nearest_d || nearest_player == NULL)
-		{
-			nearest_d = d;
-			nearest_player = player;
-		}
-	}
-	return nearest_player;
 }
 
 std::list<Player*> Environment::getPlayers()
@@ -450,8 +413,17 @@ bool ServerEnvironment::line_of_sight(v3f pos1, v3f pos2, float stepsize, v3s16 
 
 void ServerEnvironment::saveLoadedPlayers()
 {
-	for (auto & player : m_players) {
+	auto i = m_players.begin();
+	while (i != m_players.end())
+	{
+		auto *player = *i;
 		savePlayer(player->getName());
+		if(!player->peer_id && !player->getPlayerSAO() && player->refs <= 0) {
+			delete player;
+			i = m_players.erase(i);
+		} else {
+			++i;
+		}
 	}
 }
 
@@ -498,7 +470,7 @@ Player * ServerEnvironment::loadPlayer(const std::string &playername)
 
 	std::string players_path = m_path_world + DIR_DELIM "players" DIR_DELIM;
 
-	RemotePlayer testplayer(m_gamedef);
+	auto testplayer = new RemotePlayer(m_gamedef);
 	std::string path = players_path + playername;
 		// Open file and deserialize
 		std::ifstream is(path.c_str(), std::ios_base::binary);
@@ -506,16 +478,18 @@ Player * ServerEnvironment::loadPlayer(const std::string &playername)
 			return NULL;
 		}
 		try {
-		testplayer.deSerialize(is, path);
+		testplayer->deSerialize(is, path);
 		} catch (SerializationError e) {
 			errorstream<<e.what()<<std::endl;
 			return nullptr;
 		}
-		if (testplayer.getName() == playername) {
-			*player = testplayer;
+		is.close();
+		if (testplayer->getName() == playername) {
+			player = testplayer;
 			found = true;
 		}
 	if (!found) {
+		delete testplayer;
 		infostream << "Player file for player " << playername
 				<< " not found" << std::endl;
 		return NULL;
@@ -1680,7 +1654,7 @@ u16 ServerEnvironment::addActiveObjectRaw(ServerActiveObject *object,
 		v3s16 blockpos = getNodeBlockPos(floatToInt(objectpos, BS));
 		MapBlock *block = m_map->emergeBlock(blockpos);
 		if(block){
-			block->m_static_objects.m_active[object->getId()] = s_obj;
+			block->m_static_objects.m_active.set(object->getId(), s_obj);
 			object->m_static_exists = true;
 			object->m_static_block = blockpos;
 
@@ -2339,7 +2313,7 @@ void ClientEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 				v3f speed = lplayer->getSpeed();
 				if(lplayer->in_liquid == false) {
 					speed.Y -= lplayer->movement_gravity * lplayer->physics_override_gravity * dtime_part * 2;
-					viscosity_factor = 0.96; // todo maybe depend on speed; 0.96 = ~100 nps max
+					viscosity_factor = 0.97; // todo maybe depend on speed; 0.96 = ~100 nps max
 					viscosity_factor += (1.0-viscosity_factor) *
 						(1-(MAP_GENERATION_LIMIT - pf.Y/BS)/
 							MAP_GENERATION_LIMIT);

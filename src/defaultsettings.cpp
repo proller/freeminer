@@ -71,7 +71,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("always_fly_fast", "true");
 	settings->setDefault("zoom_fov", "15");
 	settings->setDefault("directional_colored_fog", "true");
-	settings->setDefault("tooltip_show_delay", "400");	
+	settings->setDefault("tooltip_show_delay", "400");
 
 	// Some (temporary) keys for debugging
 	settings->setDefault("keymap_print_debug_stacks", "KEY_KEY_P");
@@ -166,6 +166,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("curl_timeout", "5000");
 	settings->setDefault("curl_parallel_limit", "8");
 	settings->setDefault("curl_file_download_timeout", "300000");
+	settings->setDefault("curl_verify_cert", "true");
 
 	settings->setDefault("enable_remote_media_server", "true");
 
@@ -236,7 +237,6 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("max_clearobjects_extra_loaded_blocks", "4096");
 	settings->setDefault("time_send_interval", "5");
 	settings->setDefault("time_speed", "72");
-	settings->setDefault("year_days", "30");
 	settings->setDefault("server_unload_unused_data_timeout", "29");
 	settings->setDefault("max_objects_per_block", "49");
 	settings->setDefault("server_map_save_interval", "5.3");
@@ -289,6 +289,16 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("liquid_relax", "2");
 	settings->setDefault("liquid_fast_flood", "1");
 	settings->setDefault("weather", "true");
+	settings->setDefault("weather_heat_season", "30");
+	settings->setDefault("weather_heat_daily", "8");
+	settings->setDefault("weather_heat_width", "3000");
+	settings->setDefault("weather_hot_core", "1000");
+	settings->setDefault("weather_heat_height", "-333");
+	settings->setDefault("year_days", "30");
+	settings->setDefault("weather_humidity_season", "30");
+	settings->setDefault("weather_humidity_daily", "-12");
+	settings->setDefault("weather_humidity_width", "300");
+	settings->setDefault("weather_humidity_days", "2");
 
 	//mapgen stuff
 	settings->setDefault("mg_name", "v6");
@@ -351,6 +361,42 @@ void set_default_settings(Settings *settings)
 
 #if !defined(_WIN32) && !CMAKE_USE_IPV4_DEFAULT
 	settings->setDefault("ipv6_server", "true"); // problems on all windows versions (unable to play in local game)
+#endif
+
+#ifdef __ANDROID__
+	settings->setDefault("screenW", "0");
+	settings->setDefault("screenH", "0");
+	settings->setDefault("enable_shaders", "false");
+	settings->setDefault("fullscreen", "true");
+	settings->setDefault("enable_particles", "false");
+	settings->setDefault("video_driver", "ogles1");
+	settings->setDefault("touchtarget", "true");
+	settings->setDefault("main_menu_script","/sdcard/freeminer/builtin/mainmenu/init_android.lua");
+	settings->setDefault("TMPFolder","/sdcard/freeminer/tmp/");
+	settings->setDefault("touchscreen_threshold","20");
+	settings->setDefault("smooth_lighting", "false");
+	/*
+	settings->setDefault("max_simultaneous_block_sends_per_client", "3");
+	settings->setDefault("emergequeue_limit_diskonly", "8");
+	settings->setDefault("emergequeue_limit_generate", "8");
+	settings->setDefault("viewing_range_nodes_max", "50");
+	settings->setDefault("viewing_range_nodes_min", "20");
+	*/
+	settings->setDefault("inventory_image_hack", "false");
+
+	//check for device with small screen
+	float x_inches = ((double) porting::getDisplaySize().X /
+			(160 * porting::getDisplayDensity()));
+	if (x_inches  < 3.5) {
+		settings->setDefault("gui_scaling", "0.6");
+	}
+	else if (x_inches < 4.5) {
+		settings->setDefault("gui_scaling", "0.7");
+	}
+	settings->setDefault("curl_verify_cert","false");
+
+	settings->setDefault("farmesh", "1");
+	settings->setDefault("farmesh_step", "1");
 #endif
 }
 
