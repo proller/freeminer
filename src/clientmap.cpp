@@ -258,7 +258,7 @@ void ClientMap::updateDrawList(float dtime)
 
 				if(!mesh) {
 					blocks_in_range_without_mesh++;
-					m_client->addUpdateMeshTask(bp, false, false);
+					m_client->addUpdateMeshTask(bp, false);
 					continue;
 				}
 				if(mesh_step == mesh->step && block->getTimestamp() <= mesh->timestamp && (!mesh->getMesh() || !mesh->getMesh()->getMeshBufferCount())) {
@@ -330,7 +330,7 @@ void ClientMap::updateDrawList(float dtime)
 */
 
 			if (mesh_step != mesh->step)
-				m_client->addUpdateMeshTask(bp, false, mesh_step == 1);
+				m_client->addUpdateMeshTask(bp, mesh_step == 1);
 			if (block->getTimestamp() > mesh->timestamp)
 				m_client->addUpdateMeshTaskWithEdge(bp);
 

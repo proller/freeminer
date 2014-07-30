@@ -54,7 +54,6 @@ struct QueuedMeshUpdate
 {
 	v3s16 p;
 	MeshMakeData *data;
-	bool ack_block_to_server;
 
 	QueuedMeshUpdate();
 	~QueuedMeshUpdate();
@@ -80,8 +79,7 @@ public:
 	/*
 		peer_id=0 adds with nobody to send to
 	*/
-	void addBlock(v3s16 p, MeshMakeData *data,
-			bool ack_block_to_server, bool urgent);
+	void addBlock(v3s16 p, MeshMakeData *data, bool urgent);
 
 	// Returned pointer must be deleted
 	// Returns NULL if queue is empty
@@ -101,12 +99,10 @@ struct MeshUpdateResult
 {
 	v3s16 p;
 	MapBlockMesh *mesh;
-	bool ack_block_to_server;
 
 	MeshUpdateResult():
 		p(-1338,-1338,-1338),
-		mesh(NULL),
-		ack_block_to_server(false)
+		mesh(nullptr)
 	{
 	}
 };
@@ -410,10 +406,10 @@ public:
 
 	u64 getMapSeed(){ return m_map_seed; }
 
-	void addUpdateMeshTask(v3s16 blockpos, bool ack_to_server=false, bool urgent=false);
+	void addUpdateMeshTask(v3s16 blockpos, bool urgent=false);
 	// Including blocks at appropriate edges
-	void addUpdateMeshTaskWithEdge(v3s16 blockpos, bool ack_to_server=false, bool urgent=false);
-	void addUpdateMeshTaskForNode(v3s16 nodepos, bool ack_to_server=false, bool urgent=false);
+	void addUpdateMeshTaskWithEdge(v3s16 blockpos, bool urgent=false);
+	void addUpdateMeshTaskForNode(v3s16 nodepos, bool urgent=false);
 	
 	void updateCameraOffset(v3s16 camera_offset)
 	{ m_mesh_update_thread.m_camera_offset = camera_offset; }
