@@ -84,43 +84,32 @@ MeshUpdateQueue::MeshUpdateQueue()
 
 MeshUpdateQueue::~MeshUpdateQueue()
 {
-	JMutexAutoLock lock(m_mutex);
-
-	for(std::vector<QueuedMeshUpdate*>::iterator
-			i = m_queue.begin();
-			i != m_queue.end(); i++)
-	{
-		QueuedMeshUpdate *q = *i;
-		delete q;
-	}
+	clear();
 }
 
-/*
-	peer_id=0 adds with nobody to send to
-*/
+void MeshUpdateQueue::clear() {
+	auto lock = m_queue.lock_unique_rec();
+infostream << "mesh queue clear = " << m_queue.size() <<" urgents="<<m_urgents.size()<< std::endl;
+	m_queue.clear();
+	m_urgents.clear();
+}
+
 void MeshUpdateQueue::addBlock(v3s16 p, MeshMakeData *data, bool ack_block_to_server, bool urgent, bool lazy)
 {
 	DSTACK(__FUNCTION_NAME);
+	TimeTaker timer_step("MeshUpdateQueue::addBlock");
+//infostream << "mesh queue size= "<<m_queue.size()<< " urgents size="<<m_urgents.size()<<" p="<<p<<std::endl;
 
 	if(!data)
 		return;
 
-	JMutexAutoLock lock(m_mutex);
-
 	if(urgent)
-		m_urgents.insert(p);
+		m_urgents.set(p, 1);
 
-	/*
-		Find if block is already in queue.
-		If it is, update the data and quit.
-	*/
-	for(std::vector<QueuedMeshUpdate*>::iterator
-			i = m_queue.begin();
-			i != m_queue.end(); i++)
-	{
-		QueuedMeshUpdate *q = *i;
-		if(q->p == p)
+		if(m_queue.count(p))
 		{
+			auto lock = m_queue.lock_unique_rec();
+			auto * q = m_queue.get(p);
 			if(q->data)
 				delete q->data;
 			q->data = data;
@@ -130,8 +119,6 @@ void MeshUpdateQueue::addBlock(v3s16 p, MeshMakeData *data, bool ack_block_to_se
 				q->lazy = false;
 			return;
 		}
-	}
-	
 	/*
 		Add the block
 	*/
@@ -140,25 +127,23 @@ void MeshUpdateQueue::addBlock(v3s16 p, MeshMakeData *data, bool ack_block_to_se
 	q->data = data;
 	q->ack_block_to_server = ack_block_to_server;
 	q->lazy = lazy;
-	m_queue.push_back(q);
+	m_queue.set(p, q);
 }
 
 // Returned pointer must be deleted
 // Returns NULL if queue is empty
 QueuedMeshUpdate * MeshUpdateQueue::pop()
 {
-	JMutexAutoLock lock(m_mutex);
-
+	auto lock = m_queue.lock_unique_rec();
 	bool must_be_urgent = !m_urgents.empty();
-	for(std::vector<QueuedMeshUpdate*>::iterator
-			i = m_queue.begin();
-			i != m_queue.end(); i++)
+	for(auto & i : m_queue)
 	{
-		QueuedMeshUpdate *q = *i;
-		if(must_be_urgent && m_urgents.count(q->p) == 0)
+		auto p = i.first;
+		auto q = i.second;
+		if(must_be_urgent && !m_urgents.count(p))
 			continue;
-		m_queue.erase(i);
-		m_urgents.erase(q->p);
+		m_queue.erase(p);
+		m_urgents.erase(p);
 		return q;
 	}
 	return NULL;
@@ -507,7 +492,7 @@ void Client::step(float dtime)
 		player->applyControl(dtime, &m_env);
 
 		// Step environment
-		m_env.step(dtime, 0, max_cycle_ms);
+		m_env.step(dtime, m_uptime, max_cycle_ms);
 		
 		/*
 			Get events
@@ -575,6 +560,8 @@ void Client::step(float dtime)
 		Replace updated meshes
 	*/
 	{
+		TimeTaker timer_step("Clien:: Replace updated meshes");
+
 		int num_processed_meshes = 0;
 		UniqueQueue<v3s16> got_blocks;
 		while(!m_mesh_update_thread.m_queue_out.empty())
@@ -1083,7 +1070,8 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id)
 		/*
 			Add it to mesh update queue and set it to be acknowledged after update.
 		*/
-		addUpdateMeshTaskWithEdge(p, true);
+		//addUpdateMeshTaskWithEdge(p, true);
+		block->setTimestampNoChangedFlag(m_uptime);
 	}
 	else if(command == TOCLIENT_INVENTORY)
 	{
@@ -2490,17 +2478,21 @@ void Client::addUpdateMeshTask(v3s16 p, bool ack_to_server, bool urgent, bool la
 		data->setSmoothLighting(g_settings->getBool("smooth_lighting"));
 		data->step = getFarmeshStep(data->draw_control, getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
 	}
-	
+
+	if (!urgent && getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p) <= 1) {
+		urgent = true;
+	}
+
 	// Add task to queue
 	m_mesh_update_thread.m_queue_in.addBlock(p, data, ack_to_server, urgent, lazy);
 }
 
-void Client::addUpdateMeshTaskWithEdge(v3s16 blockpos, bool ack_to_server, bool urgent)
+void Client::addUpdateMeshTaskWithEdge(v3s16 blockpos, bool ack_to_server, bool urgent, bool lazy)
 {
 	try{
 		v3s16 p = blockpos + v3s16(0,0,0);
 		//MapBlock *b = m_env.getMap().getBlockNoCreate(p);
-		addUpdateMeshTask(p, ack_to_server, urgent);
+		addUpdateMeshTask(p, ack_to_server, urgent, lazy);
 	}
 	catch(InvalidPositionException &e){}
 
@@ -2509,7 +2501,7 @@ void Client::addUpdateMeshTaskWithEdge(v3s16 blockpos, bool ack_to_server, bool 
 	{
 		try{
 			v3s16 p = blockpos + g_6dirs[i];
-			addUpdateMeshTask(p, false, urgent);
+			addUpdateMeshTask(p, false, urgent, lazy);
 		}
 		catch(InvalidPositionException &e){}
 	}

@@ -134,6 +134,7 @@ void ClientMap::updateDrawList(float dtime)
 {
 	ScopeProfiler sp(g_profiler, "CM::updateDrawList()", SPT_AVG);
 	//g_profiler->add("CM::updateDrawList() count", 1);
+	TimeTaker timer_step("ClientMap::updateDrawList");
 
 	INodeDefManager *nodemgr = m_gamedef->ndef();
 
@@ -189,8 +190,15 @@ void ClientMap::updateDrawList(float dtime)
 	// Distance to farthest drawn block
 	float farthest_drawn = 0;
 
+
 	{
-	auto lock = m_blocks.lock_shared_rec();
+	auto lock = m_blocks.lock_shared_rec(std::chrono::milliseconds(1));
+	if (!lock->owns_lock())
+		return;
+
+	if (!m_drawlist_last)
+		m_client->m_mesh_update_thread.m_queue_in.clear();
+
 	for(auto & ir : m_blocks) {
 
 		if (n++ < m_drawlist_last)
@@ -228,7 +236,7 @@ void ClientMap::updateDrawList(float dtime)
 				range = m_control.wanted_range * BS;
 
 			float d = 0.0;
-			if(isBlockInSight(block->getPos(), camera_position,
+			if(isBlockInSight(bp, camera_position,
 					camera_direction, camera_fov,
 					range, &d) == false && d > MAP_BLOCKSIZE*BS)
 			{
@@ -250,9 +258,10 @@ void ClientMap::updateDrawList(float dtime)
 
 				if(!mesh) {
 					blocks_in_range_without_mesh++;
+					m_client->addUpdateMeshTask(bp, false, false, true);
 					continue;
 				}
-				if(mesh_step == mesh->step && (!mesh->getMesh() || !mesh->getMesh()->getMeshBufferCount())) {
+				if(mesh_step == mesh->step && block->getTimestamp() <= mesh->timestamp && (!mesh->getMesh() || !mesh->getMesh()->getMeshBufferCount())) {
 					blocks_in_range_without_mesh++;
 					continue;
 				}
@@ -272,7 +281,7 @@ void ClientMap::updateDrawList(float dtime)
 					occlusion_culling_enabled = false;
 			}
 
-			v3s16 cpn = block->getPos() * MAP_BLOCKSIZE;
+			v3s16 cpn = bp * MAP_BLOCKSIZE;
 			cpn += v3s16(MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2);
 
 			float step = BS*1;
@@ -313,14 +322,17 @@ void ClientMap::updateDrawList(float dtime)
 
 			// Limit block count in case of a sudden increase
 			blocks_would_have_drawn++;
+/*
 			if(blocks_drawn >= m_control.wanted_max_blocks
 					&& m_control.range_all == false
 					&& d > m_control.wanted_min_range * BS)
 				continue;
+*/
 
-			if (m_control.farmesh && mesh_step != mesh->step) { //&& !block->mesh->transparent
-				m_client->addUpdateMeshTask(block->getPos(), false, mesh_step == 1, true);
-			}
+			if (mesh_step != mesh->step)
+				m_client->addUpdateMeshTask(bp, false, mesh_step == 1, true);
+			if (block->getTimestamp() > mesh->timestamp)
+				m_client->addUpdateMeshTaskWithEdge(bp);
 
 			if(!mesh->getMesh() || !mesh->getMesh()->getMeshBufferCount())
 				continue;
@@ -329,7 +341,7 @@ void ClientMap::updateDrawList(float dtime)
 
 			// Add to set
 			block->refGrab();
-			drawlist[block->getPos()] = block;
+			drawlist.set(bp, block);
 
 			blocks_drawn++;
 			if(d/BS > farthest_drawn)
@@ -344,11 +356,14 @@ void ClientMap::updateDrawList(float dtime)
 	if (!calls)
 		m_drawlist_last = 0;
 
+//if (m_drawlist_last) infostream<<"breaked UDL "<<m_drawlist_last<<" collected="<<drawlist.size()<<" calls="<<calls<<" s="<<m_blocks.size()<<" maxms="<<max_cycle_ms<<" fw="<<getControl().fps_wanted<<" morems="<<porting::getTimeMs() - end_ms<<std::endl;
+
 	if (m_drawlist_last)
 		return;
 
 	for (auto & ir : *m_drawlist)
 		ir.second->refDrop();
+
 
 	m_drawlist->clear();
 	m_drawlist = m_drawlist_current ? &m_drawlist_1 : &m_drawlist_0;
@@ -428,7 +443,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 		Measuring time is very useful for long delays when the
 		machine is swapping a lot.
 	*/
-	int time1 = time(0);
+	//int time1 = time(0);
 
 	/*
 		Get animation parameters
@@ -488,6 +503,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 
 	MeshBufListList drawbufs;
 
+	auto lock = m_drawlist->lock_shared_rec();
 	for(auto & ir : *m_drawlist) {
 		MapBlock *block = ir.second;
 
@@ -570,10 +586,11 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 
 	std::list<MeshBufList> &lists = drawbufs.lists;
 
-	int timecheck_counter = 0;
+	//int timecheck_counter = 0;
 	for(std::list<MeshBufList>::iterator i = lists.begin();
 			i != lists.end(); ++i)
 	{
+#if 0
 		{
 			timecheck_counter++;
 			if(timecheck_counter > 50)
@@ -589,6 +606,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 				}
 			}
 		}
+#endif
 
 		MeshBufList &list = *i;
 

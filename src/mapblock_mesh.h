@@ -49,6 +49,7 @@ struct MeshMakeData
 	bool m_smooth_lighting;
 	IGameDef *m_gamedef;
 	int step;
+	unsigned int timestamp;
 	Map & map;
 	MapDrawControl& draw_control;
 	bool debug;
@@ -138,6 +139,7 @@ public:
 	bool clearHardwareBuffer;
 
 	int step;
+	unsigned int timestamp;
 
 private:
 	scene::SMesh *m_mesh;

@@ -78,6 +78,7 @@ MeshMakeData::MeshMakeData(IGameDef *gamedef, Map & map_, MapDrawControl& draw_c
 void MeshMakeData::fill(MapBlock *block)
 {
 	m_blockpos = block->getPos();
+	timestamp = block->getTimestamp();
 
 #if 0
 	v3s16 blockpos_nodes = m_blockpos*MAP_BLOCKSIZE;
@@ -1050,6 +1051,7 @@ static void updateAllFastFaceRows(MeshMakeData *data,
 MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	clearHardwareBuffer(false),
 	step(data->step),
+	timestamp(data->timestamp),
 	m_mesh(new scene::SMesh()),
 	m_gamedef(data->m_gamedef),
 	m_animation_force_timer(0), // force initial animation

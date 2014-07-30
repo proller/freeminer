@@ -76,7 +76,8 @@ public:
 	MeshUpdateQueue();
 
 	~MeshUpdateQueue();
-	
+
+	void clear();
 	/*
 		peer_id=0 adds with nobody to send to
 	*/
@@ -89,14 +90,12 @@ public:
 
 	u32 size()
 	{
-		JMutexAutoLock lock(m_mutex);
 		return m_queue.size();
 	}
 	
 private:
-	std::vector<QueuedMeshUpdate*> m_queue;
-	std::set<v3s16> m_urgents;
-	JMutex m_mutex;
+	shared_map<v3s16, QueuedMeshUpdate*> m_queue;
+	shared_map<v3s16, int> m_urgents;
 };
 
 struct MeshUpdateResult
@@ -416,7 +415,7 @@ public:
 
 	void addUpdateMeshTask(v3s16 blockpos, bool ack_to_server=false, bool urgent=false, bool lazy=false);
 	// Including blocks at appropriate edges
-	void addUpdateMeshTaskWithEdge(v3s16 blockpos, bool ack_to_server=false, bool urgent=false);
+	void addUpdateMeshTaskWithEdge(v3s16 blockpos, bool ack_to_server=false, bool urgent=false, bool lazy=false);
 	void addUpdateMeshTaskForNode(v3s16 nodepos, bool ack_to_server=false, bool urgent=false);
 	
 	void updateCameraOffset(v3s16 camera_offset)
@@ -496,7 +495,9 @@ private:
 	ISoundManager *m_sound;
 	MtEventManager *m_event;
 
+public:
 	MeshUpdateThread m_mesh_update_thread;
+private:
 	ClientEnvironment m_env;
 public:
 	con::Connection m_con;
