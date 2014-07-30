@@ -64,7 +64,6 @@ QueuedMeshUpdate::QueuedMeshUpdate():
 	p(-1337,-1337,-1337),
 	data(NULL),
 	ack_block_to_server(false)
-	,lazy(false)
 {
 }
 
@@ -94,7 +93,7 @@ infostream << "mesh queue clear = " << m_queue.size() <<" urgents="<<m_urgents.s
 	m_urgents.clear();
 }
 
-void MeshUpdateQueue::addBlock(v3s16 p, MeshMakeData *data, bool ack_block_to_server, bool urgent, bool lazy)
+void MeshUpdateQueue::addBlock(v3s16 p, MeshMakeData *data, bool ack_block_to_server, bool urgent)
 {
 	DSTACK(__FUNCTION_NAME);
 	TimeTaker timer_step("MeshUpdateQueue::addBlock");
@@ -115,8 +114,6 @@ void MeshUpdateQueue::addBlock(v3s16 p, MeshMakeData *data, bool ack_block_to_se
 			q->data = data;
 			if(ack_block_to_server)
 				q->ack_block_to_server = true;
-			if(!lazy)
-				q->lazy = false;
 			return;
 		}
 	/*
@@ -126,7 +123,6 @@ void MeshUpdateQueue::addBlock(v3s16 p, MeshMakeData *data, bool ack_block_to_se
 	q->p = p;
 	q->data = data;
 	q->ack_block_to_server = ack_block_to_server;
-	q->lazy = lazy;
 	m_queue.set(p, q);
 }
 
@@ -188,7 +184,6 @@ void * MeshUpdateThread::Thread()
 		r.p = q->p;
 		r.mesh = mesh_new;
 		r.ack_block_to_server = q->ack_block_to_server;
-		r.lazy = q->lazy;
 
 		m_queue_out.push_back(r);
 
@@ -571,8 +566,6 @@ void Client::step(float dtime)
 			MapBlock *block = m_env.getMap().getBlockNoCreateNoEx(r.p);
 			if(block)
 			{
-				if (!r.lazy)
-					block->delMesh();
 				if (r.mesh)
 					block->setMesh(r.mesh);
 			} else {
@@ -2456,7 +2449,7 @@ void Client::typeChatMessage(const std::wstring &message)
 	}
 }
 
-void Client::addUpdateMeshTask(v3s16 p, bool ack_to_server, bool urgent, bool lazy)
+void Client::addUpdateMeshTask(v3s16 p, bool ack_to_server, bool urgent)
 {
 	//ScopeProfiler sp(g_profiler, "Client: Mesh prepare");
 	MapBlock *b = m_env.getMap().getBlockNoCreateNoEx(p);
@@ -2484,15 +2477,15 @@ void Client::addUpdateMeshTask(v3s16 p, bool ack_to_server, bool urgent, bool la
 	}
 
 	// Add task to queue
-	m_mesh_update_thread.m_queue_in.addBlock(p, data, ack_to_server, urgent, lazy);
+	m_mesh_update_thread.m_queue_in.addBlock(p, data, ack_to_server, urgent);
 }
 
-void Client::addUpdateMeshTaskWithEdge(v3s16 blockpos, bool ack_to_server, bool urgent, bool lazy)
+void Client::addUpdateMeshTaskWithEdge(v3s16 blockpos, bool ack_to_server, bool urgent)
 {
 	try{
 		v3s16 p = blockpos + v3s16(0,0,0);
 		//MapBlock *b = m_env.getMap().getBlockNoCreate(p);
-		addUpdateMeshTask(p, ack_to_server, urgent, lazy);
+		addUpdateMeshTask(p, ack_to_server, urgent);
 	}
 	catch(InvalidPositionException &e){}
 
@@ -2501,7 +2494,7 @@ void Client::addUpdateMeshTaskWithEdge(v3s16 blockpos, bool ack_to_server, bool 
 	{
 		try{
 			v3s16 p = blockpos + g_6dirs[i];
-			addUpdateMeshTask(p, false, urgent, lazy);
+			addUpdateMeshTask(p, false, urgent);
 		}
 		catch(InvalidPositionException &e){}
 	}

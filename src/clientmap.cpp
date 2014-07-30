@@ -258,7 +258,7 @@ void ClientMap::updateDrawList(float dtime)
 
 				if(!mesh) {
 					blocks_in_range_without_mesh++;
-					m_client->addUpdateMeshTask(bp, false, false, true);
+					m_client->addUpdateMeshTask(bp, false, false);
 					continue;
 				}
 				if(mesh_step == mesh->step && block->getTimestamp() <= mesh->timestamp && (!mesh->getMesh() || !mesh->getMesh()->getMeshBufferCount())) {
@@ -330,7 +330,7 @@ void ClientMap::updateDrawList(float dtime)
 */
 
 			if (mesh_step != mesh->step)
-				m_client->addUpdateMeshTask(bp, false, mesh_step == 1, true);
+				m_client->addUpdateMeshTask(bp, false, mesh_step == 1);
 			if (block->getTimestamp() > mesh->timestamp)
 				m_client->addUpdateMeshTaskWithEdge(bp);
 
@@ -372,6 +372,7 @@ void ClientMap::updateDrawList(float dtime)
 	m_control.blocks_drawn = blocks_drawn;
 	m_control.farthest_drawn = farthest_drawn;
 
+	g_profiler->avg("CM: blocks total", m_blocks.size());
 	g_profiler->avg("CM: blocks in range", blocks_in_range);
 	g_profiler->avg("CM: blocks occlusion culled", blocks_occlusion_culled);
 	if(blocks_in_range != 0)
