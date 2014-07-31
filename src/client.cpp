@@ -57,22 +57,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 extern gui::IGUIEnvironment* guienv;
 
 /*
-	QueuedMeshUpdate
-*/
-
-QueuedMeshUpdate::QueuedMeshUpdate():
-	p(-1337,-1337,-1337),
-	data(nullptr)
-{
-}
-
-QueuedMeshUpdate::~QueuedMeshUpdate()
-{
-	if(data)
-		delete data;
-}
-
-/*
 	MeshUpdateQueue
 */
 	
@@ -108,23 +92,19 @@ void MeshUpdateQueue::addBlock(v3s16 p, MeshMakeData *data, bool urgent)
 		{
 			auto lock = m_queue.lock_unique_rec();
 			auto * q = m_queue.get(p);
-			if(q->data)
-				delete q->data;
-			q->data = data;
+			delete q;
+			m_queue.set(p, data);
 			return;
 		}
 	/*
 		Add the block
 	*/
-	QueuedMeshUpdate *q = new QueuedMeshUpdate;
-	q->p = p;
-	q->data = data;
-	m_queue.set(p, q);
+	m_queue.set(p, data);
 }
 
 // Returned pointer must be deleted
 // Returns NULL if queue is empty
-QueuedMeshUpdate * MeshUpdateQueue::pop()
+MeshMakeData * MeshUpdateQueue::pop()
 {
 	auto lock = m_queue.lock_unique_rec();
 	bool must_be_urgent = !m_urgents.empty();
@@ -160,7 +140,7 @@ void * MeshUpdateThread::Thread()
 
 	while(!StopRequested())
 	{
-		QueuedMeshUpdate *q = m_queue_in.pop();
+		auto q = m_queue_in.pop();
 		if(q == NULL)
 		{
 			sleep_ms(3);
@@ -169,7 +149,7 @@ void * MeshUpdateThread::Thread()
 
 		ScopeProfiler sp(g_profiler, "Client: Mesh making");
 
-		MapBlockMesh *mesh_new = new MapBlockMesh(q->data, m_camera_offset);
+		auto *mesh_new = new MapBlockMesh(q, m_camera_offset);
 		if(mesh_new->getMesh()->getMeshBufferCount() == 0)
 		{
 			//delete mesh_new;
@@ -177,7 +157,7 @@ void * MeshUpdateThread::Thread()
 		}
 
 		MeshUpdateResult r;
-		r.p = q->p;
+		r.p = q->m_blockpos;
 		r.mesh = mesh_new;
 
 		m_queue_out.push_back(r);

@@ -50,15 +50,6 @@ struct MapDrawControl;
 class MtEventManager;
 struct PointedThing;
 
-struct QueuedMeshUpdate
-{
-	v3s16 p;
-	MeshMakeData *data;
-
-	QueuedMeshUpdate();
-	~QueuedMeshUpdate();
-};
-
 enum LocalClientState {
 	LC_Created,
 	LC_Init,
@@ -83,7 +74,7 @@ public:
 
 	// Returned pointer must be deleted
 	// Returns NULL if queue is empty
-	QueuedMeshUpdate * pop();
+	MeshMakeData * pop();
 
 	u32 size()
 	{
@@ -91,7 +82,7 @@ public:
 	}
 	
 private:
-	shared_map<v3s16, QueuedMeshUpdate*> m_queue;
+	shared_map<v3s16, MeshMakeData*> m_queue;
 	shared_map<v3s16, int> m_urgents;
 };
 
