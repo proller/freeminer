@@ -70,8 +70,6 @@ MeshUpdateQueue::~MeshUpdateQueue()
 }
 
 void MeshUpdateQueue::clear(bool full) {
-	auto lock = m_queue.lock_unique_rec();
-infostream << "mesh queue clear = " << m_queue.size() <<" urgents="<<m_urgents.size()<< std::endl;
 	m_queue.clear();
 	if (full)
 		m_urgents.clear();
@@ -80,8 +78,6 @@ infostream << "mesh queue clear = " << m_queue.size() <<" urgents="<<m_urgents.s
 void MeshUpdateQueue::addBlock(v3s16 p, MeshMakeData *data, bool urgent)
 {
 	DSTACK(__FUNCTION_NAME);
-	TimeTaker timer_step("MeshUpdateQueue::addBlock");
-//infostream << "mesh queue size= "<<m_queue.size()<< " urgents size="<<m_urgents.size()<<" p="<<p<<std::endl;
 
 	if(!data)
 		return;
@@ -106,9 +102,7 @@ void MeshUpdateQueue::addBlock(v3s16 p, MeshMakeData *data, bool urgent)
 // Returns NULL if queue is empty
 MeshMakeData * MeshUpdateQueue::pop()
 {
-	auto data = m_urgents.begin()->second;
-	if (!data)
-		data = m_queue.begin()->second;
+	auto data = !m_urgents.empty() ? m_urgents.begin()->second : !m_queue.empty() ? m_queue.begin()->second : nullptr;
 	if (data) {
 		m_queue.erase(data->m_blockpos);
 		m_urgents.erase(data->m_blockpos);
@@ -145,11 +139,6 @@ void * MeshUpdateThread::Thread()
 		ScopeProfiler sp(g_profiler, "Client: Mesh making");
 
 		auto *mesh_new = new MapBlockMesh(q, m_camera_offset);
-		if(mesh_new->getMesh()->getMeshBufferCount() == 0)
-		{
-			//delete mesh_new;
-			//mesh_new = NULL;
-		}
 
 		MeshUpdateResult r;
 		r.p = q->m_blockpos;
