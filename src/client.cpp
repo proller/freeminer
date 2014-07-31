@@ -66,14 +66,15 @@ MeshUpdateQueue::MeshUpdateQueue()
 
 MeshUpdateQueue::~MeshUpdateQueue()
 {
-	clear();
+	clear(true);
 }
 
-void MeshUpdateQueue::clear() {
+void MeshUpdateQueue::clear(bool full) {
 	auto lock = m_queue.lock_unique_rec();
 infostream << "mesh queue clear = " << m_queue.size() <<" urgents="<<m_urgents.size()<< std::endl;
 	m_queue.clear();
-	m_urgents.clear();
+	if (full)
+		m_urgents.clear();
 }
 
 void MeshUpdateQueue::addBlock(v3s16 p, MeshMakeData *data, bool urgent)
@@ -85,20 +86,19 @@ void MeshUpdateQueue::addBlock(v3s16 p, MeshMakeData *data, bool urgent)
 	if(!data)
 		return;
 
-	if(urgent)
-		m_urgents.set(p, 1);
+	if(urgent) {
+		auto lock = m_urgents.lock_unique_rec();
+		auto old = m_urgents.get(p);
+		if (old)
+			delete old;
+		m_urgents.set(p, data);
+		return;
+	}
 
-		if(m_queue.count(p))
-		{
-			auto lock = m_queue.lock_unique_rec();
-			auto * q = m_queue.get(p);
-			delete q;
-			m_queue.set(p, data);
-			return;
-		}
-	/*
-		Add the block
-	*/
+	auto lock = m_queue.lock_unique_rec();
+	auto old = m_queue.get(p);
+	if (old)
+		delete old;
 	m_queue.set(p, data);
 }
 
@@ -106,19 +106,14 @@ void MeshUpdateQueue::addBlock(v3s16 p, MeshMakeData *data, bool urgent)
 // Returns NULL if queue is empty
 MeshMakeData * MeshUpdateQueue::pop()
 {
-	auto lock = m_queue.lock_unique_rec();
-	bool must_be_urgent = !m_urgents.empty();
-	for(auto & i : m_queue)
-	{
-		auto p = i.first;
-		auto q = i.second;
-		if(must_be_urgent && !m_urgents.count(p))
-			continue;
-		m_queue.erase(p);
-		m_urgents.erase(p);
-		return q;
+	auto data = m_urgents.begin()->second;
+	if (!data)
+		data = m_queue.begin()->second;
+	if (data) {
+		m_queue.erase(data->m_blockpos);
+		m_urgents.erase(data->m_blockpos);
 	}
-	return NULL;
+	return data;
 }
 
 /*

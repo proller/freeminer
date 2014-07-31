@@ -66,7 +66,7 @@ public:
 
 	~MeshUpdateQueue();
 
-	void clear();
+	void clear(bool full = false);
 	/*
 		peer_id=0 adds with nobody to send to
 	*/
@@ -78,12 +78,12 @@ public:
 
 	u32 size()
 	{
-		return m_queue.size();
+		return m_queue.size() + m_urgents.size();
 	}
 	
 private:
 	shared_map<v3s16, MeshMakeData*> m_queue;
-	shared_map<v3s16, int> m_urgents;
+	shared_map<v3s16, MeshMakeData*> m_urgents;
 };
 
 struct MeshUpdateResult
