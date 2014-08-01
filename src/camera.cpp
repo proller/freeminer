@@ -572,10 +572,12 @@ void Camera::updateViewingRange(f32 frametime_in, f32 busytime_in)
 	// Just so big a value that everything rendered is visible
 	// Some more allowance than viewing_range_max * BS because of clouds,
 	// active objects, etc.
-	if(viewing_range_max < 200*BS)
+/*	if(viewing_range_max < 200*BS)
 		m_cameranode->setFarValue(200 * BS * 10);
 	else
 		m_cameranode->setFarValue(viewing_range_max * BS * 10);
+*/
+	m_cameranode->setFarValue(m_draw_control.wanted_range * BS);
 
 	int farmesh = g_settings->getS32("farmesh");
 	int farmesh_step = g_settings->getS32("farmesh_step");

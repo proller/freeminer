@@ -1661,6 +1661,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 
 	float update_draw_list_timer = 0.0;
 	v3f update_draw_list_last_cam_dir;
+	v3f update_draw_list_last_cam_pos(100,42,1000);
 
 	bool invert_mouse = g_settings->getBool("invert_mouse");
 
@@ -3603,12 +3604,16 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 		*/
 		update_draw_list_timer += dtime;
 		if (!no_output)
-		if(client.getEnv().getClientMap().m_drawlist_last || update_draw_list_timer >= 0.2 ||
-				update_draw_list_last_cam_dir.getDistanceFrom(camera_direction) > 0.2 ||
+		if(client.getEnv().getClientMap().m_drawlist_last || update_draw_list_timer >= 0.5 ||
+				//update_draw_list_last_cam_dir.getDistanceFrom(camera_direction) > 0.2 ||
+				update_draw_list_last_cam_pos != camera_position ||
 				camera_offset_changed){
 			update_draw_list_timer = 0;
-			updateDrawList_future = std::async(std::launch::async, [](Client * client, float dtime){ client->getEnv().getClientMap().updateDrawList(dtime); }, &client, dtime);
-			update_draw_list_last_cam_dir = camera_direction;
+//driver->runAllOcclusionQueries(false);
+//driver->updateAllOcclusionQueries();
+			//updateDrawList_future = std::async(std::launch::async, [](Client * client, float dtime){ client->getEnv().getClientMap().updateDrawList(dtime); }, &client, dtime);
+			client.getEnv().getClientMap().updateDrawList(dtime);
+			update_draw_list_last_cam_pos = camera_position;
 		}
 
 		/*

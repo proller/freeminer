@@ -524,8 +524,7 @@ void Client::step(float dtime)
 			MapBlock *block = m_env.getMap().getBlockNoCreateNoEx(r.p);
 			if(block)
 			{
-				if (r.mesh)
-					block->setMesh(r.mesh);
+				block->setMesh(r.mesh);
 			} else {
 				delete r.mesh;
 			}

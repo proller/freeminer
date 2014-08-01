@@ -36,6 +36,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/numeric.h" // getContainerPos
 #include "util/lock.h"
 
+#include <ISceneNode.h>
+
 class Map;
 class NodeMetadataList;
 class IGameDef;
@@ -528,6 +530,7 @@ public:
 	MapBlockMesh* getMesh(int step = 1);
 	void setMesh(MapBlockMesh* rmesh);
 	void delMesh();
+	bool redraw;
 #endif
 
 private:
@@ -561,6 +564,7 @@ public:
 	*/
 
 #ifndef SERVER // Only on client
+	irr::scene::ISceneNode * scenenode;
 	MapBlockMesh *mesh;
 	MapBlockMesh  *mesh2, *mesh4, *mesh8, *mesh16;
 #endif

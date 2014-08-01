@@ -72,8 +72,10 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 		reallocate();
 	
 #ifndef SERVER
+	scenenode = nullptr;
 	mesh = NULL;
 	mesh2 = mesh4 = mesh8 = mesh16 = NULL;
+	redraw = false;
 #endif
 }
 
@@ -81,6 +83,8 @@ MapBlock::~MapBlock()
 {
 	auto lock = lock_unique_rec();
 #ifndef SERVER
+	if (scenenode)
+		scenenode->remove();
 	delMesh();
 #endif
 
@@ -800,6 +804,7 @@ void MapBlock::setMesh(MapBlockMesh* rmesh) {
 	else if (rmesh->step == 4 ) {if (mesh4)  delete mesh4;   mesh4  = rmesh;}
 	else if (rmesh->step == 2 ) {if (mesh2)  delete mesh2;   mesh2  = rmesh;}
 	else                        {if (mesh)   delete mesh;    mesh   = rmesh;}
+	redraw = true;
 }
 
 void MapBlock::delMesh() {

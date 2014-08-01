@@ -196,7 +196,7 @@ void ClientMap::updateDrawList(float dtime)
 	if (!lock->owns_lock())
 		return;
 
-	if (!m_drawlist_last && !(end_ms % 10))
+	if (!m_drawlist_last && !(end_ms % 5))
 		m_client->m_mesh_update_thread.m_queue_in.clear();
 
 	for(auto & ir : m_blocks) {
@@ -229,7 +229,12 @@ void ClientMap::updateDrawList(float dtime)
 
 			auto mesh = block->getMesh(mesh_step);
 			if (mesh)
-				mesh->updateCameraOffset(m_camera_offset);
+				if (mesh->updateCameraOffset(m_camera_offset))
+					if (block->scenenode) {
+						block->scenenode->remove();
+						block->scenenode = nullptr;
+					}
+
 
 			float range = 100000 * BS;
 			if(m_control.range_all == false)
@@ -237,9 +242,13 @@ void ClientMap::updateDrawList(float dtime)
 
 			float d = 0.0;
 			if(isBlockInSight(bp, camera_position,
-					camera_direction, camera_fov,
+					camera_direction, 0 /*camera_fov*/,
 					range, &d) == false && d > MAP_BLOCKSIZE*BS)
 			{
+				if (block->scenenode) {
+					block->scenenode->remove();
+					block->scenenode = nullptr;
+				}
 				continue;
 			}
 
@@ -280,6 +289,7 @@ void ClientMap::updateDrawList(float dtime)
 						nodemgr->get(n).solidness == 2)
 					occlusion_culling_enabled = false;
 			}
+//occlusion_culling_enabled = false;
 
 			v3s16 cpn = bp * MAP_BLOCKSIZE;
 			cpn += v3s16(MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2);
@@ -329,8 +339,10 @@ void ClientMap::updateDrawList(float dtime)
 				continue;
 */
 
-			if (mesh_step != mesh->step)
+			if (mesh_step != mesh->step) {
 				m_client->addUpdateMeshTask(bp, mesh_step == 1);
+				continue;
+			}
 			if (block->getTimestamp() > mesh->timestamp)
 				m_client->addUpdateMeshTaskWithEdge(bp);
 
@@ -339,10 +351,23 @@ void ClientMap::updateDrawList(float dtime)
 
 			mesh->incrementUsageTimer(dtime);
 
+
+			if (block->redraw || !block->scenenode) {
+				if (block->scenenode)
+					block->scenenode->remove();
+				block->scenenode = getSceneManager()->addOctreeSceneNode(mesh->getMesh());
+				block->scenenode = getSceneManager()->addMeshSceneNode(mesh->getMesh());
+//				m_device->getVideoDriver()->addOcclusionQuery(r.mesh->scenenode, r.mesh->getMesh());
+				block->redraw = false;
+			}
+
+//continue;
+
+/*
 			// Add to set
 			block->refGrab();
 			drawlist.set(bp, block);
-
+*/
 			blocks_drawn++;
 			if(d/BS > farthest_drawn)
 				farthest_drawn = d/BS;
@@ -424,8 +449,8 @@ struct MeshBufListList
 
 void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 {
+return;
 	DSTACK(__FUNCTION_NAME);
-
 	bool is_transparent_pass = pass == scene::ESNRP_TRANSPARENT;
 
 	std::string prefix;
@@ -504,6 +529,8 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 
 	MeshBufListList drawbufs;
 
+//auto smgr = getSceneManager();
+
 	auto lock = m_drawlist->lock_shared_rec();
 	for(auto & ir : *m_drawlist) {
 		MapBlock *block = ir.second;
@@ -513,6 +540,9 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 		auto *mapBlockMesh = block->getMesh(mesh_step);
 		if (!mapBlockMesh)
 			continue;
+
+//		smgr->addOctreeSceneNode(mapBlockMesh->getMesh()); //, 0, -1, 1024);
+//		continue;
 
 		float d = 0.0;
 		if(isBlockInSight(block->getPos(), camera_position,
@@ -587,6 +617,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 
 	std::list<MeshBufList> &lists = drawbufs.lists;
 
+if (0)
 	//int timecheck_counter = 0;
 	for(std::list<MeshBufList>::iterator i = lists.begin();
 			i != lists.end(); ++i)
@@ -611,16 +642,23 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 
 		MeshBufList &list = *i;
 
-		driver->setMaterial(list.m);
+//		driver->setMaterial(list.m);
+auto mesh = new irr::scene::SMesh();
 
+infostream<<"add to octree bufs="<<list.bufs.size()<<std::endl;
+auto smgr = getSceneManager();
 		for(std::list<scene::IMeshBuffer*>::iterator j = list.bufs.begin();
 				j != list.bufs.end(); ++j)
 		{
 			scene::IMeshBuffer *buf = *j;
-			driver->drawMeshBuffer(buf);
+//			driver->drawMeshBuffer(buf);
+			mesh->addMeshBuffer(buf);
 			vertex_count += buf->getVertexCount();
 			meshbuffer_count++;
 		}
+		//smgr->addOctreeSceneNode(mesh, 0, -1, 1024);
+		smgr->addOctreeSceneNode(mesh); //, 0, -1, 1024);
+
 #if 0
 		/*
 			Draw the faces of the block
