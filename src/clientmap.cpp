@@ -356,7 +356,7 @@ void ClientMap::updateDrawList(float dtime)
 				if (block->scenenode)
 					block->scenenode->remove();
 				block->scenenode = getSceneManager()->addOctreeSceneNode(mesh->getMesh());
-				block->scenenode = getSceneManager()->addMeshSceneNode(mesh->getMesh());
+				//block->scenenode = getSceneManager()->addMeshSceneNode(mesh->getMesh());
 //				m_device->getVideoDriver()->addOcclusionQuery(r.mesh->scenenode, r.mesh->getMesh());
 				block->redraw = false;
 			}
