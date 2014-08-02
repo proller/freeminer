@@ -1275,14 +1275,12 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 	if(m_mesh)
 	{
-//#if 0
+#if 0
 		// Usually 1-700 faces and 1-7 materials
 		infostream<<"Updated MapBlock mesh p="<<data->m_blockpos<<" has "<<fastfaces_new.size()<<" faces "
 				<<"and uses "<<m_mesh->getMeshBufferCount()
-				<<" materials (meshbuffers)"<<" step="<<step<< " mesh="<<m_mesh<<std::endl;
-//#endif
-	} else {
-		infostream<<"null mesh generated p="<<data->m_blockpos<<std::endl;
+				<<" materials "<<" step="<<step<<" range="<<data->range<< " mesh="<<m_mesh<<std::endl;
+#endif
 	}
 
 	//std::cout<<"added "<<fastfaces.getSize()<<" faces."<<std::endl;

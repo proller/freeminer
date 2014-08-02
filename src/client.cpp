@@ -87,34 +87,22 @@ void MeshUpdateQueue::addBlock(v3s16 p, std::shared_ptr<MeshMakeData> data, bool
 	DSTACK(__FUNCTION_NAME);
 
 	if (m_process.count(p))
-{
-infostream<<"skip processing p"<<p<<std::endl;
 		return;
-}
-
-	auto range = urgent ? 0 : data->range;
+	auto lock = m_queue.lock_unique_rec();
+	auto range = urgent ? 0 : data->range + data->step * 10;
 	auto & rmap = m_queue.get(range);
 	if (rmap.count(p))
 		return;
-
 	rmap[p] = data;
-infostream<<"addq r="<<range<<" p="<<p<< " qsz="<<m_queue.size() << " rsz="<<rmap.size()<<std::endl;
 }
 
-// Returned pointer must be deleted
-// Returns NULL if queue is empty
 std::shared_ptr<MeshMakeData> MeshUpdateQueue::pop()
 {
 	auto lock = m_queue.lock_unique_rec();
 	for (auto & it : m_queue) {
 		auto & rmap = it.second;
 		auto data = rmap.begin()->second;
-auto range =  it.first;
-//infostream<<"getq0 r="<<range<<" p="<<data->m_blockpos<< " qsz="<<m_queue.size() << " rsz="<<rmap.size()<<std::endl;
 		rmap.erase(rmap.begin()->first);
-
-infostream<<"getq r="<<range<<" p="<<data->m_blockpos<< " qsz="<<m_queue.size() << " rsz="<<rmap.size()<<std::endl;
-
 		if (rmap.empty())
 			m_queue.erase(it.first);
 		return data;
