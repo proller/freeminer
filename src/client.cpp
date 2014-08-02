@@ -66,48 +66,60 @@ MeshUpdateQueue::MeshUpdateQueue()
 
 MeshUpdateQueue::~MeshUpdateQueue()
 {
-	clear(true);
 }
 
-void MeshUpdateQueue::clear(bool full) {
-	m_queue.clear();
-	if (full)
-		m_urgents.clear();
+void MeshUpdateQueue::clear() {
+	auto lock = m_queue.lock_unique_rec(std::chrono::milliseconds(1));
+	if (!lock->owns_lock())
+		return;
+
+	for (auto it = m_queue.begin(); it != m_queue.end();++it) {
+		//never delete 0 range (urgent)
+		if (!it->first)
+			++it;
+		else
+			it = m_queue.erase(it);
+	}
 }
 
-void MeshUpdateQueue::addBlock(v3s16 p, MeshMakeData *data, bool urgent)
+void MeshUpdateQueue::addBlock(v3s16 p, std::shared_ptr<MeshMakeData> data, bool urgent)
 {
 	DSTACK(__FUNCTION_NAME);
 
-	if(!data)
+	if (m_process.count(p))
+{
+infostream<<"skip processing p"<<p<<std::endl;
+		return;
+}
+
+	auto range = urgent ? 0 : data->range;
+	auto & rmap = m_queue.get(range);
+	if (rmap.count(p))
 		return;
 
-	if(urgent) {
-		auto lock = m_urgents.lock_unique_rec();
-		auto old = m_urgents.get(p);
-		if (old)
-			delete old;
-		m_urgents.set(p, data);
-		return;
-	}
-
-	auto lock = m_queue.lock_unique_rec();
-	auto old = m_queue.get(p);
-	if (old)
-		delete old;
-	m_queue.set(p, data);
+	rmap[p] = data;
+infostream<<"addq r="<<range<<" p="<<p<< " qsz="<<m_queue.size() << " rsz="<<rmap.size()<<std::endl;
 }
 
 // Returned pointer must be deleted
 // Returns NULL if queue is empty
-MeshMakeData * MeshUpdateQueue::pop()
+std::shared_ptr<MeshMakeData> MeshUpdateQueue::pop()
 {
-	auto data = !m_urgents.empty() ? m_urgents.begin()->second : !m_queue.empty() ? m_queue.begin()->second : nullptr;
-	if (data) {
-		m_queue.erase(data->m_blockpos);
-		m_urgents.erase(data->m_blockpos);
+	auto lock = m_queue.lock_unique_rec();
+	for (auto & it : m_queue) {
+		auto & rmap = it.second;
+		auto data = rmap.begin()->second;
+auto range =  it.first;
+//infostream<<"getq0 r="<<range<<" p="<<data->m_blockpos<< " qsz="<<m_queue.size() << " rsz="<<rmap.size()<<std::endl;
+		rmap.erase(rmap.begin()->first);
+
+infostream<<"getq r="<<range<<" p="<<data->m_blockpos<< " qsz="<<m_queue.size() << " rsz="<<rmap.size()<<std::endl;
+
+		if (rmap.empty())
+			m_queue.erase(it.first);
+		return data;
 	}
-	return data;
+	return nullptr;
 }
 
 /*
@@ -130,23 +142,18 @@ void * MeshUpdateThread::Thread()
 	while(!StopRequested())
 	{
 		auto q = m_queue_in.pop();
-		if(q == NULL)
+		if(!q)
 		{
 			sleep_ms(3);
 			continue;
 		}
+		m_queue_in.m_process.set(q->m_blockpos, 1);
 
 		ScopeProfiler sp(g_profiler, "Client: Mesh making");
 
-		auto *mesh_new = new MapBlockMesh(q, m_camera_offset);
+		m_queue_out.push_back(MeshUpdateResult(q->m_blockpos, new MapBlockMesh(q.get(), m_camera_offset)));
 
-		MeshUpdateResult r;
-		r.p = q->m_blockpos;
-		r.mesh = mesh_new;
-
-		m_queue_out.push_back(r);
-
-		delete q;
+		m_queue_in.m_process.erase(q->m_blockpos);
 	}
 
 	END_DEBUG_EXCEPTION_HANDLER(errorstream)
@@ -2416,7 +2423,7 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent)
 		Create a task to update the mesh of the block
 	*/
 	
-	MeshMakeData *data = new MeshMakeData(this, m_env.getMap(), m_env.getClientMap().getControl());
+	std::shared_ptr<MeshMakeData> data(new MeshMakeData(this, m_env.getMap(), m_env.getClientMap().getControl()));
 	
 	{
 		//TimeTaker timer("data fill");
@@ -2426,6 +2433,7 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent)
 		data->setCrack(m_crack_level, m_crack_pos);
 		data->setSmoothLighting(g_settings->getBool("smooth_lighting"));
 		data->step = getFarmeshStep(data->draw_control, getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
+		data->range = getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p);
 	}
 
 	if (!urgent && getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p) <= 1) {

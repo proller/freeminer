@@ -70,10 +70,15 @@ MeshMakeData::MeshMakeData(IGameDef *gamedef, Map & map_, MapDrawControl& draw_c
 	m_smooth_lighting(false),
 	m_gamedef(gamedef)
 	,step(1),
+	range(1),
 	map(map_),
 	draw_control(draw_control_),
 	debug(0)
 {}
+
+MeshMakeData::~MeshMakeData() {
+	//infostream<<"~MeshMakeData "<<m_blockpos<<std::endl;
+}
 
 void MeshMakeData::fill(MapBlock *block)
 {
@@ -1270,12 +1275,12 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 	if(m_mesh)
 	{
-#if 0
+//#if 0
 		// Usually 1-700 faces and 1-7 materials
 		infostream<<"Updated MapBlock mesh p="<<data->m_blockpos<<" has "<<fastfaces_new.size()<<" faces "
 				<<"and uses "<<m_mesh->getMeshBufferCount()
 				<<" materials (meshbuffers)"<<" step="<<step<< " mesh="<<m_mesh<<std::endl;
-#endif
+//#endif
 	} else {
 		infostream<<"null mesh generated p="<<data->m_blockpos<<std::endl;
 	}
