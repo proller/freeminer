@@ -142,7 +142,7 @@ void ClientMap::updateDrawList(float dtime)
 		m_drawlist_current = !m_drawlist_current;
 	auto & drawlist = m_drawlist_current ? m_drawlist_1 : m_drawlist_0;
 
-	float max_cycle_ms = 300/getControl().fps_wanted;
+	float max_cycle_ms = 10/getControl().fps_wanted;
 	u32 n = 0, calls = 0, end_ms = porting::getTimeMs() + u32(max_cycle_ms);
 
 	m_camera_mutex.Lock();
@@ -352,13 +352,12 @@ void ClientMap::updateDrawList(float dtime)
 			mesh->incrementUsageTimer(dtime);
 
 
-			if (block->redraw || !block->scenenode) {
+			if (!block->scenenode) {
 				if (block->scenenode)
 					block->scenenode->remove();
-				block->scenenode = getSceneManager()->addOctreeSceneNode(mesh->getMesh());
-				//block->scenenode = getSceneManager()->addMeshSceneNode(mesh->getMesh());
+				//block->scenenode = getSceneManager()->addOctreeSceneNode(mesh->getMesh());
+				block->scenenode = getSceneManager()->addMeshSceneNode(mesh->getMesh());
 //				m_device->getVideoDriver()->addOcclusionQuery(r.mesh->scenenode, r.mesh->getMesh());
-				block->redraw = false;
 			}
 
 //continue;
@@ -449,6 +448,8 @@ struct MeshBufListList
 
 void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 {
+	g_profiler->avg("CM: PrimitiveDrawn", driver->getPrimitiveCountDrawn());
+
 return;
 	DSTACK(__FUNCTION_NAME);
 	bool is_transparent_pass = pass == scene::ESNRP_TRANSPARENT;

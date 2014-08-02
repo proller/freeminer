@@ -530,7 +530,6 @@ public:
 	MapBlockMesh* getMesh(int step = 1);
 	void setMesh(MapBlockMesh* rmesh);
 	void delMesh();
-	bool redraw;
 #endif
 
 private:
