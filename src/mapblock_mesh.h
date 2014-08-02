@@ -49,12 +49,14 @@ struct MeshMakeData
 	bool m_smooth_lighting;
 	IGameDef *m_gamedef;
 	int step;
+	int range;
 	unsigned int timestamp;
 	Map & map;
 	MapDrawControl& draw_control;
 	bool debug;
 
 	MeshMakeData(IGameDef *gamedef, Map & map_, MapDrawControl& draw_control_);
+	~MeshMakeData();
 
 	/*
 		Copy central data directly from block, and other data from

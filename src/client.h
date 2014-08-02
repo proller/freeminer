@@ -66,34 +66,22 @@ public:
 
 	~MeshUpdateQueue();
 
-	void clear(bool full = false);
-	/*
-		peer_id=0 adds with nobody to send to
-	*/
-	void addBlock(v3s16 p, MeshMakeData *data, bool urgent);
+	void addBlock(v3s16 p, std::shared_ptr<MeshMakeData> data, bool urgent);
+	std::shared_ptr<MeshMakeData> pop();
 
-	// Returned pointer must be deleted
-	// Returns NULL if queue is empty
-	MeshMakeData * pop();
-
-	u32 size()
-	{
-		return m_queue.size() + m_urgents.size();
-	}
-	
+	shared_map<v3s16, bool> m_process;
 private:
-	shared_map<v3s16, MeshMakeData*> m_queue;
-	shared_map<v3s16, MeshMakeData*> m_urgents;
+	shared_map<unsigned int, std::map<v3s16, std::shared_ptr<MeshMakeData>>> m_queue;
 };
 
 struct MeshUpdateResult
 {
 	v3s16 p;
-	MapBlockMesh *mesh;
+	MapBlockMesh * mesh;
 
-	MeshUpdateResult():
-		p(-1338,-1338,-1338),
-		mesh(nullptr)
+	MeshUpdateResult(v3s16 & p_, MapBlockMesh * mesh_):
+		p(p_),
+		mesh(mesh_)
 	{
 	}
 };

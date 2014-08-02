@@ -196,9 +196,6 @@ void ClientMap::updateDrawList(float dtime)
 	if (!lock->owns_lock())
 		return;
 
-	if (!m_drawlist_last && !(end_ms % 5))
-		m_client->m_mesh_update_thread.m_queue_in.clear();
-
 	for(auto & ir : m_blocks) {
 
 		if (n++ < m_drawlist_last)
@@ -723,6 +720,8 @@ auto smgr = getSceneManager();
 		g_profiler->avg(prefix+"empty blocks (frac)",
 				(float)blocks_without_stuff / blocks_drawn);
 
+	g_profiler->avg("CM: PrimitiveDrawn", driver->getPrimitiveCountDrawn());
+
 	/*infostream<<"renderMap(): is_transparent_pass="<<is_transparent_pass
 			<<", rendered "<<vertex_count<<" vertices."<<std::endl;*/
 }
@@ -915,7 +914,9 @@ void ClientMap::renderPostFx(CameraMode cam_mode)
 	v3f camera_position = m_camera_position;
 	m_camera_mutex.Unlock();
 
-	MapNode n = getNodeNoEx(floatToInt(camera_position, BS));
+	MapNode n = getNodeNoLock(floatToInt(camera_position, BS));
+	if (n.getContent() == CONTENT_IGNORE)
+		return; // may flicker
 
 	// - If the player is in a solid node, make everything black.
 	// - If the player is in liquid, draw a semi-transparent overlay.
