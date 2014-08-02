@@ -196,9 +196,6 @@ void ClientMap::updateDrawList(float dtime)
 	if (!lock->owns_lock())
 		return;
 
-	//if (!m_drawlist_last && !(end_ms % 20))
-	//	m_client->m_mesh_update_thread.m_queue_in.clear();
-
 	for(auto & ir : m_blocks) {
 
 		if (n++ < m_drawlist_last)

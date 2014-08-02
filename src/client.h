@@ -66,7 +66,6 @@ public:
 
 	~MeshUpdateQueue();
 
-	void clear();
 	void addBlock(v3s16 p, std::shared_ptr<MeshMakeData> data, bool urgent);
 	std::shared_ptr<MeshMakeData> pop();
 

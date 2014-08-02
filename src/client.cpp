@@ -68,20 +68,6 @@ MeshUpdateQueue::~MeshUpdateQueue()
 {
 }
 
-void MeshUpdateQueue::clear() {
-	auto lock = m_queue.lock_unique_rec(std::chrono::milliseconds(1));
-	if (!lock->owns_lock())
-		return;
-
-	for (auto it = m_queue.begin(); it != m_queue.end();++it) {
-		//never delete 0 range (urgent)
-		if (!it->first)
-			++it;
-		else
-			it = m_queue.erase(it);
-	}
-}
-
 void MeshUpdateQueue::addBlock(v3s16 p, std::shared_ptr<MeshMakeData> data, bool urgent)
 {
 	DSTACK(__FUNCTION_NAME);
