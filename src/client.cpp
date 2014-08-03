@@ -495,7 +495,7 @@ void Client::step(float dtime)
 		Replace updated meshes
 	*/
 	{
-		TimeTaker timer_step("Clien:: Replace updated meshes");
+		TimeTaker timer_step("Client: Replace updated meshes");
 
 		int num_processed_meshes = 0;
 		while(!m_mesh_update_thread.m_queue_out.empty())
@@ -2415,10 +2415,6 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent)
 		data->setSmoothLighting(g_settings->getBool("smooth_lighting"));
 		data->step = getFarmeshStep(data->draw_control, getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
 		data->range = getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p);
-	}
-
-	if (!urgent && getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p) <= 1) {
-		urgent = true;
 	}
 
 	// Add task to queue

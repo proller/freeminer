@@ -342,7 +342,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 */
 
 			if (mesh_step != mesh->step) {
-				m_client->addUpdateMeshTask(bp, mesh_step == 1);
+				m_client->addUpdateMeshTask(bp);
 				continue;
 			}
 			if (block->getTimestamp() > mesh->timestamp)

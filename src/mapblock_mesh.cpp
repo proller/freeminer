@@ -44,10 +44,6 @@ static void applyContrast(video::SColor& color, float factor)
 	color.setBlue(core::clamp(core::round32(color.getBlue()*factor), 0, 255));
 }
 
-inline int radius_box(const v3s16 & a, const v3s16 & b) {
-	return std::max(std::max(abs(a.X - b.X), abs(a.Y - b.Y)), abs(a.Z - b.Z));
-}
-
 int getFarmeshStep(MapDrawControl& draw_control, const v3s16 & playerpos, const v3s16 & blockpos) {
 	int range = radius_box(playerpos, blockpos);
 	if (draw_control.farmesh) {
