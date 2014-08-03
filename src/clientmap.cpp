@@ -327,7 +327,7 @@ void ClientMap::updateDrawList(float dtime)
 */
 
 			if (mesh_step != mesh->step)
-				m_client->addUpdateMeshTask(bp, mesh_step == 1);
+				m_client->addUpdateMeshTask(bp);
 			if (block->getTimestamp() > mesh->timestamp)
 				m_client->addUpdateMeshTaskWithEdge(bp);
 
