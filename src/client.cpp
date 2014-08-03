@@ -104,13 +104,13 @@ void * MeshUpdateThread::Thread()
 {
 	ThreadStarted();
 
-	log_register_thread("MeshUpdateThread");
+	log_register_thread("MeshUpdateThread" + itos(id));
 
 	DSTACK(__FUNCTION_NAME);
 	
 	BEGIN_DEBUG_EXCEPTION_HANDLER
 
-	porting::setThreadName("MeshUpdateThread");
+	porting::setThreadName(("MeshUpdateThread" + itos(id)).c_str());
 	porting::setThreadPriority(50);
 
 	while(!StopRequested())
@@ -2551,8 +2551,12 @@ void Client::afterContentReceived(IrrlichtDevice *device, gui::IGUIFont* font)
 
 	// Start mesh update thread after setting up content definitions
 	infostream<<"- Starting mesh update thread"<<std::endl;
-	if (!no_output)
-		m_mesh_update_thread.Start();
+	if (!no_output) {
+		auto threads = porting::getNumberOfProcessors() - 2;
+		if (threads < 1)
+			threads = 1;
+		m_mesh_update_thread.Start(threads);
+	}
 	
 	m_state = LC_Ready;
 	sendReady();

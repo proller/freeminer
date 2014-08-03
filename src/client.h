@@ -37,6 +37,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "localplayer.h"
 #include "hud.h"
 #include "particles.h"
+#include "util/thread_pool.h"
 
 struct MeshMakeData;
 class MapBlockMesh;
@@ -86,12 +87,13 @@ struct MeshUpdateResult
 	}
 };
 
-class MeshUpdateThread : public JThread
+class MeshUpdateThread : public thread_pool
 {
 public:
 
-	MeshUpdateThread(IGameDef *gamedef):
+	MeshUpdateThread(IGameDef *gamedef, int id_ = 0):
 		m_gamedef(gamedef)
+		,id(id_)
 	{
 	}
 
@@ -104,6 +106,7 @@ public:
 	IGameDef *m_gamedef;
 	
 	v3s16 m_camera_offset;
+	int id;
 };
 
 enum ClientEventType
