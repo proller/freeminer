@@ -3602,7 +3602,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 				camera_offset_changed){
 			update_draw_list_timer = 0;
 			if (g_settings->getBool("more_threads"))
-				updateDrawList_future = std::async(std::launch::async, [](Client * client, video::IVideoDriver* driver, float dtime){ client->getEnv().getClientMap().updateDrawList(dtime); }, &client, driver, dtime);
+				updateDrawList_future = std::async(std::launch::async, [](Client * client, video::IVideoDriver* driver, float dtime){ client->getEnv().getClientMap().updateDrawList(driver, dtime); }, &client, driver, dtime);
 			else
 				client.getEnv().getClientMap().updateDrawList(driver, dtime);
 			update_draw_list_last_cam_pos = camera_position;
