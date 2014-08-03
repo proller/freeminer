@@ -190,6 +190,11 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 	// Distance to farthest drawn block
 	float farthest_drawn = 0;
 
+			if (!m_drawlist_last) {
+				//driver->runAllOcclusionQueries(false);
+				//driver->updateAllOcclusionQueries();
+			}
+
 
 	{
 	auto lock = m_blocks.lock_shared_rec(std::chrono::milliseconds(1));
@@ -356,7 +361,9 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 //				block->scenenode = getSceneManager()->addMeshSceneNode(mesh->getMesh());
 //				m_device->getVideoDriver()->addOcclusionQuery(r.mesh->scenenode, r.mesh->getMesh());
 			} else {
-				//block->scenenode->setVisible(driver->getOcclusionQueryResult(block->scenenode)>0);
+				//auto visible = driver->getOcclusionQueryResult(block->scenenode);
+				//errorstream<<"block visible="<<visible<<std::endl;
+				//block->scenenode->setVisible(visible>0);
 			}
 
 //continue;
