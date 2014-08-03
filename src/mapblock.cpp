@@ -82,8 +82,10 @@ MapBlock::~MapBlock()
 {
 	auto lock = lock_unique_rec();
 #ifndef SERVER
-	if (scenenode)
+	if (scenenode) {
 		scenenode->remove();
+		scenenode = nullptr;
+	}
 	delMesh();
 #endif
 
