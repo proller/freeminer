@@ -30,7 +30,7 @@ public:
 	void start (int n = 1) {
 		for(int i = 0; i < n; ++i) {
 			workers.emplace_back(std::thread(&thread_pool::func, this));
-		} 
+		}
 	}
 	void stop () {
 		requeststop = true;
@@ -43,7 +43,6 @@ public:
 		workers.clear();
 	}
 
- 
 // JThread compat:
 	void ThreadStarted(){};
 	inline bool StopRequested()

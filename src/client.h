@@ -292,7 +292,7 @@ public:
 			ISoundManager *sound,
 			MtEventManager *event,
 			bool ipv6
-			,bool simple_singleplayer_mode
+			,bool simple_singleplayer_mode_
 	);
 	
 	~Client();
@@ -528,6 +528,7 @@ private:
 	// key = name
 	std::map<std::string, Inventory*> m_detached_inventories;
 	double m_uptime;
+	bool simple_singleplayer_mode;
 
 	// Storage for mesh data for creating multiple instances of the same mesh
 	std::map<std::string, std::string> m_mesh_data;
