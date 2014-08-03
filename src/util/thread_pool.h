@@ -16,45 +16,24 @@ public:
 	std::vector<std::thread> workers;
 	std::atomic_bool requeststop;
 
-	thread_pool() {
-		requeststop = false;
-	};
-	virtual ~thread_pool() {
-		join();
-	};
+	thread_pool();
+	virtual ~thread_pool();
 
-	virtual void func() {
-		Thread();
-	};
+	virtual void func();
 
-	void start (int n = 1) {
-		for(int i = 0; i < n; ++i) {
-			workers.emplace_back(std::thread(&thread_pool::func, this));
-		}
-	}
-	void stop () {
-		requeststop = true;
-	}
-	void join () {
-		stop();
-		for (auto & worker : workers) {
-			worker.join();
-		}
-		workers.clear();
-	}
+	void start (int n = 1);
+	void stop ();
+	void join ();
 
 // JThread compat:
-	void ThreadStarted(){};
-	inline bool StopRequested()
-		{ return requeststop; }
-	inline bool IsRunning()
-		{ return !workers.empty(); }
-	int Start(int n = 1){ start(n); return 0; };
-	inline void Stop()
-		{ stop(); }
-	void Wait(){ join(); };
-	void Kill(){ join(); };
-	virtual void * Thread() { return nullptr; };
+	void ThreadStarted();
+	inline bool StopRequested();
+	inline bool IsRunning();
+	int Start(int n = 1);
+	inline void Stop();
+	void Wait();
+	void Kill();
+	virtual void * Thread();
 };
 
 
