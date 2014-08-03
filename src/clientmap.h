@@ -121,7 +121,7 @@ public:
 		return m_box;
 	}
 	
-	void updateDrawList(float dtime);
+	void updateDrawList(video::IVideoDriver* driver, float dtime);
 	void renderMap(video::IVideoDriver* driver, s32 pass);
 
 	int getBackgroundBrightness(float max_d, u32 daylight_factor,
@@ -156,6 +156,7 @@ private:
 	s16 m_drawlist_current;
 public:
 	u32 m_drawlist_last;
+	irr::scene::SMesh * smesh;
 private:
 
 };

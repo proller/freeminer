@@ -3601,10 +3601,12 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 				update_draw_list_last_cam_pos != camera_position ||
 				camera_offset_changed){
 			update_draw_list_timer = 0;
-//driver->runAllOcclusionQueries(false);
-//driver->updateAllOcclusionQueries();
+			//if (!client.getEnv().getClientMap().m_drawlist_last) {
+			//	driver->runAllOcclusionQueries(false);
+			//	driver->updateAllOcclusionQueries();
+			//}
 			//updateDrawList_future = std::async(std::launch::async, [](Client * client, float dtime){ client->getEnv().getClientMap().updateDrawList(dtime); }, &client, dtime);
-			client.getEnv().getClientMap().updateDrawList(dtime);
+			client.getEnv().getClientMap().updateDrawList(driver, dtime);
 			update_draw_list_last_cam_pos = camera_position;
 		}
 

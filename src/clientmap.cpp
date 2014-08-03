@@ -130,7 +130,7 @@ static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
 	return false;
 }
 
-void ClientMap::updateDrawList(float dtime)
+void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 {
 	ScopeProfiler sp(g_profiler, "CM::updateDrawList()", SPT_AVG);
 	//g_profiler->add("CM::updateDrawList() count", 1);
@@ -240,7 +240,7 @@ void ClientMap::updateDrawList(float dtime)
 			float d = 0.0;
 			if(isBlockInSight(bp, camera_position,
 					camera_direction, 0 /*camera_fov*/,
-					range, &d) == false && d > MAP_BLOCKSIZE*BS)
+					range, &d) == false && d > MAP_BLOCKSIZE*BS && d > range*2)
 			{
 				if (block->scenenode) {
 					block->scenenode->remove();
@@ -350,11 +350,13 @@ void ClientMap::updateDrawList(float dtime)
 
 
 			if (!block->scenenode) {
-				if (block->scenenode)
-					block->scenenode->remove();
+//				if (block->scenenode)
+//					block->scenenode->remove();
 				//block->scenenode = getSceneManager()->addOctreeSceneNode(mesh->getMesh());
-				block->scenenode = getSceneManager()->addMeshSceneNode(mesh->getMesh());
+//				block->scenenode = getSceneManager()->addMeshSceneNode(mesh->getMesh());
 //				m_device->getVideoDriver()->addOcclusionQuery(r.mesh->scenenode, r.mesh->getMesh());
+			} else {
+				//block->scenenode->setVisible(driver->getOcclusionQueryResult(block->scenenode)>0);
 			}
 
 //continue;
