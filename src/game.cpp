@@ -3599,8 +3599,10 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 				update_draw_list_last_cam_dir.getDistanceFrom(camera_direction) > 0.2 ||
 				camera_offset_changed){
 			update_draw_list_timer = 0;
-			//updateDrawList_future = std::async(std::launch::async, [](Client * client, float dtime){ client->getEnv().getClientMap().updateDrawList(dtime); }, &client, dtime);
-			client.getEnv().getClientMap().updateDrawList(dtime);
+			if (g_settings->getBool("more_threads"))
+				updateDrawList_future = std::async(std::launch::async, [](Client * client, float dtime){ client->getEnv().getClientMap().updateDrawList(dtime); }, &client, dtime);
+			else
+				client.getEnv().getClientMap().updateDrawList(dtime);
 			update_draw_list_last_cam_dir = camera_direction;
 		}
 
