@@ -14,33 +14,33 @@ public:
 	std::mutex queue_mutex;
 	std::condition_variable condition;
 	std::vector<std::thread> workers;
-	bool requeststop;
+	std::atomic_bool requeststop;
 
 	thread_pool() {
 		requeststop = false;
 	};
-	~thread_pool(){
-		stop();
+	virtual ~thread_pool() {
+		join();
 	};
 
 	virtual void func() {
 		Thread();
 	};
 
-	void start (unsigned int n = 1) {
-		for(unsigned int i = 0; i < n; ++i) {
+	void start (int n = 1) {
+		for(int i = 0; i < n; ++i) {
 			workers.emplace_back(std::thread(&thread_pool::func, this));
 		} 
 	}
 	void stop () {
 		requeststop = true;
-		join();
-		workers.clear();
 	}
 	void join () {
+		stop();
 		for (auto & worker : workers) {
 			worker.join();
 		}
+		workers.clear();
 	}
 
  
@@ -54,7 +54,8 @@ public:
 	inline void Stop()
 		{ stop(); }
 	void Wait(){ join(); };
-	virtual void * Thread() { return nullptr;};
+	void Kill(){ join(); };
+	virtual void * Thread() { return nullptr; };
 };
 
 
