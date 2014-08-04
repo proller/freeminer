@@ -27,10 +27,10 @@ public:
 
 // JThread compat:
 	void ThreadStarted();
-	inline bool StopRequested();
-	inline bool IsRunning();
+	bool StopRequested();
+	bool IsRunning();
 	int Start(int n = 1);
-	inline void Stop();
+	void Stop();
 	void Wait();
 	void Kill();
 	virtual void * Thread();

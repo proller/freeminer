@@ -23,25 +23,26 @@ void thread_pool::stop () {
 }
 void thread_pool::join () {
 	stop();
-	for (auto & worker : workers) {
-		worker.join();
-	}
+	for (auto & worker : workers)
+		if (worker.joinable())
+			worker.join();
 	workers.clear();
 }
 
 // JThread compat:
 void thread_pool::ThreadStarted() {
 };
-inline bool thread_pool::StopRequested() {
+bool thread_pool::StopRequested() {
 	return requeststop;
 }
-inline bool thread_pool::IsRunning() {
+bool thread_pool::IsRunning() {
 	return !workers.empty();
 }
 int thread_pool::Start(int n) {
-	start(n); return 0;
+	start(n);
+	return 0;
 };
-inline void thread_pool::Stop() {
+void thread_pool::Stop() {
 	stop();
 }
 void thread_pool::Wait() {
