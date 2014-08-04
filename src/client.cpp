@@ -2553,12 +2553,10 @@ void Client::afterContentReceived(IrrlichtDevice *device, gui::IGUIFont* font)
 	// Start mesh update thread after setting up content definitions
 	infostream<<"- Starting mesh update thread"<<std::endl;
 	if (!no_output) {
-		auto threads = porting::getNumberOfProcessors() - (simple_singleplayer_mode ? 2 : 1);
-		if (threads < 1)
-			threads = 1;
-		m_mesh_update_thread.Start(threads);
+		auto threads = !g_settings->getBool("more_threads") ? 1 : (porting::getNumberOfProcessors() - (simple_singleplayer_mode ? 2 : 1));
+		m_mesh_update_thread.Start(threads < 1 ? 1 : threads);
 	}
-	
+
 	m_state = LC_Ready;
 	sendReady();
 	infostream<<"Client::afterContentReceived() done"<<std::endl;
