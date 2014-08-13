@@ -100,7 +100,7 @@ Map::~Map()
 	for(auto &i : m_blocks_delete_2)
 		delete i.first;
 
-	auto lock = m_blocks.lock_unique();
+	auto lock = m_blocks.lock_unique_rec();
 	for(auto &i : m_blocks) {
 
 #ifndef SERVER
@@ -170,6 +170,19 @@ MapNode Map::getNodeNoEx(v3s16 p)
 		return MapNode(CONTENT_IGNORE);
 	v3s16 relpos = p - blockpos*MAP_BLOCKSIZE;
 	return block->getNodeNoCheck(relpos);
+}
+
+MapNode Map::getNodeNoLock(v3s16 p)
+{
+	v3s16 blockpos = getNodeBlockPos(p);
+	MapBlock *block = getBlockNoCreateNoEx(blockpos);
+	if(block == NULL)
+		return MapNode(CONTENT_IGNORE);
+	auto lock = block->try_lock_shared_rec();
+	if (!lock->owns_lock())
+		return MapNode(CONTENT_IGNORE);
+	v3s16 relpos = p - blockpos*MAP_BLOCKSIZE;
+	return block->getNodeNoLock(relpos);
 }
 
 // throws InvalidPositionException if not found
@@ -458,13 +471,17 @@ void Map::spreadLight(enum LightBank bank,
 		if(block->isDummy())
 			continue;
 
-		auto lock = block->lock_unique_rec();
+		//auto lock = block->try_lock_unique_rec();
+		//if (!lock->owns_lock())
+		//	continue;
 
 		// Calculate relative position in block
 		v3s16 relpos = pos - blockpos_last * MAP_BLOCKSIZE;
 
 		// Get node straight from the block
-		MapNode n = block->getNode(relpos);
+		MapNode n = block->getNodeNoLock(relpos);
+		if (n.getContent() == CONTENT_IGNORE)
+			continue;
 
 		u8 oldlight = n.getLight(bank, nodemgr);
 		u8 newlight = diminish_light(oldlight);
@@ -497,7 +514,9 @@ void Map::spreadLight(enum LightBank bank,
 				// Calculate relative position in block
 				v3s16 relpos = n2pos - blockpos * MAP_BLOCKSIZE;
 				// Get node straight from the block
-				MapNode n2 = block->getNode(relpos);
+				MapNode n2 = block->getNodeNoLock(relpos);
+				if (n2.getContent() == CONTENT_IGNORE)
+					continue;
 
 				bool changed = false;
 				/*
@@ -712,8 +731,9 @@ u32 Map::updateLighting(enum LightBank bank,
 			if(block->isDummy())
 				break;
 
-			auto lock = block->lock_unique_rec();
-
+			//auto lock = block->try_lock_unique_rec();
+			//if (!lock->owns_lock())
+			//	break;
 			v3s16 pos = block->getPos();
 			v3s16 posnodes = block->getPosRelative();
 			modified_blocks[pos] = block;
@@ -1493,7 +1513,9 @@ u32 Map::timerUpdate(float uptime, float unload_timeout,
 	std::vector<MapBlock *> blocks_delete;
 	int save_started = 0;
 	{
-	auto lock = m_blocks.lock_shared();
+	auto lock = m_blocks.try_lock_shared_rec();
+	if (!lock->owns_lock())
+		return m_blocks_update_last;
 	for(auto ir : m_blocks) {
 		if (n++ < m_blocks_update_last) {
 			continue;
@@ -1508,8 +1530,9 @@ u32 Map::timerUpdate(float uptime, float unload_timeout,
 			continue;
 
 		{
-			auto lock = block->lock_unique_rec();
-
+			auto lock = block->try_lock_unique_rec();
+			if (!lock->owns_lock())
+				continue;
 			if(block->refGet() == 0 && block->getUsageTimer() > unload_timeout)
 			{
 				v3s16 p = block->getPos();
@@ -2918,10 +2941,11 @@ void ServerMap::finishBlockMake(BlockMakeData *data,
 		/*
 			Set block as modified
 		*/
-/*
+
+		if (g_settings->getBool("save_generated_block"))
 		block->raiseModified(MOD_STATE_WRITE_NEEDED,
 				"finishBlockMake expireDayNightDiff");
-*/
+
 	}
 
 	/*
@@ -3162,7 +3186,10 @@ s32 ServerMap::save(ModifiedState save_level, bool breakable)
 		m_blocks_save_last = 0;
 
 	{
-		auto lock = m_blocks.lock_shared();
+		auto lock = breakable ? m_blocks.try_lock_shared_rec() : m_blocks.lock_shared_rec();
+		if (!lock->owns_lock())
+			return m_blocks_save_last;
+
 		for(auto &jr : m_blocks)
 		{
 			if (n++ < m_blocks_save_last)
@@ -3176,6 +3203,7 @@ s32 ServerMap::save(ModifiedState save_level, bool breakable)
 			if (!block)
 				continue;
 
+
 			block_count_all++;
 
 			if(block->getModified() >= (u32)save_level)
@@ -3187,6 +3215,9 @@ s32 ServerMap::save(ModifiedState save_level, bool breakable)
 				}
 
 				//modprofiler.add(block->getModifiedReason(), 1);
+				auto lock = breakable ? block->try_lock_unique_rec() : block->lock_unique_rec();
+				if (!lock->owns_lock())
+					continue;
 
 				saveBlock(block);
 				block_count++;
@@ -3235,7 +3266,7 @@ void ServerMap::listAllLoadableBlocks(std::list<v3s16> &dst)
 
 void ServerMap::listAllLoadedBlocks(std::list<v3s16> &dst)
 {
-	auto lock = m_blocks.lock_shared();
+	auto lock = m_blocks.lock_shared_rec();
 	for(auto & i : m_blocks)
 		dst.push_back(i.second->getPos());
 }
@@ -3319,15 +3350,104 @@ void ServerMap::endSave()
 
 bool ServerMap::saveBlock(MapBlock *block)
 {
-	auto lock = block->lock_shared_rec();
-	return dbase->saveBlock(block);
+	return saveBlock(block, dbase);
 }
 
-MapBlock* ServerMap::loadBlock(v3s16 blockpos)
+bool ServerMap::saveBlock(MapBlock *block, Database *db)
+{
+	v3s16 p3d = block->getPos();
+
+	// Dummy blocks are not written
+	if (block->isDummy()) {
+		errorstream << "WARNING: saveBlock: Not writing dummy block "
+			<< PP(p3d) << std::endl;
+		return true;
+	}
+
+	// Format used for writing
+	u8 version = SER_FMT_VER_HIGHEST_WRITE;
+
+	/*
+		[0] u8 serialization version
+		[1] data
+	*/
+	std::ostringstream o(std::ios_base::binary);
+	o.write((char*) &version, 1);
+	block->serialize(o, version, true);
+
+	std::string data = o.str();
+	bool ret = db->saveBlock(p3d, data);
+	if(ret) {
+		// We just wrote it to the disk so clear modified flag
+		block->resetModified();
+	}
+	return ret;
+}
+
+MapBlock * ServerMap::loadBlock(v3s16 p3d)
 {
 	DSTACK(__FUNCTION_NAME);
+	ScopeProfiler sp(g_profiler, "ServerMap::loadBlock");
+	const auto sector = this;
+	auto blob = dbase->loadBlock(p3d);
+	if(!blob.length())
+		return nullptr;
 
-	return dbase->loadBlock(blockpos);
+	try {
+		std::istringstream is(blob, std::ios_base::binary);
+
+		u8 version = SER_FMT_VER_INVALID;
+		is.read((char*)&version, 1);
+
+		if(is.fail())
+			throw SerializationError("ServerMap::loadBlock(): Failed"
+					" to read MapBlock version");
+
+		/*u32 block_size = MapBlock::serializedLength(version);
+		SharedBuffer<u8> data(block_size);
+		is.read((char*)*data, block_size);*/
+
+		// This will always return a sector because we're the server
+		//MapSector *sector = emergeSector(p2d);
+
+		MapBlock *block = NULL;
+		bool created_new = false;
+		block = sector->getBlockNoCreateNoEx(p3d);
+		if(block == NULL)
+		{
+			block = sector->createBlankBlockNoInsert(p3d);
+			created_new = true;
+		}
+
+		// Read basic data
+		block->deSerialize(is, version, true);
+
+		// If it's a new block, insert it to the map
+		if(created_new)
+			sector->insertBlock(block);
+
+		// We just loaded it from, so it's up-to-date.
+		block->resetModified();
+		return block;
+	}
+	catch(SerializationError &e)
+	{
+		errorstream<<"Invalid block data in database"
+				<<" ("<<p3d.X<<","<<p3d.Y<<","<<p3d.Z<<")"
+				<<" (SerializationError): "<<e.what()<<std::endl;
+
+		// TODO: Block should be marked as invalid in memory so that it is
+		// not touched but the game can run
+
+		if(g_settings->getBool("ignore_world_load_errors")){
+			errorstream<<"Ignoring block load error. Duck and cover! "
+					<<"(ignore_world_load_errors)"<<std::endl;
+		} else {
+			throw SerializationError("Invalid block data in database");
+			//assert(0);
+		}
+	}
+	return nullptr;
 }
 
 void ServerMap::PrintInfo(std::ostream &out)

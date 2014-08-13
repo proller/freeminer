@@ -42,15 +42,17 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "log_types.h"
 #include "nodedef.h"
 #include "biome.h"
+#include "mapgen_v5.h"
 #include "mapgen_v6.h"
 #include "mapgen_v7.h"
 #include "mapgen_indev.h"
 #include "mapgen_singlenode.h"
 #include "mapgen_math.h"
 #include "circuit.h"
+#include "util/thread_pool.h"
 
 
-class EmergeThread : public JThread
+class EmergeThread : public thread_pool
 {
 public:
 	Server *m_server;
@@ -65,7 +67,6 @@ public:
 	std::queue<v3s16> blockqueue;
 
 	EmergeThread(Server *server, int ethreadid):
-		JThread(),
 		m_server(server),
 		map(NULL),
 		emerge(NULL),
@@ -86,6 +87,7 @@ public:
 
 EmergeManager::EmergeManager(IGameDef *gamedef) {
 	//register built-in mapgens
+	registerMapgen("v5",         new MapgenFactoryV5());
 	registerMapgen("v6",         new MapgenFactoryV6());
 	registerMapgen("v7",         new MapgenFactoryV7());
 	registerMapgen("indev",      new MapgenFactoryIndev());

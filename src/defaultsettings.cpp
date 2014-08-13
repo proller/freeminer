@@ -143,7 +143,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("anisotropic_filter", "false");
 	settings->setDefault("bilinear_filter", "false");
 	settings->setDefault("trilinear_filter", "false");
-	settings->setDefault("preload_item_visuals", "true");
+	settings->setDefault("preload_item_visuals", "false");
 	settings->setDefault("enable_bumpmapping", "false");
 	settings->setDefault("enable_parallax_occlusion", "false");
 	settings->setDefault("generate_normalmaps", "false");
@@ -324,6 +324,19 @@ void set_default_settings(Settings *settings)
 
 	settings->setDefault("language", "");
 
+	// gsmapper
+	settings->setDefault("hud_map", "false");
+	settings->setDefault("hud_map_back", "0,0,0");
+	settings->setDefault("hud_map_width", "128");
+	settings->setDefault("hud_map_height", "128");
+	settings->setDefault("hud_map_scale", "1.0");
+	settings->setDefault("hud_map_alpha", "192");
+	settings->setDefault("hud_map_above", "true");
+	settings->setDefault("hud_map_scan", "64");
+	settings->setDefault("hud_map_surface", "32");
+	settings->setDefault("hud_map_tracking", "false");
+	settings->setDefault("hud_map_border", "16");
+
 	// freeminer user-friendly defaults
 	settings->setDefault("pause_fps_max", "4");
 	settings->setDefault("enable_vbo", "true");
@@ -333,6 +346,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("max_users", "100");
 	settings->setDefault("server_map_save_interval", "300");
 	settings->setDefault("server_unload_unused_data_timeout", "610"); //more than client
+	settings->setDefault("save_generated_block", "true");
 	settings->setDefault("ignore_world_load_errors", "true");
 	settings->setDefault("active_block_range", "4");
 	settings->setDefault("max_block_send_distance", "30");
@@ -351,16 +365,26 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("enable_waving_leaves", "true");
 	settings->setDefault("enable_waving_plants", "true");
 	settings->setDefault("max_objects_per_block", "100");
-	settings->setDefault("preload_item_visuals", "false");
 	settings->setDefault("sqlite_synchronous", "1");
 	settings->setDefault("farmesh", "0");
 	settings->setDefault("farmesh_step", "2");
 	settings->setDefault("farmesh_wanted", "500");
 	settings->setDefault("enable_any_name", "0"); //WARNING!!! SECURITY RISK WITH SOME MODULES
 	settings->setDefault("password_save", "1");
+	settings->setDefault("more_threads", "true");
+
 
 #if !defined(_WIN32) && !CMAKE_USE_IPV4_DEFAULT
 	settings->setDefault("ipv6_server", "true"); // problems on all windows versions (unable to play in local game)
+#endif
+
+
+#if !defined(SERVER) && defined(_MSC_VER)
+	#ifdef NDEBUG
+		settings->setDefault("console_enabled", "false"); //don't enable Windows console
+	#else
+		settings->setDefault("console_enabled", "true"); //enable Windows console
+	#endif
 #endif
 
 #ifdef __ANDROID__

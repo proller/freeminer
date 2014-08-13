@@ -148,8 +148,6 @@ if(WIN32)
 		set(FREETYPE_LIBRARY "${PROJECT_SOURCE_DIR}/../../freetype2/objs/win32/vc2005/freetype247.lib"
 				CACHE FILEPATH "Path to freetype247.lib")
 	endif(USE_FREETYPE)
-	set(MINGWM10_DLL ""
-			CACHE FILEPATH "Path to mingwm10.dll (for installation)")
 	if(ENABLE_SOUND)
 		set(OPENAL_DLL "" CACHE FILEPATH "Path to OpenAL32.dll for installation (optional)")
 		set(OGG_DLL "" CACHE FILEPATH "Path to libogg.dll for installation (optional)")
@@ -321,6 +319,11 @@ if(ENABLE_LEVELDB)
 	endif(LEVELDB_LIBRARY AND LEVELDB_INCLUDE_DIR AND SNAPPY_LIBRARY AND SNAPPY_INCLUDE_DIR)
 endif(ENABLE_LEVELDB)
 
+# this is needed because VS builds install LevelDB via nuget
+if(FORCE_LEVELDB)
+	set(USE_LEVELDB 1)
+endif()
+
 #option(ENABLE_MANDELBULBER "Use Mandelbulber source to generate more fractals in math mapgen" OFF)
 set(USE_MANDELBULBER 1)
 #find_package(Mandelbulber)
@@ -391,6 +394,7 @@ set(common_SRCS
 	content_sao.cpp
 	emerge.cpp
 	mapgen.cpp
+	mapgen_v5.cpp
 	mapgen_v6.cpp
 	mapgen_v7.cpp
 	mapgen_indev.cpp
@@ -505,6 +509,7 @@ set(minetest_SRCS
 	convert_json.cpp
 	FMColoredString.cpp
 	drawscene.cpp
+	gsmapper.cpp
 	${minetest_SCRIPT_SRCS}
 )
 
@@ -562,6 +567,8 @@ if(BUILD_CLIENT)
 		${PROJECT_NAME}
 		${ZLIB_LIBRARIES}
 		${IRRLICHT_LIBRARY}
+		${OPENGLES2_LIBRARIES}
+		${EGL_LIBRARIES}
 		${OPENGL_LIBRARIES}
 		${JPEG_LIBRARIES}
 		${BZIP2_LIBRARIES}
@@ -572,8 +579,6 @@ if(BUILD_CLIENT)
 		${SQLITE3_LIBRARY}
 		${LUA_LIBRARY}
 		${JSON_LIBRARY}
-		${OPENGLES2_LIBRARIES}
-		${EGL_LIBRARIES}
 		${PLATFORM_LIBS}
 		${CLIENT_PLATFORM_LIBS}
 	)
@@ -612,9 +617,9 @@ if(BUILD_CLIENT)
 			${CGUITTFONT_LIBRARY}
 		)
 	endif(USE_FREETYPE)
-	if (USE_LEVELDB)
+	if (USE_LEVELDB AND NOT FORCE_LEVELDB)
 		target_link_libraries(${PROJECT_NAME} ${LEVELDB_LIBRARY} ${SNAPPY_LIBRARY})
-	endif(USE_LEVELDB)
+	endif(USE_LEVELDB AND NOT FORCE_LEVELDB)
 	if (USE_REDIS)
 		target_link_libraries(${PROJECT_NAME} ${REDIS_LIBRARY})
 	endif(USE_REDIS)
@@ -680,6 +685,7 @@ if(MSVC)
 	endif(BUILD_SERVER)
 
 	target_link_libraries(${PROJECT_NAME} shlwapi.lib)
+	add_definitions(-DNOMINMAX)
 else()
 	# Probably GCC
 	if(APPLE)
@@ -771,12 +777,6 @@ endif()
 if(WIN32)
 	if(NOT STATIC_BUILD)
 
-	if(MINGWM10_DLL)
-		install(FILES ${MINGWM10_DLL} DESTINATION ${BINDIR})
-	endif()
-	if(DEFINED ZLIB_DLL)
-		install(FILES ${ZLIB_DLL} DESTINATION ${BINDIR})
-	endif()
 	if(USE_SOUND)
 		if(OPENAL_DLL)
 			install(FILES ${OPENAL_DLL} DESTINATION ${BINDIR})
@@ -793,6 +793,19 @@ if(WIN32)
 	endif()
 	if(CURL_DLL)
 		install(FILES ${CURL_DLL} DESTINATION ${BINDIR})
+	endif()
+
+	if(ZLIB_DLL)
+		install(FILES ${ZLIB_DLL} DESTINATION ${BINDIR})
+	endif()
+	if(ZLIBWAPI_DLL)
+		install(FILES ${ZLIBWAPI_DLL} DESTINATION ${BINDIR})
+	endif()
+	if(FREETYPE_DLL)
+		install(FILES ${FREETYPE_DLL} DESTINATION ${BINDIR})
+	endif()
+	if(LEVELDB_DLL)
+		install(FILES ${LEVELDB_DLL} DESTINATION ${BINDIR})
 	endif()
 	endif()
 endif()
