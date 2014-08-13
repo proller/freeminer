@@ -40,7 +40,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "log_types.h"
 
-//COPYPASTE!
+//VERY BAD COPYPASTE FROM clientmap.cpp!
 static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
 		float start_off, float end_off, u32 needed_count, INodeDefManager *nodemgr)
 {
@@ -350,11 +350,6 @@ int RemoteClient::GetNextBlocks(
 				}
 			}
 
-
-
-
-
-
 			/*
 				Check if map has this block
 			*/
@@ -408,6 +403,7 @@ int RemoteClient::GetNextBlocks(
 			s16 bs2 = MAP_BLOCKSIZE/2 + 1;
 			u32 needed_count = 1;
 //infostream<<" occparams "<<" p="<<cam_pos_nodes<<" en="<<occlusion_culling_enabled<<" d="<<d<<" pnod="<<n<<" solid="<<(int)nodemgr->get(n).solidness<<std::endl;
+			//VERY BAD COPYPASTE FROM clientmap.cpp!
 			if(
 				occlusion_culling_enabled &&
 				isOccluded(&env->getMap(), spn, cpn + v3s16(0,0,0),
@@ -430,20 +426,11 @@ int RemoteClient::GetNextBlocks(
 					step, stepfac, startoff, endoff, needed_count, nodemgr)
 			)
 			{
-infostream<<" occlusion player="<<cam_pos_nodes<<" d="<<d<<" block="<<cpn<<" total="<<blocks_occlusion_culled<<std::endl;
+//infostream<<" occlusion player="<<cam_pos_nodes<<" d="<<d<<" block="<<cpn<<" total="<<blocks_occlusion_culled<<"/"<<num_blocks_selected<<std::endl;
 				blocks_occlusion_culled++;
 				continue;
 			}
 }
-
-
-
-
-
-
-
-
-
 
 				// Reset usage timer, this block will be of use in the future.
 				block->resetUsageTimer();

@@ -33,7 +33,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/numeric.h"
 #include "util/serialize.h"
 //#include "profiler.h" // For TimeTaker
-
+#include "shader.h"
 /*
 	NodeBox
 */
@@ -750,14 +750,15 @@ public:
 				if (f->name == "default:water_source")
 					is_water_surface = true;
 			}
-#ifndef SERVER
 			u32 tile_shader[6];
+			if (shdsrc) {
 			for(u16 j=0; j<6; j++)
 				tile_shader[j] = shdsrc->getShader("nodes_shader",material_type, f->drawtype);
 
 			if (is_water_surface)
 				tile_shader[0] = shdsrc->getShader("water_surface_shader",material_type, f->drawtype);
-
+			}
+#ifndef SERVER
 			if (tsrc) {
 			// Tiles (fill in f->tiles[])
 			for(u16 j=0; j<6; j++){
