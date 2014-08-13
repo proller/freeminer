@@ -50,20 +50,18 @@ static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
 	uf.normalize();
 	v3f p0f = v3f(p0.X, p0.Y, p0.Z) * BS;
 	u32 count = 0;
-//infostream<<"occcy "<< start_off<<" "<<d0<<" "<<end_off<<" "<<step<<std::endl;
 	for(float s=start_off; s<d0+end_off; s+=step){
 		v3f pf = p0f + uf * s;
 		v3s16 p = floatToInt(pf, BS);
 		MapNode n = map->getNodeNoEx(p);
-		if (n.getContent() == CONTENT_IGNORE)
-			return true;//false;
+		if (n.getContent() == CONTENT_IGNORE) // ONE DIFFERENCE FROM clientmap.cpp
+			return true; //false;
 		bool is_transparent = false;
 		const ContentFeatures &f = nodemgr->get(n);
 		if(f.solidness == 0)
 			is_transparent = (f.visual_solidness != 2);
 		else
 			is_transparent = (f.solidness != 2);
-//infostream<<"occtest "<<" p="<<p<<" n="<<n<<"tra="<<is_transparent<<" count="<<count<<std::endl;
 		if(!is_transparent){
 			count++;
 			if(count >= needed_count)
@@ -364,12 +362,7 @@ int RemoteClient::GetNextBlocks(
 					continue;
 				}
 
-
-
-
-
-
-{
+		{
 			/*
 				Occlusion culling
 			*/
@@ -430,7 +423,7 @@ int RemoteClient::GetNextBlocks(
 				blocks_occlusion_culled++;
 				continue;
 			}
-}
+		}
 
 				// Reset usage timer, this block will be of use in the future.
 				block->resetUsageTimer();
