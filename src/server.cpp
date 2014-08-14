@@ -70,7 +70,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "circuit.h"
 
 #include <chrono>
-#include <thread>
+#include "util/thread_pool.h"
 
 class ClientNotFoundException : public BaseException
 {
@@ -80,13 +80,12 @@ public:
 	{}
 };
 
-class MapThread : public JThread
+class MapThread : public thread_pool
 {
 	Server *m_server;
 public:
 
 	MapThread(Server *server):
-		JThread(),
 		m_server(server)
 	{}
 
@@ -122,13 +121,12 @@ public:
 	}
 };
 
-class SendBlocksThread : public JThread
+class SendBlocksThread : public thread_pool
 {
 	Server *m_server;
 public:
 
 	SendBlocksThread(Server *server):
-		JThread(),
 		m_server(server)
 	{}
 
@@ -146,9 +144,9 @@ public:
 		while(!StopRequested()) {
 			//infostream<<"S run d="<<m_server->m_step_dtime<< " myt="<<(porting::getTimeMs() - time)/1000.0f<<std::endl;
 			try {
-				m_server->SendBlocks((porting::getTimeMs() - time)/1000.0f);
+				int sent = m_server->SendBlocks((porting::getTimeMs() - time)/1000.0f);
 				time = porting::getTimeMs();
-				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				std::this_thread::sleep_for(std::chrono::milliseconds(sent ? 5 : 100));
 #ifdef NDEBUG
 			} catch (BaseException &e) {
 				errorstream<<"SendBlocksThread: exception: "<<e.what()<<std::endl;
@@ -169,14 +167,13 @@ public:
 
 
 
-class ServerThread : public JThread
+class ServerThread : public thread_pool
 {
 	Server *m_server;
 
 public:
 
 	ServerThread(Server *server):
-		JThread(),
 		m_server(server)
 	{
 	}
@@ -319,6 +316,7 @@ Server::Server(
 
 	m_step_dtime = 0.0;
 	m_lag = g_settings->getFloat("dedicated_server_step");
+	more_threads = g_settings->getBool("more_threads");
 
 	if(path_world == "")
 		throw ServerError("Supplied empty world path");
@@ -347,9 +345,10 @@ Server::Server(
 	// Create emerge manager
 	m_emerge = new EmergeManager(this);
 
-	m_map_thread = new MapThread(this);
-	m_sendblocks = new SendBlocksThread(this);
-	
+	if (more_threads) {
+		m_map_thread = new MapThread(this);
+		m_sendblocks = new SendBlocksThread(this);
+	}
 
 	// Create world if it doesn't exist
 	if(!initializeWorld(m_path_world, m_gamespec.id))
@@ -417,8 +416,6 @@ Server::Server(
 
 	m_script = new GameScripting(this);
 	
-	m_circuit = new Circuit(m_script, path_world);
-
 	std::string scriptpath = getBuiltinLuaPath() + DIR_DELIM "init.lua";
 
 	if (!m_script->loadScript(scriptpath)) {
@@ -454,6 +451,7 @@ Server::Server(
 
 	// Apply item aliases in the node definition manager
 	m_nodedef->updateAliases(m_itemdef);
+	m_nodedef->updateTextures(nullptr,nullptr);
 
 	// Load the mapgen params from global settings now after any
 	// initial overrides have been set by the mods
@@ -461,6 +459,7 @@ Server::Server(
 
 	// Initialize Environment
 	ServerMap *servermap = new ServerMap(path_world, this, m_emerge, m_circuit);
+	m_circuit = new Circuit(m_script, servermap, ndef(), path_world);
 	m_env = new ServerEnvironment(servermap, m_script, m_circuit, this, m_path_world);
 	m_emerge->env = m_env;
 
@@ -516,8 +515,10 @@ Server::~Server()
 	stop();
 	delete m_thread;
 
-	delete m_sendblocks;
-	delete m_map_thread;
+	if (m_sendblocks)
+		delete m_sendblocks;
+	if (m_map_thread)
+		delete m_map_thread;
 
 	// stop all emerge threads before deleting players that may have
 	// requested blocks to be emerged
@@ -557,8 +558,10 @@ void Server::start(Address bind_addr)
 
 	// Stop thread if already running
 	m_thread->Stop();
-	m_sendblocks->Stop();
-	m_map_thread->Stop();
+	if (m_sendblocks)
+		m_sendblocks->Stop();
+	if (m_map_thread)
+		m_map_thread->Stop();
 	
 	// Initialize connection
 	m_con.SetTimeoutMs(30);
@@ -566,8 +569,10 @@ void Server::start(Address bind_addr)
 
 	// Start thread
 	m_thread->Start();
-	m_map_thread->Start();
-	m_sendblocks->Start();
+	if (m_map_thread)
+		m_map_thread->Start();
+	if (m_sendblocks)
+		m_sendblocks->Start();
 
 	actionstream << "\033[1mfree\033[1;33mminer \033[1;36mv" << minetest_version_hash << "\033[0m \t"
 #ifndef NDEBUG
@@ -591,14 +596,17 @@ void Server::stop()
 
 	// Stop threads (set run=false first so both start stopping)
 	m_thread->Stop();
-	m_thread->Stop();
 	//m_emergethread.setRun(false);
 	m_thread->Wait();
 	//m_emergethread.stop();
-	m_sendblocks->Stop();
-	m_sendblocks->Wait();
-	m_map_thread->Stop();
-	m_map_thread->Wait();
+	if (m_sendblocks) {
+		m_sendblocks->Stop();
+		m_sendblocks->Wait();
+	}
+	if (m_map_thread) {
+		m_map_thread->Stop();
+		m_map_thread->Wait();
+	}
 
 	infostream<<"Server: Threads stopped"<<std::endl;
 }
@@ -633,10 +641,11 @@ void Server::AsyncRunStep(bool initial_step)
 		dtime = m_step_dtime;
 	}
 
+	if (!more_threads)
 	{
 		TimeTaker timer_step("Server step: SendBlocks");
 		// Send blocks to clients
-		//SendBlocks(dtime);
+		SendBlocks(dtime);
 	}
 
 	if((dtime < 0.001) && (initial_step == false))
@@ -770,6 +779,9 @@ void Server::AsyncRunStep(bool initial_step)
 			}
 		}
 	}
+
+	if (!more_threads)
+		AsyncRunMapStep(false);
 
 	m_clients.step(dtime);
 
@@ -1222,7 +1234,7 @@ void Server::AsyncRunStep(bool initial_step)
 	}
 }
 
-int Server::AsyncRunMapStep(bool initial_step) {
+int Server::AsyncRunMapStep(bool async) {
 	DSTACK(__FUNCTION_NAME);
 
 	TimeTaker timer_step("Server map step");
@@ -1236,7 +1248,7 @@ int Server::AsyncRunMapStep(bool initial_step) {
 		dtime = m_step_dtime;
 	}
 
-	u32 max_cycle_ms = 500;
+	u32 max_cycle_ms = async ? 2000 : 300;
 
 	const float map_timer_and_unload_dtime = 10.92;
 	if(m_map_timer_and_unload_interval.step(dtime, map_timer_and_unload_dtime))
@@ -1958,13 +1970,19 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 
 		if (playersao == NULL) {
 			errorstream
-				<< "TOSERVER_CLIENT_READY stage 2 client init failed for peer "
+				<< "TOSERVER_CLIENT_READY stage 2 client init failed for peer_id: "
 				<< peer_id << std::endl;
+			m_con.DisconnectPeer(peer_id);
 			return;
 		}
 
-		if(datasize < 2+8)
+		if(datasize < 2+8) {
+			errorstream
+				<< "TOSERVER_CLIENT_READY client sent inconsistent data, disconnecting peer_id: "
+				<< peer_id << std::endl;
+			m_con.DisconnectPeer(peer_id);
 			return;
+		}
 
 		m_clients.setClientVersion(
 				peer_id,
@@ -4057,7 +4075,7 @@ void Server::SendBlockNoLock(u16 peer_id, MapBlock *block, u8 ver, u16 net_proto
 	m_clients.send(peer_id, 2, reply, reliable);
 }
 
-void Server::SendBlocks(float dtime)
+int Server::SendBlocks(float dtime)
 {
 	DSTACK(__FUNCTION_NAME);
 	//TimeTaker timer("SendBlocks inside");
@@ -4066,6 +4084,8 @@ void Server::SendBlocks(float dtime)
 	//TODO check if one big lock could be faster then multiple small ones
 
 	//ScopeProfiler sp(g_profiler, "Server: sel and send blocks to clients");
+
+	int total = 0;
 
 	std::vector<PrioritySortedBlockTransfer> queue;
 
@@ -4081,10 +4101,10 @@ void Server::SendBlocks(float dtime)
 		{
 			RemoteClient *client = m_clients.lockedGetClientNoEx(*i, CS_Active);
 
-			if (client == NULL)
-				return;
+			if (!client)
+				continue;
 
-			client->GetNextBlocks(m_env,m_emerge, dtime, m_uptime.get() + m_env->m_game_time_start, queue);
+			total += client->GetNextBlocks(m_env,m_emerge, dtime, m_uptime.get() + m_env->m_game_time_start, queue);
 		}
 		//m_clients.Unlock();
 	}
@@ -4120,8 +4140,10 @@ void Server::SendBlocks(float dtime)
 		SendBlockNoLock(q.peer_id, block, client->serialization_version, client->net_proto_version, 1);
 
 		client->SentBlock(q.pos, m_uptime.get() + m_env->m_game_time_start);
+		++total;
 	}
 	//m_clients.Unlock();
+	return total;
 }
 
 void Server::fillMediaCache()

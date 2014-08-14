@@ -192,7 +192,7 @@ public:
 	void step(float dtime);
 	// This is run by ServerThread and does the actual processing
 	void AsyncRunStep(bool initial_step=false);
-	int AsyncRunMapStep(bool initial_step=false);
+	int AsyncRunMapStep(bool async=true);
 	u16 Receive();
 	PlayerSAO* StageTwoClientInit(u16 peer_id);
 	void ProcessData(u8 *data, u32 datasize, u16 peer_id);
@@ -405,7 +405,7 @@ private:
 
 	// Sends blocks to clients (locks env and con on its own)
 public:
-	void SendBlocks(float dtime);
+	int SendBlocks(float dtime);
 private:
 
 	void fillMediaCache();
@@ -639,6 +639,8 @@ private:
 public:
 	shared_map<v3s16, MapBlock*> m_modified_blocks;
 	shared_map<v3s16, MapBlock*> m_lighting_modified_blocks;
+	bool more_threads;
+
 private:
 };
 

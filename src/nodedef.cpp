@@ -33,7 +33,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/numeric.h"
 #include "util/serialize.h"
 //#include "profiler.h" // For TimeTaker
-
+#include "shader.h"
 /*
 	NodeBox
 */
@@ -178,11 +178,11 @@ void ContentFeatures::reset()
 	/*
 		Cached stuff
 	*/
-#ifndef SERVER
+//#ifndef SERVER
 	solidness = 2;
 	visual_solidness = 0;
 	backface_culling = true;
-#endif
+//#endif
 	has_on_construct = false;
 	has_on_destruct = false;
 	has_after_destruct = false;
@@ -239,14 +239,14 @@ void ContentFeatures::reset()
 
 	is_circuit_element = false;
 	is_wire = false;
-	is_connector = false;
+	is_wire_connector = false;
 	for(int i = 0; i < 6; ++i)
 	{
 		wire_connections[i] = 0;
 	}
 	for(int i = 0; i < 64; ++i)
 	{
-		circuit_element_states[i] = 0;
+		circuit_element_func[i] = 0;
 	}
 	circuit_element_delay = 0;
 }
@@ -645,13 +645,17 @@ public:
 	virtual void updateTextures(ITextureSource *tsrc,
 		IShaderSource *shdsrc)
 	{
-#ifndef SERVER
+
+//#ifndef SERVER
 		infostream<<"CNodeDefManager::updateTextures(): Updating "
 				<<"textures in node definitions"<<std::endl;
 
 		bool new_style_water = g_settings->getBool("new_style_water");
 		bool new_style_leaves = g_settings->getBool("new_style_leaves");
 		bool opaque_water = g_settings->getBool("opaque_water");
+		bool enable_shaders = g_settings->getBool("enable_shaders");
+		bool enable_bumpmapping = g_settings->getBool("enable_bumpmapping");
+		bool enable_parallax_occlusion = g_settings->getBool("enable_parallax_occlusion");
 
 		for(u32 i=0; i<m_content_features.size(); i++)
 		{
@@ -747,12 +751,15 @@ public:
 					is_water_surface = true;
 			}
 			u32 tile_shader[6];
+			if (shdsrc) {
 			for(u16 j=0; j<6; j++)
 				tile_shader[j] = shdsrc->getShader("nodes_shader",material_type, f->drawtype);
 
 			if (is_water_surface)
 				tile_shader[0] = shdsrc->getShader("water_surface_shader",material_type, f->drawtype);
-
+			}
+#ifndef SERVER
+			if (tsrc) {
 			// Tiles (fill in f->tiles[])
 			for(u16 j=0; j<6; j++){
 				// Shader
@@ -761,6 +768,9 @@ public:
 				f->tiles[j].texture = tsrc->getTexture(
 						tiledef[j].name,
 						&f->tiles[j].texture_id);
+				// Normal texture
+				if (enable_shaders && (enable_bumpmapping || enable_parallax_occlusion))
+					f->tiles[j].normal_texture = tsrc->getNormalTexture(tiledef[j].name);
 				// Alpha
 				f->tiles[j].alpha = f->alpha;
 				// Material type
@@ -772,28 +782,32 @@ public:
 				if(tiledef[j].animation.type == TAT_VERTICAL_FRAMES)
 					f->tiles[j].material_flags |= MATERIAL_FLAG_ANIMATION_VERTICAL_FRAMES;
 				// Animation parameters
-				if(f->tiles[j].material_flags &
-						MATERIAL_FLAG_ANIMATION_VERTICAL_FRAMES)
-				{
+				int frame_count = 1;
+				if(f->tiles[j].material_flags &	MATERIAL_FLAG_ANIMATION_VERTICAL_FRAMES) {
 					// Get texture size to determine frame count by
 					// aspect ratio
 					v2u32 size = f->tiles[j].texture->getOriginalSize();
 					int frame_height = (float)size.X /
 							(tiledef[j].animation.aspect_w ? (float)tiledef[j].animation.aspect_w : 1) *
 							(tiledef[j].animation.aspect_h ? (float)tiledef[j].animation.aspect_h : 1);
-					int frame_count = size.Y / (frame_height ? frame_height : size.Y ? size.Y : 1);
+					frame_count = size.Y / (frame_height ? frame_height : size.Y ? size.Y : 1);
 					int frame_length_ms = 1000.0 *
 							tiledef[j].animation.length / frame_count;
 					f->tiles[j].animation_frame_count = frame_count;
 					f->tiles[j].animation_frame_length_ms = frame_length_ms;
-
-					// If there are no frames for an animation, switch
-					// animation off (so that having specified an animation
-					// for something but not using it in the texture pack
-					// gives no overhead)
-					if(frame_count == 1){
-						f->tiles[j].material_flags &=
-								~MATERIAL_FLAG_ANIMATION_VERTICAL_FRAMES;
+				}
+				if(frame_count == 1) {
+					f->tiles[j].material_flags &= ~MATERIAL_FLAG_ANIMATION_VERTICAL_FRAMES;
+				} else {
+					std::ostringstream os(std::ios::binary);
+					for (int i = 0; i < frame_count; i++) {
+						FrameSpec frame;
+						os.str("");
+						os<<tiledef[j].name<<"^[verticalframe:"<<frame_count<<":"<<i;
+						frame.texture = tsrc->getTexture(os.str(), &frame.texture_id);
+						if (f->tiles[j].normal_texture)
+							frame.normal_texture = tsrc->getNormalTexture(os.str());
+						f->tiles[j].frames[i]=frame;
 					}
 				}
 			}
@@ -806,6 +820,9 @@ public:
 				f->special_tiles[j].texture = tsrc->getTexture(
 						f->tiledef_special[j].name,
 						&f->special_tiles[j].texture_id);
+				// Normal texture
+				if (enable_shaders && (enable_bumpmapping || enable_parallax_occlusion))
+					f->special_tiles[j].normal_texture = tsrc->getNormalTexture(f->tiledef_special[j].name);
 				// Alpha
 				f->special_tiles[j].alpha = f->alpha;
 				// Material type
@@ -817,33 +834,39 @@ public:
 				if(f->tiledef_special[j].animation.type == TAT_VERTICAL_FRAMES)
 					f->special_tiles[j].material_flags |= MATERIAL_FLAG_ANIMATION_VERTICAL_FRAMES;
 				// Animation parameters
-				if(f->special_tiles[j].material_flags &
-						MATERIAL_FLAG_ANIMATION_VERTICAL_FRAMES)
-				{
+				int frame_count = 1;
+				if(f->special_tiles[j].material_flags &	MATERIAL_FLAG_ANIMATION_VERTICAL_FRAMES) {
 					// Get texture size to determine frame count by
 					// aspect ratio
 					v2u32 size = f->special_tiles[j].texture->getOriginalSize();
 					int frame_height = (float)size.X /
 							(f->tiledef_special[j].animation.aspect_w ? (float)f->tiledef_special[j].animation.aspect_w : 1) *
 							(f->tiledef_special[j].animation.aspect_h ? (float)f->tiledef_special[j].animation.aspect_h : 1);
-					int frame_count = size.Y / (frame_height ? frame_height : size.Y ? size.Y : 1);
+					frame_count = size.Y / (frame_height ? frame_height : size.Y ? size.Y : 1);
 					int frame_length_ms = 1000.0 *
 							f->tiledef_special[j].animation.length / frame_count;
 					f->special_tiles[j].animation_frame_count = frame_count;
 					f->special_tiles[j].animation_frame_length_ms = frame_length_ms;
-
-					// If there are no frames for an animation, switch
-					// animation off (so that having specified an animation
-					// for something but not using it in the texture pack
-					// gives no overhead)
-					if(frame_count == 1){
-						f->special_tiles[j].material_flags &=
-								~MATERIAL_FLAG_ANIMATION_VERTICAL_FRAMES;
+				}
+				if(frame_count == 1) {
+					f->special_tiles[j].material_flags &= ~MATERIAL_FLAG_ANIMATION_VERTICAL_FRAMES;
+				} else {
+					std::ostringstream os(std::ios::binary);
+					for (int i = 0; i < frame_count; i++) {
+						FrameSpec frame;
+						os.str("");
+						os<<f->tiledef_special[j].name<<"^[verticalframe:"<<frame_count<<":"<<i;
+						frame.texture = tsrc->getTexture(os.str(), &frame.texture_id);
+						if (f->special_tiles[j].normal_texture)
+							frame.normal_texture = tsrc->getNormalTexture(os.str());
+						f->special_tiles[j].frames[i]=frame;
 					}
 				}
 			}
-		}
+			}
 #endif
+		}
+//#endif
 	}
 	void serialize(std::ostream &os, u16 protocol_version)
 	{

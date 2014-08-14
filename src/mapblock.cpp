@@ -47,8 +47,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
-		heat(0),
-		humidity(0),
 		heat_last_update(0),
 		humidity_last_update(0),
 		m_uptime_timer_last(0),
@@ -66,6 +64,8 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 		m_usage_timer(0),
 		m_refcount(0)
 {
+	heat = 0;
+	humidity = 0;
 	m_changed_timestamp = 0;
 	data = NULL;
 	if(dummy == false)
@@ -104,51 +104,18 @@ MapNode MapBlock::getNodeParent(v3s16 p)
 {
 	if(isValidPosition(p) == false)
 	{
-		return m_parent->getNode(getPosRelative() + p);
+		auto n = m_parent->getNodeNoLock(getPosRelative() + p);
+		if (n.getContent() == CONTENT_IGNORE)
+			throw InvalidPositionException();
+		return n;
 	}
 	else
 	{
 		if(data == NULL)
 			throw InvalidPositionException();
-		auto lock = lock_shared_rec();
-		return data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X];
-	}
-}
-
-void MapBlock::setNodeParent(v3s16 p, MapNode & n)
-{
-	if(isValidPosition(p) == false)
-	{
-		m_parent->setNode(getPosRelative() + p, n);
-	}
-	else
-	{
-		if(data == NULL)
+		auto lock = try_lock_shared_rec();
+		if (!lock->owns_lock())
 			throw InvalidPositionException();
-		auto lock = lock_unique_rec();
-		data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X] = n;
-	}
-}
-
-MapNode MapBlock::getNodeParentNoEx(v3s16 p)
-{
-	if(isValidPosition(p) == false)
-	{
-		try{
-			return m_parent->getNode(getPosRelative() + p);
-		}
-		catch(InvalidPositionException &e)
-		{
-			return MapNode(CONTENT_IGNORE);
-		}
-	}
-	else
-	{
-		if(data == NULL)
-		{
-			return MapNode(CONTENT_IGNORE);
-		}
-		auto lock = lock_shared_rec();
 		return data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X];
 	}
 }
@@ -792,25 +759,6 @@ void MapBlock::deSerializeNetworkSpecific(std::istream &is)
 
 void MapBlock::pushElementsToCircuit(Circuit* circuit)
 {
-	INodeDefManager* ndef = m_gamedef->ndef();
-	v3s16 pos;
-	for(int x = 0; x < 16; ++x)
-	{
-		for(int y = 0; y < 16; ++y)
-		{
-			for(int z = 0; z < 16; ++z)
-			{
-				MapNode tmp_node = data[z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + y*MAP_BLOCKSIZE + x];
-				if(ndef->get(tmp_node).is_circuit_element)
-				{
-					pos.X = m_pos.X * MAP_BLOCKSIZE + x;
-					pos.Y = m_pos.Y * MAP_BLOCKSIZE + y;
-					pos.Z = m_pos.Z * MAP_BLOCKSIZE + z;
-					circuit->pushElementToQueue(pos);
-				}
-			}
-		}
-	}
 }
 
 #ifndef SERVER

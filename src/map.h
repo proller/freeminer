@@ -192,6 +192,7 @@ public:
 
 	// Returns a CONTENT_IGNORE node if not found
 	MapNode getNodeNoEx(v3s16 p);
+	MapNode getNodeNoLock(v3s16 p);
 
 	void unspreadLight(enum LightBank bank,
 			std::map<v3s16, u8> & from_nodes,
@@ -259,7 +260,7 @@ public:
 
 	// Server implements this.
 	// Client leaves it as no-op.
-	virtual bool saveBlock(MapBlock *block){ return false; };
+	virtual bool saveBlock(MapBlock *block) { return false; };
 
 	/*
 		Updates usage timers and unloads unused blocks and sectors.
@@ -453,6 +454,7 @@ public:
 	void saveMapMeta();
 	void loadMapMeta();
 
+	bool saveBlock(MapBlock *block, Database *db);
 	bool saveBlock(MapBlock *block);
 	MapBlock* loadBlock(v3s16 p);
 
@@ -536,4 +538,3 @@ protected:
 };
 
 #endif
-

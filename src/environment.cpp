@@ -52,13 +52,13 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
 Environment::Environment():
-	m_time_of_day(9000),
 	m_time_of_day_f(9000./24000),
 	m_time_of_day_speed(0),
 	m_time_counter(0),
 	m_enable_day_night_ratio_override(false),
 	m_day_night_ratio_override(0.0f)
 {
+	m_time_of_day = 9000;
 }
 
 Environment::~Environment()
@@ -661,6 +661,10 @@ void ServerEnvironment::loadMeta()
 		if(m_aabms_empty)
 			return;
 
+		auto lock = block->try_lock_unique_rec();
+		if (!lock->owns_lock())
+			return;
+
 		ScopeProfiler sp(g_profiler, "ABM apply", SPT_ADD);
 		ServerMap *map = &m_env->getServerMap();
 
@@ -697,8 +701,10 @@ void ServerEnvironment::loadMeta()
 					{
 						if(p1 == p)
 							continue;
-						MapNode n = map->getNodeNoEx(p1);
+						MapNode n = map->getNodeNoLock(p1);
 						content_t c = n.getContent();
+						if (c == CONTENT_IGNORE)
+							continue;
 						if(required_neighbors.get(c)){
 							neighbor = n;
 							goto neighbor_found;
@@ -803,13 +809,7 @@ bool ServerEnvironment::setNode(v3s16 p, const MapNode &n, s16 fast)
 		return false;
 	}
 
-	if(ndef->get(n).is_wire) {
-		m_circuit->addWire(getMap(), ndef, p);
-	}
-	// Call circuit update
-	if(ndef->get(n).is_circuit_element) {
-		m_circuit->addElement(getMap(), ndef, p, ndef->get(n).circuit_element_states);
-	}
+	m_circuit->addNode(p);
 
 	// Call post-destructor
 	if(ndef->get(n_old).has_after_destruct)
@@ -841,12 +841,8 @@ bool ServerEnvironment::removeNode(v3s16 p, s16 fast)
 	if(!succeeded)
 		return false;
 	}
-	if(ndef->get(n_old).is_wire) {
-		m_circuit->removeWire(*m_map, ndef, p, n_old);
-	}
-	if(ndef->get(n_old).is_circuit_element) {
-		m_circuit->removeElement(p);
-	}
+
+	m_circuit->removeNode(p, n_old);
 
 	// Call post-destructor
 	if(ndef->get(n_old).has_after_destruct)
@@ -857,30 +853,11 @@ bool ServerEnvironment::removeNode(v3s16 p, s16 fast)
 
 bool ServerEnvironment::swapNode(v3s16 p, const MapNode &n)
 {
-	INodeDefManager *ndef = m_gamedef->ndef();
+	//INodeDefManager *ndef = m_gamedef->ndef();
 	MapNode n_old = m_map->getNodeNoEx(p);
 	bool succeeded = m_map->addNodeWithEvent(p, n, false);
 	if(succeeded) {
-		MapNode n_new = n;
-		if(ndef->get(n_new).is_circuit_element) {
-			if(ndef->get(n_old).is_circuit_element) {
-				m_circuit->updateElement(n_new, p, ndef, ndef->get(n_new).circuit_element_states);
-			} else {
-				if(ndef->get(n_old).is_wire) {
-					m_circuit->removeWire(*m_map, ndef, p, n_old);
-				}
-				m_circuit->addElement(*m_map, ndef, p, ndef->get(n_new).circuit_element_states);
-			}
-		} else {
-			if(ndef->get(n_old).is_circuit_element) {
-				m_circuit->removeElement(p);
-			} else if(ndef->get(n_old).is_wire) {
-				m_circuit->removeWire(*m_map, ndef, p, n_old);
-			}
-			if(ndef->get(n_new).is_wire) {
-				m_circuit->addWire(*m_map, ndef, p);
-			}
-		}
+		m_circuit->swapNode(p, n_old, n);
 	}
 	return succeeded;
 }
@@ -1088,7 +1065,7 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 	/*
 	 * Update circuit
 	 */
-	m_circuit -> update(dtime, *m_map, m_gamedef->ndef());
+	m_circuit->update(dtime);
 
 	/*
 		Manage active block list
@@ -1286,8 +1263,9 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 			if(block==NULL)
 				continue;
 
-			auto lock = block->lock_unique_rec();
-
+			auto lock = block->try_lock_unique_rec();
+			if (!lock->owns_lock())
+				continue;
 			// Set current time as timestamp
 			block->setTimestampNoChangedFlag(m_game_time);
 

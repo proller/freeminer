@@ -37,6 +37,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "localplayer.h"
 #include "hud.h"
 #include "particles.h"
+#include "util/thread_pool.h"
 
 struct MeshMakeData;
 class MapBlockMesh;
@@ -49,17 +50,6 @@ class ClientMediaDownloader;
 struct MapDrawControl;
 class MtEventManager;
 struct PointedThing;
-
-struct QueuedMeshUpdate
-{
-	v3s16 p;
-	MeshMakeData *data;
-	bool ack_block_to_server;
-	bool lazy;
-
-	QueuedMeshUpdate();
-	~QueuedMeshUpdate();
-};
 
 enum LocalClientState {
 	LC_Created,
@@ -76,51 +66,35 @@ public:
 	MeshUpdateQueue();
 
 	~MeshUpdateQueue();
-	
-	/*
-		peer_id=0 adds with nobody to send to
-	*/
-	void addBlock(v3s16 p, MeshMakeData *data,
-			bool ack_block_to_server, bool urgent, bool lazy = false);
 
-	// Returned pointer must be deleted
-	// Returns NULL if queue is empty
-	QueuedMeshUpdate * pop();
+	void addBlock(v3s16 p, std::shared_ptr<MeshMakeData> data, bool urgent);
+	std::shared_ptr<MeshMakeData> pop();
 
-	u32 size()
-	{
-		JMutexAutoLock lock(m_mutex);
-		return m_queue.size();
-	}
-	
+	shared_map<v3s16, bool> m_process;
 private:
-	std::vector<QueuedMeshUpdate*> m_queue;
-	std::set<v3s16> m_urgents;
-	JMutex m_mutex;
+	shared_map<unsigned int, std::map<v3s16, std::shared_ptr<MeshMakeData>>> m_queue;
+	std::map<v3s16, unsigned int> m_ranges;
 };
 
 struct MeshUpdateResult
 {
 	v3s16 p;
-	MapBlockMesh *mesh;
-	bool ack_block_to_server;
-	bool lazy;
+	MapBlockMesh * mesh;
 
-	MeshUpdateResult():
-		p(-1338,-1338,-1338),
-		mesh(NULL),
-		ack_block_to_server(false)
-		,lazy(false)
+	MeshUpdateResult(v3s16 & p_, MapBlockMesh * mesh_):
+		p(p_),
+		mesh(mesh_)
 	{
 	}
 };
 
-class MeshUpdateThread : public JThread
+class MeshUpdateThread : public thread_pool
 {
 public:
 
-	MeshUpdateThread(IGameDef *gamedef):
+	MeshUpdateThread(IGameDef *gamedef, int id_ = 0):
 		m_gamedef(gamedef)
+		,id(id_)
 	{
 	}
 
@@ -133,6 +107,7 @@ public:
 	IGameDef *m_gamedef;
 	
 	v3s16 m_camera_offset;
+	int id;
 };
 
 enum ClientEventType
@@ -318,7 +293,7 @@ public:
 			ISoundManager *sound,
 			MtEventManager *event,
 			bool ipv6
-			,bool simple_singleplayer_mode
+			,bool simple_singleplayer_mode_
 	);
 	
 	~Client();
@@ -328,8 +303,6 @@ public:
 	 */
 	void Stop();
 
-
-	bool isShutdown();
 	/*
 		The name of the local player should already be set when
 		calling this, as it is sent in the initialization.
@@ -414,11 +387,13 @@ public:
 
 	u64 getMapSeed(){ return m_map_seed; }
 
-	void addUpdateMeshTask(v3s16 blockpos, bool ack_to_server=false, bool urgent=false, bool lazy=false);
+	void addUpdateMeshTask(v3s16 blockpos, bool urgent=false);
 	// Including blocks at appropriate edges
-	void addUpdateMeshTaskWithEdge(v3s16 blockpos, bool ack_to_server=false, bool urgent=false);
-	void addUpdateMeshTaskForNode(v3s16 nodepos, bool ack_to_server=false, bool urgent=false);
-	
+	void addUpdateMeshTaskWithEdge(v3s16 blockpos, bool urgent=false);
+	void addUpdateMeshTaskForNode(v3s16 nodepos, bool urgent=false);
+
+	void updateMeshTimestampWithEdge(v3s16 blockpos);
+
 	void updateCameraOffset(v3s16 camera_offset)
 	{ m_mesh_update_thread.m_camera_offset = camera_offset; }
 
@@ -496,7 +471,9 @@ private:
 	ISoundManager *m_sound;
 	MtEventManager *m_event;
 
+public:
 	MeshUpdateThread m_mesh_update_thread;
+private:
 	ClientEnvironment m_env;
 public:
 	con::Connection m_con;
@@ -552,6 +529,7 @@ private:
 	// key = name
 	std::map<std::string, Inventory*> m_detached_inventories;
 	double m_uptime;
+	bool simple_singleplayer_mode;
 
 	// Storage for mesh data for creating multiple instances of the same mesh
 	std::map<std::string, std::string> m_mesh_data;

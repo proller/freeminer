@@ -299,26 +299,34 @@ public:
 				&& p.Z >= 0 && p.Z < MAP_BLOCKSIZE);
 	}
 
-	MapNode getNode(s16 x, s16 y, s16 z)
+	MapNode getNode(v3s16 p)
 	{
 		if(data == NULL)
 			throw InvalidPositionException();
-		if(x < 0 || x >= MAP_BLOCKSIZE) throw InvalidPositionException();
-		if(y < 0 || y >= MAP_BLOCKSIZE) throw InvalidPositionException();
-		if(z < 0 || z >= MAP_BLOCKSIZE) throw InvalidPositionException();
+		if(p.X < 0 || p.X >= MAP_BLOCKSIZE) throw InvalidPositionException();
+		if(p.Y < 0 || p.Y >= MAP_BLOCKSIZE) throw InvalidPositionException();
+		if(p.Z < 0 || p.Y >= MAP_BLOCKSIZE) throw InvalidPositionException();
 		auto lock = lock_shared_rec();
-		return data[z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + y*MAP_BLOCKSIZE + x];
+		return data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X];
 	}
-	
-	MapNode getNode(v3s16 p)
+
+	MapNode getNodeNoLock(v3s16 p)
 	{
-		return getNode(p.X, p.Y, p.Z);
+		if(data == NULL)
+			return MapNode(CONTENT_IGNORE);
+		if(p.X < 0 || p.X >= MAP_BLOCKSIZE) throw InvalidPositionException();
+		if(p.Y < 0 || p.Y >= MAP_BLOCKSIZE) throw InvalidPositionException();
+		if(p.Z < 0 || p.Y >= MAP_BLOCKSIZE) throw InvalidPositionException();
+		auto lock = try_lock_shared_rec();
+		if (!lock->owns_lock())
+			return MapNode(CONTENT_IGNORE);
+		return data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X];
 	}
 	
 	MapNode getNodeNoEx(v3s16 p)
 	{
 		try{
-			return getNode(p.X, p.Y, p.Z);
+			return getNode(p);
 		}catch(InvalidPositionException &e){
 			return MapNode(CONTENT_IGNORE);
 		}
@@ -378,8 +386,6 @@ public:
 	*/
 	bool isValidPositionParent(v3s16 p);
 	MapNode getNodeParent(v3s16 p);
-	void setNodeParent(v3s16 p, MapNode & n);
-	MapNode getNodeParentNoEx(v3s16 p);
 
 	void drawbox(s16 x0, s16 y0, s16 z0, s16 w, s16 h, s16 d, MapNode node)
 	{

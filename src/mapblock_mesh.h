@@ -50,11 +50,14 @@ struct MeshMakeData
 	bool m_smooth_lighting;
 	IGameDef *m_gamedef;
 	int step;
+	int range;
+	unsigned int timestamp;
 	Map & map;
 	MapDrawControl& draw_control;
 	bool debug;
 
 	MeshMakeData(IGameDef *gamedef, Map & map_, MapDrawControl& draw_control_);
+	~MeshMakeData();
 
 	/*
 		Copy central data directly from block, and other data from
@@ -139,6 +142,7 @@ public:
 	bool clearHardwareBuffer;
 
 	int step;
+	unsigned int timestamp;
 
 private:
 	scene::SMesh *m_mesh;

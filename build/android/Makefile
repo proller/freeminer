@@ -507,7 +507,7 @@ $(CURL_LIB): $(CURL_TIMESTAMP) $(OPENSSL_LIB)
 	export CFLAGS="$${CFLAGS} ${TARGET_CFLAGS_ADDON}";                         \
 	export LDFLAGS="$${LDFLAGS} -L${OPENSSL_DIR}/libs/${TARGET_ABI}/           \
 	${TARGET_LDFLAGS_ADDON}";                                                  \
-	./configure --host=${TARGET_HOST} --disable-shared --enable-static --with-ssl;  \
+	./configure --host=${TARGET_HOST} --disable-shared --enable-static --with-ssl --enable-ipv6;  \
 	$(MAKE) -j${PARALLEL} -s || exit 1;                                        \
 	touch ${CURL_TIMESTAMP};                                                   \
 	touch ${CURL_TIMESTAMP_INT};                                               \
@@ -578,11 +578,11 @@ $(ASSETS_TIMESTAMP) : $(IRRLICHT_LIB)
 		touch ${IRRLICHT_DIR}/media/timestamp;                                 \
 		touch ${ASSETS_TIMESTAMP};                                             \
 	fi;                                                                        \
-	if [ ${ROOT}/../../minetest.conf.example -nt ${ASSETS_TIMESTAMP} ] ; then  \
+	if [ ${ROOT}/../../freeminer.conf.example -nt ${ASSETS_TIMESTAMP} ] ; then \
 		echo "conf changed";                                                   \
 		touch ${ASSETS_TIMESTAMP};                                             \
 	fi;                                                                        \
-	if [ ${ROOT}/../../README.txt -nt ${ASSETS_TIMESTAMP} ] ; then             \
+	if [ ${ROOT}/../../README.md -nt ${ASSETS_TIMESTAMP} ] ; then              \
 		touch ${ASSETS_TIMESTAMP};                                             \
 	fi;                                                                        \
 	if [ ! -e $(ASSETS_TIMESTAMP) ] ; then                                     \
@@ -604,8 +604,8 @@ assets : $(ASSETS_TIMESTAMP)
 	echo "assets changed, refreshing...";                                      \
 	$(MAKE) -j${PARALLEL} clean_assets;                                        \
 	mkdir -p ${ROOT}/assets/Minetest;                                          \
-	cp ${ROOT}/../../minetest.conf.example ${ROOT}/assets/Minetest;            \
-	cp ${ROOT}/../../README.txt ${ROOT}/assets/Minetest;                       \
+	cp ${ROOT}/../../freeminer.conf.example ${ROOT}/assets/Minetest;           \
+	cp ${ROOT}/../../README.md ${ROOT}/assets/Minetest;                        \
 	cp -r ${ROOT}/../../builtin ${ROOT}/assets/Minetest;                       \
 	cp -r ${ROOT}/../../client ${ROOT}/assets/Minetest;                        \
 	cp -r ${ROOT}/../../doc ${ROOT}/assets/Minetest;                           \
@@ -691,7 +691,11 @@ $(ROOT)/jni/src/android_version.h :
 	echo "#define VERSION_PATCH_ORIG $$(cat ${ROOT}/../../CMakeLists.txt |     \
 	grep ^set\(VERSION_PATCH\ | sed 's/)/ /' | awk '{print $$2;}')"            \
 	>> ${ROOT}/jni/src/android_version.h;                                      \
-	echo "#define CMAKE_VERSION_GITHASH \"$$(git rev-parse --short=8 HEAD)\""  \
+	export GITHASH=$$(git rev-parse --short=8 HEAD);                           \
+	if [ "x$$GITHASH" = "x" ] ; then                                           \
+		export GITHASH=gUnknown;                                               \
+	fi;                                                                        \
+	echo "#define CMAKE_VERSION_GITHASH \"$$GITHASH\""                         \
 	>> ${ROOT}/jni/src/android_version.h;                                      \
 	echo "#define CMAKE_VERSION_STRING STR(VERSION_MAJOR)\".\"STR(VERSION_MINOR)\
 	\".\"STR(VERSION_PATCH)"                                                   \

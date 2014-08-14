@@ -37,7 +37,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef SERVER // Dedicated server isn't linked with Irrlicht
 	#pragma comment(lib, "Irrlicht.lib")
 	// This would get rid of the console window
-	#pragma comment(linker, "/subsystem:windows /ENTRY:mainCRTStartup")
+	//#pragma comment(linker, "/subsystem:windows /ENTRY:mainCRTStartup")
 #endif
 	//#pragma comment(lib, "zlibwapi.lib")
 	#pragma comment(lib, "Shell32.lib")
@@ -1023,7 +1023,7 @@ int main(int argc, char *argv[])
 	srand(time(0));
 	mysrand(time(0));
 
-	// Initialize HTTP fetcher
+	// Initialize HTTP fetcherg_settings
 	httpfetch_init(g_settings->getS32("curl_parallel_limit"));
 
 #if !defined(__ANDROID__) && !defined(_MSC_VER)
@@ -1040,6 +1040,9 @@ int main(int argc, char *argv[])
 #ifdef _MSC_VER
 	init_gettext((porting::path_share + DIR_DELIM + "locale").c_str(),
 		g_settings->get("language"), argc, argv);
+	//Remove windows console window if settings request
+	if (!g_settings->getBool("console_enabled"))
+		FreeConsole();
 #else
 	init_gettext((porting::path_share + DIR_DELIM + "locale").c_str(),
 		g_settings->get("language"));
@@ -1303,10 +1306,12 @@ int main(int argc, char *argv[])
 			new_db->beginSave();
 			for (std::list<v3s16>::iterator i = blocks.begin(); i != blocks.end(); i++) {
 				MapBlock *block = old_map.loadBlock(*i);
-				if(!block)
-					continue;
-				new_db->saveBlock(block);
-				old_map.deleteBlock(block, 1);
+				if (!block) {
+					errorstream << "Failed to load block " << PP(*i) << ", skipping it.";
+				} else {
+					old_map.saveBlock(block, new_db);
+					old_map.deleteBlock(block, 1);
+				}
 				++count;
 				if (count % 500 == 0)
 					actionstream << "Migrated " << count << " blocks "
@@ -1471,6 +1476,8 @@ int main(int argc, char *argv[])
 	params.HighPrecisionFPU = g_settings->getBool("high_precision_fpu");
 #ifdef __ANDROID__
 	params.PrivateData = porting::app_global;
+#endif
+#if defined(_IRR_COMPILE_WITH_OGLES2_) || defined(__ANDROID__)
 	params.OGLES2ShaderPath = std::string(porting::path_user + DIR_DELIM +
 			"media" + DIR_DELIM + "Shaders" + DIR_DELIM).c_str();
 #endif
@@ -1965,4 +1972,3 @@ int main(int argc, char *argv[])
 }
 
 //END
-
