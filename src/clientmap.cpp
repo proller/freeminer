@@ -193,13 +193,13 @@ void ClientMap::updateDrawList(float dtime)
 	//u32 blocks_without_stuff = 0;
 	// Distance to farthest drawn block
 	float farthest_drawn = 0;
+	int m_mesh_queued = 0;
 	{
 	auto lock = m_blocks.try_lock_shared_rec();
 	if (!lock->owns_lock())
 		return;
 
-	int m_mesh_queued = 0;
-	const int maxq = 200;
+	const int maxq = 1000;
 
 	for(auto & ir : m_blocks) {
 
@@ -927,7 +927,7 @@ void ClientMap::renderPostFx(CameraMode cam_mode)
 	v3f camera_position = m_camera_position;
 	m_camera_mutex.Unlock();
 
-	MapNode n = getNodeNoLock(floatToInt(camera_position, BS));
+	MapNode n = getNodeTry(floatToInt(camera_position, BS));
 	if (n.getContent() == CONTENT_IGNORE)
 		return; // may flicker
 

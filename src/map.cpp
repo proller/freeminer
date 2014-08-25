@@ -170,20 +170,26 @@ MapNode Map::getNodeNoEx(v3s16 p)
 	if(block == NULL)
 		return MapNode(CONTENT_IGNORE);
 	v3s16 relpos = p - blockpos*MAP_BLOCKSIZE;
-	return block->getNodeNoCheck(relpos);
+	return block->getNodeNoEx(relpos);
 }
 
-MapNode Map::getNodeNoLock(v3s16 p)
+MapNode Map::getNodeTry(v3s16 p)
 {
 	v3s16 blockpos = getNodeBlockPos(p);
 	MapBlock *block = getBlockNoCreateNoEx(blockpos);
 	if(block == NULL)
 		return MapNode(CONTENT_IGNORE);
-	auto lock = block->try_lock_shared_rec();
-	if (!lock->owns_lock())
-		return MapNode(CONTENT_IGNORE);
 	v3s16 relpos = p - blockpos*MAP_BLOCKSIZE;
-	return block->getNodeNoLock(relpos);
+	return block->getNodeTry(relpos);
+}
+
+MapNode Map::getNodeNoLock(v3s16 p) //dont use
+{
+	v3s16 blockpos = getNodeBlockPos(p);
+	MapBlock *block = getBlockNoCreateNoEx(blockpos);
+	if(block == NULL)
+		return MapNode(CONTENT_IGNORE);
+	return block->getNodeNoLock(p - blockpos*MAP_BLOCKSIZE);
 }
 
 // throws InvalidPositionException if not found
@@ -1665,12 +1671,12 @@ const s8 liquid_random_map[4][7] = {
 #define D_TOP 6
 #define D_SELF 1
 
-u32 Map::transformLiquidsFinite(Server *m_server, std::map<v3s16, MapBlock*> & modified_blocks, shared_map<v3s16, MapBlock*> & lighting_modified_blocks, int max_cycle_ms)
+u32 Map::transformLiquidsReal(Server *m_server, std::map<v3s16, MapBlock*> & modified_blocks, shared_map<v3s16, MapBlock*> & lighting_modified_blocks, int max_cycle_ms)
 {
 	INodeDefManager *nodemgr = m_gamedef->ndef();
 
 	DSTACK(__FUNCTION_NAME);
-	//TimeTaker timer("transformLiquidsFinite()");
+	//TimeTaker timer("transformLiquidsReal()");
 
 	u32 loopcount = 0;
 	u32 initial_size = m_transforming_liquid.size();
@@ -1732,7 +1738,7 @@ u32 Map::transformLiquidsFinite(Server *m_server, std::map<v3s16, MapBlock*> & m
 					break;
 			}
 			neighbors[i].p = p0 + liquid_flow_dirs[i];
-			neighbors[i].n = getNodeNoEx(neighbors[i].p);
+			neighbors[i].n = getNodeTry(neighbors[i].p);
 			neighbors[i].t = nt;
 			neighbors[i].l = 0;
 			neighbors[i].i = 0;
@@ -1845,7 +1851,7 @@ u32 Map::transformLiquidsFinite(Server *m_server, std::map<v3s16, MapBlock*> & m
 					}
 				}
 				catch(InvalidPositionException &e) {
-					infostream<<"transformLiquidsFinite: setNode() failed:"<<PP(neighbors[i].p)<<":"<<e.what()<<std::endl;
+					infostream<<"transformLiquidsReal: setNode() failed:"<<PP(neighbors[i].p)<<":"<<e.what()<<std::endl;
 					goto NEXT_LIQUID;
 				}
 			}
@@ -2040,7 +2046,7 @@ u32 Map::transformLiquidsFinite(Server *m_server, std::map<v3s16, MapBlock*> & m
 			try{
 				setNode(neighbors[i].p, neighbors[i].n);
 			} catch(InvalidPositionException &e) {
-				infostream<<"transformLiquidsFinite: setNode() failed:"<<PP(neighbors[i].p)<<":"<<e.what()<<std::endl;
+				infostream<<"transformLiquidsReal: setNode() failed:"<<PP(neighbors[i].p)<<":"<<e.what()<<std::endl;
 			}
 
 			// If node emits light, MapBlock requires lighting update
@@ -2070,11 +2076,11 @@ u32 Map::transformLiquidsFinite(Server *m_server, std::map<v3s16, MapBlock*> & m
 		m_liquid_step_flow += (m_liquid_step_flow > loopcount ? -1 : 1) * (int)loopcount/10;
 	/*
 	if (loopcount)
-		infostream<<"Map::transformLiquidsFinite(): loopcount="<<loopcount
+		infostream<<"Map::transformLiquidsReal(): loopcount="<<loopcount
 		<<" avgflow="<<m_liquid_step_flow
 		<<" reflow="<<must_reflow.size()
 		<<" queue="<< m_transforming_liquid.size()
-		<<" per="<< porting::getTimeMs() - (end_ms - 1000 * g_settings->getFloat("dedicated_server_step"))
+		<<" per="<< porting::getTimeMs() - (end_ms - max_cycle_ms)
 		<<" ret="<<ret<<std::endl;
 	*/
 
@@ -2097,7 +2103,7 @@ u32 Map::transformLiquids(Server *m_server, std::map<v3s16, MapBlock*> & modifie
 {
 
 	if (g_settings->getBool("liquid_real"))
-		return Map::transformLiquidsFinite(m_server, modified_blocks, lighting_modified_blocks, max_cycle_ms);
+		return Map::transformLiquidsReal(m_server, modified_blocks, lighting_modified_blocks, max_cycle_ms);
 
 	INodeDefManager *nodemgr = m_gamedef->ndef();
 
@@ -2132,7 +2138,7 @@ u32 Map::transformLiquids(Server *m_server, std::map<v3s16, MapBlock*> & modifie
 		*/
 		v3s16 p0 = m_transforming_liquid.pop_front();
 
-		MapNode n0 = getNodeNoEx(p0);
+		MapNode n0 = getNodeTry(p0);
 
 		/*
 			Collect information about current node
@@ -2182,7 +2188,7 @@ u32 Map::transformLiquids(Server *m_server, std::map<v3s16, MapBlock*> & modifie
 					break;
 			}
 			v3s16 npos = p0 + dirs[i];
-			NodeNeighbor nb = {getNodeNoEx(npos), nt, npos};
+			NodeNeighbor nb = {getNodeTry(npos), nt, npos};
 			switch (nodemgr->get(nb.n.getContent()).liquid_type) {
 				case LIQUID_NONE:
 					if (nb.n.getContent() == CONTENT_AIR) {
@@ -2760,7 +2766,6 @@ bool ServerMap::initBlockMake(BlockMakeData *data, v3s16 blockpos)
 	v3s16 bigarea_blocks_max = blockpos_max + extra_borders;
 
 	data->vmanip = new ManualMapVoxelManipulator(this);
-	data->vmanip->replace_generated = 0;
 	//data->vmanip->setMap(this);
 
 	// Add the area
@@ -3514,7 +3519,6 @@ int ServerMap::getSurface(v3s16 basepos, int searchup, bool walkable_only) {
 
 ManualMapVoxelManipulator::ManualMapVoxelManipulator(Map *map):
 		VoxelManipulator(),
-		replace_generated(true),
 		m_create_area(false),
 		m_map(map)
 {
@@ -3631,8 +3635,6 @@ void ManualMapVoxelManipulator::blitBackAll(
 		bool existed = !(i->second & VMANIP_BLOCK_DATA_INEXIST);
 		if ((existed == false) || (block == NULL) ||
 			(overwrite_generated == false && block->isGenerated() == true))
-			continue;
-		if (!replace_generated && block->isGenerated()) // todo: remove replace_generated
 			continue;
 
 		block->copyFrom(*this);

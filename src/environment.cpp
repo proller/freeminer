@@ -29,7 +29,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "serverobject.h"
 #include "content_sao.h"
 #include "settings.h"
-#include "log.h"
+#include "log_types.h"
 #include "profiler.h"
 #include "scripting_game.h"
 #include "nodedef.h"
@@ -226,9 +226,10 @@ ABMWithState::ABMWithState(ActiveBlockModifier *abm_, ServerEnvironment *senv):
 	required_neighbors_activate(CONTENT_ID_CAPACITY)
 {
 	auto ndef = senv->getGameDef()->ndef();
+	interval = abm->getTriggerInterval();
+	chance = abm->getTriggerChance();
 	// Initialize timer to random value to spread processing
-	float itv = abm->getTriggerInterval();
-	itv = MYMAX(0.001, itv); // No less than 1ms
+	float itv = MYMAX(0.001, interval); // No less than 1ms
 	int minval = MYMAX(-0.51*itv, -60); // Clamp to
 	int maxval = MYMIN(0.51*itv, 60);   // +-60 seconds
 	timer = myrand_range(minval, maxval);
@@ -332,6 +333,7 @@ ServerEnvironment::ServerEnvironment(ServerMap *map,
 	m_active_objects_last(0),
 	m_active_block_abm_last(0),
 	m_active_block_abm_dtime(0),
+	m_active_block_abm_dtime_counter(0),
 	m_active_block_timer_last(0),
 	m_blocks_added_last(0),
 	m_game_time(0),
@@ -582,7 +584,7 @@ void ServerEnvironment::loadMeta()
 		for(auto & ai: abms){
 			auto i = &ai;
 			ActiveBlockModifier *abm = i->abm;
-			float trigger_interval = abm->getTriggerInterval();
+			float trigger_interval = i->interval;
 			if(trigger_interval < 0.001)
 				trigger_interval = 0.001;
 			float actual_interval = dtime_s;
@@ -590,15 +592,16 @@ void ServerEnvironment::loadMeta()
 				i->timer += dtime_s;
 				if(i->timer < trigger_interval)
 					continue;
-				i->timer -= trigger_interval;
-				if (i->timer > trigger_interval*2)
-					i->timer = 0;
-				actual_interval = trigger_interval;
+				actual_interval = i->timer;
+				if (i->timer > trigger_interval*3)
+					i->timer = trigger_interval;
+				else
+					i->timer -= trigger_interval;
 			}
 			float intervals = actual_interval / trigger_interval;
 			if(intervals == 0)
 				continue;
-			float chance = abm->getTriggerChance();
+			float chance = i->chance;
 			if(chance == 0)
 				chance = 1;
 			ActiveABM aabm;
@@ -607,7 +610,6 @@ void ServerEnvironment::loadMeta()
 			aabm.chance = chance / intervals;
 			if(aabm.chance == 0)
 				aabm.chance = 1;
-
 			// Trigger contents
 				for (auto &c : i->trigger_ids)
 				{
@@ -664,7 +666,6 @@ void ServerEnvironment::loadMeta()
 		auto lock = block->try_lock_unique_rec();
 		if (!lock->owns_lock())
 			return;
-
 		ScopeProfiler sp(g_profiler, "ABM apply", SPT_ADD);
 		ServerMap *map = &m_env->getServerMap();
 
@@ -677,7 +678,7 @@ void ServerEnvironment::loadMeta()
 		for(p0.Y=0; p0.Y<MAP_BLOCKSIZE; p0.Y++)
 		for(p0.Z=0; p0.Z<MAP_BLOCKSIZE; p0.Z++)
 		{
-			MapNode n = block->getNodeNoEx(p0);
+			MapNode n = block->getNodeNoLock(p0);
 			content_t c = n.getContent();
 			v3s16 p = p0 + block->getPosRelative();
 
@@ -701,7 +702,7 @@ void ServerEnvironment::loadMeta()
 					{
 						if(p1 == p)
 							continue;
-						MapNode n = map->getNodeNoLock(p1);
+						MapNode n = map->getNodeTry(p1);
 						content_t c = n.getContent();
 						if (c == CONTENT_IGNORE)
 							continue;
@@ -1224,7 +1225,7 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 	}
 
 	g_profiler->add("SMap: Blocks: Active:", m_active_blocks.m_list.size());
-	m_active_block_abm_dtime += dtime;
+	m_active_block_abm_dtime_counter += dtime;
 	const float abm_interval = 1.0;
 	if(m_active_block_abm_last || m_active_block_modifier_interval.step(dtime, abm_interval))
 	{
@@ -1235,7 +1236,7 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 		if (!m_active_block_abm_last || !m_abmhandler) {
 			if (m_abmhandler)
 				delete m_abmhandler;
-			m_abmhandler = new ABMHandler(m_abms, m_active_block_abm_dtime, this, true, false);
+			m_abmhandler = new ABMHandler(m_abms, MYMAX(m_active_block_abm_dtime, m_active_block_abm_dtime_counter), this, true, false);
 		}
 /*
 		ABMHandler abmhandler(m_abms, m_active_block_abm_dtime, this, true);
@@ -1263,9 +1264,6 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 			if(block==NULL)
 				continue;
 
-			auto lock = block->try_lock_unique_rec();
-			if (!lock->owns_lock())
-				continue;
 			// Set current time as timestamp
 			block->setTimestampNoChangedFlag(m_game_time);
 
@@ -1288,8 +1286,10 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 					<<std::endl;
 		}
 */
-		if (!m_active_block_abm_last)
-			m_active_block_abm_dtime = 0;
+		if (!m_active_block_abm_last) {
+			m_active_block_abm_dtime = m_active_block_abm_dtime_counter;
+			m_active_block_abm_dtime_counter = 0;
+		}
 	}
 
 	/*
@@ -2315,6 +2315,8 @@ void ClientEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 					f32 dl = d_wanted.getLength();
 					if(dl > lplayer->movement_liquid_fluidity_smooth)
 						dl = lplayer->movement_liquid_fluidity_smooth;
+					if (lplayer->liquid_viscosity < 1) //rewrite this shit
+						dl /= 2;
 					dl *= (lplayer->liquid_viscosity * viscosity_factor) + (1 - viscosity_factor);
 
 					v3f d = d_wanted.normalize() * dl;

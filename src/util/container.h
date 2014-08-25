@@ -32,6 +32,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <vector>
 #include <map>
 #include "lock.h"
+#include "unordered_map_hash.h"
 
 /*
 	Queue with unique values with fast checking of value existence
@@ -39,6 +40,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 template<typename Value>
 class UniqueQueue
+: public locker
 {
 public:
 	
@@ -50,9 +52,14 @@ public:
 	*/
 	bool push_back(Value value)
 	{
+		{
+		auto lock = lock_shared();
 		// Check if already exists
 		if(m_map.find(value) != m_map.end())
 			return false;
+		}
+
+		auto lock = lock_unique();
 
 		// Add
 		m_map[value] = 0;
@@ -63,6 +70,7 @@ public:
 
 	Value pop_front()
 	{
+		auto lock = lock_unique();
 		typename std::list<Value>::iterator i = m_list.begin();
 		Value value = *i;
 		m_map.erase(value);
@@ -72,11 +80,13 @@ public:
 
 	u32 size()
 	{
+		auto lock = lock_shared();
 		return m_map.size();
 	}
 
 private:
-	std::map<Value, u8> m_map;
+	//std::map<Value, u8> m_map;
+	std::unordered_map<Value, u8, v3s16Hash, v3s16Equal> m_map; // all usage with v3s16 now
 	std::list<Value> m_list;
 };
 
