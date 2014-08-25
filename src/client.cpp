@@ -2401,13 +2401,13 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent)
 	MapBlock *b = m_env.getMap().getBlockNoCreateNoEx(p);
 	if(b == NULL)
 {
-infostream<<"no block for mesh "<<p<<" "<<b<<std::endl;
+//infostream<<"no block for mesh "<<p<<" "<<b<<std::endl;
 		return;
 }
 	
 	int step = getFarmeshStep(m_env.getClientMap().getControl(), getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
 	if (!getFarmeshGrid(p, step)) {
-infostream<<"meshskip "<<" s="<<step<< " p="<<p<<" player="<<getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS))<<std::endl;
+//infostream<<"meshskip "<<" s="<<step<< " p="<<p<<" player="<<getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS))<<std::endl;
 		return;
 	}
 	/*
@@ -2424,8 +2424,8 @@ infostream<<"meshskip "<<" s="<<step<< " p="<<p<<" player="<<getNodeBlockPos(flo
 		data->setCrack(m_crack_level, m_crack_pos);
 		data->setSmoothLighting(g_settings->getBool("smooth_lighting"));
 		data->step = step;
-if (data->step>=3) infostream<<"meshmake "<<" s="<<data->step<< " p="<<p<<" rng="<<getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p)<<std::endl;
 		data->range = getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p);
+//if (data->step>=2) infostream<<"meshmake "<<" s="<<data->step<< " p="<<p<<" rng="<<data->range <<std::endl;
 	}
 
 	// Add task to queue

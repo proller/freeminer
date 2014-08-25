@@ -1088,7 +1088,6 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	// 24-155ms for MAP_BLOCKSIZE=32  (NOTE: probably outdated)
 	//TimeTaker timer1("MapBlockMesh()");
 
-//step = 1;
 	if (step>3) data->debug=1;
 
 	std::vector<FastFace> fastfaces_new;
@@ -1106,7 +1105,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	}
 	// End of slow part
 
-	if (data->debug) infostream<<" step="<<step<<" fastfaces_new.size="<<fastfaces_new.size()<<std::endl;
+	if (data->debug) infostream<<" step="<<step<< " range="<<data->range<<" fastfaces_new.size="<<fastfaces_new.size()<<std::endl;
 
 	/*
 		Convert FastFaces to MeshCollector
@@ -1316,9 +1315,9 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	{
 //#if 0
 		// Usually 1-700 faces and 1-7 materials
-if (step >=3)
+if (data->debug)
 		infostream<<"Updated MapBlock has "<<fastfaces_new.size()<<" faces "
-				<<" step="<<step<<" p="<<data->m_blockpos
+				<<" step="<<step<< " range="<<data->range<<" p="<<data->m_blockpos
 				<<"and uses "<<m_mesh->getMeshBufferCount()
 				<<" materials (meshbuffers)"<<std::endl;
 //#endif
