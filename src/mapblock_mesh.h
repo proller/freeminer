@@ -28,7 +28,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "voxel.h"
 #include <map>
 
-//#define MESH_ZEROCOPY //Exprimental, slower, needed for next farmesh
+#define MESH_ZEROCOPY //Exprimental, slower, needed for next farmesh
 
 
 class IGameDef;
