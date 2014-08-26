@@ -372,6 +372,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("enable_any_name", "0"); //WARNING!!! SECURITY RISK WITH SOME MODULES
 	settings->setDefault("password_save", "1");
 	settings->setDefault("more_threads", "true");
+	settings->setDefault("shadows", "true");
 
 
 #if !defined(_WIN32) && !CMAKE_USE_IPV4_DEFAULT
