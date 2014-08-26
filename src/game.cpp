@@ -999,7 +999,7 @@ static void show_deathscreen(GUIFormSpecMenu** cur_formspec,
 		SIZE_TAG
 		"bgcolor[#320000b4;true]"
 		"label[4.85,1.35;You died.]"
-		"button_exit[4,3;3,0.5;btn_respawn;" + gettext("Respawn") + "]"
+		"button_exit[4,3;3,0.5;btn_respawn;" + _("Respawn") + "]"
 		;
 
 	/* Create menu */
@@ -1049,19 +1049,19 @@ static void show_pause_menu(GUIFormSpecMenu** cur_formspec,
 	std::ostringstream os;
 
 	os << FORMSPEC_VERSION_STRING  << SIZE_TAG
-			<< "button_exit[1," << (ypos++) << ";3,0.5;btn_continue;"
+			<< "button_exit[4," << (ypos++) << ";3,0.5;btn_continue;"
 					<< wide_to_narrow(wstrgettext("Continue"))     << "]";
 
 	if (!singleplayermode) {
-		os << "button_exit[1," << (ypos++) << ";3,0.5;btn_change_password;"
+		os << "button_exit[4," << (ypos++) << ";3,0.5;btn_change_password;"
 					<< wide_to_narrow(wstrgettext("Change Password")) << "]";
 		}
 
-	os 		<< "button_exit[1," << (ypos++) << ";3,0.5;btn_sound;"
+	os 		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_sound;"
 					<< wide_to_narrow(wstrgettext("Sound Volume")) << "]";
-	os		<< "button_exit[1," << (ypos++) << ";3,0.5;btn_exit_menu;"
+	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_exit_menu;"
 					<< wide_to_narrow(wstrgettext("Exit to Menu")) << "]";
-	os		<< "button_exit[1," << (ypos++) << ";3,0.5;btn_exit_os;"
+	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_exit_os;"
 					<< wide_to_narrow(wstrgettext("Exit to OS"))   << "]";
 /*
 			<< "textarea[7.5,0.25;3.9,6.25;;" << control_text << ";]"
@@ -1079,9 +1079,53 @@ static void show_pause_menu(GUIFormSpecMenu** cur_formspec,
 
 	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device,  fs_src, txt_dst);
 
-	if (singleplayermode) {
-		(*cur_formspec)->doPause = true;
+	(*cur_formspec)->doPause = true;
+}
+
+/******************************************************************************/
+static void updateChat(Client& client, f32 dtime, bool show_debug,
+		const v2u32& screensize, bool show_chat, u32 show_profiler,
+		ChatBackend& chat_backend, gui::IGUIStaticText* guitext_chat,
+		gui::IGUIFont* font)
+{
+	// Add chat log output for errors to be shown in chat
+	static LogOutputBuffer chat_log_error_buf(LMT_ERROR);
+
+	// Get new messages from error log buffer
+	while(!chat_log_error_buf.empty()) {
+		chat_backend.addMessage(L"", narrow_to_wide(chat_log_error_buf.get()));
 	}
+
+	// Get new messages from client
+	std::wstring message;
+	while (client.getChatMessage(message)) {
+		chat_backend.addUnparsedMessage(message);
+	}
+
+	// Remove old messages
+	chat_backend.step(dtime);
+
+	// Display all messages in a static text element
+	unsigned int recent_chat_count = chat_backend.getRecentBuffer().getLineCount();
+	std::wstring recent_chat       = chat_backend.getRecentChat();
+
+	// TODO replace by fontengine fcts
+	unsigned int line_height       = font->getDimension(L"Ay").Height + font->getKerningHeight();
+
+	guitext_chat->setText(recent_chat.c_str());
+
+	// Update gui element size and position
+	s32 chat_y = 5 + line_height;
+	if (show_debug)
+		chat_y += line_height;
+
+	core::rect<s32> rect(10, chat_y, font->getDimension(recent_chat.c_str()).Width +10,
+			chat_y + (recent_chat_count * line_height));
+
+	guitext_chat->setRelativePosition(rect);
+	// Don't show chat if disabled or empty or profiler is enabled
+	guitext_chat->setVisible(
+			show_chat && recent_chat_count != 0 && !show_profiler);
 }
 
 /******************************************************************************/
@@ -1158,9 +1202,6 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 	// Sound maker
 	SoundMaker soundmaker(sound, nodedef);
 	soundmaker.registerReceiver(&eventmgr);
-
-	// Add chat log output for errors to be shown in chat
-	LogOutputBuffer chat_log_error_buf(LMT_ERROR);
 
 	// Create UI for modifying quicktune values
 	QuicktuneShortcutter quicktune;
@@ -1445,16 +1486,16 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 
 				std::stringstream message;
 				message.precision(3);
-				message << gettext("Media...");
+				message << _("Media...");
 
 				if ( ( USE_CURL == 0) ||
 						(!g_settings->getBool("enable_remote_media_server"))) {
 					float cur = client.getCurRate();
-					std::string cur_unit = gettext(" KB/s");
+					std::string cur_unit = _(" KB/s");
 
 					if (cur > 900) {
 						cur /= 1024.0;
-						cur_unit = gettext(" MB/s");
+						cur_unit = _(" MB/s");
 					}
 					message << " ( " << cur << cur_unit << " )";
 				}
@@ -1563,24 +1604,24 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 	gui::IGUIStaticText *guitext = guienv->addStaticText(
 			L"Freeminer",
 			core::rect<s32>(0, 0, 0, 0),
-			false, false);
+			false, false, guiroot);
 	// Second line of debug text
 	gui::IGUIStaticText *guitext2 = guienv->addStaticText(
 			L"",
 			core::rect<s32>(0, 0, 0, 0),
-			false, false);
+			false, false, guiroot);
 	// At the middle of the screen
 	// Object infos are shown in this
 	gui::IGUIStaticText *guitext_info = guienv->addStaticText(
 			L"",
 			core::rect<s32>(0,0,400,text_height*5+5) + v2s32(100,200),
-			false, true);
+			false, true, guiroot);
 
 	// Status text (displays info when showing and hiding GUI stuff, etc.)
 	gui::IGUIStaticText *guitext_status = guienv->addStaticText(
 			L"<Status>",
 			core::rect<s32>(0,0,0,0),
-			false, false);
+			false, false, guiroot);
 	guitext_status->setVisible(false);
 
 	std::wstring statustext;
@@ -1596,7 +1637,11 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 	} else
 	#endif
 	{
-		guitext_chat = guienv->addStaticText(L"", core::rect<s32>(0,0,0,0), false, true);
+		guitext_chat = guienv->addStaticText(
+			L"",
+			core::rect<s32>(0,0,0,0),
+			//false, false); // Disable word wrap as of now
+			false, true, guiroot);
 	}
 
 	// Remove stale "recent" chat messages from previous connections
@@ -1608,7 +1653,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 	gui::IGUIStaticText *guitext_profiler = guienv->addStaticText(
 			L"<Profiler>",
 			core::rect<s32>(0,0,0,0),
-			false, false);
+			false, false, guiroot);
 	guitext_profiler->setBackgroundColor(video::SColor(120,0,0,0));
 	guitext_profiler->setVisible(false);
 	guitext_profiler->setWordWrap(true);
@@ -1651,9 +1696,9 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 	float object_hit_delay_timer = 0.0;
 	float time_from_last_punch = 10;
 
-	float update_draw_list_timer = 0.0;
-	v3f update_draw_list_last_cam_dir;
+	float update_draw_list_timer = 10.0;
 	v3f update_draw_list_last_cam_pos(100,42,1000);
+	v3f update_draw_list_last_cam_dir;
 
 	bool invert_mouse = g_settings->getBool("invert_mouse");
 
@@ -1718,7 +1763,9 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 
 	bool use_weather = g_settings->getBool("weather");
 	bool no_output = device->getVideoDriver()->getDriverType() == video::EDT_NULL;
+#ifndef __ANDROID__
 	std::future<void> updateDrawList_future;
+#endif
 	int errors = 0;
 	f32 dedicated_server_step = g_settings->getFloat("dedicated_server_step");
 
@@ -2562,8 +2609,8 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 					damage_flash += 8.0 * event.player_damage.amount;
 
 					player->hurt_tilt_timer = 1.5;
-					player->hurt_tilt_strength = event.player_damage.amount/2;
-					player->hurt_tilt_strength = rangelim(player->hurt_tilt_strength, 2.0, 10.0);
+					player->hurt_tilt_strength = event.player_damage.amount/4;
+					player->hurt_tilt_strength = rangelim(player->hurt_tilt_strength, 1.0, 4.0);
 
 					MtEvent *e = new SimpleTriggerEvent("PlayerDamage");
 					gamedef->event()->put(e);
@@ -3526,43 +3573,8 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 		/*
 			Get chat messages from client
 		*/
-		{
-			// Get new messages from error log buffer
-			while(!chat_log_error_buf.empty())
-			{
-				chat_backend.addMessage(L"", narrow_to_wide(
-						chat_log_error_buf.get()));
-			}
-			// Get new messages from client
-			std::wstring message;
-			while(client.getChatMessage(message))
-			{
-				chat_backend.addUnparsedMessage(message);
-			}
-			// Remove old messages
-			chat_backend.step(dtime);
-
-			// Display all messages in a static text element
-			u32 recent_chat_count = chat_backend.getRecentBuffer().getLineCount();
-			std::wstring recent_chat = chat_backend.getRecentChat();
-			guitext_chat->setText(recent_chat.c_str());
-
-			// Update gui element size and position
-			s32 chat_y = 5+(text_height+5);
-			if(show_debug)
-				chat_y += (text_height+5);
-			core::rect<s32> rect(
-				10,
-				chat_y,
-				screensize.X - 10,
-				chat_y + guitext_chat->getTextHeight()
-			);
-			guitext_chat->setRelativePosition(rect);
-
-			// Don't show chat if disabled or empty or profiler is enabled
-			guitext_chat->setVisible(show_chat && recent_chat_count != 0
-					&& !show_profiler);
-		}
+		updateChat(client, dtime, show_debug, screensize, show_chat,
+				show_profiler, chat_backend, guitext_chat, font);
 
 		/*
 			Inventory
@@ -3596,16 +3608,24 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 		*/
 		update_draw_list_timer += dtime;
 		if (!no_output)
-		if(client.getEnv().getClientMap().m_drawlist_last || update_draw_list_timer >= 0.5 ||
-				//update_draw_list_last_cam_dir.getDistanceFrom(camera_direction) > 0.2 ||
-				update_draw_list_last_cam_pos != camera_position ||
+		if (client.getEnv().getClientMap().m_drawlist_last || update_draw_list_timer >= 0.5 ||
+				update_draw_list_last_cam_pos.getDistanceFrom(camera_position) > MAP_BLOCKSIZE*BS*2 ||
 				camera_offset_changed){
 			update_draw_list_timer = 0;
+#ifndef __ANDROID__
 			if (g_settings->getBool("more_threads"))
 				updateDrawList_future = std::async(std::launch::async, [](Client * client, video::IVideoDriver* driver, float dtime){ client->getEnv().getClientMap().updateDrawList(driver, dtime); }, &client, driver, dtime);
 			else
+#endif
 				client.getEnv().getClientMap().updateDrawList(driver, dtime);
 			update_draw_list_last_cam_pos = camera_position;
+		}
+
+		/*
+			make sure menu is on top
+		*/
+		if ((!noMenuActive()) && (current_formspec)) {
+				guiroot->bringToFront(current_formspec);
 		}
 
 		/*
@@ -3758,11 +3778,8 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 
 	//force answer all texture and shader jobs (TODO return empty values)
 
-	while(!client.isShutdown()) {
-		tsrc->processQueue();
-		shsrc->processQueue();
-		sleep_ms(100);
-	}
+	tsrc->processQueue();
+	shsrc->processQueue();
 
 	// Client scope (client is destructed before destructing *def and tsrc)
 	}while(0);

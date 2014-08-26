@@ -196,10 +196,13 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 			}
 
 
+	int m_mesh_queued = 0;
 	{
-	auto lock = m_blocks.lock_shared_rec(std::chrono::milliseconds(1));
+	auto lock = m_blocks.try_lock_shared_rec();
 	if (!lock->owns_lock())
 		return;
+
+	const int maxq = 1000;
 
 	for(auto & ir : m_blocks) {
 
@@ -238,13 +241,13 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 					}
 
 
-			float range = 100000 * BS;
+			float range_max = 100000 * BS;
 			if(m_control.range_all == false)
-				range = m_control.wanted_range * BS;
+				range_max = m_control.wanted_range * BS;
 
-			float d = 0.0;
+/*			float d = 0.0;
 			if(isBlockInSight(bp, camera_position,
-					camera_direction, 0 /*camera_fov*/,
+					camera_direction, 0/*, camera_fov* /,
 					range, &d) == false && d > MAP_BLOCKSIZE*BS && d > range*2)
 			{
 				if (block->scenenode) {
@@ -253,6 +256,20 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 				}
 				continue;
 			}
+*/
+
+			v3s16 blockpos_nodes = bp * MAP_BLOCKSIZE;
+			// Block center position
+			v3f blockpos(
+				((float)blockpos_nodes.X + MAP_BLOCKSIZE/2) * BS,
+				((float)blockpos_nodes.Y + MAP_BLOCKSIZE/2) * BS,
+				((float)blockpos_nodes.Z + MAP_BLOCKSIZE/2) * BS
+			);
+
+			f32 d = radius_box(blockpos, camera_position); //blockpos_relative.getLength();
+			if (d> range_max)
+				continue;
+			int range = d / (MAP_BLOCKSIZE * BS);
 
 			// This is ugly (spherical distance limit?)
 			/*if(m_control.range_all == false &&
@@ -269,7 +286,10 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 
 				if(!mesh) {
 					blocks_in_range_without_mesh++;
-					m_client->addUpdateMeshTask(bp, false);
+					if (m_mesh_queued < maxq || range <= 2) {
+						m_client->addUpdateMeshTask(bp, false);
+						++m_mesh_queued;
+					}
 					continue;
 				}
 				if(mesh_step == mesh->step && block->getTimestamp() <= mesh->timestamp && (!mesh->getMesh() || !mesh->getMesh()->getMeshBufferCount())) {
@@ -341,12 +361,15 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 				continue;
 */
 
-			if (mesh_step != mesh->step) {
+			if (mesh_step != mesh->step && (m_mesh_queued < maxq*1.2 || range <= 2)) {
 				m_client->addUpdateMeshTask(bp);
+				++m_mesh_queued;
 				continue;
 			}
-			if (block->getTimestamp() > mesh->timestamp)
+			if (block->getTimestamp() > mesh->timestamp && (m_mesh_queued < maxq*1.5 || range <= 2)) {
 				m_client->addUpdateMeshTaskWithEdge(bp);
+				++m_mesh_queued;
+			}
 
 			if(!mesh->getMesh() || !mesh->getMesh()->getMeshBufferCount())
 				continue;
@@ -386,7 +409,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 	if (!calls)
 		m_drawlist_last = 0;
 
-//if (m_drawlist_last) infostream<<"breaked UDL "<<m_drawlist_last<<" collected="<<drawlist.size()<<" calls="<<calls<<" s="<<m_blocks.size()<<" maxms="<<max_cycle_ms<<" fw="<<getControl().fps_wanted<<" morems="<<porting::getTimeMs() - end_ms<<std::endl;
+//if (m_drawlist_last) infostream<<"breaked UDL "<<m_drawlist_last<<" collected="<<drawlist.size()<<" calls="<<calls<<" s="<<m_blocks.size()<<" maxms="<<max_cycle_ms<<" fw="<<getControl().fps_wanted<<" morems="<<porting::getTimeMs() - end_ms<< " meshq="<<m_mesh_queued<<std::endl;
 
 	if (m_drawlist_last)
 		return;
@@ -395,8 +418,9 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 		ir.second->refDrop();
 
 
-	m_drawlist->clear();
+	auto m_drawlist_old = !m_drawlist_current ? &m_drawlist_1 : &m_drawlist_0;
 	m_drawlist = m_drawlist_current ? &m_drawlist_1 : &m_drawlist_0;
+	m_drawlist_old->clear();
 
 	m_control.blocks_would_have_drawn = blocks_would_have_drawn;
 	m_control.blocks_drawn = blocks_drawn;
@@ -923,7 +947,7 @@ void ClientMap::renderPostFx(CameraMode cam_mode)
 	v3f camera_position = m_camera_position;
 	m_camera_mutex.Unlock();
 
-	MapNode n = getNodeNoLock(floatToInt(camera_position, BS));
+	MapNode n = getNodeTry(floatToInt(camera_position, BS));
 	if (n.getContent() == CONTENT_IGNORE)
 		return; // may flicker
 

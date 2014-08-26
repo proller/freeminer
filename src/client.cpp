@@ -72,14 +72,28 @@ void MeshUpdateQueue::addBlock(v3s16 p, std::shared_ptr<MeshMakeData> data, bool
 {
 	DSTACK(__FUNCTION_NAME);
 
-	if (m_process.count(p))
-		return;
 	auto lock = m_queue.lock_unique_rec();
-	auto range = urgent ? 0 : data->range + data->step * 10;
+	unsigned int range = urgent ? 0 : 1 + data->range + data->step * 10;
+	if (m_process.count(p))
+		range += 3;
+	else if (m_ranges.count(p)) {
+		auto range_old = m_ranges[p];
+		if (range_old > 0 && range != range_old)  {
+			auto & rmap = m_queue.get(range_old);
+			m_ranges.erase(p);
+			rmap.erase(p);
+			if (rmap.empty())
+				m_queue.erase(range_old);
+		} else {
+			return; //already queued
+		}
+	}
 	auto & rmap = m_queue.get(range);
 	if (rmap.count(p))
 		return;
 	rmap[p] = data;
+	m_ranges[p] = range;
+	g_profiler->avg("Client: mesh make queue", m_ranges.size());
 }
 
 std::shared_ptr<MeshMakeData> MeshUpdateQueue::pop()
@@ -87,8 +101,10 @@ std::shared_ptr<MeshMakeData> MeshUpdateQueue::pop()
 	auto lock = m_queue.lock_unique_rec();
 	for (auto & it : m_queue) {
 		auto & rmap = it.second;
-		auto data = rmap.begin()->second;
-		rmap.erase(rmap.begin()->first);
+		auto begin = rmap.begin();
+		auto data = begin->second;
+		m_ranges.erase(begin->first);
+		rmap.erase(begin->first);
 		if (rmap.empty())
 			m_queue.erase(it.first);
 		return data;
@@ -104,13 +120,13 @@ void * MeshUpdateThread::Thread()
 {
 	ThreadStarted();
 
-	log_register_thread("MeshUpdateThread");
+	log_register_thread("MeshUpdateThread" + itos(id));
 
 	DSTACK(__FUNCTION_NAME);
 	
 	BEGIN_DEBUG_EXCEPTION_HANDLER
 
-	porting::setThreadName("MeshUpdateThread");
+	porting::setThreadName(("MeshUpdateThread" + itos(id)).c_str());
 	porting::setThreadPriority(50);
 
 	while(!StopRequested())
@@ -151,7 +167,7 @@ Client::Client(
 		ISoundManager *sound,
 		MtEventManager *event,
 		bool ipv6
-		, bool simple_singleplayer_mode
+		, bool simple_singleplayer_mode_
 ):
 	m_packetcounter_timer(0.0),
 	m_connection_reinit_timer(0.1),
@@ -193,6 +209,7 @@ Client::Client(
 	m_time_of_day_update_timer(0),
 	m_recommended_send_interval(0.1),
 	m_removed_sounds_check_timer(0),
+	simple_singleplayer_mode(simple_singleplayer_mode_),
 	m_state(LC_Created)
 {
 	/*
@@ -211,14 +228,7 @@ void Client::Stop()
 {
 	//request all client managed threads to stop
 	m_mesh_update_thread.Stop();
-}
-
-bool Client::isShutdown()
-{
-
-	if (!m_mesh_update_thread.IsRunning()) return true;
-
-	return false;
+	m_mesh_update_thread.Wait();
 }
 
 Client::~Client()
@@ -978,8 +988,7 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id)
 		/*
 			Add it to mesh update queue and set it to be acknowledged after update.
 		*/
-		//addUpdateMeshTaskWithEdge(p, true);
-		block->setTimestampNoChangedFlag(m_uptime);
+		updateMeshTimestampWithEdge(p);
 
 		UniqueQueue<v3s16> got_blocks;
 		got_blocks.push_back(p);
@@ -2045,8 +2054,8 @@ void Client::sendReady()
 	writeU8(os,(int)VERSION_PATCH_ORIG);
 	writeU8(os,0);
 
-	writeU16(os,strlen(CMAKE_VERSION_GITHASH));
-	os.write(CMAKE_VERSION_GITHASH,strlen(CMAKE_VERSION_GITHASH));
+	writeU16(os,strlen(minetest_version_hash));
+	os.write(minetest_version_hash,strlen(minetest_version_hash));
 
 	// Make data buffer
 	std::string s = os.str();
@@ -2423,15 +2432,7 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent)
 
 void Client::addUpdateMeshTaskWithEdge(v3s16 blockpos, bool urgent)
 {
-	try{
-		v3s16 p = blockpos + v3s16(0,0,0);
-		//MapBlock *b = m_env.getMap().getBlockNoCreate(p);
-		addUpdateMeshTask(p, urgent);
-	}
-	catch(InvalidPositionException &e){}
-
-	// Leading edge
-	for (int i=0;i<6;i++)
+	for (int i=0;i<7;i++)
 	{
 		try{
 			v3s16 p = blockpos + g_6dirs[i];
@@ -2482,6 +2483,15 @@ void Client::addUpdateMeshTaskForNode(v3s16 nodepos, bool urgent)
 			addUpdateMeshTask(p, urgent);
 		}
 		catch(InvalidPositionException &e){}
+	}
+}
+
+void Client::updateMeshTimestampWithEdge(v3s16 blockpos) {
+	for (int i = 0; i < 7; ++i) {
+		auto *block = m_env.getMap().getBlockNoCreateNoEx(blockpos + g_6dirs[i]);
+		if(!block)
+			continue;
+		block->setTimestampNoChangedFlag(m_uptime);
 	}
 }
 
@@ -2558,9 +2568,11 @@ void Client::afterContentReceived(IrrlichtDevice *device, gui::IGUIFont* font)
 
 	// Start mesh update thread after setting up content definitions
 	infostream<<"- Starting mesh update thread"<<std::endl;
-	if (!no_output)
-		m_mesh_update_thread.Start();
-	
+	if (!no_output) {
+		auto threads = !g_settings->getBool("more_threads") ? 1 : (porting::getNumberOfProcessors() - (simple_singleplayer_mode ? 2 : 1));
+		m_mesh_update_thread.Start(threads < 1 ? 1 : threads);
+	}
+
 	m_state = LC_Ready;
 	sendReady();
 	infostream<<"Client::afterContentReceived() done"<<std::endl;

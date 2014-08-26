@@ -37,6 +37,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "localplayer.h"
 #include "hud.h"
 #include "particles.h"
+#include "util/thread_pool.h"
+#include "util/unordered_map_hash.h"
 
 struct MeshMakeData;
 class MapBlockMesh;
@@ -69,9 +71,10 @@ public:
 	void addBlock(v3s16 p, std::shared_ptr<MeshMakeData> data, bool urgent);
 	std::shared_ptr<MeshMakeData> pop();
 
-	shared_map<v3s16, bool> m_process;
+	shared_unordered_map<v3s16, bool, v3s16Hash, v3s16Equal> m_process;
 private:
-	shared_map<unsigned int, std::map<v3s16, std::shared_ptr<MeshMakeData>>> m_queue;
+	shared_map<unsigned int, std::unordered_map<v3s16, std::shared_ptr<MeshMakeData>, v3s16Hash, v3s16Equal>> m_queue;
+	std::unordered_map<v3s16, unsigned int, v3s16Hash, v3s16Equal> m_ranges;
 };
 
 struct MeshUpdateResult
@@ -86,12 +89,13 @@ struct MeshUpdateResult
 	}
 };
 
-class MeshUpdateThread : public JThread
+class MeshUpdateThread : public thread_pool
 {
 public:
 
-	MeshUpdateThread(IGameDef *gamedef):
+	MeshUpdateThread(IGameDef *gamedef, int id_ = 0):
 		m_gamedef(gamedef)
+		,id(id_)
 	{
 	}
 
@@ -104,6 +108,7 @@ public:
 	IGameDef *m_gamedef;
 	
 	v3s16 m_camera_offset;
+	int id;
 };
 
 enum ClientEventType
@@ -289,7 +294,7 @@ public:
 			ISoundManager *sound,
 			MtEventManager *event,
 			bool ipv6
-			,bool simple_singleplayer_mode
+			,bool simple_singleplayer_mode_
 	);
 	
 	~Client();
@@ -299,8 +304,6 @@ public:
 	 */
 	void Stop();
 
-
-	bool isShutdown();
 	/*
 		The name of the local player should already be set when
 		calling this, as it is sent in the initialization.
@@ -389,7 +392,9 @@ public:
 	// Including blocks at appropriate edges
 	void addUpdateMeshTaskWithEdge(v3s16 blockpos, bool urgent=false);
 	void addUpdateMeshTaskForNode(v3s16 nodepos, bool urgent=false);
-	
+
+	void updateMeshTimestampWithEdge(v3s16 blockpos);
+
 	void updateCameraOffset(v3s16 camera_offset)
 	{ m_mesh_update_thread.m_camera_offset = camera_offset; }
 
@@ -525,6 +530,7 @@ private:
 	// key = name
 	std::map<std::string, Inventory*> m_detached_inventories;
 	double m_uptime;
+	bool simple_singleplayer_mode;
 
 	// Storage for mesh data for creating multiple instances of the same mesh
 	std::map<std::string, std::string> m_mesh_data;

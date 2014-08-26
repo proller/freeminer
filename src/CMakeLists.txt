@@ -372,7 +372,6 @@ set(common_SRCS
 	circuit.cpp
 	circuit_element.cpp
 	circuit_element_virtual.cpp
-	circuit_element_states.cpp
 	key_value_storage.cpp
 	version.cpp
 	rollback_interface.cpp
@@ -567,6 +566,8 @@ if(BUILD_CLIENT)
 		${PROJECT_NAME}
 		${ZLIB_LIBRARIES}
 		${IRRLICHT_LIBRARY}
+		${OPENGLES2_LIBRARIES}
+		${EGL_LIBRARIES}
 		${OPENGL_LIBRARIES}
 		${JPEG_LIBRARIES}
 		${BZIP2_LIBRARIES}
@@ -577,8 +578,6 @@ if(BUILD_CLIENT)
 		${SQLITE3_LIBRARY}
 		${LUA_LIBRARY}
 		${JSON_LIBRARY}
-		${OPENGLES2_LIBRARIES}
-		${EGL_LIBRARIES}
 		${PLATFORM_LIBS}
 		${CLIENT_PLATFORM_LIBS}
 	)
@@ -685,6 +684,7 @@ if(MSVC)
 	endif(BUILD_SERVER)
 
 	target_link_libraries(${PROJECT_NAME} shlwapi.lib)
+	add_definitions(-DNOMINMAX)
 else()
 	# Probably GCC
 	if(APPLE)

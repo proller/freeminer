@@ -109,7 +109,7 @@ MapNode MapBlock::getNodeParent(v3s16 p)
 {
 	if(isValidPosition(p) == false)
 	{
-		auto n = m_parent->getNodeNoLock(getPosRelative() + p);
+		auto n = m_parent->getNodeTry(getPosRelative() + p);
 		if (n.getContent() == CONTENT_IGNORE)
 			throw InvalidPositionException();
 		return n;
@@ -118,7 +118,7 @@ MapNode MapBlock::getNodeParent(v3s16 p)
 	{
 		if(data == NULL)
 			throw InvalidPositionException();
-		auto lock = lock_shared_rec(std::chrono::milliseconds(1));
+		auto lock = try_lock_shared_rec();
 		if (!lock->owns_lock())
 			throw InvalidPositionException();
 		return data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X];
@@ -764,25 +764,6 @@ void MapBlock::deSerializeNetworkSpecific(std::istream &is)
 
 void MapBlock::pushElementsToCircuit(Circuit* circuit)
 {
-	INodeDefManager* ndef = m_gamedef->ndef();
-	v3s16 pos;
-	for(int x = 0; x < 16; ++x)
-	{
-		for(int y = 0; y < 16; ++y)
-		{
-			for(int z = 0; z < 16; ++z)
-			{
-				MapNode tmp_node = data[z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + y*MAP_BLOCKSIZE + x];
-				if(ndef->get(tmp_node).is_circuit_element)
-				{
-					pos.X = m_pos.X * MAP_BLOCKSIZE + x;
-					pos.Y = m_pos.Y * MAP_BLOCKSIZE + y;
-					pos.Z = m_pos.Z * MAP_BLOCKSIZE + z;
-					circuit->pushElementToQueue(pos);
-				}
-			}
-		}
-	}
 }
 
 #ifndef SERVER
