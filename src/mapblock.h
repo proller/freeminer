@@ -36,7 +36,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/numeric.h" // getContainerPos
 #include "util/lock.h"
 
-//#include <ISceneNode.h>
+#include <ISceneNode.h>
 #include <IMeshSceneNode.h>
 
 class Map;
@@ -555,7 +555,7 @@ public:
 	*/
 
 #ifndef SERVER // Only on client
-	//irr::scene::ISceneNode * scenenode;
+	irr::scene::ISceneNode * shadownode;
 	irr::scene::IMeshSceneNode * scenenode;
 	MapBlockMesh *mesh;
 	MapBlockMesh  *mesh2, *mesh4, *mesh8, *mesh16;

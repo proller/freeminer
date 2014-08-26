@@ -73,6 +73,7 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 	
 #ifndef SERVER
 	scenenode = nullptr;
+	shadownode = nullptr;
 	mesh = NULL;
 	mesh2 = mesh4 = mesh8 = mesh16 = NULL;
 #endif

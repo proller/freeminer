@@ -507,7 +507,7 @@ void Client::step(float dtime)
 	{
 		TimeTaker timer_step("Client: Replace updated meshes");
 
-		auto shadows = g_settings->getBool("shadows");
+		//auto shadows = g_settings->getBool("shadows");
 		int num_processed_meshes = 0;
 		while(!m_mesh_update_thread.m_queue_out.empty())
 		{
@@ -524,8 +524,8 @@ void Client::step(float dtime)
 				block->setMesh(r.mesh);
 				//block->scenenode = m_env.getClientMap().getSceneManager()->addOctreeSceneNode(r.mesh->getMesh());
 				block->scenenode = m_env.getClientMap().getSceneManager()->addMeshSceneNode(r.mesh->getMesh());
-				if (shadows)
-					block->scenenode->addShadowVolumeSceneNode();
+				//if (shadows && r.mesh->getMeshBufferCount())
+				//	block->scenenode->addShadowVolumeSceneNode();
 				//m_device->getVideoDriver()->addOcclusionQuery(block->scenenode, r.mesh->getMesh());
 			} else {
 				delete r.mesh;
