@@ -376,7 +376,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 			if(!mesh || !mesh->getMesh()->getMeshBufferCount())
 				continue;
 
-			if (range > 3) {
+			if (range > 2) {
 /* TODO
 				if (block->shadownode) {
 errorstream<<"removing shadow r="<< range<<std::endl;

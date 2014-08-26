@@ -1583,7 +1583,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 	if (g_settings->getBool("shadows")) {
 		auto node = smgr->addLightSceneNode(0, core::vector3df(10,10,10), video::SColorf(1.0f, 0.6f, 0.7f, 1.0f), 8000.0f);
 		if (node) {
-			auto anim = smgr->createFlyCircleAnimator (core::vector3df(0,150,0),2500.0f);
+			auto anim = smgr->createFlyCircleAnimator (core::vector3df(0,150,0), 2500.0f, 0.0001, core::vector3df(1,0.5,0));
 			node->addAnimator(anim);
 			anim->drop();
 		}
