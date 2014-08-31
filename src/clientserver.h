@@ -108,9 +108,12 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 		add swap_node
 	PROTOCOL_VERSION 23:
 		TOSERVER_CLIENT_READY
+	PROTOCOL_VERSION 24:
+		ContentFeatures version 7
+		ContentFeatures: change number of special tiles to 6 (CF_SPECIAL_COUNT)
 */
 
-#define LATEST_PROTOCOL_VERSION 23
+#define LATEST_PROTOCOL_VERSION 24
 
 // Server's supported network protocol range
 #define SERVER_PROTOCOL_VERSION_MIN 13
@@ -523,7 +526,7 @@ enum ToClientCommand
 		u16 breath
 	*/
 
-	TOCLIENT_SET_SKY = 0xae, // MUST BE 0x4f (as in MT )BUT IT BROKE OLD FM SERVERS
+	TOCLIENT_SET_SKY = 0x4f,
 	/*
 		u16 command
 		u8[4] color (ARGB)

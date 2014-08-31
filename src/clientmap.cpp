@@ -411,13 +411,19 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 			drawlist.set(bp, block);
 */
 			blocks_drawn++;
+
 			if(d/BS > farthest_drawn)
 				farthest_drawn = d/BS;
+
+			if (farthest_drawn > m_control.farthest_drawn)
+				m_control.farthest_drawn = farthest_drawn;
 
 		if (porting::getTimeMs() > end_ms) {
 			m_drawlist_last = n;
 			break;
 		}
+
+
 	}
 	}
 	if (!calls)
