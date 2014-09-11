@@ -172,13 +172,14 @@ MapNode Map::getNodeNoEx(v3s16 p)
 MapNode Map::getNodeTry(v3s16 p)
 {
 	v3s16 blockpos = getNodeBlockPos(p);
-	MapBlock *block = getBlockNoCreateNoEx(blockpos);
+	MapBlock *block = getBlockNoCreateNoEx(blockpos, true);
 	if(block == NULL)
 		return MapNode(CONTENT_IGNORE);
 	v3s16 relpos = p - blockpos*MAP_BLOCKSIZE;
 	return block->getNodeTry(relpos);
 }
 
+/*
 MapNode Map::getNodeNoLock(v3s16 p) //dont use
 {
 	v3s16 blockpos = getNodeBlockPos(p);
@@ -187,6 +188,7 @@ MapNode Map::getNodeNoLock(v3s16 p) //dont use
 		return MapNode(CONTENT_IGNORE);
 	return block->getNodeNoLock(p - blockpos*MAP_BLOCKSIZE);
 }
+*/
 
 // throws InvalidPositionException if not found
 MapNode Map::getNode(v3s16 p)
@@ -1623,7 +1625,7 @@ struct NodeNeighbor {
 };
 
 void Map::transforming_liquid_push_back(v3s16 & p) {
-	JMutexAutoLock lock(m_transforming_liquid_mutex);
+	//JMutexAutoLock lock(m_transforming_liquid_mutex);
 	m_transforming_liquid.push_back(p);
 }
 
@@ -1700,7 +1702,7 @@ u32 Map::transformLiquidsReal(Server *m_server, std::map<v3s16, MapBlock*> & mod
 		*/
 		v3s16 p0;
 		{
-			JMutexAutoLock lock(m_transforming_liquid_mutex);
+			//JMutexAutoLock lock(m_transforming_liquid_mutex);
 			p0 = m_transforming_liquid.pop_front();
 		}
 		u16 total_level = 0;
@@ -2047,7 +2049,7 @@ u32 Map::transformLiquidsReal(Server *m_server, std::map<v3s16, MapBlock*> & mod
 			// If node emits light, MapBlock requires lighting update
 			// or if node removed
 			v3s16 blockpos = getNodeBlockPos(neighbors[i].p);
-			MapBlock *block = getBlockNoCreateNoEx(blockpos);
+			MapBlock *block = getBlockNoCreateNoEx(blockpos, true); // remove true if light bugs
 			if(block != NULL) {
 				modified_blocks[blockpos] = block;
 				if(!nodemgr->get(neighbors[i].n).light_propagates || nodemgr->get(neighbors[i].n).light_source) // better to update always
@@ -2079,7 +2081,7 @@ u32 Map::transformLiquidsReal(Server *m_server, std::map<v3s16, MapBlock*> & mod
 		<<" ret="<<ret<<std::endl;
 	*/
 
-	JMutexAutoLock lock(m_transforming_liquid_mutex);
+	//JMutexAutoLock lock(m_transforming_liquid_mutex);
 
 	while (must_reflow.size() > 0)
 		m_transforming_liquid.push_back(must_reflow.pop_front());
@@ -2105,7 +2107,7 @@ u32 Map::transformLiquids(Server *m_server, std::map<v3s16, MapBlock*> & modifie
 	DSTACK(__FUNCTION_NAME);
 	//TimeTaker timer("transformLiquids()");
 
-	JMutexAutoLock lock(m_transforming_liquid_mutex);
+	//JMutexAutoLock lock(m_transforming_liquid_mutex);
 
 	u32 loopcount = 0;
 	u32 initial_size = m_transforming_liquid.size();
@@ -2766,7 +2768,7 @@ bool ServerMap::initBlockMake(BlockMakeData *data, v3s16 blockpos)
 	// Add the area
 	{
 		//TimeTaker timer("initBlockMake() initialEmerge");
-		data->vmanip->initialEmerge(bigarea_blocks_min, bigarea_blocks_max, false);
+		data->vmanip->initialEmerge(bigarea_blocks_min, bigarea_blocks_max);
 	}
 
 	// Ensure none of the blocks to be generated were marked as containing CONTENT_IGNORE
@@ -2834,7 +2836,7 @@ void ServerMap::finishBlockMake(BlockMakeData *data,
 		Copy transforming liquid information
 	*/
 	{
-	JMutexAutoLock lock(m_transforming_liquid_mutex);
+	//JMutexAutoLock lock(m_transforming_liquid_mutex);
 	while(data->transforming_liquid.size() > 0)
 	{
 		v3s16 p = data->transforming_liquid.pop_front();
@@ -3062,6 +3064,28 @@ void ServerMap::prepareBlock(MapBlock *block) {
 	v3s16 p = block->getPos() *  MAP_BLOCKSIZE;
 	updateBlockHeat(senv, p, block);
 	updateBlockHumidity(senv, p, block);
+}
+
+// N.B.  This requires no synchronization, since data will not be modified unless
+// the VoxelManipulator being updated belongs to the same thread.
+void ServerMap::updateVManip(v3s16 pos)
+{
+	Mapgen *mg = m_emerge->getCurrentMapgen();
+	if (!mg)
+		return;
+
+	ManualMapVoxelManipulator *vm = mg->vm;
+	if (!vm)
+		return;
+
+	if (!vm->m_area.contains(pos))
+		return;
+
+	s32 idx = vm->m_area.index(pos);
+	vm->m_data[idx] = getNodeNoEx(pos);
+	vm->m_flags[idx] &= ~VOXELFLAG_NO_DATA;
+
+	vm->m_is_dirty = true;
 }
 
 /**
@@ -3434,7 +3458,7 @@ s16 ServerMap::updateBlockHeat(ServerEnvironment *env, v3s16 p, MapBlock *block,
 		if (gametime < block->heat_last_update)
 			return block->heat + myrand_range(0, 1);
 	} else if (!cache) {
-		block = getBlockNoCreateNoEx(bp);
+		block = getBlockNoCreateNoEx(bp, true);
 	}
 	if (cache && cache->count(bp))
 		return cache->at(bp) + myrand_range(0, 1);
@@ -3459,7 +3483,7 @@ s16 ServerMap::updateBlockHumidity(ServerEnvironment *env, v3s16 p, MapBlock *bl
 		if (gametime < block->humidity_last_update)
 			return block->humidity + myrand_range(0, 1);
 	} else if (!cache) {
-		block = getBlockNoCreateNoEx(bp);
+		block = getBlockNoCreateNoEx(bp, true);
 	}
 	if (cache && cache->count(bp))
 		return cache->at(bp) + myrand_range(0, 1);
@@ -3514,6 +3538,7 @@ int ServerMap::getSurface(v3s16 basepos, int searchup, bool walkable_only) {
 
 ManualMapVoxelManipulator::ManualMapVoxelManipulator(Map *map):
 		VoxelManipulator(),
+		m_is_dirty(false),
 		m_create_area(false),
 		m_map(map)
 {
@@ -3609,6 +3634,8 @@ void ManualMapVoxelManipulator::initialEmerge(v3s16 blockpos_min,
 
 		m_loaded_blocks[p] = flags;
 	}
+
+	m_is_dirty = false;
 }
 
 void ManualMapVoxelManipulator::blitBackAll(
