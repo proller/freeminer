@@ -205,6 +205,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 	auto shadows = g_settings->getBool("shadows");
 
 	const int maxq = 1000;
+	int shadows_added = 0;
 
 	for(auto & ir : m_blocks) {
 
@@ -376,7 +377,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime)
 			if(!mesh || !mesh->getMesh()->getMeshBufferCount())
 				continue;
 
-			if (range > 2) {
+			if (range > 10) {
 /* TODO
 				if (block->shadownode) {
 errorstream<<"removing shadow r="<< range<<std::endl;
@@ -385,7 +386,7 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 					block->shadownode = nullptr;
 				}
 */
-			} else if (shadows && !block->shadownode && block->scenenode && mesh->getMesh()->getMeshBufferCount())
+			} else if (shadows && !shadows_added++ && !block->shadownode && block->scenenode && mesh->getMesh()->getMeshBufferCount())
 				block->shadownode = block->scenenode->addShadowVolumeSceneNode();
 
 			mesh->incrementUsageTimer(dtime);

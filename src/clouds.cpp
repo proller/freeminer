@@ -71,6 +71,8 @@ void Clouds::OnRegisterSceneNode()
 	}
 
 	ISceneNode::OnRegisterSceneNode();
+	//this->setAutomaticCulling(0);
+	//this->addShadowVolumeSceneNode();
 }
 
 #define MYROUND(x) (x > 0.0 ? (int)x : (int)x - 1)

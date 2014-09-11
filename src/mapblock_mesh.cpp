@@ -1206,13 +1206,15 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 		// Create material
 		video::SMaterial material;
-		material.setFlag(video::EMF_LIGHTING, false);
+		//material.setFlag(video::EMF_LIGHTING, false);
 		material.setFlag(video::EMF_BACK_FACE_CULLING, true);
 		material.setFlag(video::EMF_BILINEAR_FILTER, false);
 		material.setFlag(video::EMF_FOG_ENABLE, true);
 		//material.setFlag(video::EMF_ANTI_ALIASING, video::EAAM_OFF);
 		//material.setFlag(video::EMF_ANTI_ALIASING, video::EAAM_SIMPLE);
 		//material.MaterialType = video::EMT_TRANSPARENT_ALPHA_CHANNEL_REF;
+		//material.setFlag(video::EMF_NORMALIZE_NORMALS, true);
+		//material.setFlag(video::EMF_WIREFRAME, true);
 		material.setTexture(0, p.tile.texture);
 
 		if (enable_shaders) {
