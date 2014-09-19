@@ -37,7 +37,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "modifiedstate.h"
 #include "util/container.h"
 #include "nodetimer.h"
-#include "config.h"
 
 class Database;
 class ClientMap;

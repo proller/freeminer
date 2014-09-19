@@ -100,7 +100,12 @@ public:
 	std::unique_ptr<lock_rec<try_shared_lock>> try_lock_shared_rec();
 };
 
-#if ! CMAKE_THREADS
+#if CMAKE_THREADS
+
+class maybe_locker : public locker { };
+
+#else
+
 class dummy_lock {
 public:
 	bool owns_lock() {return true;}
@@ -118,6 +123,8 @@ public:
 	dummy_lock lock_shared_rec() { return dummy_lock(); };
 	dummy_lock try_lock_shared_rec() { return dummy_lock(); };
 };
+
+class maybe_locker : public dummy_locker { };
 
 #endif
 
