@@ -663,9 +663,9 @@ void ServerEnvironment::loadMeta()
 		if(m_aabms_empty)
 			return;
 
-		auto lock = block->try_lock_unique_rec();
-		if (!lock->owns_lock())
-			return;
+		//auto lock = block->try_lock_unique_rec();
+		//if (!lock->owns_lock())
+		//	return;
 		ScopeProfiler sp(g_profiler, "ABM apply", SPT_ADD);
 		ServerMap *map = &m_env->getServerMap();
 
@@ -678,8 +678,10 @@ void ServerEnvironment::loadMeta()
 		for(p0.Y=0; p0.Y<MAP_BLOCKSIZE; p0.Y++)
 		for(p0.Z=0; p0.Z<MAP_BLOCKSIZE; p0.Z++)
 		{
-			MapNode n = block->getNodeNoLock(p0);
+			MapNode n = block->getNodeTry(p0);
 			content_t c = n.getContent();
+			if (c == CONTENT_IGNORE)
+				continue;
 			v3s16 p = p0 + block->getPosRelative();
 
 			if (!m_aabms[c])

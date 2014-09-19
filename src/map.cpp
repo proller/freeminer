@@ -734,9 +734,9 @@ u32 Map::updateLighting(enum LightBank bank,
 			if(!block || block->isDummy())
 				break;
 
-			//auto lock = block->try_lock_unique_rec();
-			//if (!lock->owns_lock())
-			//	break;
+			auto lock = block->try_lock_unique_rec(); // may cause dark areas
+			if (!lock->owns_lock())
+				break;
 			v3s16 pos = block->getPos();
 			v3s16 posnodes = block->getPosRelative();
 			modified_blocks[pos] = block;
