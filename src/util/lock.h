@@ -7,6 +7,8 @@
 #include <memory>
 #include <chrono>
 
+#include <config.h>
+
 #ifdef _MSC_VER
 #define noexcept
 #endif
@@ -99,7 +101,6 @@ public:
 };
 
 #if ! CMAKE_THREADS
-
 class dummy_lock {
 public:
 	bool owns_lock() {return true;}
@@ -108,10 +109,10 @@ public:
 
 class dummy_locker {
 public:
-	dummy_lock lock_unique();// { return dummy_lock(); };
-	dummy_lock try_lock_unique() { return dummy_lock(); };
-	dummy_lock lock_shared() { return dummy_lock(); };
-	dummy_lock try_lock_shared() { return dummy_lock(); };
+	//dummy_lock lock_unique();// { return dummy_lock(); };
+	//dummy_lock try_lock_unique() { return dummy_lock(); };
+	//dummy_lock lock_shared() { return dummy_lock(); };
+	//dummy_lock try_lock_shared() { return dummy_lock(); };
 	dummy_lock lock_unique_rec() { return dummy_lock(); };
 	dummy_lock try_lock_unique_rec() { return dummy_lock(); };
 	dummy_lock lock_shared_rec() { return dummy_lock(); };
@@ -255,7 +256,14 @@ public:
 };
 
 
-#if ! CMAKE_THREADS
+#if CMAKE_THREADS
+
+template < class Key, class T, class Compare = std::less<Key>,
+         class Allocator = std::allocator<std::pair<const Key, T> >>
+class maybe_shared_map: public shared_map<Key, T, Compare, Allocator>
+{ };
+
+#else
 
 template < class Key, class T, class Compare = std::less<Key>,
          class Allocator = std::allocator<std::pair<const Key, T> >>
@@ -278,13 +286,6 @@ public:
 template < class Key, class T, class Compare = std::less<Key>,
          class Allocator = std::allocator<std::pair<const Key, T> >>
 class maybe_shared_map: public not_shared_map<Key, T, Compare, Allocator>
-{ };
-
-#else
-
-template < class Key, class T, class Compare = std::less<Key>,
-         class Allocator = std::allocator<std::pair<const Key, T> >>
-class maybe_shared_map: public shared_map<Key, T, Compare, Allocator>
 { };
 
 #endif
@@ -401,7 +402,15 @@ public:
 
 };
 
-#if ! CMAKE_THREADS
+#if CMAKE_THREADS
+
+template < class Key, class T, class Hash = std::hash<Key>, class Pred = std::equal_to<Key>,
+         class Alloc = std::allocator<std::pair<const Key, T> >>
+class maybe_shared_unordered_map: public shared_unordered_map<Key, T, Hash, Pred, Alloc>
+{};
+
+#else
+
 template < class Key, class T, class Hash = std::hash<Key>, class Pred = std::equal_to<Key>,
          class Alloc = std::allocator<std::pair<const Key, T> >>
 class not_shared_unordered_map: public std::unordered_map<Key, T, Hash, Pred, Alloc>,
@@ -425,15 +434,6 @@ template < class Key, class T, class Hash = std::hash<Key>, class Pred = std::eq
 class maybe_shared_unordered_map: public not_shared_unordered_map<Key, T, Hash, Pred, Alloc>
 {};
 
-#else
-
-template < class Key, class T, class Hash = std::hash<Key>, class Pred = std::equal_to<Key>,
-         class Alloc = std::allocator<std::pair<const Key, T> >>
-class maybe_shared_unordered_map: public shared_unordered_map<Key, T, Hash, Pred, Alloc>
-{};
-
 #endif
-
-
 
 #endif
