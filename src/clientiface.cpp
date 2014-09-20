@@ -361,7 +361,7 @@ int RemoteClient::GetNextBlocks(
 			/*
 				Don't send already sent blocks
 			*/
-			int block_sent;
+			unsigned int block_sent;
 			{
 				auto lock = m_blocks_sent.lock_shared_rec();
 				block_sent = m_blocks_sent.find(p) != m_blocks_sent.end() ? m_blocks_sent.get(p) : 0;
