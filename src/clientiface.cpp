@@ -361,12 +361,13 @@ int RemoteClient::GetNextBlocks(
 			/*
 				Don't send already sent blocks
 			*/
-			auto block_sent = m_blocks_sent.find(p) != m_blocks_sent.end() ? m_blocks_sent.get(p) : 0;
+			int block_sent;
 			{
-				if(block_sent > 0 && block_sent + (d <= 2 ? 1 : d*d*d) > m_uptime) {
-					continue;
-				}
+				auto lock = m_blocks_sent.lock_shared_rec();
+				block_sent = m_blocks_sent.find(p) != m_blocks_sent.end() ? m_blocks_sent.get(p) : 0;
 			}
+			if(block_sent > 0 && block_sent + (d <= 2 ? 1 : d*d*d) > m_uptime)
+				continue;
 
 			/*
 				Check if map has this block
