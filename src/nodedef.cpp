@@ -34,6 +34,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/serialize.h"
 //#include "profiler.h" // For TimeTaker
 #include "shader.h"
+#include "util/lock.h"
 /*
 	NodeBox
 */
@@ -465,20 +466,22 @@ public:
 	virtual ~CNodeDefManager()
 	{
 	}
+/*
 	virtual IWritableNodeDefManager* clone()
 	{
 		CNodeDefManager *mgr = new CNodeDefManager();
 		*mgr = *this;
 		return mgr;
 	}
-	virtual const ContentFeatures& get(content_t c) const
+*/
+	virtual const ContentFeatures& get(content_t c)
 	{
 		if(c < m_content_features.size())
 			return m_content_features[c];
 		else
 			return m_content_features[CONTENT_UNKNOWN];
 	}
-	virtual const ContentFeatures& get(const MapNode &n) const
+	virtual const ContentFeatures& get(const MapNode &n)
 	{
 		return get(n.getContent());
 	}
@@ -543,7 +546,7 @@ public:
 				result.set((*j).first, true);
 		}
 	}
-	virtual const ContentFeatures& get(const std::string &name) const
+	virtual const ContentFeatures& get(const std::string &name)
 	{
 		content_t id = CONTENT_UNKNOWN;
 		getId(name, id);
@@ -949,7 +952,7 @@ private:
 	}
 private:
 	// Features indexed by id
-	std::vector<ContentFeatures> m_content_features;
+	maybe_shared_vector<ContentFeatures> m_content_features;
 	// A mapping for fast converting back and forth between names and ids
 	NameIdMapping m_name_id_mapping;
 	// Like m_name_id_mapping, but only from names to ids, and includes
