@@ -918,7 +918,8 @@ void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 			m_animated_meshnode->setMaterialFlag(video::EMF_BILINEAR_FILTER, false);
 			m_animated_meshnode->setMaterialType(video::EMT_TRANSPARENT_ALPHA_CHANNEL_REF);
 			m_animated_meshnode->setMaterialFlag(video::EMF_FOG_ENABLE, true);
-			m_animated_meshnode->addShadowVolumeSceneNode();
+			if (g_settings->getBool("shadows"))
+				m_animated_meshnode->addShadowVolumeSceneNode();
 		}
 		else
 			errorstream<<"GenericCAO::addToScene(): Could not load mesh "<<m_prop.mesh<<std::endl;
