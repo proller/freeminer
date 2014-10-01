@@ -418,14 +418,16 @@ PointedThing getPointedThing(Client *client, v3f player_position,
 				mindistance = distance;
 
 				hilightboxes.clear();
-				for(std::vector<aabb3f>::const_iterator
-						i2 = boxes.begin();
-						i2 != boxes.end(); i2++)
-				{
-					aabb3f box = *i2;
-					box.MinEdge += npf + v3f(-d,-d,-d) - intToFloat(camera_offset, BS);
-					box.MaxEdge += npf + v3f(d,d,d) - intToFloat(camera_offset, BS);
-					hilightboxes.push_back(box);
+				if (!g_settings->getBool("enable_node_highlighting")) {
+					for(std::vector<aabb3f>::const_iterator
+							i2 = boxes.begin();
+							i2 != boxes.end(); i2++)
+					{
+						aabb3f box = *i2;
+						box.MinEdge += npf + v3f(-d,-d,-d) - intToFloat(camera_offset, BS);
+						box.MaxEdge += npf + v3f(d,d,d) - intToFloat(camera_offset, BS);
+						hilightboxes.push_back(box);
+					}
 				}
 			}
 		}
@@ -471,11 +473,13 @@ private:
 		Profiler::GraphValues values;
 	};
 	struct Meta{
+		float cur;
 		float min;
 		float max;
 		video::SColor color;
 		Meta(float initial=0, video::SColor color=
 				video::SColor(255,255,255,255)):
+			cur(initial),
 			min(initial),
 			max(initial),
 			color(color)
@@ -520,6 +524,7 @@ public:
 					j->second.min = value;
 				if(value > j->second.max)
 					j->second.max = value;
+				j->second.cur = value;
 			}
 		}
 
@@ -581,7 +586,7 @@ public:
 					core::rect<s32>(textx, y - texth,
 					textx2, y),
 					meta.color);
-			font->draw(narrow_to_wide(id).c_str(),
+			font->draw(narrow_to_wide(id + " " + ftos(meta.cur)).c_str(),
 					core::rect<s32>(textx, y - graphh/2 - texth/2,
 					textx2, y - graphh/2 + texth/2),
 					meta.color);
@@ -948,12 +953,12 @@ bool nodePlacementPrediction(Client &client,
 static inline void create_formspec_menu(GUIFormSpecMenu** cur_formspec,
 		InventoryManager *invmgr, IGameDef *gamedef,
 		IWritableTextureSource* tsrc, IrrlichtDevice * device,
-		IFormSource* fs_src, TextDest* txt_dest
+		IFormSource* fs_src, TextDest* txt_dest, Client* client
 		) {
 
 	if (*cur_formspec == 0) {
 		*cur_formspec = new GUIFormSpecMenu(device, guiroot, -1, &g_menumgr,
-				invmgr, gamedef, tsrc, fs_src, txt_dest, cur_formspec );
+				invmgr, gamedef, tsrc, fs_src, txt_dest, cur_formspec, client);
 		(*cur_formspec)->doPause = false;
 		(*cur_formspec)->drop();
 	}
@@ -987,7 +992,7 @@ static void show_chat_menu(GUIFormSpecMenu** cur_formspec,
 	FormspecFormSource* fs_src = new FormspecFormSource(formspec);
 	LocalFormspecHandler* txt_dst = new LocalFormspecHandler("MT_CHAT_MENU", client);
 
-	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device, fs_src, txt_dst);
+	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device, fs_src, txt_dst, NULL);
 }
 
 static void show_deathscreen(GUIFormSpecMenu** cur_formspec,
@@ -1008,7 +1013,7 @@ static void show_deathscreen(GUIFormSpecMenu** cur_formspec,
 	FormspecFormSource* fs_src = new FormspecFormSource(formspec);
 	LocalFormspecHandler* txt_dst = new LocalFormspecHandler("MT_DEATH_SCREEN", client);
 
-	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device,  fs_src, txt_dst);
+	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device,  fs_src, txt_dst, NULL);
 }
 
 /******************************************************************************/
@@ -1077,7 +1082,7 @@ static void show_pause_menu(GUIFormSpecMenu** cur_formspec,
 	FormspecFormSource* fs_src = new FormspecFormSource(os.str());
 	LocalFormspecHandler* txt_dst = new LocalFormspecHandler("MT_PAUSE_MENU");
 
-	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device,  fs_src, txt_dst);
+	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device,  fs_src, txt_dst, NULL);
 
 	(*cur_formspec)->doPause = true;
 }
@@ -1119,8 +1124,16 @@ static void updateChat(Client& client, f32 dtime, bool show_debug,
 	if (show_debug)
 		chat_y += line_height;
 
-	core::rect<s32> rect(10, chat_y, font->getDimension(recent_chat.c_str()).Width +10,
-			chat_y + (recent_chat_count * line_height));
+	// first pass to calculate height of text to be set
+	s32 width = std::min(font->getDimension(recent_chat.c_str()).Width + 10,
+			porting::getWindowSize().X - 20);
+	core::rect<s32> rect(10, chat_y, width, chat_y + porting::getWindowSize().Y);
+	guitext_chat->setRelativePosition(rect);
+
+	//now use real height of text and adjust rect according to this size	
+	rect = core::rect<s32>(10, chat_y, width,
+			chat_y + guitext_chat->getTextHeight());
+
 
 	guitext_chat->setRelativePosition(rect);
 	// Don't show chat if disabled or empty or profiler is enabled
@@ -2061,7 +2074,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 			PlayerInventoryFormSource* fs_src = new PlayerInventoryFormSource(&client);
 			TextDest* txt_dst = new TextDestPlayerInventory(&client);
 
-			create_formspec_menu(&current_formspec, &client, gamedef, tsrc, device, fs_src, txt_dst);
+			create_formspec_menu(&current_formspec, &client, gamedef, tsrc, device, fs_src, txt_dst, &client);
 
 			InventoryLocation inventoryloc;
 			inventoryloc.setCurrentPlayer();
@@ -2165,31 +2178,18 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 		}
 		else if(input->wasKeyDown(getKeySetting("keymap_screenshot")))
 		{
-			irr::video::IImage* const image = driver->createScreenShot();
-			if (image) {
-				irr::c8 filename[256];
-				snprintf(filename, 256, "%s" DIR_DELIM "screenshot_%u.png",
-						 g_settings->get("screenshot_path").c_str(),
-						 device->getTimer()->getRealTime());
-				if (driver->writeImageToFile(image, filename)) {
-					std::wstringstream sstr;
-					sstr<<"Saved screenshot to '"<<filename<<"'";
-					infostream<<"Saved screenshot to '"<<filename<<"'"<<std::endl;
-					statustext = sstr.str();
-					statustext_time = 0;
-				} else{
-					infostream<<"Failed to save screenshot '"<<filename<<"'"<<std::endl;
-				}
-				image->drop();
-			}
+			client.makeScreenshot(device);
 		}
 		else if(input->wasKeyDown(getKeySetting("keymap_toggle_hud")))
 		{
 			show_hud = !show_hud;
-			if(show_hud)
+			if(show_hud) {
 				statustext = L"HUD shown";
-			else
+				client.setHighlighted(client.getHighlighted(), true);
+			} else {
 				statustext = L"HUD hidden";
+				client.setHighlighted(client.getHighlighted(), false);
+			}
 			statustext_time = 0;
 		}
 		else if(input->wasKeyDown(getKeySetting("keymap_toggle_chat")))
@@ -2650,7 +2650,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 							new TextDestPlayerInventory(&client,*(event.show_formspec.formname));
 
 					create_formspec_menu(&current_formspec, &client, gamedef,
-							tsrc, device, fs_src, txt_dst);
+							tsrc, device, fs_src, txt_dst, &client);
 
 					delete(event.show_formspec.formspec);
 					delete(event.show_formspec.formname);
@@ -2969,14 +2969,15 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 		if(pointed != pointed_old)
 		{
 			infostream<<"Pointing at "<<pointed.dump()<<std::endl;
-			//dstream<<"Pointing at "<<pointed.dump()<<std::endl;
-/* node debug 
+/* node debug
 			MapNode nu = client.getEnv().getClientMap().getNodeNoEx(pointed.node_undersurface);
 			MapNode na = client.getEnv().getClientMap().getNodeNoEx(pointed.node_abovesurface);
 			infostream	<< "|| nu0="<<(int)nu.param0<<" nu1"<<(int)nu.param1<<" nu2"<<(int)nu.param1<<"; nam="<<nodedef->get(nu.getContent()).name
 						<< "|| na0="<<(int)na.param0<<" na1"<<(int)na.param1<<" na2"<<(int)na.param1<<"; nam="<<nodedef->get(na.getContent()).name
 						<<std::endl;
 */
+			if (g_settings->getBool("enable_node_highlighting"))
+				client.setHighlighted(pointed.node_undersurface, show_hud);
 		}
 
 		/*
@@ -3226,7 +3227,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 					TextDest* txt_dst = new TextDestNodeMetadata(nodepos, &client);
 
 					create_formspec_menu(&current_formspec, &client, gamedef,
-							tsrc, device, fs_src, txt_dst);
+							tsrc, device, fs_src, txt_dst, &client);
 
 					current_formspec->setFormSpec(meta->getString("formspec"), inventoryloc);
 				}
@@ -3620,13 +3621,23 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 				update_draw_list_last_cam_pos.getDistanceFrom(camera_position) > MAP_BLOCKSIZE*BS*2 ||
 				camera_offset_changed){
 			update_draw_list_timer = 0;
-#ifndef __ANDROID__
-			if (g_settings->getBool("more_threads"))
-				updateDrawList_future = std::async(std::launch::async, [](Client * client, float dtime){ client->getEnv().getClientMap().updateDrawList(dtime); }, &client, dtime);
+			bool allow = true;
+#if CMAKE_THREADS && !(defined(__ANDROID__) || (defined(__GNUC__) && ((__GNUC__*100 + __GNUC_MINOR__) < 407)))
+			if (g_settings->getBool("more_threads")) {
+				bool allow = true;
+				if (updateDrawList_future.valid()) {
+					auto res = updateDrawList_future.wait_for(std::chrono::milliseconds(0));
+					if (res == std::future_status::timeout)
+						allow = false;
+				}
+				if (allow)
+					updateDrawList_future = std::async(std::launch::async, [](Client * client, video::IVideoDriver* driver, float dtime){ client->getEnv().getClientMap().updateDrawList(driver, dtime, 1000); }, &client, driver, dtime);
+			}
 			else
 #endif
-				client.getEnv().getClientMap().updateDrawList(dtime);
-			update_draw_list_last_cam_pos = camera_position;
+				client.getEnv().getClientMap().updateDrawList(driver, dtime);
+			if (allow)
+				update_draw_list_last_cam_pos = camera_position;
 		}
 
 		/*

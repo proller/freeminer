@@ -107,7 +107,7 @@ public:
 */
 
 class MapBlock /*: public NodeContainer*/
-: public locker
+: public maybe_locker
 {
 public:
 	MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy=false);
@@ -322,23 +322,9 @@ public:
 		return data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X];
 	}
 
-	MapNode getNodeNoEx(v3s16 p)
-	{
-		auto lock = lock_shared_rec();
-		return getNodeNoLock(p);
-	}
+	MapNode getNodeNoEx(v3s16 p);
 
-	void setNode(v3s16 p, MapNode & n)
-	{
-		if(data == NULL)
-			throw InvalidPositionException();
-		if(p.X < 0 || p.X >= MAP_BLOCKSIZE) throw InvalidPositionException();
-		if(p.Y < 0 || p.Y >= MAP_BLOCKSIZE) throw InvalidPositionException();
-		if(p.Z < 0 || p.Z >= MAP_BLOCKSIZE) throw InvalidPositionException();
-		auto lock = lock_unique_rec();
-		data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X] = n;
-		raiseModified(MOD_STATE_WRITE_NEEDED/*, "setNode"*/);
-	}
+	void setNode(v3s16 p, MapNode & n);
 
 	/*
 		Non-checking variants of the above
@@ -516,9 +502,9 @@ public:
 	void pushElementsToCircuit(Circuit* circuit);
 
 #ifndef SERVER // Only on client
-	MapBlockMesh* getMesh(int step = 1);
-	void setMesh(MapBlockMesh* rmesh);
-	void delMesh();
+	std::shared_ptr<MapBlockMesh> getMesh(int step = 1);
+	void setMesh(std::shared_ptr<MapBlockMesh> rmesh);
+	//void delMesh();
 #endif
 
 private:
@@ -552,8 +538,9 @@ public:
 	*/
 
 #ifndef SERVER // Only on client
-	MapBlockMesh *mesh;
-	MapBlockMesh  *mesh2, *mesh4, *mesh8, *mesh16;
+	std::shared_ptr<MapBlockMesh> mesh;
+	std::shared_ptr<MapBlockMesh>  mesh2, mesh4, mesh8, mesh16;
+	unsigned int mesh_size;
 #endif
 	
 	NodeMetadataList m_node_metadata;

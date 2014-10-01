@@ -58,6 +58,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "porting.h"
 #include "main.h"
 #include "settings.h"
+#include "client.h"
 
 #define MY_CHECKPOS(a,b)													\
 	if (v_pos.size() != 2) {												\
@@ -80,12 +81,13 @@ GUIFormSpecMenu::GUIFormSpecMenu(irr::IrrlichtDevice* dev,
 		gui::IGUIElement* parent, s32 id, IMenuManager *menumgr,
 		InventoryManager *invmgr, IGameDef *gamedef,
 		ISimpleTextureSource *tsrc, IFormSource* fsrc, TextDest* tdst,
-		GUIFormSpecMenu** ext_ptr) :
+		GUIFormSpecMenu** ext_ptr, Client* client) :
 	GUIModalMenu(dev->getGUIEnvironment(), parent, id, menumgr),
 	m_device(dev),
 	m_invmgr(invmgr),
 	m_gamedef(gamedef),
 	m_tsrc(tsrc),
+	m_client(client),
 	m_selected_item(NULL),
 	m_selected_amount(0),
 	m_selected_dragging(false),
@@ -2166,10 +2168,10 @@ void GUIFormSpecMenu::drawList(const ListDrawSpec &s, int phase)
 
 			// Draw tooltip
 			std::string tooltip_text = "";
-			if(hovering && !m_selected_item)
+			if (hovering && !m_selected_item)
 				tooltip_text = item.getDefinition(m_gamedef->idef()).description;
-			if(tooltip_text != "")
-			{
+			if (tooltip_text != "") {
+				std::vector<std::string> tt_rows = str_split(tooltip_text, '\n');
 				m_tooltip_element->setBackgroundColor(m_default_tooltip_bgcolor);
 				m_tooltip_element->setOverrideColor(m_default_tooltip_color);
 				m_tooltip_element->setVisible(true);
@@ -2178,7 +2180,7 @@ void GUIFormSpecMenu::drawList(const ListDrawSpec &s, int phase)
 				s32 tooltip_x = m_pointer.X + m_btn_height;
 				s32 tooltip_y = m_pointer.Y + m_btn_height;
 				s32 tooltip_width = m_tooltip_element->getTextWidth() + m_btn_height;
-				s32 tooltip_height = m_tooltip_element->getTextHeight() + 5;
+				s32 tooltip_height = m_tooltip_element->getTextHeight() * tt_rows.size() + 5;
 				m_tooltip_element->setRelativePosition(core::rect<s32>(
 						core::position2d<s32>(tooltip_x, tooltip_y),
 						core::dimension2d<s32>(tooltip_width, tooltip_height)));
@@ -2401,13 +2403,8 @@ void GUIFormSpecMenu::drawMenu()
 						s32 tooltip_width = m_tooltip_element->getTextWidth() + m_btn_height;
 						if (tooltip_x + tooltip_width > (s32)screenSize.X)
 							tooltip_x = (s32)screenSize.X - tooltip_width - m_btn_height;
-						int lines_count = 1;
-						size_t i = 0;
-						while ((i = m_tooltips[iter->fname].tooltip.find("\n", i)) != std::string::npos) {
-							lines_count++;
-							i += 2;
-						}
-						s32 tooltip_height = m_tooltip_element->getTextHeight() * lines_count + 5;
+						std::vector<std::string> tt_rows = str_split(m_tooltips[iter->fname].tooltip, '\n');
+						s32 tooltip_height = m_tooltip_element->getTextHeight() * tt_rows.size() + 5;
 						m_tooltip_element->setRelativePosition(core::rect<s32>(
 						core::position2d<s32>(tooltip_x, tooltip_y),
 						core::dimension2d<s32>(tooltip_width, tooltip_height)));
@@ -2939,6 +2936,9 @@ bool GUIFormSpecMenu::OnEvent(const SEvent& event)
 				m_text_dst->gotText(narrow_to_wide("MenuQuit"));
 			}
 			return true;
+		} else if (m_client != NULL && event.KeyInput.PressedDown &&
+			(kp == getKeySetting("keymap_screenshot"))) {
+				m_client->makeScreenshot(m_device);
 		}
 		if (event.KeyInput.PressedDown &&
 			(event.KeyInput.Key==KEY_RETURN ||
@@ -2972,9 +2972,11 @@ bool GUIFormSpecMenu::OnEvent(const SEvent& event)
 
 	}
 
-	if(event.EventType==EET_MOUSE_INPUT_EVENT
-			&& event.MouseInput.Event != EMIE_MOUSE_MOVED) {
-		// Mouse event other than movement
+	if((event.EventType==EET_MOUSE_INPUT_EVENT &&
+			event.MouseInput.Event != EMIE_MOUSE_MOVED) ||
+			(event.MouseInput.Event == EMIE_MOUSE_MOVED &&
+			event.MouseInput.isRightPressed() && getItemAtPos(m_pointer).i != getItemAtPos(m_old_pointer).i)){
+		// Mouse event other than movement or crossing the border of inventory field while holding rmb
 
 		// Get selected item and hovered/clicked item (s)
 
@@ -3030,7 +3032,7 @@ bool GUIFormSpecMenu::OnEvent(const SEvent& event)
 			(m_selected_item->i == s.i);
 
 		// buttons: 0 = left, 1 = right, 2 = middle
-		// up/down: 0 = down (press), 1 = up (release), 2 = unknown event
+		// up/down: 0 = down (press), 1 = up (release), 2 = unknown event, -1 movement
 		int button = 0;
 		int updown = 2;
 		if(event.MouseInput.Event == EMIE_LMOUSE_PRESSED_DOWN)
@@ -3045,6 +3047,8 @@ bool GUIFormSpecMenu::OnEvent(const SEvent& event)
 			{ button = 1; updown = 1; }
 		else if(event.MouseInput.Event == EMIE_MMOUSE_LEFT_UP)
 			{ button = 2; updown = 1; }
+		else if(event.MouseInput.Event == EMIE_MOUSE_MOVED)
+			{ updown = -1;}
 
 		// Set this number to a positive value to generate a move action
 		// from m_selected_item to s.
@@ -3134,6 +3138,16 @@ bool GUIFormSpecMenu::OnEvent(const SEvent& event)
 			}
 
 			m_selected_dragging = false;
+		}
+		else if(updown == -1) {
+			// Mouse has been moved and rmb is down and mouse pointer just
+			// entered a new inventory field (checked in the entry-if, this
+			// is the only action here that is generated by mouse movement)
+			if(m_selected_item != NULL && s.isValid()){
+				// Move 1 item
+				// TODO: middle mouse to move 10 items might be handy
+				move_amount = 1;
+			}
 		}
 
 		// Possibly send inventory action to server
@@ -3234,6 +3248,7 @@ bool GUIFormSpecMenu::OnEvent(const SEvent& event)
 			m_selected_dragging = false;
 			m_selected_content_guess = ItemStack();
 		}
+		m_old_pointer = m_pointer;
 	}
 	if(event.EventType==EET_GUI_EVENT) {
 

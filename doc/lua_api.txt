@@ -422,6 +422,7 @@ Look for examples in games/minimal or games/minetest_game.
 - torchlike
 - signlike
 - plantlike
+- firelike
 - fencelike
 - raillike
 - nodebox -- See below. EXPERIMENTAL
@@ -1290,6 +1291,8 @@ minetest.formspec_escape(string) -> string
 ^ escapes characters [ ] \ , ;  that can not be used in formspecs
 minetest.is_yes(arg)
 ^ returns whether arg can be interpreted as yes
+minetest.get_us_time()
+^ returns time with microsecond precision
 
 minetest namespace reference
 -----------------------------
@@ -1569,8 +1572,6 @@ minetest.get_heat(pos)
 ^ heat at pos
 minetest.get_humidity(pos)
 ^ humidity at pos
-minetest.get_time_us()
-^ get time in microseconds
 
 Inventory:
 minetest.get_inventory(location) -> InvRef
@@ -1749,7 +1750,7 @@ minetest.place_schematic(pos, schematic, rotation, replacements, force_placement
 ^ Place the schematic specified by schematic (see: Schematic specifier) at pos.
 ^ Rotation can be "0", "90", "180", "270", or "random".
 ^ If the rotation parameter is omitted, the schematic is not rotated.
-^ replacements = {{"oldname", "convert_to"}, ...}
+^ replacements = {["old_name"] = "convert_to", ...}
 ^ force_placement is a boolean indicating whether nodes other than air and
 ^ ignore are replaced by the schematic
 
@@ -1793,6 +1794,18 @@ minetest.deserialize(string) -> table
 ^ Example: deserialize('return { ["foo"] = "bar" }') -> {foo='bar'}
 ^ Example: deserialize('print("foo")') -> nil (function call fails)
   ^ error:[string "print("foo")"]:1: attempt to call global 'print' (a nil value)
+minetest.compress(data, method, ...) -> compressed_data
+^ Compress a string of data.
+^ `method` is a string identifying the compression method to be used.
+^ Supported compression methods:
+^     Deflate (zlib): "deflate"
+^ `...` indicates method-specific arguments.  Currently defined arguments are:
+^     Deflate: `level` - Compression level, 0-9 or nil.
+minetest.decompress(compressed_data, method, ...) -> data
+^ Decompress a string of data (using ZLib).
+^ See documentation on minetest.compress() for supported compression methods.
+^ currently supported.
+^ `...` indicates method-specific arguments.  Currently, no methods use this.
 minetest.is_protected(pos, name) -> bool
 ^ This function should be overridden by protection mods and should be used to
   check if a player can interact at a position.
@@ -2107,6 +2120,8 @@ methods:
   ^ returns actual emerged pmin, actual emerged pmax
 - write_to_map():  Writes the data loaded from the VoxelManip back to the map.
   ^ important: data must be set using VoxelManip:set_data before calling this
+- get_node_at(pos): Returns a MapNode table of the node currently loaded in the VoxelManip at that position
+- set_node_at(pos, node): Sets a specific MapNode in the VoxelManip at that position
 - get_data():  Gets the data read into the VoxelManip object
   ^ returns raw node data is in the form of an array of node content ids
 - set_data(data):  Sets the data contents of the VoxelManip object
@@ -2129,6 +2144,8 @@ methods:
   ^ To be used only by a VoxelManip object from minetest.get_mapgen_object
   ^ (p1, p2) is the area in which lighting is set; defaults to the whole area if left out
 - update_liquids():  Update liquid flow
+- was_modified(): Returns true or false if the data in the voxel manipulator had been modified since
+  the last read from map, due to a call to minetest.set_data() on the loaded area elsewhere
 
 VoxelArea: A helper class for voxel areas
 - Can be created via VoxelArea:new{MinEdge=pmin, MaxEdge=pmax}
@@ -2712,7 +2729,7 @@ Decoration definition (register_decoration)
         },
     },
     ^ See 'Schematic specifier' for details.
-    replacements = {{"oldname", "convert_to"}, ...},
+    replacements = {["oldname"] = "convert_to", ...},
     flags = "place_center_x, place_center_z",
     ^ Flags for schematic decorations.  See 'Schematic attributes'.
     rotation = "90" -- rotate schematic 90 degrees on placement

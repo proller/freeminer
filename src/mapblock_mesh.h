@@ -52,14 +52,20 @@ struct MeshMakeData
 #endif
 	v3s16 m_blockpos;
 	v3s16 m_crack_pos_relative;
+	v3s16 m_highlighted_pos_relative;
 	bool m_smooth_lighting;
+	bool m_show_hud;
+	video::SColor m_highlight_mesh_color;
+
 	IGameDef *m_gamedef;
 	int step;
 	int range;
 	unsigned int timestamp;
+	MapBlock * block;
 	Map & map;
 	MapDrawControl& draw_control;
 	bool debug;
+	bool filled;
 
 	MeshMakeData(IGameDef *gamedef, Map & map_, MapDrawControl& draw_control_);
 	~MeshMakeData();
@@ -68,7 +74,8 @@ struct MeshMakeData
 		Copy central data directly from block, and other data from
 		parent of block.
 	*/
-	void fill(MapBlock *block);
+	void fill(MapBlock *block_);
+	void fill_data();
 
 	/*
 		Set up with only a single node at (1,1,1)
@@ -80,6 +87,11 @@ struct MeshMakeData
 	*/
 	void setCrack(int crack_level, v3s16 crack_pos);
 
+	/*
+		Set the highlighted node position
+	*/
+
+	void setHighlighted(v3s16 highlighted_pos, bool show_hud);
 	/*
 		Enable or disable smooth lighting
 	*/
@@ -153,6 +165,11 @@ private:
 	scene::SMesh *m_mesh;
 	IGameDef *m_gamedef;
 
+	bool m_enable_shaders;
+	bool m_enable_highlighting;
+
+	video::SColor m_highlight_mesh_color;
+	
 	// Must animate() be called before rendering?
 	bool m_has_animation;
 	int m_animation_force_timer;
@@ -162,6 +179,7 @@ private:
 	int m_last_crack;
 	// Maps mesh buffer (i.e. material) indices to base texture names
 	std::map<u32, std::string> m_crack_materials;
+	std::list<u32> m_highlighted_materials;
 
 	// Animation info: texture animationi
 	// Maps meshbuffers to TileSpecs

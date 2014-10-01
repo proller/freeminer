@@ -156,9 +156,10 @@ enum NodeDrawType
 	NDT_GLASSLIKE_FRAMED, // Glass-like, draw connected frames and all all
 	                      // visible faces
 						  // uses 2 textures, one for frames, second for faces
+	NDT_FIRELIKE, // Draw faces slightly rotated and only on connecting nodes
 };
 
-#define CF_SPECIAL_COUNT 2
+#define CF_SPECIAL_COUNT 6
 
 struct ContentFeatures
 {

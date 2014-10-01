@@ -27,6 +27,14 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "constants.h"
 #include "porting.h"
 
+const bool debug =
+#ifdef NDEBUG
+	false
+#else
+	true
+#endif
+;
+
 void set_default_settings(Settings *settings)
 {
 	// Client and server
@@ -129,6 +137,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("console_color", "(0,0,0)");
 	settings->setDefault("console_alpha", "200");
 	settings->setDefault("selectionbox_color", "(0,0,0)");
+	settings->setDefault("enable_node_highlighting", "false");
 	settings->setDefault("crosshair_color", "(255,255,255)");
 	settings->setDefault("crosshair_alpha", "255");
 	settings->setDefault("gui_scaling", "1.0");
@@ -137,6 +146,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("sound_volume", "0.8");
 	settings->setDefault("desynchronize_mapblock_texture_animation", "true");
 	settings->setDefault("enable_vbo", "false");
+	settings->setDefault("selectionbox_width","2");
 	settings->setDefault("hud_hotbar_max_width","1.0");
 
 	settings->setDefault("mip_map", "false");
@@ -199,7 +209,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("workaround_window_size","5");
 	settings->setDefault("max_packets_per_iteration","1024");
 	settings->setDefault("port", "30000");
-	settings->setDefault("bind_address","");
+	settings->setDefault("bind_address", "");
 	settings->setDefault("default_game", "minetest");
 	settings->setDefault("motd", "");
 	settings->setDefault("max_users", "15");
@@ -224,7 +234,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("deprecated_lua_api_handling", "log");
 #endif
 
-	settings->setDefault("profiler_print_interval", "0");
+	settings->setDefault("profiler_print_interval", debug ? "10" : "0");
 	settings->setDefault("enable_mapgen_debug_info", "false");
 	settings->setDefault("active_object_send_range_blocks", "3");
 	settings->setDefault("active_block_range", "2");
@@ -246,13 +256,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("ignore_world_load_errors", "false");
 	settings->setDefault("remote_media", "");
 	settings->setDefault("debug_log_level", "2");
-	settings->setDefault("time_taker_enabled",
-#ifdef NDEBUG
-	"0"
-#else
-	"1"
-#endif
-	);
+	settings->setDefault("time_taker_enabled", debug ? "5" : "0");
 	settings->setDefault("emergequeue_limit_total", "256");
 	settings->setDefault("emergequeue_limit_diskonly", "32");
 	settings->setDefault("emergequeue_limit_generate", "32");
@@ -348,7 +352,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("server_unload_unused_data_timeout", "610"); //more than client
 	settings->setDefault("save_generated_block", "true");
 	settings->setDefault("ignore_world_load_errors", "true");
-	settings->setDefault("active_block_range", "4");
+	//settings->setDefault("active_block_range", "4");
 	settings->setDefault("max_block_send_distance", "30");
 	settings->setDefault("max_simultaneous_block_sends_per_client", "30");
 	settings->setDefault("emergequeue_limit_diskonly", ""); // autodetect from number of cpus
@@ -371,9 +375,14 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("farmesh_wanted", "500");
 	settings->setDefault("enable_any_name", "0"); //WARNING!!! SECURITY RISK WITH SOME MODULES
 	settings->setDefault("password_save", "1");
-	settings->setDefault("more_threads", "true");
 	settings->setDefault("shadows", "true");
+	settings->setDefault("enable_node_highlighting", "1");
 
+#if defined(_WIN32)
+		settings->setDefault("more_threads", "false");
+#else
+		settings->setDefault("more_threads", "true");
+#endif
 
 #if !defined(_WIN32) && !CMAKE_USE_IPV4_DEFAULT
 	settings->setDefault("ipv6_server", "true"); // problems on all windows versions (unable to play in local game)

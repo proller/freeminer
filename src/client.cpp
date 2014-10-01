@@ -20,13 +20,19 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "client.h"
 #include <iostream>
 #include <algorithm>
-#include "clientserver.h"
-#include "jthread/jmutexautolock.h"
-#include "main.h"
 #include <sstream>
+#include <IFileSystem.h>
+#include "jthread/jmutexautolock.h"
+#include "util/directiontables.h"
+#include "util/pointedthing.h"
+#include "util/serialize.h"
+#include "util/string.h"
+#include "strfnd.h"
+#include "client.h"
+#include "clientserver.h"
+#include "main.h"
 #include "filesys.h"
 #include "porting.h"
 #include "mapblock_mesh.h"
@@ -39,18 +45,13 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "nodedef.h"
 #include "itemdef.h"
 #include "shader.h"
-#include <IFileSystem.h>
 #include "base64.h"
 #include "clientmap.h"
 #include "clientmedia.h"
 #include "sound.h"
-#include "util/string.h"
 #include "IMeshCache.h"
 #include "serialization.h"
-#include "util/serialize.h"
 #include "config.h"
-#include "util/directiontables.h"
-#include "util/pointedthing.h"
 #include "version.h"
 #include "drawscene.h"
 
@@ -127,7 +128,7 @@ void * MeshUpdateThread::Thread()
 	BEGIN_DEBUG_EXCEPTION_HANDLER
 
 	porting::setThreadName(("MeshUpdateThread" + itos(id)).c_str());
-	porting::setThreadPriority(50);
+	porting::setThreadPriority(30);
 
 	while(!StopRequested())
 	{
@@ -141,7 +142,7 @@ void * MeshUpdateThread::Thread()
 
 		ScopeProfiler sp(g_profiler, "Client: Mesh making");
 
-		m_queue_out.push_back(MeshUpdateResult(q->m_blockpos, new MapBlockMesh(q.get(), m_camera_offset)));
+		m_queue_out.push_back(MeshUpdateResult(q->m_blockpos, std::shared_ptr<MapBlockMesh>(new MapBlockMesh(q.get(), m_camera_offset))));
 
 		m_queue_in.m_process.erase(q->m_blockpos);
 	}
@@ -167,7 +168,7 @@ Client::Client(
 		ISoundManager *sound,
 		MtEventManager *event,
 		bool ipv6
-		, bool simple_singleplayer_mode_
+		, bool simple_singleplayer_mode
 ):
 	m_packetcounter_timer(0.0),
 	m_connection_reinit_timer(0.1),
@@ -209,7 +210,7 @@ Client::Client(
 	m_time_of_day_update_timer(0),
 	m_recommended_send_interval(0.1),
 	m_removed_sounds_check_timer(0),
-	simple_singleplayer_mode(simple_singleplayer_mode_),
+	m_simple_singleplayer_mode(simple_singleplayer_mode),
 	m_state(LC_Created)
 {
 	/*
@@ -237,11 +238,12 @@ Client::~Client()
 
 	m_mesh_update_thread.Stop();
 	m_mesh_update_thread.Wait();
+/*
 	while(!m_mesh_update_thread.m_queue_out.empty()) {
 		MeshUpdateResult r = m_mesh_update_thread.m_queue_out.pop_frontNoEx();
 		delete r.mesh;
 	}
-
+*/
 
 	delete m_inventory_from_server;
 
@@ -510,6 +512,8 @@ void Client::step(float dtime)
 		int num_processed_meshes = 0;
 		while(!m_mesh_update_thread.m_queue_out.empty())
 		{
+			if (getEnv().getClientMap().m_drawlist_work)
+				break;
 			num_processed_meshes++;
 			MeshUpdateResult r = m_mesh_update_thread.m_queue_out.pop_frontNoEx();
 			MapBlock *block = m_env.getMap().getBlockNoCreateNoEx(r.p);
@@ -518,7 +522,7 @@ void Client::step(float dtime)
 				if (r.mesh)
 					block->setMesh(r.mesh);
 			} else {
-				delete r.mesh;
+				//delete r.mesh;
 			}
 		}
 		if(num_processed_meshes > 0)
@@ -2328,6 +2332,15 @@ int Client::getCrackLevel()
 	return m_crack_level;
 }
 
+void Client::setHighlighted(v3s16 pos, bool show_hud)
+{
+	m_show_hud = show_hud;
+	v3s16 old_highlighted_pos = m_highlighted_pos;
+	m_highlighted_pos = pos;
+	addUpdateMeshTaskForNode(old_highlighted_pos, true);
+	addUpdateMeshTaskForNode(m_highlighted_pos, true);
+}
+
 void Client::setCrack(int level, v3s16 pos)
 {
 	int old_crack_level = m_crack_level;
@@ -2382,16 +2395,14 @@ void Client::typeChatMessage(const std::wstring &message)
 	// Show locally
 	if (message[0] == L'/')
 	{
-		m_chat_queue.push_back(
-				(std::wstring)L"issued command: "+message);
+		m_chat_queue.push_back((std::wstring)L"issued command: " + message);
 	}
 	else
 	{
 		LocalPlayer *player = m_env.getLocalPlayer();
 		assert(player != NULL);
 		std::wstring name = narrow_to_wide(player->getName());
-		m_chat_queue.push_back(
-				(std::wstring)L"<"+name+L"> "+message);
+		m_chat_queue.push_back((std::wstring)L"<" + name + L"> " + message);
 	}
 }
 
@@ -2401,19 +2412,25 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent)
 	MapBlock *b = m_env.getMap().getBlockNoCreateNoEx(p);
 	if(b == NULL)
 		return;
-	
+
 	/*
 		Create a task to update the mesh of the block
 	*/
-	
+
 	std::shared_ptr<MeshMakeData> data(new MeshMakeData(this, m_env.getMap(), m_env.getClientMap().getControl()));
-	
+
 	{
 		//TimeTaker timer("data fill");
 		// Release: ~0ms
 		// Debug: 1-6ms, avg=2ms
 		data->fill(b);
+
+#if ! CMAKE_THREADS
+		data->fill_data();
+#endif
+
 		data->setCrack(m_crack_level, m_crack_pos);
+		data->setHighlighted(m_highlighted_pos, m_show_hud);
 		data->setSmoothLighting(g_settings->getBool("smooth_lighting"));
 		data->step = getFarmeshStep(data->draw_control, getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
 		data->range = getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p);
@@ -2562,7 +2579,7 @@ void Client::afterContentReceived(IrrlichtDevice *device, gui::IGUIFont* font)
 	// Start mesh update thread after setting up content definitions
 	infostream<<"- Starting mesh update thread"<<std::endl;
 	if (!no_output) {
-		auto threads = !g_settings->getBool("more_threads") ? 1 : (porting::getNumberOfProcessors() - (simple_singleplayer_mode ? 2 : 1));
+		auto threads = !g_settings->getBool("more_threads") ? 1 : (porting::getNumberOfProcessors() - (m_simple_singleplayer_mode ? 2 : 1));
 		m_mesh_update_thread.Start(threads < 1 ? 1 : threads);
 	}
 
@@ -2586,6 +2603,34 @@ float Client::getAvgRate(void)
 {
 	return ( m_con.getLocalStat(con::AVG_INC_RATE) +
 			m_con.getLocalStat(con::AVG_DL_RATE));
+}
+
+void Client::makeScreenshot(IrrlichtDevice *device)
+{
+	irr::video::IVideoDriver *driver = device->getVideoDriver();
+	irr::video::IImage* const raw_image = driver->createScreenShot();
+	if (raw_image) {
+		irr::video::IImage* const image = driver->createImage(video::ECF_R8G8B8, 
+			raw_image->getDimension());
+
+		if (image) {
+			raw_image->copyTo(image);
+			irr::c8 filename[256];
+			snprintf(filename, sizeof(filename), "%s" DIR_DELIM "screenshot_%u.png",
+				 g_settings->get("screenshot_path").c_str(),
+				 device->getTimer()->getRealTime());
+			std::stringstream sstr;
+			if (driver->writeImageToFile(image, filename)) {
+				sstr << "Saved screenshot to '" << filename << "'";
+			} else {
+				sstr << "Failed to save screenshot '" << filename << "'";
+			}
+			m_chat_queue.push_back(narrow_to_wide(sstr.str()));
+			infostream << sstr.str() << std::endl;
+			image->drop();
+		}
+		raw_image->drop();
+	}
 }
 
 // IGameDef interface

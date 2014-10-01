@@ -528,42 +528,33 @@ void ServerEnvironment::loadMeta()
 
 	// Open file and deserialize
 	std::ifstream is(path.c_str(), std::ios_base::binary);
-	if(is.good() == false)
-	{
-		infostream<<"ServerEnvironment::loadMeta(): Failed to open "
-				<<path<<std::endl;
+	if (!is.good()) {
+		infostream << "ServerEnvironment::loadMeta(): Failed to open "
+				<< path << std::endl;
 		throw SerializationError("Couldn't load env meta");
 	}
 
 	Settings args;
 
-	for(;;)
-	{
-		if(is.eof())
-			return;
+	if (!args.parseConfigLines(is, "EnvArgsEnd")) {
+		errorstream << "ServerEnvironment::loadMeta(): EnvArgsEnd not found! in " << path << std::endl;
 /*
-			throw SerializationError
-					("ServerEnvironment::loadMeta(): EnvArgsEnd not found");
+		throw SerializationError("ServerEnvironment::loadMeta(): "
+				"EnvArgsEnd not found!");
 */
-		std::string line;
-		std::getline(is, line);
-		std::string trimmedline = trim(line);
-		if(trimmedline == "EnvArgsEnd")
-			break;
-		args.parseConfigLine(line);
 	}
 
-	try{
+	try {
 		m_game_time_start =
 		m_game_time = args.getU64("game_time");
-	}catch(SettingNotFoundException &e){
+	} catch (SettingNotFoundException &e) {
 		// Getting this is crucial, otherwise timestamps are useless
 		throw SerializationError("Couldn't load env meta game_time");
 	}
 
-	try{
+	try {
 		m_time_of_day = args.getU64("time_of_day");
-	}catch(SettingNotFoundException &e){
+	} catch (SettingNotFoundException &e) {
 		// This is not as important
 		m_time_of_day = 9000;
 	}
@@ -792,9 +783,11 @@ bool ServerEnvironment::setNode(v3s16 p, const MapNode &n, s16 fast)
 {
 	INodeDefManager *ndef = m_gamedef->ndef();
 	MapNode n_old = m_map->getNodeNoEx(p);
+
 	// Call destructor
-	if(ndef->get(n_old).has_on_destruct)
+	if (ndef->get(n_old).has_on_destruct)
 		m_script->node_on_destruct(p, n_old);
+
 	// Replace node
 
 	if (fast) {
@@ -805,19 +798,23 @@ bool ServerEnvironment::setNode(v3s16 p, const MapNode &n, s16 fast)
 			m_map->setNode(p, nn);
 		} catch(InvalidPositionException &e) { }
 	} else {
-	bool succeeded = m_map->addNodeWithEvent(p, n);
-	if(!succeeded)
+	if (!m_map->addNodeWithEvent(p, n))
 		return false;
 	}
 
 	m_circuit->addNode(p);
 
+	// Update active VoxelManipulator if a mapgen thread
+	m_map->updateVManip(p);
+
 	// Call post-destructor
-	if(ndef->get(n_old).has_after_destruct)
+	if (ndef->get(n_old).has_after_destruct)
 		m_script->node_after_destruct(p, n_old);
+
 	// Call constructor
-	if(ndef->get(n).has_on_construct)
+	if (ndef->get(n).has_on_construct)
 		m_script->node_on_construct(p, n);
+
 	return true;
 }
 
@@ -825,9 +822,11 @@ bool ServerEnvironment::removeNode(v3s16 p, s16 fast)
 {
 	INodeDefManager *ndef = m_gamedef->ndef();
 	MapNode n_old = m_map->getNodeNoEx(p);
+
 	// Call destructor
-	if(ndef->get(n_old).has_on_destruct)
+	if (ndef->get(n_old).has_on_destruct)
 		m_script->node_on_destruct(p, n_old);
+
 	// Replace with air
 	// This is slightly optimized compared to addNodeWithEvent(air)
 	if (fast) {
@@ -838,16 +837,19 @@ bool ServerEnvironment::removeNode(v3s16 p, s16 fast)
 			m_map->setNode(p, n);
 		} catch(InvalidPositionException &e) { }
 	} else {
-	bool succeeded = m_map->removeNodeWithEvent(p);
-	if(!succeeded)
+	if (!m_map->removeNodeWithEvent(p))
 		return false;
 	}
 
 	m_circuit->removeNode(p, n_old);
 
+	// Update active VoxelManipulator if a mapgen thread
+	m_map->updateVManip(p);
+
 	// Call post-destructor
-	if(ndef->get(n_old).has_after_destruct)
+	if (ndef->get(n_old).has_after_destruct)
 		m_script->node_after_destruct(p, n_old);
+
 	// Air doesn't require constructor
 	return true;
 }
@@ -856,11 +858,14 @@ bool ServerEnvironment::swapNode(v3s16 p, const MapNode &n)
 {
 	//INodeDefManager *ndef = m_gamedef->ndef();
 	MapNode n_old = m_map->getNodeNoEx(p);
-	bool succeeded = m_map->addNodeWithEvent(p, n, false);
-	if(succeeded) {
-		m_circuit->swapNode(p, n_old, n);
-	}
-	return succeeded;
+	if (!m_map->addNodeWithEvent(p, n, false))
+		return false;
+	m_circuit->swapNode(p, n_old, n);
+
+	// Update active VoxelManipulator if a mapgen thread
+	m_map->updateVManip(p);
+
+	return true;
 }
 
 std::set<u16> ServerEnvironment::getObjectsInsideRadius(v3f pos, float radius)
@@ -1180,7 +1185,7 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 			/*infostream<<"Server: Block ("<<p.X<<","<<p.Y<<","<<p.Z
 					<<") being handled"<<std::endl;*/
 
-			MapBlock *block = m_map->getBlockNoCreateNoEx(p);
+			MapBlock *block = m_map->getBlockNoCreateNoEx(p, true);
 			if(block==NULL)
 				continue;
 
@@ -1224,7 +1229,7 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 			m_active_block_timer_last = 0;
 	}
 
-	g_profiler->add("SMap: Blocks: Active:", m_active_blocks.m_list.size());
+	g_profiler->add("SMap: Blocks: Active", m_active_blocks.m_list.size());
 	m_active_block_abm_dtime_counter += dtime;
 	const float abm_interval = 1.0;
 	if(m_active_block_abm_last || m_active_block_modifier_interval.step(dtime, abm_interval))
@@ -1260,7 +1265,7 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 			/*infostream<<"Server: Block ("<<p.X<<","<<p.Y<<","<<p.Z
 					<<") being handled"<<std::endl;*/
 
-			MapBlock *block = m_map->getBlockNoCreateNoEx(p);
+			MapBlock *block = m_map->getBlockNoCreateNoEx(p, true);
 			if(block==NULL)
 				continue;
 
@@ -1307,7 +1312,7 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 		//ScopeProfiler sp(g_profiler, "SEnv: step act. objs avg", SPT_AVG);
 		//TimeTaker timer("Step active objects");
 
-		g_profiler->add("SEnv: Objects:", m_active_objects.size());
+		g_profiler->add("SEnv: Objects", m_active_objects.size());
 
 		// This helps the objects to send data at the same time
 		bool send_recommended = false;

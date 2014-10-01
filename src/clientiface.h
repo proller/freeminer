@@ -336,7 +336,7 @@ private:
 		Key is position, value is dummy.
 		No MapBlock* is stored here because the blocks can get deleted.
 	*/
-	std::map<v3s16, unsigned int> m_blocks_sent;
+	shared_map<v3s16, unsigned int> m_blocks_sent;
 
 public:
 	s16 m_nearest_unsent_d;
@@ -424,13 +424,6 @@ public:
 
 	static std::string state2Name(ClientState state);
 
-protected:
-	//TODO find way to avoid this functions
-	void Lock()
-		{ m_clients_mutex.Lock(); }
-	void Unlock()
-		{ m_clients_mutex.Unlock(); }
-
 public:
 	shared_map<u16, RemoteClient*>& getClientList()
 		{ return m_clients; }
@@ -441,7 +434,6 @@ private:
 
 	// Connection
 	con::Connection* m_con;
-	JMutex m_clients_mutex;
 	// Connected clients (behind the con mutex)
 	shared_map<u16, RemoteClient*> m_clients;
 	std::vector<std::string> m_clients_names; //for announcing masterserver

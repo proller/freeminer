@@ -20,14 +20,20 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <ICameraSceneNode.h>
+#include <ITextSceneNode.h>
+#include <IBillboardSceneNode.h>
+#include <IMeshManipulator.h>
+#include <IAnimatedMeshSceneNode.h>
+#include <IBoneSceneNode.h>
 #include "content_cao.h"
+#include "util/numeric.h" // For IntervalLimiter
+#include "util/serialize.h"
+#include "util/mathconstants.h"
 #include "tile.h"
 #include "environment.h"
 #include "collision.h"
 #include "settings.h"
-#include <ICameraSceneNode.h>
-#include <ITextSceneNode.h>
-#include <IBillboardSceneNode.h>
 #include "serialization.h" // For decompressZlib
 #include "gamedef.h"
 #include "clientobject.h"
@@ -39,15 +45,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "sound.h"
 #include "nodedef.h"
 #include "localplayer.h"
-#include "util/numeric.h" // For IntervalLimiter
-#include "util/serialize.h"
-#include "util/mathconstants.h"
 #include "map.h"
 #include "main.h" // g_settings
 #include "camera.h" // CameraModes
-#include <IMeshManipulator.h>
-#include <IAnimatedMeshSceneNode.h>
-#include <IBoneSceneNode.h>
+#include "log.h"
 
 class Settings;
 struct ToolCapabilities;
@@ -1420,7 +1421,7 @@ void GenericCAO::updateTextures(const std::string &mod)
 		{
 			scene::IMesh *mesh = m_meshnode->getMesh();
 			{
-				std::string tname = "unknown_object.png";
+				std::string tname = "blank.png";
 				if(m_prop.textures.size() >= 1)
 					tname = m_prop.textures[0];
 				tname += mod;
@@ -1443,7 +1444,7 @@ void GenericCAO::updateTextures(const std::string &mod)
 				buf->getMaterial().setFlag(video::EMF_ANISOTROPIC_FILTER, use_anisotropic_filter);
 			}
 			{
-				std::string tname = "unknown_object.png";
+				std::string tname = "blank.png";
 				if(m_prop.textures.size() >= 2)
 					tname = m_prop.textures[1];
 				else if(m_prop.textures.size() >= 1)

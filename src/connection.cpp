@@ -1273,7 +1273,7 @@ void * ConnectionSendThread::Thread()
 	PROFILE(ThreadIdentifier << "ConnectionSend: [" << m_connection->getDesc() << "]");
 
 	porting::setThreadName("ConnectionSend");
-	porting::setThreadPriority(10);
+	porting::setThreadPriority(90);
 
 	/* if stop is requested don't stop immediately but try to send all        */
 	/* packets first */
@@ -1311,7 +1311,7 @@ void * ConnectionSendThread::Thread()
 		/* send non reliable packets */
 		sendPackets(dtime);
 
-		END_DEBUG_EXCEPTION_HANDLER(derr_con);
+		END_DEBUG_EXCEPTION_HANDLER(errorstream);
 	}
 
 	PROFILE(g_profiler->remove(ThreadIdentifier.str()));
@@ -2027,7 +2027,7 @@ void * ConnectionReceiveThread::Thread()
 	PROFILE(ThreadIdentifier << "ConnectionReceive: [" << m_connection->getDesc() << "]");
 
 	porting::setThreadName("ConnectionReceive");
-	porting::setThreadPriority(10);
+	porting::setThreadPriority(90);
 
 #ifdef DEBUG_CONNECTION_KBPS
 	u32 curtime = porting::getTimeMs();
@@ -2100,7 +2100,7 @@ void * ConnectionReceiveThread::Thread()
 			}
 		}
 #endif
-		END_DEBUG_EXCEPTION_HANDLER(derr_con);
+		END_DEBUG_EXCEPTION_HANDLER(errorstream);
 	}
 	PROFILE(g_profiler->remove(ThreadIdentifier.str()));
 	return NULL;
@@ -2158,7 +2158,9 @@ void ConnectionReceiveThread::receive()
 			LOG(derr_con<<m_connection->getDesc()
 					<<"Receive(): Invalid incoming packet, "
 					<<"size: " << received_size
-					<<", protocol: " << readU32(&packetdata[0]) <<std::endl);
+					<<", protocol: "
+					<< ((received_size >= 4) ? readU32(&packetdata[0]) : -1)
+					<< std::endl);
 			continue;
 		}
 
@@ -2399,10 +2401,12 @@ SharedBuffer<u8> ConnectionReceiveThread::processPacket(Channel *channel,
 				}
 			}
 			catch(NotFoundException &e){
+/*
 				LOG(derr_con<<m_connection->getDesc()
 						<<"WARNING: ACKed packet not "
 						"in outgoing queue"
 						<<std::endl);
+*/
 				channel->UpdatePacketTooLateCounter();
 			}
 			throw ProcessedSilentlyException("Got an ACK");

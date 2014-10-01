@@ -97,7 +97,7 @@ public:
 		ThreadStarted();
 
 		porting::setThreadName("Map");
-		porting::setThreadPriority(20);
+		porting::setThreadPriority(15);
 		while(!StopRequested()) {
 			try {
 				if (!m_server->AsyncRunMapStep())
@@ -139,7 +139,7 @@ public:
 		ThreadStarted();
 
 		porting::setThreadName("SendBlocksThread");
-		porting::setThreadPriority(50);
+		porting::setThreadPriority(30);
 		auto time = porting::getTimeMs();
 		while(!StopRequested()) {
 			//infostream<<"S run d="<<m_server->m_step_dtime<< " myt="<<(porting::getTimeMs() - time)/1000.0f<<std::endl;
@@ -165,7 +165,47 @@ public:
 };
 
 
+class LiquidThread : public thread_pool
+{
+	Server *m_server;
+public:
 
+	LiquidThread(Server *server):
+		m_server(server)
+	{}
+
+	void * Thread() {
+		log_register_thread("Liquid");
+
+		DSTACK(__FUNCTION_NAME);
+		BEGIN_DEBUG_EXCEPTION_HANDLER
+
+		ThreadStarted();
+
+		porting::setThreadName("Liquid");
+		porting::setThreadPriority(4);
+		int max_cycle_ms = 5000;
+		while(!StopRequested()) {
+			try {
+				shared_map<v3s16, MapBlock*> modified_blocks; //not used
+				int res = m_server->getEnv().getMap().transformLiquids(m_server, modified_blocks, m_server->m_lighting_modified_blocks, max_cycle_ms);
+				std::this_thread::sleep_for(std::chrono::milliseconds(res ? 5 : 1000));
+#ifdef NDEBUG
+			} catch (BaseException &e) {
+				errorstream<<"Liquid: exception: "<<e.what()<<std::endl;
+			} catch(std::exception &e) {
+				errorstream<<"Liquid: exception: "<<e.what()<<std::endl;
+			} catch (...) {
+				errorstream<<"Liquid: Ooops..."<<std::endl;
+#else
+			} catch (int) { //nothing
+#endif
+			}
+		}
+		END_DEBUG_EXCEPTION_HANDLER(errorstream)
+	return nullptr;
+	}
+};
 
 class ServerThread : public thread_pool
 {
@@ -194,7 +234,7 @@ void * ServerThread::Thread()
 	ThreadStarted();
 
 	porting::setThreadName("ServerThread");
-	porting::setThreadPriority(10);
+	porting::setThreadPriority(40);
 
 	while(!StopRequested())
 	{
@@ -296,6 +336,7 @@ Server::Server(
 	m_thread(NULL),
 	m_map_thread(nullptr),
 	m_sendblocks(nullptr),
+	m_liquid(nullptr),
 	m_time_of_day_send_timer(0),
 	m_uptime(0),
 	m_clients(&m_con),
@@ -316,7 +357,11 @@ Server::Server(
 
 	m_step_dtime = 0.0;
 	m_lag = g_settings->getFloat("dedicated_server_step");
+#if CMAKE_THREADS
 	more_threads = g_settings->getBool("more_threads");
+#else
+	more_threads = 0;
+#endif
 
 	if(path_world == "")
 		throw ServerError("Supplied empty world path");
@@ -348,6 +393,7 @@ Server::Server(
 	if (more_threads) {
 		m_map_thread = new MapThread(this);
 		m_sendblocks = new SendBlocksThread(this);
+		m_liquid = new LiquidThread(this);
 	}
 
 	// Create world if it doesn't exist
@@ -515,6 +561,8 @@ Server::~Server()
 	stop();
 	delete m_thread;
 
+	if (m_liquid)
+		delete m_liquid;
 	if (m_sendblocks)
 		delete m_sendblocks;
 	if (m_map_thread)
@@ -556,25 +604,23 @@ void Server::start(Address bind_addr)
 	infostream<<"Starting server on "
 			<< bind_addr.serializeString() <<"..."<<std::endl;
 
-	// Stop thread if already running
-	m_thread->Stop();
-	if (m_sendblocks)
-		m_sendblocks->Stop();
-	if (m_map_thread)
-		m_map_thread->Stop();
-	
 	// Initialize connection
 	m_con.SetTimeoutMs(30);
 	m_con.Serve(bind_addr);
 
 	// Start thread
-	m_thread->Start();
+	m_thread->restart();
 	if (m_map_thread)
-		m_map_thread->Start();
+		m_map_thread->restart();
 	if (m_sendblocks)
-		m_sendblocks->Start();
+		m_sendblocks->restart();
+	if (m_liquid)
+		m_liquid->restart();
 
 	actionstream << "\033[1mfree\033[1;33mminer \033[1;36mv" << minetest_version_hash << "\033[0m \t"
+#if CMAKE_THREADS
+			<< " THREADS \t"
+#endif
 #ifndef NDEBUG
 			<< " DEBUG \t"
 #endif
@@ -595,18 +641,15 @@ void Server::stop()
 	infostream<<"Server: Stopping and waiting threads"<<std::endl;
 
 	// Stop threads (set run=false first so both start stopping)
-	m_thread->Stop();
 	//m_emergethread.setRun(false);
-	m_thread->Wait();
+	m_thread->join();
 	//m_emergethread.stop();
-	if (m_sendblocks) {
-		m_sendblocks->Stop();
-		m_sendblocks->Wait();
-	}
-	if (m_map_thread) {
-		m_map_thread->Stop();
-		m_map_thread->Wait();
-	}
+	if (m_liquid)
+		m_liquid->join();
+	if (m_sendblocks)
+		m_sendblocks->join();
+	if (m_map_thread)
+		m_map_thread->join();
 
 	infostream<<"Server: Threads stopped"<<std::endl;
 }
@@ -814,7 +857,6 @@ void Server::AsyncRunStep(bool initial_step)
 		//infostream<<"Server: Checking added and deleted active objects"<<std::endl;
 		JMutexAutoLock envlock(m_env_mutex);
 
-		m_clients.Lock();
 		auto & clients = m_clients.getClientList();
 		ScopeProfiler sp(g_profiler, "Server: checking added and deleted objs");
 
@@ -823,6 +865,7 @@ void Server::AsyncRunStep(bool initial_step)
 		radius *= MAP_BLOCKSIZE;
 		s16 radius_deactivate = radius*3;
 
+		auto lock = clients.lock_shared_rec();
 		for(auto
 			i = clients.begin();
 			i != clients.end(); ++i)
@@ -938,7 +981,6 @@ void Server::AsyncRunStep(bool initial_step)
 					<<"packet size is "<<reply.getSize()<<std::endl;
 */
 		}
-		m_clients.Unlock();
 #if 0
 		/*
 			Collect a list of all the objects known by the clients
@@ -1001,8 +1043,9 @@ void Server::AsyncRunStep(bool initial_step)
 			message_list->push_back(aom);
 		}
 
-		m_clients.Lock();
 		auto & clients = m_clients.getClientList();
+		{
+		auto lock = clients.lock_shared_rec();
 		// Route data to every client
 		for(auto
 			i = clients.begin();
@@ -1073,8 +1116,7 @@ void Server::AsyncRunStep(bool initial_step)
 						<<std::endl;
 			}*/
 		}
-		m_clients.Unlock();
-
+		}
 		// Clear buffered_messages
 		for(std::map<u16, std::list<ActiveObjectMessage>* >::iterator
 				i = buffered_messages.begin();
@@ -1265,7 +1307,7 @@ int Server::AsyncRunMapStep(bool async) {
 
 	/* Transform liquids */
 	m_liquid_transform_timer += dtime;
-	if(m_liquid_transform_timer >= m_liquid_transform_interval)
+	if(!more_threads && m_liquid_transform_timer >= m_liquid_transform_interval)
 	{
 		TimeTaker timer_step("Server step: liquid transform");
 		m_liquid_transform_timer -= m_liquid_transform_interval;
@@ -1401,13 +1443,11 @@ PlayerSAO* Server::StageTwoClientInit(u16 peer_id)
 {
 	std::string playername = "";
 	PlayerSAO *playersao = NULL;
-	m_clients.Lock();
-	RemoteClient* client = m_clients.lockedGetClientNoEx(peer_id, CS_InitDone);
-	if (client != NULL) {
-		playername = client->getName();
-		playersao = emergePlayer(playername.c_str(), peer_id);
-	}
-	m_clients.Unlock();
+		RemoteClient* client = m_clients.lockedGetClientNoEx(peer_id, CS_InitDone);
+		if (client != NULL) {
+			playername = client->getName();
+			playersao = emergePlayer(playername.c_str(), peer_id);
+		}
 
 	RemotePlayer *player =
 		static_cast<RemotePlayer*>(m_env->getPlayer(playername.c_str()));
@@ -3075,7 +3115,6 @@ void Server::setInventoryModified(const InventoryLocation &loc)
 void Server::SetBlocksNotSent(std::map<v3s16, MapBlock *>& block)
 {
 	std::list<u16> clients = m_clients.getClientIDs();
-	m_clients.Lock();
 	// Set the modified blocks unsent for all the clients
 	for (std::list<u16>::iterator
 		 i = clients.begin();
@@ -3084,7 +3123,6 @@ void Server::SetBlocksNotSent(std::map<v3s16, MapBlock *>& block)
 			if (client != NULL)
 				client->SetBlocksNotSent(block);
 		}
-	m_clients.Unlock();
 }
 
 void Server::peerAdded(con::Peer *peer)
@@ -3134,11 +3172,9 @@ bool Server::getClientInfo(
 	)
 {
 	*state = m_clients.getClientState(peer_id);
-	m_clients.Lock();
 	RemoteClient* client = m_clients.lockedGetClientNoEx(peer_id, CS_Invalid);
 
 	if (client == NULL) {
-		m_clients.Unlock();
 		return false;
 	}
 
@@ -3150,8 +3186,6 @@ bool Server::getClientInfo(
 	*minor = client->getMinor();
 	*patch = client->getPatch();
 	*vers_string = client->getPatch();
-
-	m_clients.Unlock();
 
 	return true;
 }
@@ -3989,7 +4023,6 @@ void Server::sendAddNode(v3s16 p, MapNode n, u16 ignore_id,
 			}
 		}
 		SharedBuffer<u8> reply(0);
-		m_clients.Lock();
 		RemoteClient* client = m_clients.lockedGetClientNoEx(*i);
 		if (client != 0)
 		{
@@ -4012,7 +4045,6 @@ void Server::sendAddNode(v3s16 p, MapNode n, u16 ignore_id,
 				}
 			}
 		}
-		m_clients.Unlock();
 
 		// Send as reliable
 		if (reply.getSize() > 0)
@@ -4022,8 +4054,7 @@ void Server::sendAddNode(v3s16 p, MapNode n, u16 ignore_id,
 
 void Server::setBlockNotSent(v3s16 p)
 {
-	std::list<u16> clients = m_clients.getClientIDs();
-	m_clients.Lock();
+	auto clients = m_clients.getClientIDs();
 	for(std::list<u16>::iterator
 		i = clients.begin();
 		i != clients.end(); ++i)
@@ -4031,7 +4062,6 @@ void Server::setBlockNotSent(v3s16 p)
 		RemoteClient *client = m_clients.lockedGetClientNoEx(*i);
 		client->SetBlockNotSent(p);
 	}
-	m_clients.Unlock();
 }
 
 void Server::SendBlockNoLock(u16 peer_id, MapBlock *block, u8 ver, u16 net_proto_version, bool reliable)
@@ -4110,19 +4140,17 @@ int Server::SendBlocks(float dtime)
 
 		std::list<u16> clients = m_clients.getClientIDs();
 
-		//m_clients.Lock();
 		for(std::list<u16>::iterator
 			i = clients.begin();
 			i != clients.end(); ++i)
 		{
 			RemoteClient *client = m_clients.lockedGetClientNoEx(*i, CS_Active);
 
-			if (!client)
+			if (client == NULL)
 				continue;
 
 			total += client->GetNextBlocks(m_env,m_emerge, dtime, m_uptime.get() + m_env->m_game_time_start, queue);
 		}
-		//m_clients.Unlock();
 	}
 
 	// Sort.
@@ -4130,7 +4158,6 @@ int Server::SendBlocks(float dtime)
 	// Lowest is most important.
 	std::sort(queue.begin(), queue.end());
 
-	//m_clients.Lock();
 	for(u32 i=0; i<queue.size(); i++)
 	{
 		//TODO: Calculate limit dynamically
@@ -4158,7 +4185,6 @@ int Server::SendBlocks(float dtime)
 		client->SentBlock(q.pos, m_uptime.get() + m_env->m_game_time_start);
 		++total;
 	}
-	//m_clients.Unlock();
 	return total;
 }
 

@@ -80,9 +80,9 @@ private:
 struct MeshUpdateResult
 {
 	v3s16 p;
-	MapBlockMesh * mesh;
+	std::shared_ptr<MapBlockMesh> mesh;
 
-	MeshUpdateResult(v3s16 & p_, MapBlockMesh * mesh_):
+	MeshUpdateResult(v3s16 & p_, std::shared_ptr<MapBlockMesh> mesh_):
 		p(p_),
 		mesh(mesh_)
 	{
@@ -294,7 +294,7 @@ public:
 			ISoundManager *sound,
 			MtEventManager *event,
 			bool ipv6
-			,bool simple_singleplayer_mode_
+			,bool simple_singleplayer_mode
 	);
 	
 	~Client();
@@ -377,6 +377,9 @@ public:
 	int getCrackLevel();
 	void setCrack(int level, v3s16 pos);
 
+	void setHighlighted(v3s16 pos, bool show_hud);
+	v3s16 getHighlighted(){ return m_highlighted_pos; }
+
 	u16 getHP();
 	u16 getBreath();
 
@@ -445,6 +448,8 @@ public:
 
 	LocalClientState getState() { return m_state; }
 
+	void makeScreenshot(IrrlichtDevice *device);
+
 private:
 
 	// Virtual methods from con::PeerHandler
@@ -488,10 +493,12 @@ private:
 	float m_inventory_from_server_age;
 	std::set<v3s16> m_active_blocks;
 	PacketCounter m_packetcounter;
+	bool m_show_hud;
 	// Block mesh animation parameters
 	float m_animation_time;
 	int m_crack_level;
 	v3s16 m_crack_pos;
+	v3s16 m_highlighted_pos;
 	// 0 <= m_daynight_i < DAYNIGHT_CACHE_COUNT
 	//s32 m_daynight_i;
 	//u32 m_daynight_ratio;
@@ -530,7 +537,7 @@ private:
 	// key = name
 	std::map<std::string, Inventory*> m_detached_inventories;
 	double m_uptime;
-	bool simple_singleplayer_mode;
+	bool m_simple_singleplayer_mode;
 
 	// Storage for mesh data for creating multiple instances of the same mesh
 	std::map<std::string, std::string> m_mesh_data;
