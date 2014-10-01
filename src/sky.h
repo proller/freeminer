@@ -134,6 +134,8 @@ private:
 	video::ITexture* m_moon_texture;
 	video::ITexture* m_sun_tonemap;
 	video::ITexture* m_moon_tonemap;
+
+	irr::scene::ILightSceneNode * sun_moon_light;
 };
 
 #endif

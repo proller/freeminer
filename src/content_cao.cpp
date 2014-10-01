@@ -918,7 +918,6 @@ void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 			m_animated_meshnode->setMaterialFlag(video::EMF_BILINEAR_FILTER, false);
 			m_animated_meshnode->setMaterialType(video::EMT_TRANSPARENT_ALPHA_CHANNEL_REF);
 			m_animated_meshnode->setMaterialFlag(video::EMF_FOG_ENABLE, true);
-			m_animated_meshnode->addShadowVolumeSceneNode();
 		}
 		else
 			errorstream<<"GenericCAO::addToScene(): Could not load mesh "<<m_prop.mesh<<std::endl;
@@ -974,8 +973,15 @@ void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 	updateAnimation();
 	updateBonePosition();
 	updateAttachments();
+
+	if (g_settings->getBool("shadows")) {
+		if(m_animated_meshnode)
+			m_animated_meshnode->addShadowVolumeSceneNode();
+		else if(m_meshnode)
+			m_meshnode->addShadowVolumeSceneNode();
+	}
 }
-		
+
 void GenericCAO::updateLight(u8 light_at_pos)
 {
 	u8 li = decode_light(light_at_pos);
