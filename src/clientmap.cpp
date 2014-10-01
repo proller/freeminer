@@ -304,7 +304,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 
 			auto mesh = block->getMesh(mesh_step);
 
-				if (mesh->updateCameraOffset(m_camera_offset))
+				if (mesh && mesh->updateCameraOffset(m_camera_offset))
 					if (block->scenenode) {
 						block->scenenode->remove();
 						block->scenenode = nullptr;
