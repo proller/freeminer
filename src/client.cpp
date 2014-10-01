@@ -521,7 +521,7 @@ void Client::step(float dtime)
 			if(block)
 			{
 
-				block->scene_remove();
+				block->scenenode_remove();
 				block->setMesh(r.mesh);
 				//block->scenenode = m_env.getClientMap().getSceneManager()->addOctreeSceneNode(r.mesh->getMesh());
 				block->scenenode = m_env.getClientMap().getSceneManager()->addMeshSceneNode(r.mesh->getMesh());

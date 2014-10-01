@@ -508,7 +508,8 @@ public:
 	std::shared_ptr<MapBlockMesh> getMesh(int step = 1);
 	void setMesh(std::shared_ptr<MapBlockMesh> rmesh);
 	//void delMesh();
-	bool scene_remove();
+	bool scenenode_remove();
+	bool scenenode_setVisible(bool value);
 #endif
 
 private:

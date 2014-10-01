@@ -243,7 +243,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 			|| bp.Y < p_blocks_min.Y
 			|| bp.Y > p_blocks_max.Y)
 			{
-				ir.second->scene_remove();
+				ir.second->scenenode_setVisible(false);
 				continue;
 			}
 		}
@@ -258,7 +258,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 
 			f32 d = radius_box(blockpos, camera_position); //blockpos_relative.getLength();
 			if (d> range_max) {
-				ir.second->scene_remove();
+				ir.second->scenenode_setVisible(false);
 				continue;
 			}
 			int range = d / (MAP_BLOCKSIZE * BS);
@@ -309,11 +309,8 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 
 			auto mesh = block->getMesh(mesh_step);
 
-				if (mesh && mesh->updateCameraOffset(m_camera_offset))
-					if (block->scenenode) {
-						block->scenenode->remove();
-						block->scenenode = nullptr;
-					}
+			if (mesh && mesh->updateCameraOffset(m_camera_offset))
+				block->scenenode_remove(); // TODO!!
 
 			int range = ir.second;
 
@@ -375,6 +372,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 			)
 			{
 				blocks_occlusion_culled++;
+				block->scenenode_setVisible(false);
 				continue;
 			}
 
@@ -417,7 +415,6 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 
 			mesh->incrementUsageTimer(dtime);
 
-
 			if (!block->scenenode) {
 //				if (block->scenenode)
 //					block->scenenode->remove();
@@ -429,6 +426,7 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 				//errorstream<<"block visible="<<visible<<std::endl;
 				//block->scenenode->setVisible(visible>0);
 			}
+			block->scenenode_setVisible(true);
 
 //continue;
 

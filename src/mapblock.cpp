@@ -830,10 +830,18 @@ void MapBlock::delMesh() {
 */
 
 
-bool MapBlock::scene_remove() {
+bool MapBlock::scenenode_remove() {
 	if (scenenode) {
 		scenenode->remove();
 		scenenode = nullptr;
+		return true;
+	}
+	return false;
+}
+
+bool MapBlock::scenenode_setVisible(bool value) {
+	if (scenenode) {
+		scenenode->setVisible(value);
 		return true;
 	}
 	return false;
