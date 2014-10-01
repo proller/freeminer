@@ -25,10 +25,12 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "log_types.h"
 #include "util/lock.h"
 
-//#include "main.h"
-//#include "profiler.h"
+#include "config.h"
+#include "main.h"
+#include "profiler.h"
 
-#if defined(__GNUC__) && ((__GNUC__*100 + __GNUC_MINOR__) < 407)
+
+#if _MSC_VER || (defined(__GNUC__) && ((__GNUC__*100 + __GNUC_MINOR__) < 408))
 try_shared_mutex m_block_cache_mutex;
 #define NO_THREAD_LOCAL
 #define THREAD_LOCAL
@@ -41,14 +43,18 @@ THREAD_LOCAL v3s16 m_block_cache_p;
 
 MapBlock * Map::getBlockNoCreateNoEx(v3s16 p, bool trylock)
 {
-	//ScopeProfiler sp(g_profiler, "Map: getBlockBuffered");
+#ifndef NDEBUG
+	ScopeProfiler sp(g_profiler, "Map: getBlock");
+#endif
 	{
-#ifdef NO_THREAD_LOCAL
+#if CMAKE_THREADS && defined(NO_THREAD_LOCAL)
 		auto lock = try_shared_lock(m_block_cache_mutex, TRY_TO_LOCK);
 		if(lock.owns_lock())
 #endif
 		if(m_block_cache && p == m_block_cache_p) {
-			//g_profiler->add("Map: getBlockBuffered cache hit", 1);
+#ifndef NDEBUG
+			g_profiler->add("Map: getBlock cache hit", 1);
+#endif
 			return m_block_cache;
 		}
 	}
@@ -64,7 +70,7 @@ MapBlock * Map::getBlockNoCreateNoEx(v3s16 p, bool trylock)
 		block = n->second;
 	}
 
-#ifdef NO_THREAD_LOCAL
+#if CMAKE_THREADS && defined(NO_THREAD_LOCAL)
 		auto lock = unique_lock(m_block_cache_mutex, TRY_TO_LOCK);
 		if(lock.owns_lock())
 #endif
@@ -78,20 +84,19 @@ MapBlock * Map::getBlockNoCreateNoEx(v3s16 p, bool trylock)
 
 MapBlock * Map::createBlankBlockNoInsert(v3s16 & p)
 {
-	MapBlock *block = getBlockNoCreateNoEx(p);
-	if (block != NULL) {
-		infostream<<"Block already created "<<block->getPos()<<std::endl;
-		return block;
-	}
-	
-	block = new MapBlock(this, p, m_gamedef);
-	
+	auto block = new MapBlock(this, p, m_gamedef);
 	return block;
 }
 
 MapBlock * Map::createBlankBlock(v3s16 & p)
 {
-	MapBlock *block = createBlankBlockNoInsert(p);
+	MapBlock *block = getBlockNoCreateNoEx(p);
+	if (block != NULL) {
+		infostream<<"Block already created p="<<block->getPos()<<std::endl;
+		return block;
+	}
+
+	block = createBlankBlockNoInsert(p);
 	
 	m_blocks.set(p, block);
 

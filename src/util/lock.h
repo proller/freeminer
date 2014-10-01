@@ -7,6 +7,8 @@
 #include <memory>
 #include <chrono>
 
+#include <config.h>
+
 #ifdef _MSC_VER
 #define noexcept
 #endif
@@ -98,8 +100,47 @@ public:
 	std::unique_ptr<lock_rec<try_shared_lock>> try_lock_shared_rec();
 };
 
+#if CMAKE_THREADS
+
+class maybe_locker : public locker { };
+
+#else
+class dummy_lock {
+public:
+	bool owns_lock() {return true;}
+	dummy_lock * operator->() {return this; }
+};
+
+class dummy_locker {
+public:
+	//dummy_lock lock_unique();// { return dummy_lock(); };
+	//dummy_lock try_lock_unique() { return dummy_lock(); };
+	//dummy_lock lock_shared() { return dummy_lock(); };
+	//dummy_lock try_lock_shared() { return dummy_lock(); };
+	dummy_lock lock_unique_rec() { return dummy_lock(); };
+	dummy_lock try_lock_unique_rec() { return dummy_lock(); };
+	dummy_lock lock_shared_rec() { return dummy_lock(); };
+	dummy_lock try_lock_shared_rec() { return dummy_lock(); };
+};
+
+class maybe_locker : public dummy_locker { };
+
+#endif
+
+/*
+	int lock_unique() { return 1; };
+	dummy_lock try_lock_unique() { return std::unique_ptr<dummy_lock>(new dummy_lock); };
+	int lock_shared() { return 1; };
+	dummy_lock try_lock_shared() { return std::unique_ptr<dummy_lock>(new dummy_lock); };
+	dummy_lock lock_unique_rec() { return std::unique_ptr<dummy_lock>(new dummy_lock); };
+	dummy_lock try_lock_unique_rec() { return std::unique_ptr<dummy_lock>(new dummy_lock); };
+	dummy_lock lock_shared_rec() { return ; };
+	std::unique_ptr<dummy_lock> try_lock_shared_rec() { return std::unique_ptr<dummy_lock>(new dummy_lock); };
+
+*/
 
 #include <map>
+
 template < class Key, class T, class Compare = std::less<Key>,
          class Allocator = std::allocator<std::pair<const Key, T> >>
 class shared_map: public std::map<Key, T, Compare, Allocator>,
@@ -220,7 +261,44 @@ public:
 	}
 };
 
+
+#if CMAKE_THREADS
+
+template < class Key, class T, class Compare = std::less<Key>,
+         class Allocator = std::allocator<std::pair<const Key, T> >>
+class maybe_shared_map: public shared_map<Key, T, Compare, Allocator>
+{ };
+
+#else
+
+template < class Key, class T, class Compare = std::less<Key>,
+         class Allocator = std::allocator<std::pair<const Key, T> >>
+class not_shared_map: public std::map<Key, T, Compare, Allocator>,
+	public dummy_locker {
+public:
+	typedef typename std::map<Key, T, Compare, Allocator> full_type;
+	typedef Key                                           key_type;
+	typedef T                                             mapped_type;
+
+	mapped_type& get(const key_type& k) {
+		return full_type::operator[](k);
+	}
+
+	void set(const key_type& k, const mapped_type& v) {
+		full_type::operator[](k) = v;
+	}
+};
+
+template < class Key, class T, class Compare = std::less<Key>,
+         class Allocator = std::allocator<std::pair<const Key, T> >>
+class maybe_shared_map: public not_shared_map<Key, T, Compare, Allocator>
+{ };
+
+#endif
+
+
 #include <unordered_map>
+
 
 template < class Key, class T, class Hash = std::hash<Key>, class Pred = std::equal_to<Key>,
          class Alloc = std::allocator<std::pair<const Key, T> >>
@@ -329,5 +407,39 @@ public:
 	}
 
 };
+
+#if CMAKE_THREADS
+
+template < class Key, class T, class Hash = std::hash<Key>, class Pred = std::equal_to<Key>,
+         class Alloc = std::allocator<std::pair<const Key, T> >>
+class maybe_shared_unordered_map: public shared_unordered_map<Key, T, Hash, Pred, Alloc>
+{};
+
+#else
+
+template < class Key, class T, class Hash = std::hash<Key>, class Pred = std::equal_to<Key>,
+         class Alloc = std::allocator<std::pair<const Key, T> >>
+class not_shared_unordered_map: public std::unordered_map<Key, T, Hash, Pred, Alloc>,
+	public dummy_locker {
+public:
+	typedef typename std::unordered_map<Key, T, Hash, Pred, Alloc>     full_type;
+	typedef Key                                                        key_type;
+	typedef T                                                          mapped_type;
+
+	mapped_type& get(const key_type& k) {
+		return full_type::operator[](k);
+	}
+
+	void set(const key_type& k, const mapped_type& v) {
+		full_type::operator[](k) = v;
+	}
+};
+
+template < class Key, class T, class Hash = std::hash<Key>, class Pred = std::equal_to<Key>,
+         class Alloc = std::allocator<std::pair<const Key, T> >>
+class maybe_shared_unordered_map: public not_shared_unordered_map<Key, T, Hash, Pred, Alloc>
+{};
+
+#endif
 
 #endif

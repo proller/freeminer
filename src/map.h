@@ -340,7 +340,7 @@ public:
 
 
 // from old mapsector:
-	typedef shared_unordered_map<v3s16, MapBlock*, v3s16Hash, v3s16Equal> m_blocks_type;
+	typedef maybe_shared_unordered_map<v3s16, MapBlock*, v3s16Hash, v3s16Equal> m_blocks_type;
 	m_blocks_type m_blocks;
 	//MapBlock * getBlockNoCreateNoEx(v3s16 & p);
 	MapBlock * createBlankBlockNoInsert(v3s16 & p);

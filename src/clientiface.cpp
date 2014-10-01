@@ -23,6 +23,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <sstream>
 
 #include "clientiface.h"
+#include "util/numeric.h"
+#include "util/mathconstants.h"
 #include "player.h"
 #include "settings.h"
 #include "mapblock.h"
@@ -31,18 +33,17 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "map.h"
 #include "emerge.h"
 #include "serverobject.h"              // TODO this is used for cleanup of only
+#include "main.h"                      // for g_settings
 
 #include "util/numeric.h"
 #include "util/mathconstants.h"
-
 #include "profiler.h"
-#include "main.h"                      // for g_settings
-
 #include "log_types.h"
 
 //VERY BAD COPYPASTE FROM clientmap.cpp!
 static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
-		float start_off, float end_off, u32 needed_count, INodeDefManager *nodemgr)
+		float start_off, float end_off, u32 needed_count, INodeDefManager *nodemgr,
+		std::unordered_map<v3s16, bool, v3s16Hash, v3s16Equal> & occlude_cache)
 {
 	float d0 = (float)BS * p0.getDistanceFrom(p1);
 	v3s16 u0 = p1 - p0;
@@ -53,15 +54,24 @@ static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
 	for(float s=start_off; s<d0+end_off; s+=step){
 		v3f pf = p0f + uf * s;
 		v3s16 p = floatToInt(pf, BS);
-		MapNode n = map->getNodeNoEx(p);
-		if (n.getContent() == CONTENT_IGNORE) // ONE DIFFERENCE FROM clientmap.cpp
-			return true; //false;
 		bool is_transparent = false;
+		bool cache = true;
+		if (occlude_cache.count(p)) {
+			cache = false;
+			is_transparent = occlude_cache[p];
+		} else {
+		MapNode n = map->getNodeTry(p);
+		if (n.getContent() == CONTENT_IGNORE) {
+			return true; // ONE DIFFERENCE FROM clientmap.cpp
+		}
 		const ContentFeatures &f = nodemgr->get(n);
 		if(f.solidness == 0)
 			is_transparent = (f.visual_solidness != 2);
 		else
 			is_transparent = (f.solidness != 2);
+		}
+		if (cache)
+			occlude_cache[p] = is_transparent;
 		if(!is_transparent){
 			count++;
 			if(count >= needed_count)
@@ -71,7 +81,6 @@ static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
 	}
 	return false;
 }
-
 
 const char *ClientInterface::statenames[] = {
 	"Invalid",
@@ -187,6 +196,8 @@ int RemoteClient::GetNextBlocks(
 	{
 		max_simul_sends_usually
 			= LIMITED_MAX_SIMULTANEOUS_BLOCK_SENDS;
+		if(d_start<=1)
+			d_start=2;
 	}
 
 	/*
@@ -231,6 +242,14 @@ int RemoteClient::GetNextBlocks(
 	f32 speed_in_blocks = (playerspeed/(MAP_BLOCKSIZE*BS)).getLength();
 
 	int blocks_occlusion_culled = 0;
+	bool occlusion_culling_enabled = true;
+	auto cam_pos_nodes = center_nodepos;
+	auto nodemgr = env->getGameDef()->getNodeDefManager();
+	MapNode n = env->getMap().getNodeNoEx(cam_pos_nodes);
+	if(n.getContent() == CONTENT_IGNORE || nodemgr->get(n).solidness == 2)
+		occlusion_culling_enabled = false;
+	std::unordered_map<v3s16, bool, v3s16Hash, v3s16Equal> occlude_cache;
+
 	s16 d;
 	for(d = d_start; d <= d_max; d++)
 	{
@@ -280,6 +299,7 @@ int RemoteClient::GetNextBlocks(
 		*/
 			getFacePositions(list, d);
 		}
+
 
 		std::list<v3s16>::iterator li;
 		for(li=list.begin(); li!=list.end(); ++li)
@@ -351,12 +371,13 @@ int RemoteClient::GetNextBlocks(
 			/*
 				Don't send already sent blocks
 			*/
-			auto block_sent = m_blocks_sent.find(p) != m_blocks_sent.end() ? m_blocks_sent.get(p) : 0;
+			unsigned int block_sent;
 			{
-				if(block_sent > 0 && block_sent + (d <= 2 ? 1 : d*d*d) > m_uptime) {
-					continue;
-				}
+				auto lock = m_blocks_sent.lock_shared_rec();
+				block_sent = m_blocks_sent.find(p) != m_blocks_sent.end() ? m_blocks_sent.get(p) : 0;
 			}
+			if(block_sent > 0 && block_sent + (d <= 2 ? 1 : d*d*d) > m_uptime)
+				continue;
 
 			/*
 				Check if map has this block
@@ -377,29 +398,13 @@ int RemoteClient::GetNextBlocks(
 				Occlusion culling
 			*/
 			auto cpn = p;
-			auto cam_pos_nodes = center_nodepos;
-			auto nodemgr = env->getGameDef()->getNodeDefManager();
 
 			// No occlusion culling when free_move is on and camera is
 			// inside ground
-			bool occlusion_culling_enabled = true;
-			if (d <= 2)
-				occlusion_culling_enabled = false;
-				
-// /*
-//			if(g_settings->getBool("free_move")){
-//			if (occlusion_culling_enabled) {
-				MapNode n = env->getMap().getNodeNoEx(cam_pos_nodes);
-				if(n.getContent() == CONTENT_IGNORE ||
-						nodemgr->get(n).solidness == 2)
-					occlusion_culling_enabled = false;
-//			}
-// */
-
 			cpn += v3s16(MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2);
 
 			float step = BS*1;
-			float stepfac = 1.1;
+			float stepfac = 1.3;
 			float startoff = BS*1;
 			float endoff = -BS*MAP_BLOCKSIZE*1.42*1.42;
 			v3s16 spn = cam_pos_nodes + v3s16(0,0,0);
@@ -407,26 +412,26 @@ int RemoteClient::GetNextBlocks(
 			u32 needed_count = 1;
 //infostream<<" occparams "<<" p="<<cam_pos_nodes<<" en="<<occlusion_culling_enabled<<" d="<<d<<" pnod="<<n<<" solid="<<(int)nodemgr->get(n).solidness<<std::endl;
 			//VERY BAD COPYPASTE FROM clientmap.cpp!
-			if(
+			if( d > 2 &&
 				occlusion_culling_enabled &&
 				isOccluded(&env->getMap(), spn, cpn + v3s16(0,0,0),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
 				isOccluded(&env->getMap(), spn, cpn + v3s16(bs2,bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
 				isOccluded(&env->getMap(), spn, cpn + v3s16(bs2,bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
 				isOccluded(&env->getMap(), spn, cpn + v3s16(bs2,-bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
 				isOccluded(&env->getMap(), spn, cpn + v3s16(bs2,-bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
 				isOccluded(&env->getMap(), spn, cpn + v3s16(-bs2,bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
 				isOccluded(&env->getMap(), spn, cpn + v3s16(-bs2,bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
 				isOccluded(&env->getMap(), spn, cpn + v3s16(-bs2,-bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
 				isOccluded(&env->getMap(), spn, cpn + v3s16(-bs2,-bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr)
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache)
 			)
 			{
 //infostream<<" occlusion player="<<cam_pos_nodes<<" d="<<d<<" block="<<cpn<<" total="<<blocks_occlusion_culled<<"/"<<num_blocks_selected<<std::endl;
@@ -706,7 +711,7 @@ ClientInterface::~ClientInterface()
 		Delete clients
 	*/
 	{
-		JMutexAutoLock clientslock(m_clients_mutex);
+		auto lock = m_clients.lock_unique_rec();
 
 		for(std::map<u16, RemoteClient*>::iterator
 			i = m_clients.begin();
@@ -722,7 +727,7 @@ ClientInterface::~ClientInterface()
 std::list<u16> ClientInterface::getClientIDs(ClientState min_state)
 {
 	std::list<u16> reply;
-	JMutexAutoLock clientslock(m_clients_mutex);
+	auto lock = m_clients.lock_shared_rec();
 
 	for(std::map<u16, RemoteClient*>::iterator
 		i = m_clients.begin();
@@ -743,7 +748,7 @@ std::vector<std::string> ClientInterface::getPlayerNames()
 
 void ClientInterface::step(float dtime)
 {
-	g_profiler->add("Server: Clients:", m_clients.size());
+	g_profiler->add("Server: Clients", m_clients.size());
 	m_print_info_timer += dtime;
 	if(m_print_info_timer >= 30.0)
 	{
@@ -772,7 +777,7 @@ void ClientInterface::UpdatePlayerList()
 			infostream<<"* "<<player->getName()<<"\t";
 
 			{
-				JMutexAutoLock clientslock(m_clients_mutex);
+				//JMutexAutoLock clientslock(m_clients_mutex);
 				RemoteClient* client = lockedGetClientNoEx(*i);
 				if(client != NULL)
 					client->PrintInfo(infostream);
@@ -791,7 +796,7 @@ void ClientInterface::send(u16 peer_id,u8 channelnum,
 void ClientInterface::sendToAll(u16 channelnum,
 		SharedBuffer<u8> data, bool reliable)
 {
-	JMutexAutoLock clientslock(m_clients_mutex);
+	auto lock = m_clients.lock_shared_rec();
 	for(std::map<u16, RemoteClient*>::iterator
 		i = m_clients.begin();
 		i != m_clients.end(); ++i)
@@ -807,9 +812,8 @@ void ClientInterface::sendToAll(u16 channelnum,
 
 RemoteClient* ClientInterface::getClientNoEx(u16 peer_id, ClientState state_min)
 {
-	JMutexAutoLock clientslock(m_clients_mutex);
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
+	auto lock = m_clients.lock_shared_rec();
+	auto n = m_clients.find(peer_id);
 	// The client may not exist; clients are immediately removed if their
 	// access is denied, and this event occurs later then.
 	if(n == m_clients.end())
@@ -823,24 +827,13 @@ RemoteClient* ClientInterface::getClientNoEx(u16 peer_id, ClientState state_min)
 
 RemoteClient* ClientInterface::lockedGetClientNoEx(u16 peer_id, ClientState state_min)
 {
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
-	// The client may not exist; clients are immediately removed if their
-	// access is denied, and this event occurs later then.
-	if(n == m_clients.end())
-		return NULL;
-
-	if (n->second->getState() >= state_min)
-		return n->second;
-	else
-		return NULL;
+	return getClientNoEx(peer_id, state_min);
 }
 
 ClientState ClientInterface::getClientState(u16 peer_id)
 {
-	JMutexAutoLock clientslock(m_clients_mutex);
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
+	auto lock = m_clients.lock_shared_rec();
+	auto n = m_clients.find(peer_id);
 	// The client may not exist; clients are immediately removed if their
 	// access is denied, and this event occurs later then.
 	if(n == m_clients.end())
@@ -851,9 +844,9 @@ ClientState ClientInterface::getClientState(u16 peer_id)
 
 void ClientInterface::setPlayerName(u16 peer_id,std::string name)
 {
-	JMutexAutoLock clientslock(m_clients_mutex);
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
+	//JMutexAutoLock clientslock(m_clients_mutex);
+	auto lock = m_clients.lock_unique_rec();
+	auto n = m_clients.find(peer_id);
 	// The client may not exist; clients are immediately removed if their
 	// access is denied, and this event occurs later then.
 	if(n != m_clients.end())
@@ -862,11 +855,10 @@ void ClientInterface::setPlayerName(u16 peer_id,std::string name)
 
 void ClientInterface::DeleteClient(u16 peer_id)
 {
-	JMutexAutoLock conlock(m_clients_mutex);
+	auto lock = m_clients.lock_unique_rec();
 
 	// Error check
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
+	auto n = m_clients.find(peer_id);
 	// The client may not exist; clients are immediately removed if their
 	// access is denied, and this event occurs later then.
 	if(n == m_clients.end())
@@ -897,11 +889,9 @@ void ClientInterface::DeleteClient(u16 peer_id)
 
 void ClientInterface::CreateClient(u16 peer_id)
 {
-	JMutexAutoLock conlock(m_clients_mutex);
-
+	auto lock = m_clients.lock_unique_rec();
 	// Error check
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
+	auto n = m_clients.find(peer_id);
 	// The client shouldn't already exist
 	if(n != m_clients.end()) return;
 
@@ -914,11 +904,10 @@ void ClientInterface::CreateClient(u16 peer_id)
 void ClientInterface::event(u16 peer_id, ClientStateEvent event)
 {
 	{
-		JMutexAutoLock clientlock(m_clients_mutex);
+		auto lock = m_clients.lock_shared_rec();
 
 		// Error check
-		std::map<u16, RemoteClient*>::iterator n;
-		n = m_clients.find(peer_id);
+		auto n = m_clients.find(peer_id);
 
 		// No client to deliver event
 		if (n == m_clients.end())
@@ -936,11 +925,10 @@ void ClientInterface::event(u16 peer_id, ClientStateEvent event)
 
 u16 ClientInterface::getProtocolVersion(u16 peer_id)
 {
-	JMutexAutoLock conlock(m_clients_mutex);
+	auto lock = m_clients.lock_shared_rec();
 
 	// Error check
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
+	auto n = m_clients.find(peer_id);
 
 	// No client to get version
 	if (n == m_clients.end())
@@ -951,11 +939,10 @@ u16 ClientInterface::getProtocolVersion(u16 peer_id)
 
 void ClientInterface::setClientVersion(u16 peer_id, u8 major, u8 minor, u8 patch, std::string full)
 {
-	JMutexAutoLock conlock(m_clients_mutex);
+	auto lock = m_clients.lock_unique_rec();
 
 	// Error check
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
+	auto n = m_clients.find(peer_id);
 
 	// No client to set versions
 	if (n == m_clients.end())

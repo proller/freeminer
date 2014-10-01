@@ -69,10 +69,6 @@ public:
 
 ScriptApiBase::ScriptApiBase()
 {
-	#ifdef SCRIPTAPI_LOCK_DEBUG
-	m_locked = false;
-	#endif
-
 	m_luastack = luaL_newstate();
 	assert(m_luastack);
 
@@ -119,7 +115,7 @@ bool ScriptApiBase::loadMod(const std::string &scriptpath,
 	if (!string_allowed(modname, MODNAME_ALLOWED_CHARS)) {
 		errorstream<<"Error loading mod \""<<modname
 				<<"\": modname does not follow naming conventions: "
-				<<"Only chararacters [a-z0-9_] are allowed."<<std::endl;
+				<<"Only chararacters [a-z0-9_-] are allowed."<<std::endl;
 		return false;
 	}
 
