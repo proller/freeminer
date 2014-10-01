@@ -11,6 +11,7 @@
 #include <cmath>
 #include "settings.h"
 #include "camera.h" // CameraModes
+#include "log_types.h"
 
 //! constructor
 Sky::Sky(scene::ISceneNode* parent, scene::ISceneManager* mgr, s32 id):
@@ -85,6 +86,19 @@ Sky::Sky(scene::ISceneNode* parent, scene::ISceneManager* mgr, s32 id):
 	}
 
 	m_directional_colored_fog = g_settings->getBool("directional_colored_fog");
+
+	if (g_settings->getBool("shadows")) {
+		sun_moon_light = mgr->addLightSceneNode(this, core::vector3df(0,MAP_GENERATION_LIMIT*BS*2,0), video::SColorf(1.0f, 0.6f, 0.7f, 1.0f), MAP_GENERATION_LIMIT*BS*2);
+		if (sun_moon_light) {
+			//irr::video::SLight light_data;
+			//light_data.Type = irr::video::ELT_DIRECTIONAL;
+			//sun_moon_light->setLightData(light_data);
+
+			//auto anim = smgr->createFlyCircleAnimator (core::vector3df(0,150,0),2500.0f);
+			//node->addAnimator(anim);
+			//anim->drop();
+		}
+	}
 }
 
 void Sky::OnRegisterSceneNode()
