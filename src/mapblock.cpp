@@ -828,6 +828,16 @@ void MapBlock::delMesh() {
 	if (mesh)   {mesh   = nullptr;}
 }
 */
+
+
+bool MapBlock::scene_remove() {
+	if (scenenode) {
+		scenenode->remove();
+		scenenode = nullptr;
+		return true;
+	}
+	return false;
+}
 #endif
 
 

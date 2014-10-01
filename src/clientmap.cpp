@@ -242,7 +242,10 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 			|| bp.Z < p_blocks_min.Z
 			|| bp.Y < p_blocks_min.Y
 			|| bp.Y > p_blocks_max.Y)
+			{
+				ir.second->scene_remove();
 				continue;
+			}
 		}
 
 			v3s16 blockpos_nodes = bp * MAP_BLOCKSIZE;
@@ -254,8 +257,10 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 			);
 
 			f32 d = radius_box(blockpos, camera_position); //blockpos_relative.getLength();
-			if (d> range_max)
+			if (d> range_max) {
+				ir.second->scene_remove();
 				continue;
+			}
 			int range = d / (MAP_BLOCKSIZE * BS);
 			draw_nearest[bp] = range;
 		}
@@ -407,7 +412,7 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 					block->shadownode = nullptr;
 				}
 */
-			} else if (shadows && !shadows_added++ && !block->shadownode && block->scenenode && mesh->getMesh()->getMeshBufferCount())
+			} else if (shadows && !block->shadownode && block->scenenode && mesh->getMesh()->getMeshBufferCount())
 				block->shadownode = block->scenenode->addShadowVolumeSceneNode();
 
 			mesh->incrementUsageTimer(dtime);

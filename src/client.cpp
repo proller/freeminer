@@ -520,11 +520,8 @@ void Client::step(float dtime)
 			MapBlock *block = m_env.getMap().getBlockNoCreateNoEx(r.p);
 			if(block)
 			{
-				if (block->scenenode) {
-					block->scenenode->remove();
-					block->scenenode = nullptr;
-				}
 
+				block->scene_remove();
 				block->setMesh(r.mesh);
 				//block->scenenode = m_env.getClientMap().getSceneManager()->addOctreeSceneNode(r.mesh->getMesh());
 				block->scenenode = m_env.getClientMap().getSceneManager()->addMeshSceneNode(r.mesh->getMesh());
