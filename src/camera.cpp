@@ -577,7 +577,8 @@ void Camera::updateViewingRange(f32 frametime_in, f32 busytime_in)
 	else
 		m_cameranode->setFarValue(viewing_range_max * BS * 10);
 */
-	m_cameranode->setFarValue(m_draw_control.wanted_range * BS * 10);
+	//m_cameranode->setFarValue(m_draw_control.wanted_range * BS * 10);
+	m_cameranode->setFarValue(10000 * BS);
 
 	int farmesh = g_settings->getS32("farmesh");
 	int farmesh_step = g_settings->getS32("farmesh_step");
