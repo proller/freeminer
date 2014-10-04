@@ -24,7 +24,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "shader.h"
 #include "irrlichttypes_extrabloated.h"
 #include "debug.h"
-#include "main.h" // for g_settings
+#include <fstream>
 #include "filesys.h"
 #include "util/container.h"
 #include "util/thread.h"
@@ -648,7 +648,8 @@ ShaderInfo generate_shader(std::string name, u8 material_type, u8 drawtype,
 		"NDT_RAILLIKE",
 		"NDT_NODEBOX",
 		"NDT_GLASSLIKE_FRAMED",
-		"NDT_FIRELIKE"
+		"NDT_FIRELIKE",
+		"NDT_GLASSLIKE_FRAMED_OPTIONAL"
 	};
 	
 	for (int i = 0; i < 14; i++){
