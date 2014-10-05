@@ -88,16 +88,7 @@ Sky::Sky(scene::ISceneNode* parent, scene::ISceneManager* mgr, s32 id):
 	m_directional_colored_fog = g_settings->getBool("directional_colored_fog");
 
 	if (g_settings->getBool("shadows")) {
-		sun_moon_light = mgr->addLightSceneNode(this, core::vector3df(0,MAP_GENERATION_LIMIT*BS*2,0), video::SColorf(1.0f, 0.6f, 0.7f, 1.0f), MAP_GENERATION_LIMIT*BS*2);
-		if (sun_moon_light) {
-			//irr::video::SLight light_data;
-			//light_data.Type = irr::video::ELT_DIRECTIONAL;
-			//sun_moon_light->setLightData(light_data);
-
-			//auto anim = smgr->createFlyCircleAnimator (core::vector3df(0,150,0),2500.0f);
-			//node->addAnimator(anim);
-			//anim->drop();
-		}
+		sun_moon_light = mgr->addLightSceneNode(this, core::vector3df(0,MAP_GENERATION_LIMIT*BS*2,0), video::SColorf(1.0f, 0.6f, 0.7f, 1.0f), MAP_GENERATION_LIMIT*BS*5);
 	}
 }
 
@@ -275,6 +266,7 @@ void Sky::render()
 			driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 		}
 
+		bool sun_light_drawed = false;
 		// Draw sun
 		if(wicked_time_of_day > 0.15 && wicked_time_of_day < 0.85){
 			if (!m_sun_texture){
@@ -349,6 +341,15 @@ void Sky::render()
 				}
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 			}
+
+			if (sun_moon_light) {
+				auto light_vector = core::vector3df(0, MAP_GENERATION_LIMIT*BS*2, 0);
+				light_vector.rotateXZBy(90);
+				light_vector.rotateXYBy(wicked_time_of_day * 360 + 180);
+				sun_moon_light->setPosition(light_vector);
+				sun_light_drawed = true;
+			}
+
 		}
 
 		// Draw moon
@@ -426,6 +427,14 @@ void Sky::render()
 				}
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 			}
+
+			if (!sun_light_drawed && sun_moon_light) {
+				auto light_vector = core::vector3df(0, -MAP_GENERATION_LIMIT*BS*2, 0);
+				light_vector.rotateXZBy(90);
+				light_vector.rotateXYBy(wicked_time_of_day * 360 - 180);
+				sun_moon_light->setPosition(light_vector);
+			}
+
 		}
 
 		// Stars
