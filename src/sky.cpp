@@ -5,13 +5,15 @@
 #include "S3DVertex.h"
 #include "tile.h" // getTexturePath
 #include "noise.h" // easeCurve
-#include "main.h" // g_profiler
 #include "profiler.h"
 #include "util/numeric.h" // MYMIN
 #include <cmath>
 #include "settings.h"
 #include "camera.h" // CameraModes
 #include "log_types.h"
+#include "player.h"
+#include "map.h"
+#include "light.h"
 
 //! constructor
 Sky::Sky(scene::ISceneNode* parent, scene::ISceneManager* mgr, s32 id):
@@ -342,7 +344,7 @@ void Sky::render()
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 			}
 
-			if (sun_moon_light) {
+			if (shadow_enabled && sun_moon_light) {
 				auto light_vector = core::vector3df(0, MAP_GENERATION_LIMIT*BS*2, 0);
 				light_vector.rotateXZBy(90);
 				light_vector.rotateXYBy(wicked_time_of_day * 360 + 180);
@@ -428,7 +430,7 @@ void Sky::render()
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 			}
 
-			if (!sun_light_drawed && sun_moon_light) {
+			if (shadow_enabled && !sun_light_drawed && sun_moon_light) {
 				auto light_vector = core::vector3df(0, -MAP_GENERATION_LIMIT*BS*2, 0);
 				light_vector.rotateXZBy(90);
 				light_vector.rotateXYBy(wicked_time_of_day * 360 - 180);
@@ -508,7 +510,8 @@ void Sky::render()
 
 void Sky::update(float time_of_day, float time_brightness,
 		float direct_brightness, bool sunlight_seen,
-		CameraMode cam_mode, float yaw, float pitch)
+		CameraMode cam_mode, float yaw, float pitch,
+		Player * player, Map * map, INodeDefManager *ndef)
 {
 	// Stabilize initial brightness and color values by flooding updates
 	if(m_first_update){
@@ -519,10 +522,17 @@ void Sky::update(float time_of_day, float time_brightness,
 		m_first_update = false;
 		for(u32 i=0; i<100; i++){
 			update(time_of_day, time_brightness, direct_brightness,
-					sunlight_seen, cam_mode, yaw, pitch);
+					sunlight_seen, cam_mode, yaw, pitch, player, map, ndef);
 		}
 		return;
 	}
+
+	auto n = map->getNodeTry(floatToInt(player->getPosition(), BS));
+	if (n.getContent() != CONTENT_IGNORE) {
+		shadow_enabled = n.getLight(LIGHTBANK_DAY, ndef) >= LIGHT_SUN;
+	}
+	//sun_moon_light->setVisible(shadow_enabled);
+	sun_moon_light->enableCastShadow(shadow_enabled);
 
 	m_time_of_day = time_of_day;
 	m_time_brightness = time_brightness;
