@@ -531,7 +531,6 @@ void Sky::update(float time_of_day, float time_brightness,
 	if (n.getContent() != CONTENT_IGNORE) {
 		shadow_enabled = n.getLight(LIGHTBANK_DAY, ndef) >= LIGHT_SUN;
 	}
-	//sun_moon_light->setVisible(shadow_enabled);
 	sun_moon_light->enableCastShadow(shadow_enabled);
 
 	m_time_of_day = time_of_day;
