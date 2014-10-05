@@ -31,6 +31,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "filesys.h"
 #include <cctype>
 
+Settings main_settings;
+Settings *g_settings = &main_settings;
+std::string g_settings_path;
 
 Settings & Settings::operator += (const Settings &other)
 {
@@ -531,7 +534,7 @@ void Settings::setS32(const std::string &name, s32 value)
 }
 
 
-void Settings::setU64(const std::string &name, u64 value)
+void Settings::setU64(const std::string &name, uint64_t value)
 {
 	std::ostringstream os;
 	os << value;

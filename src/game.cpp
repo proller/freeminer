@@ -1775,7 +1775,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 
 	bool use_weather = g_settings->getBool("weather");
 	bool no_output = device->getVideoDriver()->getDriverType() == video::EDT_NULL;
-#ifndef __ANDROID__
+#if CMAKE_THREADS && defined(HAVE_FUTURE)
 	std::future<void> updateDrawList_future;
 #endif
 	int errors = 0;
@@ -2960,6 +2960,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 		if(pointed != pointed_old)
 		{
 			infostream<<"Pointing at "<<pointed.dump()<<std::endl;
+
 /* node debug
 			MapNode nu = client.getEnv().getClientMap().getNodeNoEx(pointed.node_undersurface);
 			MapNode na = client.getEnv().getClientMap().getNodeNoEx(pointed.node_abovesurface);
@@ -2967,8 +2968,14 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 						<< "|| na0="<<(int)na.param0<<" na1"<<(int)na.param1<<" na2"<<(int)na.param1<<"; nam="<<nodedef->get(na.getContent()).name
 						<<std::endl;
 */
-			if (g_settings->getBool("enable_node_highlighting"))
-				client.setHighlighted(pointed.node_undersurface, show_hud);
+
+			if (g_settings->getBool("enable_node_highlighting")) {
+				if (pointed.type == POINTEDTHING_NODE) {
+					client.setHighlighted(pointed.node_undersurface, show_hud);
+				} else {
+					client.setHighlighted(pointed.node_undersurface, false);
+				}
+			}
 		}
 
 		/*
@@ -3324,7 +3331,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 
 		if(draw_control.range_all)
 			fog_range = 100000*BS;
-		else {
+		else if (!no_output) {
 			fog_range = draw_control.wanted_range*BS + 0.0*MAP_BLOCKSIZE*BS;
 			if(use_weather) {
 				auto humidity = client.getEnv().getClientMap().getHumidity(pos_i, 1);
@@ -3345,7 +3352,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 		if(g_settings->getBool("free_move")){
 			direct_brightness = time_brightness;
 			sunlight_seen = true;
-		} else {
+		} else if (!no_output) {
 			//ScopeProfiler sp(g_profiler, "Detecting background light", SPT_AVG);
 			float old_brightness = sky->getBrightness();
 			direct_brightness = (float)client.getEnv().getClientMap()
@@ -3368,6 +3375,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 			time_of_day_smooth = time_of_day_smooth * (1.0-todsm)
 					+ time_of_day * todsm;
 
+		if (!no_output)
 		sky->update(time_of_day_smooth, time_brightness, direct_brightness,
 				sunlight_seen,camera.getCameraMode(), player->getYaw(),
 				player->getPitch());
@@ -3378,6 +3386,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 		/*
 			Update clouds
 		*/
+		if (!no_output)
 		if(clouds){
 			if(sky->getCloudsVisible()){
 				clouds->setVisible(true);
@@ -3613,7 +3622,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 				camera_offset_changed){
 			update_draw_list_timer = 0;
 			bool allow = true;
-#if CMAKE_THREADS && !(defined(__ANDROID__) || (defined(__GNUC__) && ((__GNUC__*100 + __GNUC_MINOR__) < 407)))
+#if CMAKE_THREADS && defined(HAVE_FUTURE)
 			if (g_settings->getBool("more_threads")) {
 				bool allow = true;
 				if (updateDrawList_future.valid()) {
@@ -3621,8 +3630,9 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 					if (res == std::future_status::timeout)
 						allow = false;
 				}
-				if (allow)
+				if (allow) {
 					updateDrawList_future = std::async(std::launch::async, [](Client * client, video::IVideoDriver* driver, float dtime){ client->getEnv().getClientMap().updateDrawList(driver, dtime, 1000); }, &client, driver, dtime);
+				}
 			}
 			else
 #endif

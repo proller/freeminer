@@ -34,7 +34,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "scripting_game.h"
 #include "nodedef.h"
 #include "nodemetadata.h"
-#include "main.h" // For g_settings, g_profiler
+#include <fstream>
 #include "gamedef.h"
 #ifndef SERVER
 #include "clientmap.h"
@@ -445,7 +445,7 @@ Player * ServerEnvironment::loadPlayer(const std::string &playername)
 	bool newplayer = false;
 	bool found = false;
 	if (!player) {
-		player = new RemotePlayer(m_gamedef);
+		player = new RemotePlayer(m_gamedef, playername);
 		newplayer = true;
 	}
 
@@ -472,7 +472,7 @@ Player * ServerEnvironment::loadPlayer(const std::string &playername)
 
 	std::string players_path = m_path_world + DIR_DELIM "players" DIR_DELIM;
 
-	auto testplayer = new RemotePlayer(m_gamedef);
+	auto testplayer = new RemotePlayer(m_gamedef, "");
 	std::string path = players_path + playername;
 		// Open file and deserialize
 		std::ifstream is(path.c_str(), std::ios_base::binary);
