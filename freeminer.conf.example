@@ -119,6 +119,8 @@
 #liquid_fast_flood = 1
 # Enable nice leaves; disable for speed
 #new_style_leaves = true
+# Connects glass if supported by node
+#connected_glass = false
 # Enable smooth lighting with simple ambient occlusion;
 # disable for speed or for different looks.
 #smooth_lighting = true
@@ -175,8 +177,10 @@
 #sound_volume = 0.7
 # Whether node texture animations should be desynchronized per MapBlock
 #desynchronize_mapblock_texture_animation = true
+# (useful if you've there's something to be displayed right or left of hotbar)
+# Width of the selectionbox's lines (Between 1 and 5)
+#selectionbox_width = 2
 # maximum percentage of current window to be used for hotbar
-# (usefull if you've there's something to be displayed right or left of hotbar)
 #hud_hotbar_max_width = 1.0
 # Enable highlighting for nodes (disables selectionboxes)
 #enable_node_highlighting = false
@@ -186,7 +190,7 @@
 #bilinear_filter = false
 #trilinear_filter = false
 # Set to true to pre-generate all item visuals
-#preload_item_visuals = true
+#preload_item_visuals = false
 # Set to true to enable shaders. Disable them if video_driver = direct3d9/8.
 #enable_shaders = true
 # Set to true to enable textures bumpmapping. Requires shaders enabled.
@@ -418,7 +422,8 @@
 #max_packets_per_iteration = 1024
 # Enable thread for send_blocks and thread for map stuff (liquid, map save, ...)  Disable if you have frequent crashes
 #more_threads = 1
-
+# [dev] Shadows from objects
+#shadows = 0
 
 #
 # Physics stuff

@@ -149,7 +149,6 @@ public:
 	}
 	void unDummify()
 	{
-		assert(isDummy());
 		reallocate();
 	}
 	
@@ -303,7 +302,7 @@ public:
 	{
 		auto n = getNodeNoEx(p);
 		if (n.getContent() == CONTENT_IGNORE)
-			throw InvalidPositionException();
+			throw InvalidPositionException("getnode = CONTENT_IGNORE");
 		return n;
 	}
 
@@ -312,7 +311,7 @@ public:
 		auto lock = try_lock_shared_rec();
 		if (!lock->owns_lock())
 			return MapNode(CONTENT_IGNORE);
-		return getNodeNoEx(p);
+		return getNodeNoLock(p);
 	}
 
 	MapNode getNodeNoLock(v3s16 p)
@@ -333,7 +332,7 @@ public:
 	MapNode getNodeNoCheck(s16 x, s16 y, s16 z)
 	{
 		if(data == NULL)
-			throw InvalidPositionException();
+			throw InvalidPositionException("getNodeNoCheck data=NULL");
 		auto lock = lock_shared_rec();
 		return data[z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + y*MAP_BLOCKSIZE + x];
 	}
@@ -346,7 +345,7 @@ public:
 	void setNodeNoCheck(s16 x, s16 y, s16 z, MapNode & n)
 	{
 		if(data == NULL)
-			throw InvalidPositionException();
+			throw InvalidPositionException("setNodeNoCheck data=NULL");
 		auto lock = lock_unique_rec();
 		data[z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + y*MAP_BLOCKSIZE + x] = n;
 		raiseModified(MOD_STATE_WRITE_NEEDED/*, "setNodeNoCheck"*/);
@@ -521,10 +520,10 @@ private:
 	MapNode & getNodeRef(s16 x, s16 y, s16 z)
 	{
 		if(data == NULL)
-			throw InvalidPositionException();
-		if(x < 0 || x >= MAP_BLOCKSIZE) throw InvalidPositionException();
-		if(y < 0 || y >= MAP_BLOCKSIZE) throw InvalidPositionException();
-		if(z < 0 || z >= MAP_BLOCKSIZE) throw InvalidPositionException();
+			throw InvalidPositionException("getNodeRef data=NULL");
+		if(x < 0 || x >= MAP_BLOCKSIZE) throw InvalidPositionException("getNodeRef x out of size");
+		if(y < 0 || y >= MAP_BLOCKSIZE) throw InvalidPositionException("getNodeRef y out of size");
+		if(z < 0 || z >= MAP_BLOCKSIZE) throw InvalidPositionException("getNodeRef z out of size");
 		return data[z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + y*MAP_BLOCKSIZE + x];
 	}
 	MapNode & getNodeRef(v3s16 &p)
@@ -539,7 +538,7 @@ public:
 
 #ifndef SERVER // Only on client
 	std::shared_ptr<MapBlockMesh> mesh;
-	std::shared_ptr<MapBlockMesh>  mesh2, mesh4, mesh8, mesh16;
+	std::shared_ptr<MapBlockMesh> mesh2, mesh4, mesh8, mesh16;
 	unsigned int mesh_size;
 #endif
 	
@@ -658,6 +657,8 @@ inline v3s16 getNodeBlockPos(const v3s16 &p)
 	Get a quick string to describe what a block actually contains
 */
 std::string analyze_block(MapBlock *block);
+
+typedef std::shared_ptr<MapBlock> MapBlockP;
 
 #endif
 

@@ -401,5 +401,13 @@ v2u32 getWindowSize();
 #include "porting_android.h"
 #endif
 
+
+#if CMAKE_HAVE_THREAD_LOCAL
+#define THREAD_LOCAL thread_local
+#else
+#define NO_THREAD_LOCAL
+#define THREAD_LOCAL
+#endif
+
 #endif // PORTING_HEADER
 

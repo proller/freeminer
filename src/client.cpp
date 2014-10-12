@@ -20,13 +20,19 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "client.h"
 #include <iostream>
 #include <algorithm>
-#include "clientserver.h"
-#include "jthread/jmutexautolock.h"
-#include "main.h"
 #include <sstream>
+#include <IFileSystem.h>
+#include "jthread/jmutexautolock.h"
+#include "util/directiontables.h"
+#include "util/pointedthing.h"
+#include "util/serialize.h"
+#include "util/string.h"
+#include "strfnd.h"
+#include "client.h"
+#include "clientserver.h"
+#include "main.h"
 #include "filesys.h"
 #include "porting.h"
 #include "mapblock_mesh.h"
@@ -39,18 +45,13 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "nodedef.h"
 #include "itemdef.h"
 #include "shader.h"
-#include <IFileSystem.h>
 #include "base64.h"
 #include "clientmap.h"
 #include "clientmedia.h"
 #include "sound.h"
-#include "util/string.h"
 #include "IMeshCache.h"
 #include "serialization.h"
-#include "util/serialize.h"
 #include "config.h"
-#include "util/directiontables.h"
-#include "util/pointedthing.h"
 #include "version.h"
 #include "drawscene.h"
 
@@ -216,9 +217,7 @@ Client::Client(
 		Add local player
 	*/
 	{
-		Player *player = new LocalPlayer(this);
-
-		player->updateName(playername);
+		Player *player = new LocalPlayer(this, playername);
 
 		m_env.addPlayer(player);
 	}
@@ -509,7 +508,14 @@ void Client::step(float dtime)
 		TimeTaker timer_step("Client: Replace updated meshes");
 
 		int num_processed_meshes = 0;
-		while(!m_mesh_update_thread.m_queue_out.empty())
+		u32 end_ms = porting::getTimeMs() + 5;
+
+		auto lock = m_env.getMap().m_blocks.try_lock_shared_rec();
+		if (!lock->owns_lock()) {
+			infostream<<"skip updating meshes"<<std::endl;
+		} else {
+
+		while(!m_mesh_update_thread.m_queue_out.empty_try())
 		{
 			if (getEnv().getClientMap().m_drawlist_work)
 				break;
@@ -523,9 +529,13 @@ void Client::step(float dtime)
 			} else {
 				//delete r.mesh;
 			}
+			if (porting::getTimeMs() > end_ms)
+				break;
 		}
 		if(num_processed_meshes > 0)
 			g_profiler->graphAdd("num_processed_meshes", num_processed_meshes);
+
+		}
 	}
 
 	/*
@@ -759,14 +769,9 @@ void Client::received_media()
 void Client::ReceiveAll()
 {
 	DSTACK(__FUNCTION_NAME);
-	u32 start_ms = porting::getTimeMs();
+	auto end_ms = porting::getTimeMs() + 10;
 	for(;;)
 	{
-		// Limit time even if there would be huge amounts of data to
-		// process
-		if(porting::getTimeMs() > start_ms + 100)
-			break;
-		
 		try{
 			Receive();
 			g_profiler->graphAdd("client_received_packets", 1);
@@ -781,6 +786,10 @@ void Client::ReceiveAll()
 					"InvalidIncomingDataException: what()="
 					<<e.what()<<std::endl;
 		}
+		// Limit time even if there would be huge amounts of data to
+		// process
+		if(porting::getTimeMs() > end_ms)
+			break;
 	}
 }
 
@@ -2394,16 +2403,14 @@ void Client::typeChatMessage(const std::wstring &message)
 	// Show locally
 	if (message[0] == L'/')
 	{
-		m_chat_queue.push_back(
-				(std::wstring)L"issued command: "+message);
+		m_chat_queue.push_back((std::wstring)L"issued command: " + message);
 	}
 	else
 	{
 		LocalPlayer *player = m_env.getLocalPlayer();
 		assert(player != NULL);
 		std::wstring name = narrow_to_wide(player->getName());
-		m_chat_queue.push_back(
-				(std::wstring)L"<"+name+L"> "+message);
+		m_chat_queue.push_back((std::wstring)L"<" + name + L"> " + message);
 	}
 }
 
@@ -2604,6 +2611,34 @@ float Client::getAvgRate(void)
 {
 	return ( m_con.getLocalStat(con::AVG_INC_RATE) +
 			m_con.getLocalStat(con::AVG_DL_RATE));
+}
+
+void Client::makeScreenshot(IrrlichtDevice *device)
+{
+	irr::video::IVideoDriver *driver = device->getVideoDriver();
+	irr::video::IImage* const raw_image = driver->createScreenShot();
+	if (raw_image) {
+		irr::video::IImage* const image = driver->createImage(video::ECF_R8G8B8, 
+			raw_image->getDimension());
+
+		if (image) {
+			raw_image->copyTo(image);
+			irr::c8 filename[256];
+			snprintf(filename, sizeof(filename), "%s" DIR_DELIM "screenshot_%u.png",
+				 g_settings->get("screenshot_path").c_str(),
+				 device->getTimer()->getRealTime());
+			std::stringstream sstr;
+			if (driver->writeImageToFile(image, filename)) {
+				sstr << "Saved screenshot to '" << filename << "'";
+			} else {
+				sstr << "Failed to save screenshot '" << filename << "'";
+			}
+			m_chat_queue.push_back(narrow_to_wide(sstr.str()));
+			infostream << sstr.str() << std::endl;
+			image->drop();
+		}
+		raw_image->drop();
+	}
 }
 
 // IGameDef interface

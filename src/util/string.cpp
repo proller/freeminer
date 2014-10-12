@@ -32,9 +32,13 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "../base64.h"
 #include "../hex.h"
 #include "../porting.h"
+#include "../log.h"
 
 #ifdef __ANDROID__
-const wchar_t* wide_chars = L" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
+const wchar_t* wide_chars =
+	L" !\"#$%&'()*+,-./0123456789:;<=>?@"
+	L"ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`"
+	L"abcdefghijklmnopqrstuvwxyz{|}~";
 
 int wctomb(char *s, wchar_t wc)
 {
@@ -195,7 +199,7 @@ std::string urldecode(std::string str)
 	return oss.str();
 }
 
-u32 readFlagString(std::string str, FlagDesc *flagdesc, u32 *flagmask)
+u32 readFlagString(std::string str, const FlagDesc *flagdesc, u32 *flagmask)
 {
 	if (str.length() == 0)
 		return 0;
@@ -231,7 +235,7 @@ u32 readFlagString(std::string str, FlagDesc *flagdesc, u32 *flagmask)
 	return result;
 }
 
-std::string writeFlagString(u32 flags, FlagDesc *flagdesc, u32 flagmask)
+std::string writeFlagString(u32 flags, const FlagDesc *flagdesc, u32 flagmask)
 {
 	std::string result;
 
@@ -307,9 +311,11 @@ u64 read_seed(const char *str)
 	return num;
 }
 
-bool parseColor(const std::string &value, video::SColor &color)
+bool parseColorString(const std::string &value, video::SColor &color, bool quiet)
 {
 	const char *hexpattern = NULL;
+	video::SColor outcolor(255, 255, 255, 255);
+
 	if (value[0] == '#') {
 		if (value.size() == 9)
 			hexpattern = "#RRGGBBAA";
@@ -321,50 +327,52 @@ bool parseColor(const std::string &value, video::SColor &color)
 			hexpattern = "#RGB";
 	}
 
-	if (hexpattern) {
-		assert(strlen(hexpattern) == value.size());
-		video::SColor outcolor(255, 255, 255, 255);
-		for (size_t pos = 0; pos < value.size(); ++pos) {
-			// '#' in the pattern means skip that character
-			if (hexpattern[pos] == '#')
-				continue;
+	if (!hexpattern)
+		goto fail;
 
-			// Else assume hexpattern[pos] is one of 'R' 'G' 'B' 'A'
-			// Read one or two digits, depending on hexpattern
-			unsigned char c1, c2;
-			if (hexpattern[pos+1] == hexpattern[pos]) {
-				// Two digits, e.g. hexpattern == "#RRGGBB"
-				if (!hex_digit_decode(value[pos], c1) ||
-				    !hex_digit_decode(value[pos+1], c2))
-					return false;
-				++pos;
-			}
-			else {
-				// One digit, e.g. hexpattern == "#RGB"
-				if (!hex_digit_decode(value[pos], c1))
-					return false;
-				c2 = c1;
-			}
-			u32 colorpart = ((c1 & 0x0f) << 4) | (c2 & 0x0f);
+	if (strlen(hexpattern) != value.size())
+		goto fail;
+	for (size_t pos = 0; pos < value.size(); ++pos) {
+		// '#' in the pattern means skip that character
+		if (hexpattern[pos] == '#')
+			continue;
 
-			// Update outcolor with newly read color part
-			if (hexpattern[pos] == 'R')
-				outcolor.setRed(colorpart);
-			else if (hexpattern[pos] == 'G')
-				outcolor.setGreen(colorpart);
-			else if (hexpattern[pos] == 'B')
-				outcolor.setBlue(colorpart);
-			else if (hexpattern[pos] == 'A')
-				outcolor.setAlpha(colorpart);
+		// Else assume hexpattern[pos] is one of 'R' 'G' 'B' 'A'
+		// Read one or two digits, depending on hexpattern
+		unsigned char c1, c2;
+		if (hexpattern[pos+1] == hexpattern[pos]) {
+			// Two digits, e.g. hexpattern == "#RRGGBB"
+			if (!hex_digit_decode(value[pos], c1) ||
+				   !hex_digit_decode(value[pos+1], c2))
+				goto fail;
+			++pos;
+		} else {
+			// One digit, e.g. hexpattern == "#RGB"
+			if (!hex_digit_decode(value[pos], c1))
+				goto fail;
+			c2 = c1;
 		}
+		u32 colorpart = ((c1 & 0x0f) << 4) | (c2 & 0x0f);
 
-		color = outcolor;
-		return true;
+		// Update outcolor with newly read color part
+		if (hexpattern[pos] == 'R')
+			outcolor.setRed(colorpart);
+		else if (hexpattern[pos] == 'G')
+			outcolor.setGreen(colorpart);
+		else if (hexpattern[pos] == 'B')
+			outcolor.setBlue(colorpart);
+		else if (hexpattern[pos] == 'A')
+			outcolor.setAlpha(colorpart);
 	}
 
+	color = outcolor;
+	return true;
+
+fail:
+	if (!quiet)
+		errorstream << "Invalid color: \"" << value << "\"" << std::endl;
 	return false;
 }
-
 
 std::wstring colorizeText(const std::wstring &s, std::vector<video::SColor> &colors, const video::SColor &initial_color) {
 	std::wstring output;
@@ -373,7 +381,7 @@ std::wstring colorizeText(const std::wstring &s, std::vector<video::SColor> &col
 	video::SColor color = initial_color;
 	while (i < s.length()) {
 		if (s[i] == L'\v' && i + 6 < s.length()) {
-			parseColor("#" + wide_to_narrow(s.substr(i + 1, 6)), color);
+			parseColorString("#" + wide_to_narrow(s.substr(i + 1, 6)), color);
 			i += 7;
 			continue;
 		}

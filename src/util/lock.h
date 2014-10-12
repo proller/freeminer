@@ -109,6 +109,7 @@ class maybe_locker : public locker { };
 class dummy_lock {
 public:
 	bool owns_lock() {return true;}
+	bool operator!() {return true;}
 	dummy_lock * operator->() {return this; }
 };
 
@@ -165,6 +166,14 @@ public:
 	void set(const key_type& k, const mapped_type& v) {
 		auto lock = lock_unique_rec();
 		full_type::operator[](k) = v;
+	}
+
+	bool set_try(const key_type& k, const mapped_type& v) {
+		auto lock = try_lock_unique_rec();
+		if (!lock->owns_lock())
+			return false;
+		full_type::operator[](k) = v;
+		return true;
 	}
 
 	bool      empty() {
@@ -287,6 +296,11 @@ public:
 
 	void set(const key_type& k, const mapped_type& v) {
 		full_type::operator[](k) = v;
+	}
+
+	bool set_try(const key_type& k, const mapped_type& v) {
+		full_type::operator[](k) = v;
+		return true;
 	}
 };
 

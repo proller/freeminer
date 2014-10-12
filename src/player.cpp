@@ -21,14 +21,20 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "player.h"
+
+#include <fstream>
+#include "util/numeric.h"
 #include "hud.h"
 #include "constants.h"
 #include "gamedef.h"
 #include "settings.h"
 #include "content_sao.h"
-#include "util/numeric.h"
+#include "filesys.h"
+#include "log.h"
+#include "porting.h"  // strlcpy
 
-Player::Player(IGameDef *gamedef):
+
+Player::Player(IGameDef *gamedef, const std::string & name):
 	refs(0),
 	touching_ground(false),
 	in_liquid(false),
@@ -57,13 +63,15 @@ Player::Player(IGameDef *gamedef):
 	m_position(0,0,0),
 	m_collisionbox(-BS*0.30,0.0,-BS*0.30,BS*0.30,BS*1.75,BS*0.30)
 {
-	updateName("<not set>");
+	m_name = name;
+
 	inventory.clear();
 	inventory.addList("main", PLAYER_INVENTORY_SIZE);
 	InventoryList *craft = inventory.addList("craft", 9);
 	craft->setWidth(3);
 	inventory.addList("craftpreview", 1);
 	inventory.addList("craftresult", 1);
+	inventory.setModified(false);
 
 	// Can be redefined via Lua
 	inventory_formspec = "size[8,7.5]"
@@ -204,23 +212,15 @@ void Player::serialize(std::ostream &os)
 void Player::deSerialize(std::istream &is, std::string playername)
 {
 	Settings args;
-	
-	for(;;)
-	{
-		if(is.eof())
-			throw SerializationError
-					(("Player::deSerialize(): PlayerArgsEnd of player \"" + playername + "\" not found").c_str());
-		std::string line;
-		std::getline(is, line);
-		std::string trimmedline = trim(line);
-		if(trimmedline == "PlayerArgsEnd")
-			break;
-		args.parseConfigLine(line);
+
+	if (!args.parseConfigLines(is, "PlayerArgsEnd")) {
+		throw SerializationError("PlayerArgsEnd of player " +
+				playername + " not found!");
 	}
 
 	//args.getS32("version"); // Version field value not used
 	std::string name = args.get("name");
-	updateName(name.c_str());
+	name = m_name;
 	setPitch(args.getFloat("pitch"));
 	setYaw(args.getFloat("yaw"));
 	setPosition(args.getV3F("position"));

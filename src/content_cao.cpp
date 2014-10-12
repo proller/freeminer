@@ -20,14 +20,20 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <ICameraSceneNode.h>
+#include <ITextSceneNode.h>
+#include <IBillboardSceneNode.h>
+#include <IMeshManipulator.h>
+#include <IAnimatedMeshSceneNode.h>
+#include <IBoneSceneNode.h>
 #include "content_cao.h"
+#include "util/numeric.h" // For IntervalLimiter
+#include "util/serialize.h"
+#include "util/mathconstants.h"
 #include "tile.h"
 #include "environment.h"
 #include "collision.h"
 #include "settings.h"
-#include <ICameraSceneNode.h>
-#include <ITextSceneNode.h>
-#include <IBillboardSceneNode.h>
 #include "serialization.h" // For decompressZlib
 #include "gamedef.h"
 #include "clientobject.h"
@@ -39,15 +45,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "sound.h"
 #include "nodedef.h"
 #include "localplayer.h"
-#include "util/numeric.h" // For IntervalLimiter
-#include "util/serialize.h"
-#include "util/mathconstants.h"
 #include "map.h"
 #include "main.h" // g_settings
 #include "camera.h" // CameraModes
-#include <IMeshManipulator.h>
-#include <IAnimatedMeshSceneNode.h>
-#include <IBoneSceneNode.h>
+#include "log.h"
 
 class Settings;
 struct ToolCapabilities;
@@ -555,6 +556,7 @@ GenericCAO::GenericCAO(IGameDef *gamedef, ClientEnvironment *env):
 		m_animated_meshnode(NULL),
 		m_spritenode(NULL),
 		m_textnode(NULL),
+		shadownode(NULL),
 		m_position(v3f(0,10*BS,0)),
 		m_velocity(v3f(0,0,0)),
 		m_acceleration(v3f(0,0,0)),
@@ -972,8 +974,15 @@ void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 	updateAnimation();
 	updateBonePosition();
 	updateAttachments();
+
+	if (g_settings->getBool("shadows")) {
+		if(m_animated_meshnode)
+			shadownode = m_animated_meshnode->addShadowVolumeSceneNode();
+		else if(m_meshnode)
+			shadownode = m_meshnode->addShadowVolumeSceneNode();
+	}
 }
-		
+
 void GenericCAO::updateLight(u8 light_at_pos)
 {
 	u8 li = decode_light(light_at_pos);
@@ -1212,7 +1221,7 @@ void GenericCAO::step(float dtime, ClientEnvironment *env)
 				INodeDefManager *ndef = m_gamedef->ndef();
 				v3s16 p = floatToInt(getPosition() + v3f(0,
 						(m_prop.collisionbox.MinEdge.Y-0.5)*BS, 0), BS);
-				MapNode n = m_env->getMap().getNodeNoEx(p);
+				MapNode n = m_env->getMap().getNodeTry(p);
 				SimpleSoundSpec spec = ndef->get(n).sound_footstep;
 				m_gamedef->sound()->playSoundAt(spec, false, getPosition());
 			}
@@ -1251,6 +1260,13 @@ void GenericCAO::step(float dtime, ClientEnvironment *env)
 				+ m_prop.automatic_face_movement_dir_offset;
 		updateNodePos();
 	}
+
+	if (shadownode && !(rand()%50)) {
+		auto n = m_env->getMap().getNodeTry(floatToInt(getPosition(), BS));
+		if (n.getContent() != CONTENT_IGNORE)
+			shadownode->setVisible(n.getLight(LIGHTBANK_DAY, env->getGameDef()->ndef()) >= LIGHT_SUN);
+	}
+
 }
 
 void GenericCAO::updateTexturePos()

@@ -34,6 +34,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "server.h"
 #include "guiPasswordChange.h"
 #include "guiVolumeChange.h"
+#include "guiKeyChangeMenu.h"
 #include "guiFormSpecMenu.h"
 #include "guiTextInputMenu.h"
 #include "tool.h"
@@ -159,6 +160,11 @@ struct LocalFormspecHandler : public TextDest
 		if (m_formname == "MT_PAUSE_MENU") {
 			if (fields.find("btn_sound") != fields.end()) {
 				g_gamecallback->changeVolume();
+				return;
+			}
+
+			if (fields.find("btn_key_config") != fields.end()) {
+				g_gamecallback->keyConfig();
 				return;
 			}
 
@@ -953,12 +959,12 @@ bool nodePlacementPrediction(Client &client,
 static inline void create_formspec_menu(GUIFormSpecMenu** cur_formspec,
 		InventoryManager *invmgr, IGameDef *gamedef,
 		IWritableTextureSource* tsrc, IrrlichtDevice * device,
-		IFormSource* fs_src, TextDest* txt_dest
+		IFormSource* fs_src, TextDest* txt_dest, Client* client
 		) {
 
 	if (*cur_formspec == 0) {
 		*cur_formspec = new GUIFormSpecMenu(device, guiroot, -1, &g_menumgr,
-				invmgr, gamedef, tsrc, fs_src, txt_dest, cur_formspec );
+				invmgr, gamedef, tsrc, fs_src, txt_dest, cur_formspec, client);
 		(*cur_formspec)->doPause = false;
 		(*cur_formspec)->drop();
 	}
@@ -992,7 +998,7 @@ static void show_chat_menu(GUIFormSpecMenu** cur_formspec,
 	FormspecFormSource* fs_src = new FormspecFormSource(formspec);
 	LocalFormspecHandler* txt_dst = new LocalFormspecHandler("MT_CHAT_MENU", client);
 
-	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device, fs_src, txt_dst);
+	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device, fs_src, txt_dst, NULL);
 }
 
 static void show_deathscreen(GUIFormSpecMenu** cur_formspec,
@@ -1013,7 +1019,7 @@ static void show_deathscreen(GUIFormSpecMenu** cur_formspec,
 	FormspecFormSource* fs_src = new FormspecFormSource(formspec);
 	LocalFormspecHandler* txt_dst = new LocalFormspecHandler("MT_DEATH_SCREEN", client);
 
-	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device,  fs_src, txt_dst);
+	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device,  fs_src, txt_dst, NULL);
 }
 
 /******************************************************************************/
@@ -1064,6 +1070,8 @@ static void show_pause_menu(GUIFormSpecMenu** cur_formspec,
 
 	os 		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_sound;"
 					<< wide_to_narrow(wstrgettext("Sound Volume")) << "]";
+	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_key_config;"
+					<< wide_to_narrow(wstrgettext("Change Keys"))  << "]";
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_exit_menu;"
 					<< wide_to_narrow(wstrgettext("Exit to Menu")) << "]";
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_exit_os;"
@@ -1082,7 +1090,7 @@ static void show_pause_menu(GUIFormSpecMenu** cur_formspec,
 	FormspecFormSource* fs_src = new FormspecFormSource(os.str());
 	LocalFormspecHandler* txt_dst = new LocalFormspecHandler("MT_PAUSE_MENU");
 
-	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device,  fs_src, txt_dst);
+	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device,  fs_src, txt_dst, NULL);
 
 	(*cur_formspec)->doPause = true;
 }
@@ -1124,8 +1132,16 @@ static void updateChat(Client& client, f32 dtime, bool show_debug,
 	if (show_debug)
 		chat_y += line_height;
 
-	core::rect<s32> rect(10, chat_y, font->getDimension(recent_chat.c_str()).Width +10,
-			chat_y + (recent_chat_count * line_height));
+	// first pass to calculate height of text to be set
+	s32 width = std::min(font->getDimension(recent_chat.c_str()).Width + 10,
+			porting::getWindowSize().X - 20);
+	core::rect<s32> rect(10, chat_y, width, chat_y + porting::getWindowSize().Y);
+	guitext_chat->setRelativePosition(rect);
+
+	//now use real height of text and adjust rect according to this size	
+	rect = core::rect<s32>(10, chat_y, width,
+			chat_y + guitext_chat->getTextHeight());
+
 
 	guitext_chat->setRelativePosition(rect);
 	// Don't show chat if disabled or empty or profiler is enabled
@@ -1767,7 +1783,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 
 	bool use_weather = g_settings->getBool("weather");
 	bool no_output = device->getVideoDriver()->getDriverType() == video::EDT_NULL;
-#ifndef __ANDROID__
+#if CMAKE_THREADS && defined(CMAKE_HAVE_FUTURE)
 	std::future<void> updateDrawList_future;
 #endif
 	int errors = 0;
@@ -1941,6 +1957,14 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 			g_gamecallback->changevolume_requested = false;
 		}
 
+		if(g_gamecallback->keyconfig_requested)
+		{
+			(new GUIKeyChangeMenu(guienv, guiroot, -1,
+				&g_menumgr))->drop();
+			g_gamecallback->keyconfig_requested = false;
+		}
+
+
 		/* Process TextureSource's queue */
 		if (!no_output)
 		tsrc->processQueue();
@@ -2057,7 +2081,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 			PlayerInventoryFormSource* fs_src = new PlayerInventoryFormSource(&client);
 			TextDest* txt_dst = new TextDestPlayerInventory(&client);
 
-			create_formspec_menu(&current_formspec, &client, gamedef, tsrc, device, fs_src, txt_dst);
+			create_formspec_menu(&current_formspec, &client, gamedef, tsrc, device, fs_src, txt_dst, &client);
 
 			InventoryLocation inventoryloc;
 			inventoryloc.setCurrentPlayer();
@@ -2161,30 +2185,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 		}
 		else if(input->wasKeyDown(getKeySetting("keymap_screenshot")))
 		{
-			irr::video::IImage* const raw_image = driver->createScreenShot();
-			if (raw_image) {
-				irr::video::IImage* const image = driver->createImage(video::ECF_R8G8B8, 
-					raw_image->getDimension());
-
-				if (image) {
-					raw_image->copyTo(image);
-					irr::c8 filename[256];
-					snprintf(filename, sizeof(filename), "%s" DIR_DELIM "screenshot_%u.png",
-						 g_settings->get("screenshot_path").c_str(),
-						 device->getTimer()->getRealTime());
-					if (driver->writeImageToFile(image, filename)) {
-						std::wstringstream sstr;
-						sstr << "Saved screenshot to '" << filename << "'";
-						infostream << "Saved screenshot to '" << filename << "'" << std::endl;
-						statustext = sstr.str();
-						statustext_time = 0;
-					} else {
-						infostream << "Failed to save screenshot '" << filename << "'" << std::endl;
-					}
-					image->drop();
-				}
-				raw_image->drop();
-			}
+			client.makeScreenshot(device);
 		}
 		else if(input->wasKeyDown(getKeySetting("keymap_toggle_hud")))
 		{
@@ -2656,7 +2657,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 							new TextDestPlayerInventory(&client,*(event.show_formspec.formname));
 
 					create_formspec_menu(&current_formspec, &client, gamedef,
-							tsrc, device, fs_src, txt_dst);
+							tsrc, device, fs_src, txt_dst, &client);
 
 					delete(event.show_formspec.formspec);
 					delete(event.show_formspec.formname);
@@ -2975,6 +2976,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 		if(pointed != pointed_old)
 		{
 			infostream<<"Pointing at "<<pointed.dump()<<std::endl;
+
 /* node debug
 			MapNode nu = client.getEnv().getClientMap().getNodeNoEx(pointed.node_undersurface);
 			MapNode na = client.getEnv().getClientMap().getNodeNoEx(pointed.node_abovesurface);
@@ -2982,8 +2984,14 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 						<< "|| na0="<<(int)na.param0<<" na1"<<(int)na.param1<<" na2"<<(int)na.param1<<"; nam="<<nodedef->get(na.getContent()).name
 						<<std::endl;
 */
-			if (g_settings->getBool("enable_node_highlighting"))
-				client.setHighlighted(pointed.node_undersurface, show_hud);
+
+			if (g_settings->getBool("enable_node_highlighting")) {
+				if (pointed.type == POINTEDTHING_NODE) {
+					client.setHighlighted(pointed.node_undersurface, show_hud);
+				} else {
+					client.setHighlighted(pointed.node_undersurface, false);
+				}
+			}
 		}
 
 		/*
@@ -3233,7 +3241,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 					TextDest* txt_dst = new TextDestNodeMetadata(nodepos, &client);
 
 					create_formspec_menu(&current_formspec, &client, gamedef,
-							tsrc, device, fs_src, txt_dst);
+							tsrc, device, fs_src, txt_dst, &client);
 
 					current_formspec->setFormSpec(meta->getString("formspec"), inventoryloc);
 				}
@@ -3339,7 +3347,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 
 		if(draw_control.range_all)
 			fog_range = 100000*BS;
-		else {
+		else if (!no_output) {
 			fog_range = draw_control.wanted_range*BS + 0.0*MAP_BLOCKSIZE*BS;
 			if(use_weather) {
 				auto humidity = client.getEnv().getClientMap().getHumidity(pos_i, 1);
@@ -3360,7 +3368,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 		if(g_settings->getBool("free_move")){
 			direct_brightness = time_brightness;
 			sunlight_seen = true;
-		} else {
+		} else if (!no_output) {
 			//ScopeProfiler sp(g_profiler, "Detecting background light", SPT_AVG);
 			float old_brightness = sky->getBrightness();
 			direct_brightness = (float)client.getEnv().getClientMap()
@@ -3383,6 +3391,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 			time_of_day_smooth = time_of_day_smooth * (1.0-todsm)
 					+ time_of_day * todsm;
 
+		if (!no_output)
 		sky->update(time_of_day_smooth, time_brightness, direct_brightness,
 				sunlight_seen,camera.getCameraMode(), player->getYaw(),
 				player->getPitch());
@@ -3393,6 +3402,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 		/*
 			Update clouds
 		*/
+		if (!no_output)
 		if(clouds){
 			if(sky->getCloudsVisible()){
 				clouds->setVisible(true);
@@ -3628,7 +3638,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 				camera_offset_changed){
 			update_draw_list_timer = 0;
 			bool allow = true;
-#if CMAKE_THREADS && !(defined(__ANDROID__) || (defined(__GNUC__) && ((__GNUC__*100 + __GNUC_MINOR__) < 407)))
+#if CMAKE_THREADS && defined(CMAKE_HAVE_FUTURE)
 			if (g_settings->getBool("more_threads")) {
 				bool allow = true;
 				if (updateDrawList_future.valid()) {
@@ -3636,8 +3646,9 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 					if (res == std::future_status::timeout)
 						allow = false;
 				}
-				if (allow)
+				if (allow) {
 					updateDrawList_future = std::async(std::launch::async, [](Client * client, video::IVideoDriver* driver, float dtime){ client->getEnv().getClientMap().updateDrawList(driver, dtime, 1000); }, &client, driver, dtime);
+				}
 			}
 			else
 #endif

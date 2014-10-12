@@ -26,19 +26,15 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/lock.h"
 
 #include "config.h"
-#include "main.h"
 #include "profiler.h"
+#include "porting.h"
 
 
-#if _MSC_VER || (defined(__GNUC__) && ((__GNUC__*100 + __GNUC_MINOR__) < 407))
+#if defined(NO_THREAD_LOCAL)
 try_shared_mutex m_block_cache_mutex;
-#define NO_THREAD_LOCAL
-#define THREAD_LOCAL
-#else
-#define THREAD_LOCAL thread_local
 #endif
 
-THREAD_LOCAL MapBlock *m_block_cache = nullptr;
+THREAD_LOCAL MapBlockP m_block_cache = nullptr;
 THREAD_LOCAL v3s16 m_block_cache_p;
 
 MapBlock * Map::getBlockNoCreateNoEx(v3s16 p, bool trylock)
@@ -55,11 +51,11 @@ MapBlock * Map::getBlockNoCreateNoEx(v3s16 p, bool trylock)
 #ifndef NDEBUG
 			g_profiler->add("Map: getBlock cache hit", 1);
 #endif
-			return m_block_cache;
+			return m_block_cache.get();
 		}
 	}
 
-	MapBlock *block;
+	MapBlockP block;
 	{
 		auto lock = trylock ? m_blocks.try_lock_shared_rec() : m_blocks.lock_shared_rec();
 		if (!lock->owns_lock())
@@ -79,7 +75,7 @@ MapBlock * Map::getBlockNoCreateNoEx(v3s16 p, bool trylock)
 		m_block_cache = block;
 	}
 
-	return block;
+	return block.get();
 }
 
 MapBlock * Map::createBlankBlockNoInsert(v3s16 & p)
@@ -98,7 +94,7 @@ MapBlock * Map::createBlankBlock(v3s16 & p)
 
 	block = createBlankBlockNoInsert(p);
 	
-	m_blocks.set(p, block);
+	m_blocks.set(p, MapBlockP(block));
 
 	return block;
 }
@@ -115,16 +111,13 @@ void Map::insertBlock(MapBlock *block)
 	}
 
 	// Insert into container
-	m_blocks.set(block_p, block);
+	m_blocks.set(block_p, MapBlockP(block));
 }
 
-void Map::deleteBlock(MapBlock *block, bool now)
+void Map::deleteBlock(MapBlockP block)
 {
 	auto block_p = block->getPos();
-	if (now)
-		delete block;
-	else
-		(*m_blocks_delete)[block] = 1;
+	(*m_blocks_delete)[block] = 1;
 	m_blocks.erase(block_p);
 	m_block_cache = nullptr;
 }
