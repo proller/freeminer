@@ -224,7 +224,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 
 	if (draw_nearest.empty()) {
 		//ScopeProfiler sp(g_profiler, "CM::updateDrawList() make list", SPT_AVG);
-		//TimeTaker timer_step("ClientMap::updateDrawList make list");
+		TimeTaker timer_step("ClientMap::updateDrawList make list");
 
 		auto lock = m_blocks.try_lock_shared_rec();
 		if (!lock->owns_lock())
@@ -297,7 +297,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 		++calls;
 
 		//auto block = getBlockNoCreateNoEx(bp);
-		auto * block = m_blocks.get(bp);
+		auto block = m_blocks.get(bp);
 		if (!block)
 			continue;
 
@@ -433,8 +433,9 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 /*
 			// Add to set
 			block->refGrab();
-			drawlist.set(bp, block);
+			drawlist.set(bp, block.get());
 */
+
 			blocks_drawn++;
 
 			if(range * MAP_BLOCKSIZE > farthest_drawn)

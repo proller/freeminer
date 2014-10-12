@@ -510,7 +510,13 @@ void Client::step(float dtime)
 		//auto shadows = g_settings->getBool("shadows");
 		int num_processed_meshes = 0;
 		u32 end_ms = porting::getTimeMs() + 5;
-		while(!m_mesh_update_thread.m_queue_out.empty())
+
+		auto lock = m_env.getMap().m_blocks.try_lock_shared_rec();
+		if (!lock->owns_lock()) {
+			infostream<<"skip updating meshes"<<std::endl;
+		} else {
+
+		while(!m_mesh_update_thread.m_queue_out.empty_try())
 		{
 			if (getEnv().getClientMap().m_drawlist_work)
 				break;
@@ -535,6 +541,8 @@ void Client::step(float dtime)
 		}
 		if(num_processed_meshes > 0)
 			g_profiler->graphAdd("num_processed_meshes", num_processed_meshes);
+
+		}
 	}
 
 	/*
@@ -768,14 +776,9 @@ void Client::received_media()
 void Client::ReceiveAll()
 {
 	DSTACK(__FUNCTION_NAME);
-	u32 start_ms = porting::getTimeMs();
+	auto end_ms = porting::getTimeMs() + 10;
 	for(;;)
 	{
-		// Limit time even if there would be huge amounts of data to
-		// process
-		if(porting::getTimeMs() > start_ms + 100)
-			break;
-		
 		try{
 			Receive();
 			g_profiler->graphAdd("client_received_packets", 1);
@@ -790,6 +793,10 @@ void Client::ReceiveAll()
 					"InvalidIncomingDataException: what()="
 					<<e.what()<<std::endl;
 		}
+		// Limit time even if there would be huge amounts of data to
+		// process
+		if(porting::getTimeMs() > end_ms)
+			break;
 	}
 }
 

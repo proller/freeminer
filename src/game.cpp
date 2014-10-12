@@ -34,6 +34,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "server.h"
 #include "guiPasswordChange.h"
 #include "guiVolumeChange.h"
+#include "guiKeyChangeMenu.h"
 #include "guiFormSpecMenu.h"
 #include "guiTextInputMenu.h"
 #include "tool.h"
@@ -159,6 +160,11 @@ struct LocalFormspecHandler : public TextDest
 		if (m_formname == "MT_PAUSE_MENU") {
 			if (fields.find("btn_sound") != fields.end()) {
 				g_gamecallback->changeVolume();
+				return;
+			}
+
+			if (fields.find("btn_key_config") != fields.end()) {
+				g_gamecallback->keyConfig();
 				return;
 			}
 
@@ -1064,6 +1070,8 @@ static void show_pause_menu(GUIFormSpecMenu** cur_formspec,
 
 	os 		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_sound;"
 					<< wide_to_narrow(wstrgettext("Sound Volume")) << "]";
+	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_key_config;"
+					<< wide_to_narrow(wstrgettext("Change Keys"))  << "]";
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_exit_menu;"
 					<< wide_to_narrow(wstrgettext("Exit to Menu")) << "]";
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_exit_os;"
@@ -1776,7 +1784,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 
 	bool use_weather = g_settings->getBool("weather");
 	bool no_output = device->getVideoDriver()->getDriverType() == video::EDT_NULL;
-#if CMAKE_THREADS && defined(HAVE_FUTURE)
+#if CMAKE_THREADS && defined(CMAKE_HAVE_FUTURE)
 	std::future<void> updateDrawList_future;
 #endif
 	int errors = 0;
@@ -1949,6 +1957,14 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 				&g_menumgr, &client))->drop();
 			g_gamecallback->changevolume_requested = false;
 		}
+
+		if(g_gamecallback->keyconfig_requested)
+		{
+			(new GUIKeyChangeMenu(guienv, guiroot, -1,
+				&g_menumgr))->drop();
+			g_gamecallback->keyconfig_requested = false;
+		}
+
 
 		/* Process TextureSource's queue */
 		if (!no_output)
@@ -3379,8 +3395,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 		if (!no_output)
 		sky->update(time_of_day_smooth, time_brightness, direct_brightness,
 				sunlight_seen,camera.getCameraMode(), player->getYaw(),
-				player->getPitch(),
-				player, &client.getEnv().getMap(), nodedef);
+				player->getPitch());
 
 		video::SColor bgcolor = sky->getBgColor();
 		video::SColor skycolor = sky->getSkyColor();
@@ -3624,7 +3639,7 @@ bool the_game(bool &kill, bool random_input, InputHandler *input,
 				camera_offset_changed){
 			update_draw_list_timer = 0;
 			bool allow = true;
-#if CMAKE_THREADS && defined(HAVE_FUTURE)
+#if CMAKE_THREADS && defined(CMAKE_HAVE_FUTURE)
 			if (g_settings->getBool("more_threads")) {
 				bool allow = true;
 				if (updateDrawList_future.valid()) {
