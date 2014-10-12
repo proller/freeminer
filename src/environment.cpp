@@ -649,16 +649,27 @@ void ServerEnvironment::loadMeta()
 		return active_object_count;
 	}
 
+typedef struct {
+	ActiveABM * i;
+	v3s16 p;
+	MapNode n;
+	u32 active_object_count;
+	u32 active_object_count_wider;
+	MapNode neighbor;
+} trigger_one;
+
 	void ABMHandler::apply(MapBlock *block, bool activate)
 	{
 		if(m_aabms_empty)
 			return;
 
-		//auto lock = block->try_lock_unique_rec();
-		//if (!lock->owns_lock())
-		//	return;
-		ScopeProfiler sp(g_profiler, "ABM apply", SPT_ADD);
+		std::list<trigger_one> trigger_list;
 		ServerMap *map = &m_env->getServerMap();
+		{
+		auto lock = block->try_lock_unique_rec();
+		if (!lock->owns_lock())
+			return;
+		ScopeProfiler sp(g_profiler, "ABM select", SPT_ADD);
 
 		u32 active_object_count_wider;
 		u32 active_object_count = this->countObjects(block, map, active_object_count_wider);
@@ -709,6 +720,25 @@ void ServerEnvironment::loadMeta()
 				}
 neighbor_found:
 
+				trigger_list.emplace_back(trigger_one{i, p, n, active_object_count, active_object_count_wider, neighbor});
+			}
+		}
+		}
+
+		ScopeProfiler sp(g_profiler, "ABM triggers", SPT_ADD);
+
+		while (!trigger_list.empty()) {
+			auto abm = trigger_list.front();
+
+			auto & i = abm.i;
+			auto & p = abm.p;
+			auto & n = abm.n;
+			auto & active_object_count = abm.active_object_count;
+			auto & active_object_count_wider = abm.active_object_count_wider;
+			auto & neighbor = abm.neighbor;
+
+			//TODO: async call for c++ abms
+
 				i->abm->trigger(m_env, p, n,
 						active_object_count, active_object_count_wider, neighbor, activate);
 
@@ -717,8 +747,10 @@ neighbor_found:
 					active_object_count = countObjects(block, map, active_object_count_wider);
 					m_env->m_added_objects = 0;
 				}
-			}
+
+			trigger_list.pop_front();
 		}
+
 	}
 /*
 };
