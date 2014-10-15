@@ -2980,7 +2980,7 @@ void ServerMap::finishBlockMake(BlockMakeData *data,
 	}
 #endif
 
-	MapBlock * block = getBlockNoCreateNoEx(blockpos_requested);
+	MapBlock * block = getBlockNoCreateNoEx(blockpos_requested, false, true);
 	if(!block) {
 		errorstream<<"finishBlockMake(): created NULL block at "<<PP(blockpos_requested)<<std::endl;
 	}
@@ -3003,7 +3003,7 @@ MapBlock * ServerMap::createBlock(v3s16 p)
 	|| p.Z > MAP_GENERATION_LIMIT / MAP_BLOCKSIZE)
 		throw InvalidPositionException("createBlock(): pos. over limit");
 
-	MapBlock *block = this->getBlockNoCreateNoEx(p);
+	MapBlock *block = this->getBlockNoCreateNoEx(p, false, true);
 	if(block)
 	{
 		if(block->isDummy())
@@ -3022,7 +3022,7 @@ MapBlock * ServerMap::emergeBlock(v3s16 p, bool create_blank)
 			__FUNCTION_NAME,
 			p.X, p.Y, p.Z, create_blank);
 	{
-		MapBlock *block = getBlockNoCreateNoEx(p);
+		MapBlock *block = getBlockNoCreateNoEx(p, false, true);
 		if(block && block->isDummy() == false)
 		{
 			return block;
