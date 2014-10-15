@@ -1140,7 +1140,8 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 		}
 		if (!m_blocks_added_last && g_settings->getBool("enable_force_load")) {
 			//TimeTaker timer_s2("force load");
-			auto lock = m_active_objects.lock_shared_rec();
+			auto lock = m_active_objects.try_lock_shared_rec();
+			if (lock->owns_lock())
 			for(std::map<u16, ServerActiveObject*>::iterator
 				i = m_active_objects.begin();
 				i != m_active_objects.end(); ++i)
@@ -1378,7 +1379,9 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 		//ScopeProfiler sp(g_profiler, "SEnv: step act. objs avg", SPT_AVG);
 		//TimeTaker timer("Step active objects");
 
-		auto lock = m_active_objects.lock_shared_rec();
+		auto lock = m_active_objects.try_lock_shared_rec();
+		if (lock->owns_lock()) 
+	{
 		g_profiler->add("SEnv: Objects", m_active_objects.size());
 
 		// This helps the objects to send data at the same time
@@ -1431,6 +1434,7 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 		}
 		if (!calls)
 			m_active_objects_last = 0;
+	}
 	}
 
 	/*
