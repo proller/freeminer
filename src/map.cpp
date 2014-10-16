@@ -1723,7 +1723,7 @@ u32 Map::transformLiquidsReal(Server *m_server, std::map<v3s16, MapBlock*> & mod
 			u8 i = liquid_explore_map[e];
 			NodeNeighbor & nb = neighbors[i];
 			nb.p = p0 + liquid_flow_dirs[i];
-			nb.n = getNodeTry(neighbors[i].p);
+			nb.n = getNodeNoEx(neighbors[i].p);
 			nb.c = nb.n.getContent();
 			NeighborType nt = NEIGHBOR_SAME_LEVEL;
 			switch (i) {
@@ -1741,8 +1741,8 @@ u32 Map::transformLiquidsReal(Server *m_server, std::map<v3s16, MapBlock*> & mod
 			nb.drop = 0;
 
 			if (nb.c == CONTENT_IGNORE) {
-				if (i == D_SELF && (loopcount % 9) && initial_size < m_liquid_step_flow * 3)
-					must_reflow_third[nb.p] = 1;
+				//if (i == D_SELF && (loopcount % 2) && initial_size < m_liquid_step_flow * 3)
+				//	must_reflow_third[nb.p] = 1;
 				continue;
 			}
 
