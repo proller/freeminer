@@ -1379,10 +1379,19 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 		//ScopeProfiler sp(g_profiler, "SEnv: step act. objs avg", SPT_AVG);
 		//TimeTaker timer("Step active objects");
 
-		auto lock = m_active_objects.try_lock_shared_rec();
-		if (lock->owns_lock()) 
+	std::vector<ServerActiveObject*> objects;
 	{
-		g_profiler->add("SEnv: Objects", m_active_objects.size());
+		auto lock = m_active_objects.try_lock_shared_rec();
+		if (lock->owns_lock()) {
+			for(auto & ir : m_active_objects) {
+				objects.emplace_back(ir.second);
+			}
+		}
+	}
+
+	if (objects.size())
+	{
+		g_profiler->add("SEnv: Objects", objects.size());
 
 		// This helps the objects to send data at the same time
 		bool send_recommended = false;
@@ -1396,17 +1405,19 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 			send_recommended = true;
 		}
 		bool only_peaceful_mobs = g_settings->getBool("only_peaceful_mobs");
+#if !CMAKE_THREADS
 		u32 n = 0, calls = 0, end_ms = porting::getTimeMs() + max_cycle_ms;
-		for(std::map<u16, ServerActiveObject*>::iterator
-				i = m_active_objects.begin();
-				i != m_active_objects.end(); ++i)
-		{
+#endif
+
+		for(auto & obj : objects) {
+#if !CMAKE_THREADS
 			if (n++ < m_active_objects_last)
 				continue;
 			else
 				m_active_objects_last = 0;
 			++calls;
-			ServerActiveObject* obj = i->second;
+#endif
+			//ServerActiveObject* obj = ir;
 			// Remove non-peaceful mobs on peaceful mode
 			if(only_peaceful_mobs){
 				if(!obj->isPeaceful())
@@ -1427,13 +1438,17 @@ void ServerEnvironment::step(float dtime, float uptime, int max_cycle_ms)
 						obj->m_messages_out.pop_front());
 			}
 
+#if !CMAKE_THREADS
 			if (porting::getTimeMs() > end_ms) {
 				m_active_objects_last = n;
 				break;
 			}
+#endif
 		}
+#if !CMAKE_THREADS
 		if (!calls)
 			m_active_objects_last = 0;
+#endif
 	}
 	}
 
