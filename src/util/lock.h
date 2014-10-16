@@ -459,8 +459,8 @@ class maybe_shared_unordered_map: public not_shared_unordered_map<Key, T, Hash, 
 
 
 
-
-
+/*
+Not used, but uncomment if you need
 
 #include <vector>
 
@@ -476,10 +476,7 @@ public:
     typedef Allocator                                allocator_type;
     typedef typename full_type::reference       reference;
     typedef typename full_type::const_reference const_reference;
-//    typedef implementation-defined                   iterator;
-//    typedef implementation-defined                   const_iterator;
     typedef typename full_type::size_type       size_type;
-    //typedef typename full_type::difference_type difference_type;
     typedef typename full_type::pointer         pointer;
     typedef typename full_type::const_pointer   const_pointer;
 
@@ -564,6 +561,7 @@ class maybe_shared_vector: public not_shared_vector<Key, Allocator>
 
 #endif
 
+*/
 
 
 

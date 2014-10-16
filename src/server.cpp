@@ -230,16 +230,11 @@ public:
 
 		porting::setThreadName("Env");
 		porting::setThreadPriority(20);
-		int max_cycle_ms = 5000;
+		int max_cycle_ms = 1000;
 		auto time = porting::getTimeMs();
 		while(!StopRequested()) {
 			try {
-				//int res = 
-{
-				//JMutexAutoLock envlock(m_server->m_env_mutex);
 				m_server->getEnv().step((porting::getTimeMs() - time)/1000.0f, m_server->m_uptime.get(), max_cycle_ms);
-}
-				//std::this_thread::sleep_for(std::chrono::milliseconds(res ? 5 : 1000));
 				time = porting::getTimeMs();
 				std::this_thread::sleep_for(std::chrono::milliseconds(5));
 #ifdef NDEBUG
@@ -932,7 +927,8 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 		radius *= MAP_BLOCKSIZE;
 		s16 radius_deactivate = radius*3;
 
-		auto lock = clients.lock_shared_rec();
+		auto lock = clients.try_lock_shared_rec();
+		if (lock->owns_lock())
 		for(auto
 			i = clients.begin();
 			i != clients.end(); ++i)
