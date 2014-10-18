@@ -69,6 +69,7 @@ MeshMakeData::MeshMakeData(IGameDef *gamedef, Map & map_, MapDrawControl& draw_c
 	m_gamedef(gamedef)
 	,step(1),
 	range(1),
+	no_draw(false),
 	block(nullptr),
 	map(map_),
 	draw_control(draw_control_),
@@ -1059,6 +1060,7 @@ static void updateAllFastFaceRows(MeshMakeData *data,
 MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	clearHardwareBuffer(false),
 	step(data->step),
+	no_draw(data->no_draw),
 	timestamp(data->timestamp),
 	m_mesh(new scene::SMesh()),
 	m_gamedef(data->m_gamedef),

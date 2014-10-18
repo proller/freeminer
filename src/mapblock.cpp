@@ -798,16 +798,18 @@ void MapBlock::pushElementsToCircuit(Circuit* circuit)
 }
 
 #ifndef SERVER
-std::shared_ptr<MapBlockMesh> MapBlock::getMesh(int step) {
-	if (step >= 16 && mesh16) return mesh16;
-	if (step >= 8  && mesh8)  return mesh8;
-	if (step >= 4  && mesh4)  return mesh4;
-	if (step >= 2  && mesh2)  return mesh2;
-	if (step >= 1  && mesh)   return mesh;
+std::shared_ptr<MapBlockMesh> MapBlock::getMesh(int step, bool no_fallback) {
+	if (step >= 16 && (no_fallback || mesh16)) return mesh16;
+	if (step >= 8  && (no_fallback || mesh8))  return mesh8;
+	if (step >= 4  && (no_fallback || mesh4))  return mesh4;
+	if (step >= 2  && (no_fallback || mesh2))  return mesh2;
+	if (step >= 1  && (no_fallback || mesh))   return mesh;
+	if (!no_fallback) {
 	if (mesh2)  return mesh2;
 	if (mesh4)  return mesh4;
 	if (mesh8)  return mesh8;
 	if (mesh16) return mesh16;
+	}
 	return mesh;
 }
 

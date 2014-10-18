@@ -60,6 +60,7 @@ struct MeshMakeData
 	IGameDef *m_gamedef;
 	int step;
 	int range;
+	bool no_draw;
 	unsigned int timestamp;
 	MapBlock * block;
 	Map & map;
@@ -159,6 +160,7 @@ public:
 	bool clearHardwareBuffer;
 
 	int step;
+	bool no_draw;
 	unsigned int timestamp;
 
 private:

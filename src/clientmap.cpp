@@ -399,7 +399,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 			if(!smesh_size)
 				continue;
 
-			if (range > 2) {
+			if (range > 10) {
 				if (block->shadownode) {
 					block->shadownode->setVisible(false);
 /* TODO
@@ -409,8 +409,18 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 					block->shadownode = nullptr;
 */
 				}
-			} else if (shadows && !block->shadownode && block->scenenode && mesh->getMesh()->getMeshBufferCount() && ++shadows_added < 3 ) {
-				block->shadownode = block->scenenode->addShadowVolumeSceneNode();
+			} else if (shadows && !block->shadownode && block->scenenode && mesh->getMesh()->getMeshBufferCount() /*&& ++shadows_added < 3*/ ) {
+				auto shadow_step = mesh_step <= 2 ? 4 : 16;
+				auto mesh_shadow = block->getMesh(shadow_step, true);
+				if (mesh_shadow) {
+					if (mesh_shadow->getMesh()->getMeshBufferCount()) {
+infostream<<"adding shadow "<<mesh_shadow->step <<" "<<mesh_shadow->getMesh()->getMeshBufferCount()<<std::endl;
+						block->shadownode = block->scenenode->addShadowVolumeSceneNode(mesh_shadow->getMesh());
+					}
+				} else {
+infostream<<"req shadow "<<std::endl;
+					m_client->addUpdateMeshTask(bp, false, shadow_step);
+				}
 			}
 
 			mesh->incrementUsageTimer(dtime);

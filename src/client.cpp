@@ -529,10 +529,18 @@ void Client::step(float dtime)
 			if(block)
 			{
 
-				block->scenenode_remove();
+				if (!r.mesh->no_draw)
+					block->scenenode_remove();
 				block->setMesh(r.mesh);
+				if (!r.mesh->no_draw) {
 				//block->scenenode = m_env.getClientMap().getSceneManager()->addOctreeSceneNode(r.mesh->getMesh());
-				block->scenenode = m_env.getClientMap().getSceneManager()->addMeshSceneNode(r.mesh->getMesh());
+					//auto tangentMesh = m_env.getClientMap().getSceneManager()->getMeshManipulator()->createMeshWithTangents(  r.mesh->getMesh() );
+					//block->scenenode = m_env.getClientMap().getSceneManager()->addMeshSceneNode( tangentMesh );
+					//tangentMesh->drop();
+					block->scenenode = m_env.getClientMap().getSceneManager()->addMeshSceneNode(r.mesh->getMesh());
+				} else {
+//infostream<<"nodraw mesh " <<r.mesh->step<< " c="<< r.mesh->getMesh()->getMeshBufferCount() <<std::endl;
+				}
 				//if (shadows && r.mesh->getMeshBufferCount())
 				//	block->scenenode->addShadowVolumeSceneNode();
 				//m_device->getVideoDriver()->addOcclusionQuery(block->scenenode, r.mesh->getMesh());
@@ -2424,7 +2432,7 @@ void Client::typeChatMessage(const std::wstring &message)
 	}
 }
 
-void Client::addUpdateMeshTask(v3s16 p, bool urgent)
+void Client::addUpdateMeshTask(v3s16 p, bool urgent, int step)
 {
 	//ScopeProfiler sp(g_profiler, "Client: Mesh prepare");
 	MapBlock *b = m_env.getMap().getBlockNoCreateNoEx(p);
@@ -2450,8 +2458,10 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent)
 		data->setCrack(m_crack_level, m_crack_pos);
 		data->setHighlighted(m_highlighted_pos, m_show_hud);
 		data->setSmoothLighting(g_settings->getBool("smooth_lighting"));
-		data->step = getFarmeshStep(data->draw_control, getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
+		data->step = step ? step : getFarmeshStep(data->draw_control, getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
 		data->range = getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p);
+		if (step)
+			data->no_draw = true;
 	}
 
 	// Add task to queue

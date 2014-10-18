@@ -506,7 +506,7 @@ public:
 	void pushElementsToCircuit(Circuit* circuit);
 
 #ifndef SERVER // Only on client
-	std::shared_ptr<MapBlockMesh> getMesh(int step = 1);
+	std::shared_ptr<MapBlockMesh> getMesh(int step = 1, bool no_fallback = false);
 	void setMesh(std::shared_ptr<MapBlockMesh> & rmesh);
 	//void delMesh();
 	bool scenenode_remove();
