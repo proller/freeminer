@@ -148,7 +148,9 @@ public:
 
 	bool isDummy()
 	{
-		return (data == NULL);
+		return false;
+		//auto lock = lock_shared_rec();
+		//return (data == NULL);
 	}
 	void unDummify()
 	{
@@ -505,7 +507,7 @@ public:
 
 #ifndef SERVER // Only on client
 	std::shared_ptr<MapBlockMesh> getMesh(int step = 1);
-	void setMesh(std::shared_ptr<MapBlockMesh> rmesh);
+	void setMesh(std::shared_ptr<MapBlockMesh> & rmesh);
 	//void delMesh();
 	bool scenenode_remove();
 	bool scenenode_setVisible(bool value);

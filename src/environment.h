@@ -44,6 +44,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "fmbitset.h"
 #include "util/lock.h"
 #include <unordered_set>
+#include "util/container.h" // Queue
 
 class ServerEnvironment;
 class ActiveBlockModifier;
@@ -427,9 +428,11 @@ private:
 	// World path
 	const std::string m_path_world;
 	// Active object list
-	std::map<u16, ServerActiveObject*> m_active_objects;
+	maybe_shared_map<u16, ServerActiveObject*> m_active_objects;
 	// Outgoing network message buffer for active objects
-	std::list<ActiveObjectMessage> m_active_object_messages;
+public:
+	Queue<ActiveObjectMessage> m_active_object_messages;
+private:
 	// Some timers
 	float m_send_recommended_timer;
 	IntervalLimiter m_object_management_interval;

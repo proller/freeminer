@@ -100,8 +100,6 @@ public:
 	// If object has moved less than this and data has not changed,
 	// saving to disk may be omitted
 	virtual float getMinimumSavedMovement();
-	
-	virtual bool isPeaceful(){return true;}
 
 	virtual std::string getDescription(){return "SAO";}
 	
@@ -226,7 +224,7 @@ public:
 	/*
 		Queue of messages to be sent to the client
 	*/
-	Queue<ActiveObjectMessage> m_messages_out;
+	Queue<ActiveObjectMessage> & m_messages_out;
 	float m_uptime_last;
 	
 protected:

@@ -40,7 +40,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/serialize.h"
 #include "circuit.h"
 #include "profiler.h"
-#include "main.h"
+#include <mutex>
 
 #define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
@@ -70,7 +70,7 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 	humidity = 0;
 	m_changed_timestamp = 0;
 	data = NULL;
-	if(dummy == false)
+	//if(dummy == false)
 		reallocate();
 	
 #ifndef SERVER
@@ -84,7 +84,7 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 
 MapBlock::~MapBlock()
 {
-	auto lock = lock_unique_rec();
+	//auto lock = lock_unique_rec();
 #ifndef SERVER
 	if (scenenode) {
 		scenenode->remove();
@@ -487,6 +487,7 @@ static void getBlockNodeIdMapping(NameIdMapping *nimap, MapNode *nodes,
 // Correct ids in the block to match nodedef based on names.
 // Unknown ones are added to nodedef.
 // Will not update itself to match id-name pairs in nodedef.
+static std::mutex correctBlockNodeIds_mutex;
 static void correctBlockNodeIds(const NameIdMapping *nimap, MapNode *nodes,
 		IGameDef *gamedef)
 {
@@ -497,6 +498,7 @@ static void correctBlockNodeIds(const NameIdMapping *nimap, MapNode *nodes,
 	// correct ids.
 	std::set<content_t> unnamed_contents;
 	std::set<std::string> unallocatable_contents;
+	std::lock_guard<std::mutex> lock(correctBlockNodeIds_mutex);
 	for(u32 i=0; i<MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; i++)
 	{
 		content_t local_id = nodes[i].getContent();
@@ -809,7 +811,7 @@ std::shared_ptr<MapBlockMesh> MapBlock::getMesh(int step) {
 	return mesh;
 }
 
-void MapBlock::setMesh(std::shared_ptr<MapBlockMesh> rmesh) {
+void MapBlock::setMesh(std::shared_ptr<MapBlockMesh> & rmesh) {
 	if (rmesh && !mesh_size)
 		mesh_size = rmesh->getMesh()->getMeshBufferCount();
 	     if (rmesh->step == 16) {mesh16 = rmesh;}

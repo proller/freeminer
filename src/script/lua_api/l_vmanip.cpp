@@ -145,7 +145,7 @@ int LuaVoxelManip::l_update_liquids(lua_State *L)
 
 	LuaVoxelManip *o = checkobject(L, 1);
 
-	Map *map = &(env->getMap());
+	//Map *map = &(env->getMap());
 	INodeDefManager *ndef = getServer(L)->getNodeDefManager();
 	ManualMapVoxelManipulator *vm = o->vm;
 
@@ -153,7 +153,7 @@ int LuaVoxelManip::l_update_liquids(lua_State *L)
 	mg.vm   = vm;
 	mg.ndef = ndef;
 
-	mg.updateLiquid(&map->m_transforming_liquid,
+	mg.updateLiquid(
 			vm->m_area.MinEdge, vm->m_area.MaxEdge);
 
 	return 0;
