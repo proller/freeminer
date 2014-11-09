@@ -51,6 +51,8 @@ endif()
 
 option(ENABLE_CXX1Y "Try use C++14 features (shared_mutex) *experimental!*" 0)
 
+OPTION(ENABLE_OCULUSVR "Use Oculus Rift" 0)
+
 
 # Set some random things default to not being visible in the GUI
 mark_as_advanced(EXECUTABLE_OUTPUT_PATH LIBRARY_OUTPUT_PATH)
@@ -534,6 +536,23 @@ set(FMclient_SRCS
 	guiTextInputMenu.cpp
 )
 
+if(ENABLE_OCULUSVR)
+	find_package(OculusVR REQUIRED)
+	if(OCULUSVR_FOUND)
+		set(FMclient_SRCS
+			${FMclient_SRCS}
+			IrrOculusVR/OculusRenderer.cpp
+		)
+		include_directories(
+			${OCULUSVR_INCLUDE_DIR}
+		)
+	endif()
+endif()
+if(NOT OCULUSVR_FOUND)
+	SET(OCULUSVR_FOUND 0)
+endif()
+
+
 # Client sources
 set(minetest_SRCS
 	${common_SRCS}
@@ -684,6 +703,9 @@ if(BUILD_CLIENT)
 	if (USE_REDIS)
 		target_link_libraries(${PROJECT_NAME} ${REDIS_LIBRARY})
 	endif(USE_REDIS)
+	if(OCULUSVR_FOUND)
+		target_link_libraries( ${PROJECT_NAME} ${OCULUSVR_LIBRARY})
+	endif()
 endif(BUILD_CLIENT)
 
 if(BUILD_SERVER)

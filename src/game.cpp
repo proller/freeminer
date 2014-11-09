@@ -85,6 +85,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "gsmapper.h"
 #include <future>
+#if CMAKE_USE_OCULUSVR
+#include "IrrOculusVR/OculusRenderer.h"
+#endif
 
 /*
 	Text input system
@@ -1503,6 +1506,9 @@ private:
 #if CMAKE_THREADS && CMAKE_HAVE_FUTURE
 	std::future<void> updateDrawList_future;
 #endif
+#if CMAKE_USE_OCULUSVR
+	OculusRenderer * oculusRenderer;
+#endif
 public:
 	VolatileRunFlags flags;
 
@@ -1533,6 +1539,9 @@ Game::Game() :
 	,
 	playerlist(nullptr),
 	mapper(nullptr)
+#if CMAKE_USE_OCULUSVR
+	,oculusRenderer(nullptr)
+#endif
 {
 
 }
@@ -1564,6 +1573,10 @@ Game::~Game()
 
 	if (mapper)
 		delete mapper;
+#if CMAKE_USE_OCULUSVR
+	if (oculusRenderer)
+		delete oculusRenderer;
+#endif
 
 	extendedResourceCleanup();
 }
@@ -1602,6 +1615,22 @@ bool Game::startup(bool *kill,
 
 	if (!createClient(playername, password, address, port, error_message))
 		return false;
+
+
+#if CMAKE_USE_OCULUSVR
+	auto driverType = device->getVideoDriver()->getDriverType();
+	// Get the window handle for Oculus Rift SDK
+	void *window = 0;
+	
+	if(driverType == irr::video::EDT_DIRECT3D9)
+		window = driver->getExposedVideoData().D3D9.HWnd;
+	else if(driverType == irr::video::EDT_OPENGL)
+		window = driver->getExposedVideoData().OpenGLWin32.HWnd;
+
+
+	// Initialize Oculus Rift Renderer
+	oculusRenderer = new OculusRenderer(window, driver, smgr, 20.0f);
+#endif
 
 	return true;
 }
@@ -4043,6 +4072,13 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 	*/
 	if (!flags.no_output)
 	{
+
+#if CMAKE_USE_OCULUSVR
+		if (oculusRenderer && g_settings->getBool("enable_oculus") && !g_menumgr.pausesGame())
+			oculusRenderer->drawAll(camera->getCameraNode()->getAbsolutePosition(), camera->getCameraNode()->getRotation().Y, 
+				sky->getBgColor());
+#endif
+
 		TimeTaker timer("endScene");
 		driver->endScene();
 		stats->endscenetime = timer.stop(true);

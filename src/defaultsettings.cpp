@@ -256,6 +256,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("farmesh", "0");
 	settings->setDefault("farmesh_step", "2");
 	settings->setDefault("farmesh_wanted", "500");
+	settings->setDefault("enable_oculus", "false");
 	
 	// Liquid
 	settings->setDefault("liquid_real", "true");
