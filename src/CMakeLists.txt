@@ -648,6 +648,11 @@ if(BUILD_CLIENT)
 	set(minetest_LIBS
 		${PROJECT_NAME}
 		${ZLIB_LIBRARIES}
+	)
+	if(OCULUSVR_FOUND)
+		set(minetest_LIBS ${minetest_LIBS} ${OCULUSVR_LIBRARY} ${XRANDR_LIBRARY})
+	endif()
+	set(minetest_LIBS ${minetest_LIBS}
 		${IRRLICHT_LIBRARY}
 		${OPENGLES2_LIBRARIES}
 		${EGL_LIBRARIES}
@@ -705,9 +710,6 @@ if(BUILD_CLIENT)
 	if (USE_REDIS)
 		target_link_libraries(${PROJECT_NAME} ${REDIS_LIBRARY})
 	endif(USE_REDIS)
-	if(OCULUSVR_FOUND)
-		target_link_libraries( ${PROJECT_NAME} ${OCULUSVR_LIBRARY})
-	endif()
 endif(BUILD_CLIENT)
 
 if(BUILD_SERVER)
