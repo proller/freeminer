@@ -106,7 +106,7 @@ void ClientMap::OnRegisterSceneNode()
 
 static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
 		float start_off, float end_off, u32 needed_count, INodeDefManager *nodemgr,
-		std::unordered_map<v3s16, bool, v3s16Hash, v3s16Equal> & occlude_cache)
+		std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> & occlude_cache)
 {
 	float d0 = (float)BS * p0.getDistanceFrom(p1);
 	v3s16 u0 = p1 - p0;
@@ -285,7 +285,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 
 	u32 calls = 0, end_ms = porting::getTimeMs() + u32(max_cycle_ms);
 
-	std::unordered_map<v3s16, bool, v3s16Hash, v3s16Equal> occlude_cache;
+	std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> occlude_cache;
 
 	m_drawlist_work = true;
 	while (!draw_nearest.empty()) {
@@ -615,8 +615,9 @@ return;
 
 //auto smgr = getSceneManager();
 
-	auto lock = m_drawlist->lock_shared_rec();
-	for(auto & ir : *m_drawlist) {
+	auto drawlist = m_drawlist.load();
+	auto lock = drawlist->lock_shared_rec();
+	for(auto & ir : *drawlist) {
 		auto block = ir.second;
 
 		int mesh_step = getFarmeshStep(m_control, getNodeBlockPos(cam_pos_nodes), block->getPos());

@@ -2,7 +2,92 @@ project(freeminer)
 cmake_minimum_required( VERSION 2.6 )
 
 INCLUDE(CheckCSourceRuns)
+INCLUDE(CheckIncludeFiles)
 INCLUDE(CheckCXXSourceRuns)
+
+# test compiler capabilities
+
+if(MSVC)
+else()
+	option(ENABLE_CXX1Y "Try use C++14 features (shared_mutex) *experimental!*" 0)
+	if(ENABLE_CXX1Y)
+		#set(STD_FLAGS "-std=c++1y -stdlib=libstdc++ -lc++")
+		set(STD_FLAGS "-std=c++1y")
+		if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+			set(STD_FLAGS "${STD_FLAGS} -lstdc++")
+		endif()
+		set(CMAKE_REQUIRED_FLAGS "${STD_FLAGS}")
+		CHECK_CXX_SOURCE_RUNS("
+			#include <shared_mutex>
+			int main(int argc, char *argv[]) {
+				std::shared_timed_mutex m;
+				std::shared_lock<std::shared_timed_mutex> lock(m);
+				lock.unlock();
+				return 0;
+			}
+			"
+			HAVE_SHARED_MUTEX)
+	else()
+		if(WIN32) # http://forum.freeminer.org/threads/building-errors.182/#post-1855
+			set(STD_FLAGS "-std=gnu++0x")
+		else()
+			set(STD_FLAGS "-std=c++0x")
+		endif()
+	endif()
+endif()
+
+set(CMAKE_REQUIRED_FLAGS "${STD_FLAGS}")
+set(CMAKE_REQUIRED_LIBRARIES "-lstdc++")
+CHECK_CXX_SOURCE_RUNS("
+	#include <string>
+	thread_local std::string test;
+	int main(int argc, char *argv[]) {
+		test = __LINE__;
+		return 0;
+	}
+	"
+	HAVE_THREAD_LOCAL)
+if(NOT HAVE_THREAD_LOCAL)
+	set(HAVE_THREAD_LOCAL 0)
+endif()
+
+set(CMAKE_REQUIRED_FLAGS "${STD_FLAGS} -pthread")
+CHECK_CXX_SOURCE_RUNS("
+	#include <future>
+	int main(int argc, char *argv[]) {
+		std::future<void> updateDrawList_future;
+		bool allow = false;
+		if (updateDrawList_future.valid()) {
+			auto res = updateDrawList_future.wait_for(std::chrono::milliseconds(0));
+			if (res == std::future_status::timeout)
+				allow = false;
+		}
+		if (false)
+			updateDrawList_future = std::async(std::launch::async, [](){ });
+		return 0;
+	}
+	"
+	HAVE_FUTURE)
+if(NOT HAVE_FUTURE)
+	set(HAVE_FUTURE 0)
+endif()
+
+set(CMAKE_REQUIRED_FLAGS "")
+
+option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 1)
+
+if(ENABLE_THREADS)
+	set(ENABLE_THREADS 1)
+else()
+	set(ENABLE_THREADS 0)
+endif()
+
+if(STATIC_BUILD)
+	set(STATIC_BUILD 1)
+else()
+	set(STATIC_BUILD 0)
+endif()
+
 
 # Set some random things default to not being visible in the GUI
 mark_as_advanced(EXECUTABLE_OUTPUT_PATH LIBRARY_OUTPUT_PATH)
@@ -247,7 +332,7 @@ if(LUA_LIBRARY AND LUA_INCLUDE_DIR)
 	else(CMAKE_CROSSCOMPILING)
 		set(BACKUP_REQUIRED_INCS CMAKE_REQUIRED_INCLUDES)
 		set(CMAKE_REQUIRED_INCLUDES "${CMAKE_REQUIRED_INCLUDES} ${LUA_INCLUDE_DIR}")
-		CHECK_C_SOURCE_RUNS("
+		CHECK_CXX_SOURCE_RUNS("
 			#include <luajit.h>
 			#include <stdio.h>
 			#include <string.h>
@@ -354,6 +439,19 @@ if(ENABLE_REDIS)
 	endif(REDIS_LIBRARY AND REDIS_INCLUDE_DIR)
 endif(ENABLE_REDIS)
 
+CHECK_INCLUDE_FILES(endian.h HAVE_ENDIAN_H)
+
+if(HAVE_ENDIAN_H)
+	set(HAVE_ENDIAN_H 1)
+else()
+	set(HAVE_ENDIAN_H 0)
+endif()
+
+configure_file(
+	"${PROJECT_SOURCE_DIR}/cmake_config.h.in"
+	"${PROJECT_BINARY_DIR}/cmake_config.h"
+)
+
 # Add a target that always rebuilds cmake_config_githash.h
 add_custom_target(GenerateVersion
 	COMMAND ${CMAKE_COMMAND}
@@ -380,12 +478,12 @@ set(FMcommon_SRCS
 	mapgen_math.cpp
 	log_types.cpp
 	profiler.cpp
+	stat.cpp
 )
 
 set(common_SRCS
 	ban.cpp
 	base64.cpp
-	biome.cpp
 	cavegen.cpp
 	clientiface.cpp
 	collision.cpp
@@ -419,10 +517,15 @@ set(common_SRCS
 	mapblock.cpp
 	mapgen.cpp
 	mapgen_singlenode.cpp
+	mapgen_v5.cpp
 	mapgen_v6.cpp
 	mapgen_v7.cpp
 	mapnode.cpp
 	mapsector.cpp
+	mg_biome.cpp
+	mg_decoration.cpp
+	mg_ore.cpp
+	mg_schematic.cpp
 	mods.cpp
 	nameidmapping.cpp
 	nodedef.cpp
@@ -519,6 +622,7 @@ set(minetest_SRCS
 	shader.cpp
 	sky.cpp
 	tile.cpp
+	wieldmesh.cpp
 	${minetest_SCRIPT_SRCS}
 	${FMclient_SRCS}
 )
@@ -668,8 +772,6 @@ endif(BUILD_SERVER)
 
 include(CheckCXXCompilerFlag)
 
-option(DISABLE_THREADS "Disable using more threads (faster on 1-2 cores)" 0)
-option(ENABLE_CXX1Y "Try use c++14 features (shared_mutex)" 0)
 
 if(MSVC)
 	# Visual Studio
@@ -700,7 +802,6 @@ if(MSVC)
 	target_link_libraries(${PROJECT_NAME} shlwapi.lib)
 	add_definitions(-DNOMINMAX)
 
-	set(THREADS 0)
 else()
 	# Probably GCC
 	if(APPLE)
@@ -736,27 +837,6 @@ else()
 		endif()
 	endif()
 
-	if(ENABLE_CXX1Y)
-		#set(STD_FLAGS "-std=c++1y -stdlib=libstdc++ -lc++")
-		set(STD_FLAGS "-std=c++1y")
-		if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-			set(STD_FLAGS "${STD_FLAGS} -lstdc++")
-		endif()
-		set(CMAKE_REQUIRED_FLAGS "${STD_FLAGS}")
-		CHECK_CXX_SOURCE_RUNS("
-			#include <shared_mutex>
-			int main(int argc, char *argv[]) {
-				std::shared_timed_mutex m;
-				std::shared_lock<std::shared_timed_mutex> lock(m);
-				lock.unlock();
-				return 0;
-			}
-			"
-			HAVE_SHARED_MUTEX)
-	else()
-		set(STD_FLAGS "-std=c++0x")
-	endif()
-
 	set(CMAKE_CXX_FLAGS_RELEASE "${STD_FLAGS} -DNDEBUG ${RELEASE_WARNING_FLAGS} ${WARNING_FLAGS} ${OTHER_FLAGS} -ffast-math -Wall -pipe -funroll-loops")
 
 	if(APPLE)
@@ -775,56 +855,12 @@ else()
 		set_target_properties(${PROJECT_NAME}server PROPERTIES
 				COMPILE_DEFINITIONS "SERVER")
 	endif(BUILD_SERVER)
-
-	set(THREADS 1)
 endif()
 if(NOT HAVE_SHARED_MUTEX)
 	# avoid empty value in cmake_config.h
 	set(HAVE_SHARED_MUTEX 0)
 endif()
 
-set(CMAKE_REQUIRED_FLAGS "${STD_FLAGS}")
-set(CMAKE_REQUIRED_LIBRARIES "-lstdc++")
-CHECK_CXX_SOURCE_RUNS("
-	#include <string>
-	thread_local std::string test;
-	int main(int argc, char *argv[]) {
-		test = __LINE__;
-		return 0;
-	}
-	"
-	HAVE_THREAD_LOCAL)
-if(NOT HAVE_THREAD_LOCAL)
-	set(HAVE_THREAD_LOCAL 0)
-endif()
-
-set(CMAKE_REQUIRED_FLAGS "${STD_FLAGS} -pthread")
-CHECK_CXX_SOURCE_RUNS("
-	#include <future>
-	int main(int argc, char *argv[]) {
-		std::future<void> updateDrawList_future;
-		bool allow = false;
-		if (updateDrawList_future.valid()) {
-			auto res = updateDrawList_future.wait_for(std::chrono::milliseconds(0));
-			if (res == std::future_status::timeout)
-				allow = false;
-		}
-		if (false)
-			updateDrawList_future = std::async(std::launch::async, [](){ });
-		return 0;
-	}
-	"
-	HAVE_FUTURE)
-if(NOT HAVE_FUTURE)
-	set(HAVE_FUTURE 0)
-endif()
-
-
-
-
-if(DISABLE_THREADS)
-	set(THREADS 0)
-endif()
 
 #MESSAGE(STATUS "CMAKE_CXX_FLAGS_RELEASE=${CMAKE_CXX_FLAGS_RELEASE}")
 #MESSAGE(STATUS "CMAKE_CXX_FLAGS_DEBUG=${CMAKE_CXX_FLAGS_DEBUG}")

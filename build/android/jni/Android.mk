@@ -112,7 +112,6 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/profiler.cpp                      \
 		jni/src/ban.cpp                           \
 		jni/src/base64.cpp                        \
-		jni/src/biome.cpp                         \
 		jni/src/camera.cpp                        \
 		jni/src/cavegen.cpp                       \
 		jni/src/chat.cpp                          \
@@ -178,6 +177,10 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/mapnode.cpp                       \
 		jni/src/mapsector.cpp                     \
 		jni/src/mesh.cpp                          \
+		jni/src/mg_biome.cpp                      \
+		jni/src/mg_decoration.cpp                 \
+		jni/src/mg_ore.cpp                        \
+		jni/src/mg_schematic.cpp                  \
 		jni/src/mods.cpp                          \
 		jni/src/nameidmapping.cpp                 \
 		jni/src/nodedef.cpp                       \
@@ -222,11 +225,12 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/util/lock.cpp                     \
 		jni/src/util/thread_pool.cpp              \
 		jni/src/circuit.cpp                       \
-		jni/src/circuit_element.cpp               \
-		jni/src/circuit_element_states.cpp        \
 		jni/src/circuit_element_virtual.cpp       \
- 		jni/src/database-leveldb.cpp              \
- 		jni/src/settings.cpp
+		jni/src/circuit_element.cpp               \
+		jni/src/stat.cpp               \
+		jni/src/database-leveldb.cpp              \
+		jni/src/settings.cpp                      \
+		jni/src/wieldmesh.cpp
 
 # lua api
 LOCAL_SRC_FILES +=                                \

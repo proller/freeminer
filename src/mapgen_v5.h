@@ -21,18 +21,44 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define MAPGEN_V5_HEADER
 
 #include "mapgen.h"
+#include "mapgen_indev.h"
 
-struct MapgenV5Params : public MapgenSpecificParams
-{
-	MapgenV5Params() {}
+/////////////////// Mapgen V5 flags
+#define MGV5_BLOBS 0x01
+
+extern FlagDesc flagdesc_mapgen_v5[];
+
+
+struct MapgenV5Params : public MapgenSpecificParams {
+	u32 spflags;
+	NoiseParams np_filler_depth;
+	NoiseParams np_factor;
+	NoiseParams np_height;
+	NoiseParams np_cave1;
+	NoiseParams np_cave2;
+	NoiseParams np_ground;
+	NoiseParams np_crumble;
+	NoiseParams np_wetness;
+
+	s16 float_islands;
+	NoiseParams np_float_islands1;
+	NoiseParams np_float_islands2;
+	NoiseParams np_float_islands3;
+	NoiseParams np_layers;
+	Json::Value paramsj;
+
+	MapgenV5Params();
 	~MapgenV5Params() {}
-	void readParams(Settings *settings) {}
-	void writeParams(Settings *settings) {}
+	
+	void readParams(Settings *settings);
+	void writeParams(Settings *settings);
 };
 
-class MapgenV5 : public Mapgen {
+
+class MapgenV5 : public Mapgen, public Mapgen_features {
 public:
 	EmergeManager *emerge;
+	BiomeManager *bmgr;
 
 	int ystride;
 	int zstride;
@@ -45,6 +71,17 @@ public:
 	v3s16 full_node_min;
 	v3s16 full_node_max;
 	
+	Noise *noise_filler_depth;
+	Noise *noise_factor;
+	Noise *noise_height;
+	Noise *noise_cave1;
+	Noise *noise_cave2;
+	Noise *noise_ground;
+	Noise *noise_crumble;
+	Noise *noise_wetness;
+	Noise *noise_heat;
+	Noise *noise_humidity;
+
 	content_t c_stone;
 	content_t c_dirt;
 	content_t c_dirt_with_grass;
@@ -61,14 +98,22 @@ public:
 	content_t c_stair_cobble;
 	content_t c_stair_sandstone;
 
+	//freeminer:
+	s16 float_islands;
+	content_t c_dirt_with_snow;
+
 	MapgenV5(int mapgenid, MapgenParams *params, EmergeManager *emerge_);
 	~MapgenV5();
 	
-	virtual int getGroundLevelAtPoint(v2s16 p);
 	virtual void makeChunk(BlockMakeData *data);
-
-	void actuallyGenerate();
+	int getGroundLevelAtPoint(v2s16 p);
+	void calculateNoise();
+	void generateBaseTerrain();
+	void generateBlobs();
+	void generateBiomes();
+	void dustTopNodes();
 };
+
 
 struct MapgenFactoryV5 : public MapgenFactory {
 	Mapgen *createMapgen(int mgid, MapgenParams *params, EmergeManager *emerge) {

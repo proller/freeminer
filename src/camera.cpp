@@ -26,12 +26,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h" // for g_settings
 #include "map.h"
 #include "clientmap.h" // MapDrawControl
-#include "mesh.h"
 #include "player.h"
-#include "tile.h"
 #include <cmath>
 #include "settings.h"
-#include "itemdef.h" // For wield visualization
+#include "wieldmesh.h"
 #include "noise.h" // easeCurve
 #include "gamedef.h"
 #include "sound.h"
@@ -55,9 +53,9 @@ Camera::Camera(scene::ISceneManager* smgr, MapDrawControl& draw_control,
 	m_cameranode(NULL),
 
 	m_wieldmgr(NULL),
-	m_wieldnode(NULL),
 	m_wieldlight(0),
 	m_wieldlight_add(0),
+	m_wieldnode(NULL),
 
 	m_draw_control(draw_control),
 	m_gamedef(gamedef),
@@ -84,12 +82,9 @@ Camera::Camera(scene::ISceneManager* smgr, MapDrawControl& draw_control,
 
 	m_digging_anim(0),
 	m_digging_button(-1),
-	m_dummymesh(createCubeMesh(v3f(1,1,1))),
 
 	m_wield_change_timer(0.125),
-	m_wield_mesh_next(NULL),
-	m_previous_playeritem(-1),
-	m_previous_itemname(""),
+	m_wield_item_next(),
 
 	m_camera_mode(CAMERA_MODE_FIRST)
 {
@@ -106,14 +101,15 @@ Camera::Camera(scene::ISceneManager* smgr, MapDrawControl& draw_control,
 	// all other 3D scene nodes and before the GUI.
 	m_wieldmgr = smgr->createNewSceneManager();
 	m_wieldmgr->addCameraSceneNode();
-	m_wieldnode = m_wieldmgr->addMeshSceneNode(m_dummymesh, NULL);  // need a dummy mesh
+	m_wieldnode = new WieldMeshSceneNode(m_wieldmgr->getRootSceneNode(), m_wieldmgr, -1, true);
+	m_wieldnode->setItem(ItemStack(), m_gamedef);
+	m_wieldnode->drop(); // m_wieldmgr grabbed it
+	m_wieldlightnode = m_wieldmgr->addLightSceneNode(NULL, v3f(0.0, 50.0, 0.0));
 }
 
 Camera::~Camera()
 {
 	m_wieldmgr->drop();
-
-	delete m_dummymesh;
 }
 
 bool Camera::successfullyCreated(std::wstring& error_message)
@@ -163,22 +159,10 @@ void Camera::step(f32 dtime)
 	}
 
 	bool was_under_zero = m_wield_change_timer < 0;
-	if(m_wield_change_timer < 0.125)
-		m_wield_change_timer += dtime;
-	if(m_wield_change_timer > 0.125)
-		m_wield_change_timer = 0.125;
+	m_wield_change_timer = MYMIN(m_wield_change_timer + dtime, 0.125);
 
-	if(m_wield_change_timer >= 0 && was_under_zero)
-	{
-		if(m_wield_mesh_next)
-		{
-			m_wieldnode->setMesh(m_wield_mesh_next);
-			m_wieldnode->setVisible(true);
-		} else {
-			m_wieldnode->setVisible(false);
-		}
-		m_wield_mesh_next = NULL;
-	}
+	if (m_wield_change_timer >= 0 && was_under_zero)
+		m_wieldnode->setItem(m_wield_item_next, m_gamedef);
 
 	if (m_view_bobbing_state != 0)
 	{
@@ -446,9 +430,17 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 busytime,
 	}
 
 	// Greater FOV if running
+        v3f speed = player->getSpeed();
+        f32 fov_add = sqrt(pow(speed.X,2)+pow(speed.Z,2))/40;
 	if (g_settings->getBool("enable_movement_fov"))
+           { 
 		fov_degrees += player->movement_fov;
-
+                if (fov_add > 4)
+                    fov_add = 4;
+                if (fov_add > 1) 
+                   fov_degrees = fov_degrees+fov_add;
+           }        
+        
 	// FOV and aspect ratio
 	m_aspect = (f32) porting::getWindowSize().X / (f32) porting::getWindowSize().Y;
 	m_fov_y = fov_degrees * M_PI / 180.0;
@@ -463,10 +455,7 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 busytime,
 	v3f wield_position = v3f(55, -35, 65);
 	//v3f wield_rotation = v3f(-100, 120, -100);
 	v3f wield_rotation = v3f(-100, 120, -100);
-	if(m_wield_change_timer < 0)
-		wield_position.Y -= 40 + m_wield_change_timer*320;
-	else
-		wield_position.Y -= 40 - m_wield_change_timer*320;
+	wield_position.Y += fabs(m_wield_change_timer)*320 - 40;
 	if(m_digging_anim < 0.05 || m_digging_anim > 0.5)
 	{
 		f32 frac = 1.0;
@@ -504,7 +493,12 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 busytime,
 	}
 	m_wieldnode->setPosition(wield_position);
 	m_wieldnode->setRotation(wield_rotation);
-	m_wieldlight = player->light;
+
+	// Shine light upon the wield mesh
+	video::SColor black(255,0,0,0);
+	m_wieldmgr->setAmbientLight(player->light_color.getInterpolated(black, 0.7));
+	m_wieldlightnode->getLightData().DiffuseColor = player->light_color.getInterpolated(black, 0.3);
+	m_wieldlightnode->setPosition(v3f(30+5*sin(2*player->getYaw()*M_PI/180), -50, 0));
 
 	// Render distance feedback loop
 	updateViewingRange(frametime, busytime);
@@ -512,7 +506,8 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 busytime,
 	// If the player seems to be walking on solid ground,
 	// view bobbing is enabled and free_move is off,
 	// start (or continue) the view bobbing animation.
-	v3f speed = player->getSpeed();
+	//v3f speed = player->getSpeed();
+        
 	if ((hypot(speed.X, speed.Z) > BS) &&
 		(player->touching_ground) &&
 		(g_settings->getBool("view_bobbing") == true) &&
@@ -712,38 +707,17 @@ void Camera::setDigging(s32 button)
 		m_digging_button = button;
 }
 
-void Camera::wield(const ItemStack &item, u16 playeritem)
+void Camera::wield(const ItemStack &item)
 {
+	if (item.name != m_wield_item_next.name) {
+		m_wield_item_next = item;
+		if (m_wield_change_timer > 0)
+			m_wield_change_timer = -m_wield_change_timer;
+		else if (m_wield_change_timer == 0)
+			m_wield_change_timer = -0.001;
+	}
 	IItemDefManager *idef = m_gamedef->idef();
 	std::string itemname = item.getDefinition(idef).name;
-	m_wield_mesh_next = idef->getWieldMesh(itemname, m_gamedef);
-	if(playeritem != m_previous_playeritem &&
-			!(m_previous_itemname == "" && itemname == ""))
-	{
-		m_previous_playeritem = playeritem;
-		m_previous_itemname = itemname;
-		if(m_wield_change_timer >= 0.125)
-			m_wield_change_timer = -0.125;
-		else if(m_wield_change_timer > 0)
-		{
-			m_wield_change_timer = -m_wield_change_timer;
-		}
-	} else {
-		if(m_wield_mesh_next) {
-			m_wieldnode->setMesh(m_wield_mesh_next);
-			m_wieldnode->setVisible(true);
-		} else {
-			m_wieldnode->setVisible(false);
-		}
-		m_wield_mesh_next = NULL;
-		if(m_previous_itemname != itemname)
-		{
-			m_previous_itemname = itemname;
-			m_wield_change_timer = 0;
-		}
-		else
-			m_wield_change_timer = 0.125;
-	}
 	m_wieldlight_add = ((ItemGroupList)idef->get(itemname).groups)["wield_light"]*200/14;
 }
 
@@ -759,9 +733,8 @@ void Camera::drawWieldedTool(irr::core::matrix4* translation)
 			li = 200;
 	}
 	video::SColor color(255,li,li,li);
-	setMeshColor(m_wieldnode->getMesh(), color);
 
-	// Clear Z buffer
+	// Clear Z buffer so that the wielded tool stay in front of world geometry
 	m_wieldmgr->getVideoDriver()->clearZBuffer();
 
 	// Draw the wielded node (in a separate scene manager)
@@ -769,7 +742,7 @@ void Camera::drawWieldedTool(irr::core::matrix4* translation)
 	cam->setAspectRatio(m_cameranode->getAspectRatio());
 	cam->setFOV(72.0*M_PI/180.0);
 	cam->setNearValue(0.1);
-	cam->setFarValue(100);
+	cam->setFarValue(1000);
 	if (translation != NULL)
 	{
 		irr::core::matrix4 startMatrix = cam->getAbsoluteTransformation();

@@ -670,8 +670,9 @@ void Settings::getUpdatedConfigObject(std::istream &is,
 		bool &changed)
 {
 	std::string name, value;
+
 	if (!parseConfigObject(is, name, value)) {
-		dst.push_back(value + '\n');
+		dst.push_back(value + (is.eof() ? "" : "\n"));
 		return;
 	}
 
@@ -682,7 +683,7 @@ void Settings::getUpdatedConfigObject(std::istream &is,
 			changed = true;
 		}
 
-		dst.push_back(name + " = " + new_value + '\n');
+		dst.push_back(name + " = " + new_value + (is.eof() ? "" : "\n"));
 		updated.insert(name);
 	} else { // File contains a setting which is not in m_settings
 		changed = true;
@@ -704,12 +705,12 @@ void Settings::clearNoLock()
 }
 
 
-	Json::Value Settings::getJson(const std::string & name)
+	Json::Value Settings::getJson(const std::string & name, const Json::Value & def)
 	{
 		Json::Value root;
 		std::string value = get(name);
 		if (value.empty())
-			return root;
+			return def;
 		if (!json_reader.parse( value, root ) ) {
 			errorstream  << "Failed to parse json conf var [" << name << "]='" << value <<"' : " << json_reader.getFormattedErrorMessages();
 		}

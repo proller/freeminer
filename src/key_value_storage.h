@@ -31,23 +31,30 @@
 class KeyValueStorage
 {
 public:
-	KeyValueStorage(const std::string &savedir, const std::string &name) throw(KeyValueStorageException);
+	KeyValueStorage(const std::string &savedir, const std::string &name);
 	~KeyValueStorage();
+	bool open();
+	void close();
+
 	bool put(const std::string & key, const std::string & data);
+	bool put(const std::string & key, const float & data);
 	bool put_json(const std::string & key, const Json::Value & data);
 	bool get(const std::string & key, std::string &data);
+	bool get(const std::string & key, float &data);
 	bool get_json(const std::string & key, Json::Value & data);
 	bool del(const std::string & key);
 #if USE_LEVELDB
 	leveldb::Iterator* new_iterator();
-	leveldb::DB *m_db;
+	leveldb::DB *db;
 	leveldb::ReadOptions read_options;
 	leveldb::WriteOptions write_options;
 #else
-	char *m_db;
+	char *db;
 #endif
+	std::string error;
 private:
-	const std::string &m_db_name;
+	const std::string &db_name;
+	std::string fullpath;
 	Json::FastWriter json_writer;
 	Json::Reader json_reader;
 	std::mutex mutex;

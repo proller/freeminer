@@ -1,6 +1,5 @@
 /*
 mapgen_math.cpp
-Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 */
 
 /*
@@ -29,9 +28,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "nodedef.h"
 #include "voxelalgorithms.h"
 #include "profiler.h"
-#include "settings.h" // For g_settings
+#include "settings.h"
 #include "emerge.h"
-#include "biome.h"
+#include "environment.h"
+#include "mg_biome.h"
+#include "log_types.h"
 
 // can use ported lib from http://mandelbulber.googlecode.com/svn/trunk/src
 #if USE_MANDELBULBER
@@ -142,11 +143,17 @@ double sphere(double x, double y, double z, double d, int ITR = 1) {
 //////////////////////// Mapgen Math parameter read/write
 
 void MapgenMathParams::readParams(Settings *settings) {
+	try {
+		MapgenV7Params::readParams(settings);
+	} catch (...) {}
 	params = settings->getJson("mg_math");
 }
 
 void MapgenMathParams::writeParams(Settings *settings) {
 	settings->setJson("mg_math", params);
+	try {
+		MapgenV7Params::writeParams(settings);
+	} catch (...) {}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -161,26 +168,32 @@ MapgenMath::MapgenMath(int mapgenid, MapgenParams *params_, EmergeManager *emerg
 		this->flags &= ~MG_LIGHT;
 
 	n_air		= MapNode(ndef, params.get("air", "air").asString(), LIGHT_SUN);
-	n_water_source	= MapNode(ndef, params.get("water_source", "mapgen_water_source").asString(), LIGHT_SUN);
+	n_water	= MapNode(ndef, params.get("water_source", "mapgen_water_source").asString(), LIGHT_SUN);
 	n_stone		= MapNode(ndef, params.get("stone", "mapgen_stone").asString(), LIGHT_SUN);
+
+	if (params["generator"].empty()) {
+		params["generator"] = "menger_sponge";
+	}
 
 	invert = params.get("invert", 1).asBool(); //params["invert"].empty()?1:params["invert"].asBool();
 	invert_yz = params.get("invert_yz", 1).asBool();
 	size = params.get("size", (MAP_GENERATION_LIMIT - 1000)).asDouble(); // = max_r
 	scale = params.get("scale", 1.0 / size).asDouble(); //(double)1 / size;
 	if (!params.get("center", Json::Value()).empty()) center = v3f(params["center"]["x"].asDouble(), params["center"]["y"].asDouble(), params["center"]["z"].asDouble()); //v3f(5, -size - 5, 5);
-	iterations = params.get("N", 20).asInt(); //10;
+	iterations = params.get("N", 15).asInt(); //10;
+
+	result_max = params.get("result_max", 1.0).asDouble();
 
 	internal = 0;
 	func = &sphere;
 
 	//if (params["generator"].empty()) params["generator"] = "mandelbox";
-	if (params["generator"].asString() == "mengersponge" || params["generator"].empty()) {
+	if (params["generator"].asString() == "mengersponge") {
 		internal = 1;
 		func = &mengersponge;
 		size = params.get("size", (MAP_GENERATION_LIMIT - 1000) / 2).asDouble();
-		scale = params.get("scale", 1.0 / size).asDouble();
-		iterations = params.get("N", 20).asInt();
+		//scale = params.get("scale", 1.0 / size).asDouble();
+		iterations = params.get("N", 13).asInt();
 		//if(!center.getLength()) center = v3f(-size, -size, -size);
 		if(!center.getLength()) center = v3f(-size / 3, -size / 3, -size / 3);
 	} else if (params["generator"].asString() == "mandelbox") {
@@ -401,9 +414,13 @@ MapgenMath::MapgenMath(int mapgenid, MapgenParams *params_, EmergeManager *emerg
 	}
 
 	if (params["generator"].asString() == "menger_sponge") {
-		invert = params.get("invert", 0).asBool();
-		size = params.get("size", (MAP_GENERATION_LIMIT - 1000) / 2).asDouble();
-		if(!center.getLength()) center = v3f(-1.0 / scale / 2, -1.0 / scale + (-2 * -(int)invert), 2);
+		invert = params.get("invert", 1).asBool();
+		//size = params.get("size", (MAP_GENERATION_LIMIT - 1000) / 2).asDouble();
+		//if(!center.getLength()) center = v3f(-1.0 / scale / 2, -1.0 / scale + (-2 * -(int)invert), 2);
+		size = params.get("size", 15000 ).asDouble();
+		scale = params.get("scale", 1.0 / size).asDouble(); //(double)1 / size;
+		if(!center.getLength()) center = v3f(5000-5,5000+5,5000-5);
+		//par.doubles.N = params.get("N", 4).asInt();
 	}
 
 	if (params["generator"].asString() == "mandelbulb2") {
@@ -423,10 +440,16 @@ MapgenMath::~MapgenMath() {
 
 //////////////////////// Map generator
 
+MapNode MapgenMath::layers_get(float value, float max) {
+	auto layer_index = rangelim((unsigned int)myround((value/max) * layers_node.size()), 0, layers_node.size()-1);
+	return layers_node[layer_index];
+}
+
 int MapgenMath::generateTerrain() {
 
+	MapNode n_ice(c_ice);
 	u32 index = 0;
-	v3s16 em = vm->m_area.getExtent();
+	v3POS em = vm->m_area.getExtent();
 
 	/* debug
 	v3f vec0 = (v3f(node_min.X, node_min.Y, node_min.Z) - center) * scale ;
@@ -454,10 +477,12 @@ int MapgenMath::generateTerrain() {
 	double d = 0;
 	for (s16 z = node_min.Z; z <= node_max.Z; z++) {
 		for (s16 x = node_min.X; x <= node_max.X; x++, index++) {
-			//Biome *biome = bmgr->biomes[biomemap[index]];
+			s16 heat = emerge->env->m_use_weather ? emerge->env->getServerMap().updateBlockHeat(emerge->env, v3POS(x,node_max.Y,z), nullptr, &heat_cache) : 0;
+
 			u32 i = vm->m_area.index(x, node_min.Y, z);
 			for (s16 y = node_min.Y; y <= node_max.Y; y++) {
 				v3f vec = (v3f(x, y, z) - center) * scale ;
+
 
 #if USE_MANDELBULBER
 				if (!internal)
@@ -466,12 +491,23 @@ int MapgenMath::generateTerrain() {
 				if (internal)
 					d = (*func)(vec.X, invert_yz ? vec.Z : vec.Y, invert_yz ? vec.Y : vec.Z, scale, iterations);
 				if ((!invert && d > 0) || (invert && d == 0)  ) {
-					if (vm->m_data[i].getContent() == CONTENT_IGNORE)
+					if (vm->m_data[i].getContent() == CONTENT_IGNORE) {
 						//vm->m_data[i] = (y > water_level + biome->filler) ?
 						//     MapNode(biome->c_filler) : n_stone;
-						vm->m_data[i] = n_stone;
+						if (invert) {
+							int index3 = (z - node_min.Z) * zstride +
+								(y - node_min.Y) * ystride +
+								(x - node_min.X);
+							vm->m_data[i] = Mapgen_features::layers_get(index3);
+						} else {
+							vm->m_data[i] = layers_get(d, result_max);
+						}
+//						vm->m_data[i] = (y > water_level + biome->filler) ?
+//						     MapNode(biome->c_filler) : layers_get(d, result_max);
+
+					}
 				} else if (y <= water_level) {
-					vm->m_data[i] = n_water_source;
+					vm->m_data[i] = (heat < 0 && y > heat/3) ? n_ice : n_water;
 				} else {
 					vm->m_data[i] = n_air;
 				}
@@ -482,6 +518,18 @@ int MapgenMath::generateTerrain() {
 	return 0;
 }
 
-int MapgenMath::getGroundLevelAtPoint(v2s16 p) {
+int MapgenMath::getGroundLevelAtPoint(v2POS p) {
 	return 0;
+}
+
+void MapgenMath::calculateNoise() {
+	//TimeTaker t("calculateNoise", NULL, PRECISION_MICRO);
+	int x = node_min.X;
+	//int y = node_min.Y;
+	int z = node_min.Z;
+
+	noise_filler_depth->perlinMap2D(x, z);
+
+	noise_heat->perlinMap2D(x, z);
+	noise_humidity->perlinMap2D(x, z);
 }

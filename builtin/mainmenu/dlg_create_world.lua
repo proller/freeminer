@@ -16,7 +16,7 @@
 --51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 local function create_world_formspec(dialogdata)
-	local mapgens = {"v6", "v7", "indev", "singlenode", "math"}
+	local mapgens = {"v5", "v6", "indev", "v7", "math", "singlenode"}
 
 	local current_seed = core.setting_get("fixed_map_seed") or ""
 	local current_mg   = core.setting_get("mg_name")
@@ -62,6 +62,16 @@ local function create_world_formspec(dialogdata)
 
 		"button[5,5.5;2.6,0.5;world_create_confirm;" .. fgettext("Create") .. "]" ..
 		"button[7.5,5.5;2.8,0.5;world_create_cancel;" .. fgettext("Cancel") .. "]"
+		
+	if #gamemgr.games == 0 then
+		retval = retval .. "box[2,4;8,1;#ff8800]label[2.25,4;" ..
+				fgettext("You have no subgames installed.") .. "]label[2.25,4.4;" ..
+				fgettext("Download one from minetest.net") .. "]"
+	elseif #gamemgr.games == 1 and gamemgr.games[1].id == "minimal" then
+		retval = retval .. "box[1.75,4;8.7,1;#ff8800]label[2,4;" ..
+				fgettext("Warning: The minimal development test is meant for developers.") .. "]label[2,4.4;" ..
+				fgettext("Download a subgame, such as minetest_game, from minetest.net") .. "]"
+	end
 
 	return retval
 

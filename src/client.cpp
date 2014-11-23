@@ -54,6 +54,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "config.h"
 #include "version.h"
 #include "drawscene.h"
+#include "subgame.h"
+#include "server.h"
+#include "database.h" //remove with g sunsed shit localdb
 
 extern gui::IGUIEnvironment* guienv;
 
@@ -69,7 +72,7 @@ MeshUpdateQueue::~MeshUpdateQueue()
 {
 }
 
-void MeshUpdateQueue::addBlock(v3s16 p, std::shared_ptr<MeshMakeData> data, bool urgent)
+void MeshUpdateQueue::addBlock(v3POS p, std::shared_ptr<MeshMakeData> data, bool urgent)
 {
 	DSTACK(__FUNCTION_NAME);
 
@@ -132,6 +135,8 @@ void * MeshUpdateThread::Thread()
 
 	while(!StopRequested())
 	{
+
+		try {
 		auto q = m_queue_in.pop();
 		if(!q)
 		{
@@ -140,11 +145,24 @@ void * MeshUpdateThread::Thread()
 		}
 		m_queue_in.m_process.set(q->m_blockpos, 1);
 
-		ScopeProfiler sp(g_profiler, "Client: Mesh making");
+		ScopeProfiler sp(g_profiler, "Client: Mesh making " + itos(q->step));
 
 		m_queue_out.push_back(MeshUpdateResult(q->m_blockpos, std::shared_ptr<MapBlockMesh>(new MapBlockMesh(q.get(), m_camera_offset))));
 
 		m_queue_in.m_process.erase(q->m_blockpos);
+
+#ifdef NDEBUG
+		} catch (BaseException &e) {
+			errorstream<<"MeshUpdateThread: exception: "<<e.what()<<std::endl;
+		} catch(std::exception &e) {
+			errorstream<<"MeshUpdateThread: exception: "<<e.what()<<std::endl;
+		} catch (...) {
+			errorstream<<"MeshUpdateThread: Ooops..."<<std::endl;
+#else
+		} catch (int) { //nothing
+#endif
+		}
+
 	}
 
 	END_DEBUG_EXCEPTION_HANDLER(errorstream)
@@ -196,6 +214,7 @@ Client::Client(
 	m_inventory_updated(false),
 	m_inventory_from_server(NULL),
 	m_inventory_from_server_age(0.0),
+	m_show_hud(true),
 	m_animation_time(0),
 	m_crack_level(-1),
 	m_crack_pos(0,0,0),
@@ -221,6 +240,33 @@ Client::Client(
 
 		m_env.addPlayer(player);
 	}
+
+	if (!simple_singleplayer_mode && g_settings->getBool("enable_local_map_saving")) {
+		const std::string world_path = porting::path_user + DIR_DELIM + "worlds"
+				+ DIR_DELIM + "server_" + g_settings->get("address")
+				+ "_" + g_settings->get("remote_port");
+
+		SubgameSpec gamespec;
+		if (!getWorldExists(world_path)) {
+			gamespec = findSubgame(g_settings->get("default_game"));
+			if (!gamespec.isValid())
+				gamespec = findSubgame("minimal");
+		} else {
+			std::string world_gameid = getWorldGameId(world_path, false);
+			gamespec = findWorldSubgame(world_path);
+		}
+		if (!gamespec.isValid()) {
+			errorstream << "Couldn't find subgame for local map saving." << std::endl;
+			return;
+		}
+
+		localserver = new Server(world_path, gamespec, false, false);
+		localdb = nullptr;
+		actionstream << "Local map saving started, map will be saved at '" << world_path << "'" << std::endl;
+	} else {
+		localdb = NULL;
+		localserver = nullptr;
+	}
 }
 
 void Client::Stop()
@@ -228,6 +274,10 @@ void Client::Stop()
 	//request all client managed threads to stop
 	m_mesh_update_thread.Stop();
 	m_mesh_update_thread.Wait();
+	if (localdb != NULL) {
+		actionstream << "Local map saving ended" << std::endl;
+		localdb->endSave();
+	}
 }
 
 Client::~Client()
@@ -260,6 +310,11 @@ Client::~Client()
 		if (mesh != NULL)
 			m_device->getSceneManager()->getMeshCache()->removeMesh(mesh);
 	}
+
+	if (localserver)
+		delete localserver;
+	if (localdb)
+		delete localdb;
 }
 
 void Client::connect(Address address)
@@ -1006,6 +1061,10 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id)
 			block->deSerialize(istr, ser_version, false);
 			block->deSerializeNetworkSpecific(istr);
 			m_env.getMap().insertBlock(block);
+		}
+
+		if (localserver != NULL) {
+			localserver->getMap().saveBlock(block);
 		}
 
 		/*
@@ -2181,20 +2240,19 @@ void Client::removeNode(v3s16 p)
 	{
 	}
 	
-	// add urgent task to update the modified node
-	addUpdateMeshTaskForNode(p, true);
-
 	for(std::map<v3s16, MapBlock * >::iterator
 			i = modified_blocks.begin();
 			i != modified_blocks.end(); ++i)
 	{
-		addUpdateMeshTaskWithEdge(i->first);
+		addUpdateMeshTask(i->first, false);
 	}
+	// add urgent task to update the modified node
+	addUpdateMeshTaskForNode(p, true);
 }
 
 void Client::addNode(v3s16 p, MapNode n, bool remove_metadata)
 {
-	TimeTaker timer1("Client::addNode()");
+	//TimeTaker timer1("Client::addNode()");
 
 	std::map<v3s16, MapBlock*> modified_blocks;
 
@@ -2212,7 +2270,7 @@ void Client::addNode(v3s16 p, MapNode n, bool remove_metadata)
 			i = modified_blocks.begin();
 			i != modified_blocks.end(); ++i)
 	{
-		addUpdateMeshTaskWithEdge(i->first);
+		addUpdateMeshTask(i->first, false);
 	}
 }
 	
@@ -2579,7 +2637,7 @@ void Client::afterContentReceived(IrrlichtDevice *device, gui::IGUIFont* font)
 	// Update node textures and assign shaders to each tile
 	infostream<<"- Updating node textures"<<std::endl;
 	if (!no_output)
-	m_nodedef->updateTextures(m_tsrc, m_shsrc);
+	m_nodedef->updateTextures(this);
 
 	// Preload item textures and meshes if configured to
 	if(!no_output && g_settings->getBool("preload_item_visuals"))
@@ -2683,6 +2741,10 @@ ITextureSource* Client::getTextureSource()
 IShaderSource* Client::getShaderSource()
 {
 	return m_shsrc;
+}
+scene::ISceneManager* Client::getSceneManager()
+{
+	return m_device->getSceneManager();
 }
 u16 Client::allocateUnknownNodeId(const std::string &name)
 {

@@ -213,7 +213,6 @@ public:
 			ISimpleTextureSource *tsrc,
 			IFormSource* fs_src,
 			TextDest* txt_dst,
-			GUIFormSpecMenu** ext_ptr,
 			Client* client
 			);
 
@@ -328,7 +327,7 @@ protected:
 	gui::IGUIStaticText *m_tooltip_element;
 
 	u32 m_tooltip_show_delay;
-	s32 m_hoovered_time;
+	s32 m_hovered_time;
 	s32 m_old_tooltip_id;
 	std::string m_old_tooltip;
 
@@ -349,7 +348,6 @@ protected:
 private:
 	IFormSource      *m_form_src;
 	TextDest         *m_text_dst;
-	GUIFormSpecMenu **m_ext_ptr;
 	gui::IGUIFont    *m_font;
 	unsigned int      m_formspec_version;
 

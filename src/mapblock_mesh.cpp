@@ -43,7 +43,7 @@ static void applyFacesShading(video::SColor& color, float factor)
 	color.setGreen(core::clamp(core::round32(color.getGreen()*factor), 0, 255));
 }
 
-int getFarmeshStep(MapDrawControl& draw_control, const v3s16 & playerpos, const v3s16 & blockpos) {
+int getFarmeshStep(MapDrawControl& draw_control, const v3POS & playerpos, const v3POS & blockpos) {
 	int range = radius_box(playerpos, blockpos);
 	if (draw_control.farmesh) {
 		if		(range >= draw_control.farmesh+draw_control.farmesh_step*3)	return 16;
@@ -66,6 +66,8 @@ MeshMakeData::MeshMakeData(IGameDef *gamedef, Map & map_, MapDrawControl& draw_c
 	m_crack_pos_relative(-1337, -1337, -1337),
 	m_highlighted_pos_relative(-1337, -1337, -1337),
 	m_smooth_lighting(false),
+	m_show_hud(false),
+	m_highlight_mesh_color(255, 255, 255, 255),
 	m_gamedef(gamedef)
 	,step(1),
 	range(1),
@@ -97,7 +99,7 @@ void MeshMakeData::fill_data()
 #if !defined(MESH_ZEROCOPY)
 	ScopeProfiler sp(g_profiler, "Client: Mesh data fill");
 
-	v3s16 blockpos_nodes = m_blockpos*MAP_BLOCKSIZE;
+	v3POS blockpos_nodes = m_blockpos*MAP_BLOCKSIZE;
 
 	/*
 		Copy data
@@ -105,8 +107,9 @@ void MeshMakeData::fill_data()
 
 	// Allocate this block + neighbors
 	m_vmanip.clear();
-	m_vmanip.addArea(VoxelArea(blockpos_nodes-v3s16(1,1,1)*MAP_BLOCKSIZE,
-			blockpos_nodes+v3s16(1,1,1)*MAP_BLOCKSIZE*2-v3s16(1,1,1)));
+	VoxelArea voxel_area(blockpos_nodes - v3s16(1,1,1) * MAP_BLOCKSIZE,
+			blockpos_nodes + v3s16(1,1,1) * MAP_BLOCKSIZE*2-v3s16(1,1,1));
+	m_vmanip.addArea(voxel_area);
 
 	{
 		//TimeTaker timer("copy central block data");
@@ -264,11 +267,11 @@ u16 getFaceLight(MapNode n, MapNode n2, v3s16 face_dir, INodeDefManager *ndef)
 
 /*
 	Calculate smooth lighting at the XYZ- corner of p.
-	Single light bank.
+	Both light banks
 */
-static u8 getSmoothLight(enum LightBank bank, v3s16 p, MeshMakeData *data)
+static u16 getSmoothLightCombined(v3s16 p, MeshMakeData *data)
 {
-	static v3s16 dirs8[8] = {
+	static const v3s16 dirs8[8] = {
 		v3s16(0,0,0),
 		v3s16(0,0,1),
 		v3s16(0,1,0),
@@ -282,10 +285,12 @@ static u8 getSmoothLight(enum LightBank bank, v3s16 p, MeshMakeData *data)
 	INodeDefManager *ndef = data->m_gamedef->ndef();
 
 	u16 ambient_occlusion = 0;
-	u16 light = 0;
 	u16 light_count = 0;
 	u8 light_source_max = 0;
-	for(u32 i=0; i<8; i++)
+	u16 light_day = 0;
+	u16 light_night = 0;
+
+	for (u32 i = 0; i < 8; i++)
 	{
 		MapNode n = data->m_vmanip.getNodeNoEx(p - dirs8[i]);
 
@@ -295,52 +300,53 @@ static u8 getSmoothLight(enum LightBank bank, v3s16 p, MeshMakeData *data)
 		}
 
 		const ContentFeatures &f = ndef->get(n);
-		if(f.light_source > light_source_max)
+		if (f.light_source > light_source_max)
 			light_source_max = f.light_source;
-		// Check f.solidness because fast-style leaves look
-		// better this way
-		if(f.param_type == CPT_LIGHT && f.solidness != 2)
-		{
-			light += decode_light(n.getLight(bank, ndef));
+		// Check f.solidness because fast-style leaves look better this way
+		if (f.param_type == CPT_LIGHT && f.solidness != 2) {
+			light_day += decode_light(n.getLight(LIGHTBANK_DAY, ndef));
+			light_night += decode_light(n.getLight(LIGHTBANK_NIGHT, ndef));
 			light_count++;
-		}
-		else {
+		} else {
 			ambient_occlusion++;
 		}
 	}
 
 	if(light_count == 0)
-		return 255;
+		return 0xffff;
 
-	light /= light_count;
+	light_day /= light_count;
+	light_night /= light_count;
 
 	// Boost brightness around light sources
-	if(decode_light(light_source_max) >= light)
-		//return decode_light(undiminish_light(light_source_max));
-		return decode_light(light_source_max);
-
-	if(ambient_occlusion > 4)
-	{
-		//calculate table index for gamma space multiplier
-		ambient_occlusion -= 5;
-		//table of precalculated gamma space multiply factors
-		//light^2.2 * factor (0.75, 0.5, 0.25, 0.0), so table holds factor ^ (1 / 2.2)
-		const float light_amount[4] = {0.877424315, 0.729740053, 0.532520545, 0.0};
-		light = core::clamp(core::round32(light*light_amount[ambient_occlusion]), 0, 255);
+	bool skip_ambient_occlusion_day = false;
+	if(decode_light(light_source_max) >= light_day) {
+		light_day = decode_light(light_source_max);
+		skip_ambient_occlusion_day = true;
 	}
 
-	return light;
-}
+	bool skip_ambient_occlusion_night = false;
+	if(decode_light(light_source_max) >= light_night) {
+		light_night = decode_light(light_source_max);
+		skip_ambient_occlusion_night = true;
+	}
 
-/*
-	Calculate smooth lighting at the XYZ- corner of p.
-	Both light banks.
-*/
-static u16 getSmoothLight(v3s16 p, MeshMakeData *data)
-{
-	u16 day = getSmoothLight(LIGHTBANK_DAY, p, data);
-	u16 night = getSmoothLight(LIGHTBANK_NIGHT, p, data);
-	return day | (night << 8);
+	if (ambient_occlusion > 4)
+	{
+		//table of precalculated gamma space multiply factors
+		//light^2.2 * factor (0.75, 0.5, 0.25, 0.0), so table holds factor ^ (1 / 2.2)
+		static const float light_amount[4] = { 0.877424315, 0.729740053, 0.532520545, 0.0 };
+
+		//calculate table index for gamma space multiplier
+		ambient_occlusion -= 5;
+
+		if (!skip_ambient_occlusion_day)
+			light_day = rangelim(core::round32(light_day*light_amount[ambient_occlusion]), 0, 255);
+		if (!skip_ambient_occlusion_night)
+			light_night = rangelim(core::round32(light_night*light_amount[ambient_occlusion]), 0, 255);
+	}
+
+	return light_day | (light_night << 8);
 }
 
 /*
@@ -350,20 +356,20 @@ static u16 getSmoothLight(v3s16 p, MeshMakeData *data)
 u16 getSmoothLight(v3s16 p, v3s16 corner, MeshMakeData *data)
 {
 	if(corner.X == 1) p.X += 1;
-	else              assert(corner.X == -1);
+	// else corner.X == -1
 	if(corner.Y == 1) p.Y += 1;
-	else              assert(corner.Y == -1);
+	// else corner.Y == -1
 	if(corner.Z == 1) p.Z += 1;
-	else              assert(corner.Z == -1);
+	// else corner.Z == -1
 
-	return getSmoothLight(p, data);
+	return getSmoothLightCombined(p, data);
 }
 
 /*
 	Converts from day + night color values (0..255)
 	and a given daynight_ratio to the final SColor shown on screen.
 */
-static void finalColorBlend(video::SColor& result,
+void finalColorBlend(video::SColor& result,
 		u8 day, u8 night, u32 daynight_ratio)
 {
 	s32 rg = (day * daynight_ratio + night * (1000-daynight_ratio)) / 1000;
@@ -375,7 +381,7 @@ static void finalColorBlend(video::SColor& result,
 
 	// Emphase blue a bit in darker places
 	// Each entry of this array represents a range of 8 blue levels
-	static u8 emphase_blue_when_dark[32] = {
+	static const u8 emphase_blue_when_dark[32] = {
 		1, 4, 6, 6, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	};
@@ -383,7 +389,7 @@ static void finalColorBlend(video::SColor& result,
 	b = irr::core::clamp (b, 0, 255);
 
 	// Artificial light is yellow-ish
-	static u8 emphase_yellow_when_artificial[16] = {
+	static const u8 emphase_yellow_when_artificial[16] = {
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 15, 15, 15
 	};
 	rg += emphase_yellow_when_artificial[night/16];
@@ -885,6 +891,8 @@ static void updateFastFaceRow(
 			makes_face, p_corrected, face_dir_corrected,
 			lights, tile, light_source, step);
 
+	auto prev_p_corrected = p_corrected;
+
 	u16 to = MAP_BLOCKSIZE/step;
 	for(u16 j=0; j<to; j++)
 	{
@@ -912,7 +920,7 @@ static void updateFastFaceRow(
 					next_tile, next_light_source, step);
 
 			if(next_makes_face == makes_face
-					&& next_p_corrected == p_corrected + translate_dir
+					&& next_p_corrected == prev_p_corrected + translate_dir
 					&& next_face_dir_corrected == face_dir_corrected
 					&& next_lights[0] == lights[0]
 					&& next_lights[1] == lights[1]
@@ -962,8 +970,8 @@ static void updateFastFaceRow(
 				v3f pf(p_corrected.X, p_corrected.Y, p_corrected.Z);
 				// Center point of face (kind of)
 				v3f sp = pf - ((f32)continuous_tiles_count / 2.0 - 0.5) * translate_dir_f;
-				if(continuous_tiles_count != 1)
-					sp += translate_dir_f;
+				if(continuous_tiles_count > 1)
+					sp += translate_dir_f * (continuous_tiles_count - 1);
 				v3f scale(1,1,1);
 
 				if(translate_dir.X != 0) {
@@ -980,10 +988,9 @@ static void updateFastFaceRow(
 						sp, face_dir_corrected, scale, light_source,
 						dest);
 
-				g_profiler->avg("Meshgen: faces drawn by tiling", 0);
-				for(int i = 1; i < continuous_tiles_count; i++){
-					g_profiler->avg("Meshgen: faces drawn by tiling", 1);
-				}
+#if !defined(NDEBUG)
+				g_profiler->avg("Meshgen: faces drawn by tiling", continuous_tiles_count);
+#endif
 			}
 
 			continuous_tiles_count = 0;
@@ -1000,6 +1007,7 @@ static void updateFastFaceRow(
 		}
 
 		p = p_next;
+		prev_p_corrected = next_p_corrected;
 	}
 }
 
@@ -1146,7 +1154,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	if(step <= 1)
 	mapblock_mesh_generate_special(data, collector);
 
-	m_highlight_mesh_color = data->m_highlight_mesh_color; 
+	m_highlight_mesh_color = data->m_highlight_mesh_color;
 
 	/*
 		Convert MeshCollector to SMesh
@@ -1504,5 +1512,56 @@ void MeshCollector::append(const TileSpec &tile,
 	for(u32 i=0; i<numVertices; i++)
 	{
 		p->vertices.push_back(vertices[i]);
+	}
+}
+
+/*
+	MeshCollector - for meshnodes and converted drawtypes.
+*/
+
+void MeshCollector::append(const TileSpec &tile,
+		const video::S3DVertex *vertices, u32 numVertices,
+		const u16 *indices, u32 numIndices,
+		v3f pos, video::SColor c)
+{
+	if(numIndices > 65535)
+	{
+		dstream<<"FIXME: MeshCollector::append() called with numIndices="<<numIndices<<" (limit 65535)"<<std::endl;
+		return;
+	}
+
+	PreMeshBuffer *p = NULL;
+	for(u32 i=0; i<prebuffers.size(); i++)
+	{
+		PreMeshBuffer &pp = prebuffers[i];
+		if(pp.tile != tile)
+			continue;
+		if(pp.indices.size() + numIndices > 65535)
+			continue;
+
+		p = &pp;
+		break;
+	}
+
+	if(p == NULL)
+	{
+		PreMeshBuffer pp;
+		pp.tile = tile;
+		prebuffers.push_back(pp);
+		p = &prebuffers[prebuffers.size()-1];
+	}
+
+	u32 vertex_count = p->vertices.size();
+	for(u32 i=0; i<numIndices; i++)
+	{
+		u32 j = indices[i] + vertex_count;
+		p->indices.push_back(j);
+	}
+	for(u32 i=0; i<numVertices; i++)
+	{
+		video::S3DVertex vert = vertices[i];
+		vert.Pos += pos;
+		vert.Color = c;		
+		p->vertices.push_back(vert);
 	}
 }

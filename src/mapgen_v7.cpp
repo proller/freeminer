@@ -37,10 +37,14 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "dungeongen.h"
 #include "cavegen.h"
 #include "treegen.h"
-#include "biome.h"
+#include "mg_biome.h"
+#include "mg_ore.h"
+#include "mg_decoration.h"
 #include "mapgen_v7.h"
 #include "mapgen_indev.h" //farscale
 #include "environment.h"
+#include "log_types.h"
+
 
 
 FlagDesc flagdesc_mapgen_v7[] = {
@@ -52,11 +56,13 @@ FlagDesc flagdesc_mapgen_v7[] = {
 ///////////////////////////////////////////////////////////////////////////////
 
 
-MapgenV7::MapgenV7(int mapgenid, MapgenParams *params, EmergeManager *emerge) {
+MapgenV7::MapgenV7(int mapgenid, MapgenParams *params, EmergeManager *emerge):
+		Mapgen_features(mapgenid, params, emerge)
+	{
 	this->generating  = false;
 	this->id     = mapgenid;
 	this->emerge = emerge;
-	this->bmgr   = emerge->biomedef;
+	this->bmgr   = emerge->biomemgr;
 
 	this->seed        = (int)params->seed;
 	this->water_level = params->water_level;
@@ -65,8 +71,8 @@ MapgenV7::MapgenV7(int mapgenid, MapgenParams *params, EmergeManager *emerge) {
 
 	this->csize   = v3s16(1, 1, 1) * params->chunksize * MAP_BLOCKSIZE;
 
-	// amount of elements to skip for the next index
-	// for noise/height/biome maps (not vmanip)
+	//// amount of elements to skip for the next index
+	//// for noise/height/biome maps (not vmanip)
 	this->ystride = csize.X;
 	this->zstride = csize.X * csize.Y;
 
@@ -75,8 +81,9 @@ MapgenV7::MapgenV7(int mapgenid, MapgenParams *params, EmergeManager *emerge) {
 	this->ridge_heightmap = new s16[csize.X * csize.Z];
 
 	MapgenV7Params *sp = (MapgenV7Params *)params->sparams;
+	this->spflags = sp->spflags;
 
-	// Terrain noise
+	//// Terrain noise
 	noise_terrain_base    = new Noise(&sp->np_terrain_base,    seed, csize.X, csize.Z);
 	noise_terrain_alt     = new Noise(&sp->np_terrain_alt,     seed, csize.X, csize.Z);
 	noise_terrain_persist = new Noise(&sp->np_terrain_persist, seed, csize.X, csize.Z);
@@ -85,18 +92,38 @@ MapgenV7::MapgenV7(int mapgenid, MapgenParams *params, EmergeManager *emerge) {
 	noise_mount_height    = new Noise(&sp->np_mount_height,    seed, csize.X, csize.Z);
 	noise_ridge_uwater    = new Noise(&sp->np_ridge_uwater,    seed, csize.X, csize.Z);
 
-	// 3d terrain noise
+	//// 3d terrain noise
 	noise_mountain = new Noise(&sp->np_mountain, seed, csize.X, csize.Y, csize.Z);
 	noise_ridge    = new Noise(&sp->np_ridge,    seed, csize.X, csize.Y, csize.Z);
 
-	// Biome noise
+	//// Biome noise
 	noise_heat     = new Noise(bmgr->np_heat,     seed, csize.X, csize.Z);
-	noise_humidity = new Noise(bmgr->np_humidity, seed, csize.X, csize.Z);	
+	noise_humidity = new Noise(bmgr->np_humidity, seed, csize.X, csize.Z);
 
+	//// Resolve nodes to be used
+	INodeDefManager *ndef = emerge->ndef;
+
+	c_stone           = ndef->getId("mapgen_stone");
+	c_dirt            = ndef->getId("mapgen_dirt");
+	c_dirt_with_grass = ndef->getId("mapgen_dirt_with_grass");
+	c_sand            = ndef->getId("mapgen_sand");
+	c_water_source    = ndef->getId("mapgen_water_source");
+	c_lava_source     = ndef->getId("mapgen_lava_source");
+	c_ice             = ndef->getId("default:ice");
+	if (c_ice == CONTENT_IGNORE)
+		c_ice = c_water_source;
+
+	//freeminer:
+	c_dirt_with_snow  = ndef->getId("mapgen_dirt_with_snow");
+	if (c_dirt_with_snow == CONTENT_IGNORE)
+		c_dirt_with_snow = c_dirt;
 	float_islands = sp->float_islands;
 	noise_float_islands1  = new Noise(&sp->np_float_islands1, seed, csize.X, csize.Y, csize.Z);
 	noise_float_islands2  = new Noise(&sp->np_float_islands2, seed, csize.X, csize.Y, csize.Z);
 	noise_float_islands3  = new Noise(&sp->np_float_islands3, seed, csize.X, csize.Z);
+
+	noise_layers          = new Noise(&sp->np_layers,         seed, csize.X, csize.Y, csize.Z);
+	layers_init(emerge, sp->paramsj);
 }
 
 
@@ -117,10 +144,6 @@ MapgenV7::~MapgenV7() {
 	delete[] ridge_heightmap;
 	delete[] heightmap;
 	delete[] biomemap;
-
-	delete noise_float_islands1;
-	delete noise_float_islands2;
-	delete noise_float_islands3;
 }
 
 
@@ -138,9 +161,10 @@ MapgenV7Params::MapgenV7Params() {
 	np_ridge           = NoiseParams(0,    1,   v3f(100, 100, 100), 6467,  4, 0.75);
 
 	float_islands = 500;
-	np_float_islands1  = NoiseParams(0,    1,   v3f(256, 256, 256), 3683,  6, 0.6,  1,   1.5);
-	np_float_islands2  = NoiseParams(0,    1,   v3f(8,   8,   8  ), 9292,  2, 0.5,  1,   1.5);
-	np_float_islands3  = NoiseParams(0,    1,   v3f(256, 256, 256), 6412,  2, 0.5,  1,   0.5);
+	np_float_islands1  = NoiseParams(0,    1,   v3f(256, 256, 256), 3683,  6, 0.6,  false, 1,   1.5);
+	np_float_islands2  = NoiseParams(0,    1,   v3f(8,   8,   8  ), 9292,  2, 0.5,  false, 1,   1.5);
+	np_float_islands3  = NoiseParams(0,    1,   v3f(256, 256, 256), 6412,  2, 0.5,  false, 1,   0.5);
+	np_layers          = NoiseParams(500,  500, v3f(100, 50,  100), 3663,  5, 0.6,  false, 1,   5,   0.5);
 }
 
 
@@ -157,10 +181,12 @@ void MapgenV7Params::readParams(Settings *settings) {
 	settings->getNoiseParams("mgv7_np_mountain",        np_mountain);
 	settings->getNoiseParams("mgv7_np_ridge",           np_ridge);
 
-	settings->getS16NoEx("mgv7_float_islands", float_islands);
-	settings->getNoiseIndevParams("mgv7_np_float_islands1", np_float_islands1);
-	settings->getNoiseIndevParams("mgv7_np_float_islands2", np_float_islands2);
-	settings->getNoiseIndevParams("mgv7_np_float_islands3", np_float_islands3);
+	settings->getS16NoEx("mg_float_islands", float_islands);
+	settings->getNoiseIndevParams("mg_np_float_islands1", np_float_islands1);
+	settings->getNoiseIndevParams("mg_np_float_islands2", np_float_islands2);
+	settings->getNoiseIndevParams("mg_np_float_islands3", np_float_islands3);
+	settings->getNoiseIndevParams("mg_np_layers",         np_layers);
+	paramsj = settings->getJson("mg_params", paramsj);
 }
 
 
@@ -177,10 +203,13 @@ void MapgenV7Params::writeParams(Settings *settings) {
 	settings->setNoiseParams("mgv7_np_mountain",        np_mountain);
 	settings->setNoiseParams("mgv7_np_ridge",           np_ridge);
 
-	settings->setS16("mgv7_float_islands", float_islands);
-	settings->setNoiseIndevParams("mgv7_np_float_islands1", np_float_islands1);
-	settings->setNoiseIndevParams("mgv7_np_float_islands2", np_float_islands2);
-	settings->setNoiseIndevParams("mgv7_np_float_islands3", np_float_islands3);
+	settings->setS16("mg_float_islands", float_islands);
+	settings->setNoiseIndevParams("mg_np_float_islands1", np_float_islands1);
+	settings->setNoiseIndevParams("mg_np_float_islands2", np_float_islands2);
+	settings->setNoiseIndevParams("mg_np_float_islands3", np_float_islands3);
+	settings->setNoiseIndevParams("mg_np_layers",         np_layers);
+
+	settings->setJson("mg_params", paramsj);
 }
 
 
@@ -237,18 +266,15 @@ void MapgenV7::makeChunk(BlockMakeData *data) {
 
 	blockseed = emerge->getBlockSeed(full_node_min);  //////use getBlockSeed2()!
 	
-	c_stone           = ndef->getId("mapgen_stone");
-	c_dirt            = ndef->getId("mapgen_dirt");
-	c_dirt_with_grass = ndef->getId("mapgen_dirt_with_grass");
-	c_sand            = ndef->getId("mapgen_sand");
-	c_water_source    = ndef->getId("mapgen_water_source");
-	c_lava_source     = ndef->getId("mapgen_lava_source");
-	c_ice             = ndef->getId("mapgen_ice");
-	if (c_ice == CONTENT_IGNORE)
-		c_ice = CONTENT_AIR;
-	
 	// Make some noise
 	calculateNoise();
+
+	if (float_islands && node_max.Y >= float_islands) {
+		float_islands_prepare(node_min, node_max, float_islands);
+	}
+
+	layers_prepare(node_min, node_max);
+
 	
 	// Generate base terrain, mountains, and ridges with initial heightmaps
 	s16 stone_surface_max_y = generateTerrain();
@@ -256,12 +282,8 @@ void MapgenV7::makeChunk(BlockMakeData *data) {
 	updateHeightmap(node_min, node_max);
 	
 	// Calculate biomes
-	BiomeNoiseInput binput;
-	binput.mapsize      = v2s16(csize.X, csize.Z);
-	binput.heat_map     = noise_heat->result;
-	binput.humidity_map = noise_humidity->result;
-	binput.height_map   = heightmap;
-	bmgr->calcBiomes(&binput, biomemap);
+	bmgr->calcBiomes(csize.X, csize.Z, noise_heat->result,
+		noise_humidity->result, heightmap, biomemap);
 	
 	// Actually place the biome-specific nodes and what not
 	generateBiomes();
@@ -276,16 +298,12 @@ void MapgenV7::makeChunk(BlockMakeData *data) {
 		dgen.generate(blockseed, full_node_min, full_node_max);
 	}
 
-	for (size_t i = 0; i != emerge->decorations.size(); i++) {
-		Decoration *deco = emerge->decorations[i];
-		deco->placeDeco(this, blockseed + i, node_min, node_max);
-	}
+	// Generate the registered decorations
+	emerge->decomgr->placeAllDecos(this, blockseed, node_min, node_max);
 
-	for (size_t i = 0; i != emerge->ores.size(); i++) {
-		Ore *ore = emerge->ores[i];
-		ore->placeOre(this, blockseed + i, node_min, node_max);
-	}
-	
+	// Generate the registered ores
+	emerge->oremgr->placeAllOres(this, blockseed, node_min, node_max);
+
 	// Sprinkle some dust on top after everything else was generated
 	dustTopNodes();
 	
@@ -340,25 +358,6 @@ void MapgenV7::calculateNoise() {
 	noise_heat->perlinMap2D(x, z);
 	noise_humidity->perlinMap2D(x, z);
 	
-		noise_float_islands1->perlinMap3D(
-			x + 0.33 * noise_float_islands1->np->spread.X * farscale(noise_float_islands1->np->farspread, x, y, z),
-			y + 0.33 * noise_float_islands1->np->spread.Y * farscale(noise_float_islands1->np->farspread, x, y, z),
-			z + 0.33 * noise_float_islands1->np->spread.Z * farscale(noise_float_islands1->np->farspread, x, y, z)
-		);
-		noise_float_islands1->transformNoiseMap(x, y, z);
-
-		noise_float_islands2->perlinMap3D(
-			x + 0.33 * noise_float_islands2->np->spread.X * farscale(noise_float_islands2->np->farspread, x, y, z),
-			y + 0.33 * noise_float_islands2->np->spread.Y * farscale(noise_float_islands2->np->farspread, x, y, z),
-			z + 0.33 * noise_float_islands2->np->spread.Z * farscale(noise_float_islands2->np->farspread, x, y, z)
-		);
-		noise_float_islands2->transformNoiseMap(x, y, z);
-
-		noise_float_islands3->perlinMap2D(
-			x + 0.5 * noise_float_islands3->np->spread.X * farscale(noise_float_islands3->np->farspread, x, z),
-			z + 0.5 * noise_float_islands3->np->spread.Z * farscale(noise_float_islands3->np->farspread, x, z));
-		noise_float_islands3->transformNoiseMap(x, y, z);
-
 	//printf("calculateNoise: %dus\n", t.stop());
 }
 
@@ -489,14 +488,22 @@ int MapgenV7::generateBaseTerrain() {
 		if (surface_y > stone_surface_max_y)
 			stone_surface_max_y = surface_y;
 
+		s16 heat = emerge->env->m_use_weather ? emerge->env->getServerMap().updateBlockHeat(emerge->env, v3POS(x,node_max.Y,z), nullptr, &heat_cache) : 0;
+
 		u32 i = vm->m_area.index(x, node_min.Y, z);		
 		for (s16 y = node_min.Y; y <= node_max.Y; y++) {
+
 			if (vm->m_data[i].getContent() == CONTENT_IGNORE) {
-				if (y <= surface_y)
-					vm->m_data[i] = n_stone;
+				if (y <= surface_y) {
+
+					int index3 = (z - node_min.Z) * zstride +
+						(y - node_min.Y) * ystride +
+						(x - node_min.X);
+
+					vm->m_data[i] = layers_get(index3);
+				}
 				else if (y <= water_level)
 				{
-					s16 heat = emerge->env->m_use_weather ? emerge->env->getServerMap().updateBlockHeat(emerge->env, v3s16(x,y,z), nullptr, &heat_cache) : 0;
 					vm->m_data[i] = (heat < 0 && y > heat/3) ? n_ice : n_water;
 				}
 				else
@@ -569,7 +576,7 @@ void MapgenV7::generateRidgeTerrain() {
 			if (y < ridge_heightmap[j])
 				ridge_heightmap[j] = y - 1; 
 
-			s16 heat = emerge->env->m_use_weather ? emerge->env->getServerMap().updateBlockHeat(emerge->env, v3s16(x,y,z), NULL, &heat_cache) : 0;
+			s16 heat = emerge->env->m_use_weather ? emerge->env->getServerMap().updateBlockHeat(emerge->env, v3POS(x,node_max.Y,z), NULL, &heat_cache) : 0;
 			MapNode n_water_or_ice = (heat < 0 && y > water_level + heat/4) ? n_ice : n_water;
 
 			vm->m_data[vi] = (y > water_level) ? n_air : n_water_or_ice;
@@ -591,17 +598,19 @@ void MapgenV7::generateBiomes() {
 	
 	for (s16 z = node_min.Z; z <= node_max.Z; z++)
 	for (s16 x = node_min.X; x <= node_max.X; x++, index++) {
-		Biome *biome  = bmgr->biomes[biomemap[index]];
+		Biome *biome  = (Biome *)bmgr->get(biomemap[index]);
 		s16 dfiller   = biome->depth_filler + noise_filler_depth->result[index];
 		s16 y0_top    = biome->depth_top;
 		s16 y0_filler = biome->depth_filler + biome->depth_top + dfiller;
-		
+
 		s16 nplaced = 0;
 		u32 i = vm->m_area.index(x, node_max.Y, z);	
 
 		content_t c_above = vm->m_data[i + em.X].getContent();
 		bool have_air = c_above == CONTENT_AIR;
 		
+		s16 heat = emerge->env->m_use_weather ? emerge->env->getServerMap().updateBlockHeat(emerge->env, v3POS(x,node_max.Y,z), NULL, &heat_cache) : 0;
+
 		for (s16 y = node_max.Y; y >= node_min.Y; y--) {
 			content_t c = vm->m_data[i].getContent();
 			
@@ -615,7 +624,7 @@ void MapgenV7::generateBiomes() {
 				have_air = !getMountainTerrainFromMap(j, index, y);
 			}
 			
-			if (c == c_stone && have_air) {
+			if (c != CONTENT_AIR && c != c_water_source && have_air) {
 				content_t c_below = vm->m_data[i - em.X].getContent();
 				
 				if (c_below != CONTENT_AIR) {
@@ -624,8 +633,7 @@ void MapgenV7::generateBiomes() {
 						// placed below water.  TODO: fix later
 						content_t c_place = ((y < water_level) &&
 								(biome->c_top == c_dirt_with_grass)) ?
-								 c_dirt : biome->c_top;
-						
+								c_dirt : heat < -3 ? biome->c_top_cold : biome->c_top;
 						vm->m_data[i] = MapNode(c_place);
 						nplaced++;
 					} else if (nplaced < y0_filler && nplaced >= y0_top) {
@@ -639,7 +647,6 @@ void MapgenV7::generateBiomes() {
 			} else if (c == c_water_source) {
 				have_air = true;
 				nplaced = 0;
-				s16 heat = emerge->env->m_use_weather ? emerge->env->getServerMap().updateBlockHeat(emerge->env, v3s16(x,y,z), NULL, &heat_cache) : 0;
 				vm->m_data[i] = MapNode((heat < 0 && y > water_level + heat/4) ? biome->c_ice : biome->c_water);
 			} else if (c == CONTENT_AIR) {
 				have_air = true;
@@ -661,7 +668,7 @@ void MapgenV7::dustTopNodes() {
 
 	for (s16 z = node_min.Z; z <= node_max.Z; z++)
 	for (s16 x = node_min.X; x <= node_max.X; x++, index++) {
-		Biome *biome = bmgr->biomes[biomemap[index]];
+		Biome *biome = (Biome *)bmgr->get(biomemap[index]);
 	
 		if (biome->c_dust == CONTENT_IGNORE)
 			continue;
@@ -812,57 +819,8 @@ void MapgenV7::generateCaves(int max_stone_y) {
 }
 
 
-
-// STUPID COPYPASTE FROM INDEV !
-void MapgenV7::generateFloatIslands(int min_y) {
-	if (node_min.Y < min_y) return;
-	PseudoRandom pr(blockseed + 985);
-	// originally from http://forum.minetest.net/viewtopic.php?id=4776
-	float RAR = 0.8 * farscale(0.4, node_min.Y); // 0.4; // Island rarity in chunk layer. -0.4 = thick layer with holes, 0 = 50%, 0.4 = desert rarity, 0.7 = very rare.
-	float AMPY = 24; // 24; // Amplitude of island centre y variation.
-	float TGRAD = 24; // 24; // Noise gradient to create top surface. Tallness of island top.
-	float BGRAD = 24; // 24; // Noise gradient to create bottom surface. Tallness of island bottom.
-
-	v3s16 p0(node_min.X, node_min.Y, node_min.Z);
-	MapNode n1(c_stone);
-
-	float xl = node_max.X - node_min.X;
-	float yl = node_max.Y - node_min.Y;
-	float zl = node_max.Z - node_min.Z;
-	u32 zstride = xl + 1;
-	float midy = node_min.Y + yl * 0.5;
-	u32 index = 0;
-	int generated = 0;
-	for (int z1 = 0; z1 <= zl; ++z1)
-	for (int y1 = 0; y1 <= yl; ++y1)
-	for (int x1 = 0; x1 <= xl; ++x1, ++index) {
-		int y = y1 + node_min.Y;
-		u32 index2d = z1 * zstride + x1;
-		float noise3 = noise_float_islands3->result[index2d];
-		float pmidy = midy + noise3 / 1.5 * AMPY;
-		float noise1 = noise_float_islands1->result[index];
-		float offset = y > pmidy ? (y - pmidy) / TGRAD : (pmidy - y) / BGRAD;
-		float noise1off = noise1 - offset - RAR;
-		if (noise1off > 0 && noise1off < 0.7) {
-			float noise2 = noise_float_islands2->result[index];
-			if (noise2 - noise1off > -0.7) {
-				v3s16 p = p0 + v3s16(x1, y1, z1);
-				u32 i = vm->m_area.index(p);
-				if (!vm->m_area.contains(i))
-					continue;
-				// Cancel if not  air
-				if (vm->m_data[i].getContent() != CONTENT_AIR)
-					continue;
-				vm->m_data[i] = n1;
-				++generated;
-			}
-		}
-	}
-	if (generated)
-		dustTopNodes();
-}
-
 void MapgenV7::generateExperimental() {
 	if (float_islands)
-		generateFloatIslands(float_islands);
+		if (float_islands_generate(node_min, node_max, float_islands, vm))
+			dustTopNodes();
 }

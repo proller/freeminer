@@ -43,6 +43,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "constants.h"
 #include "gettime.h"
 #include "threads.h"
+#include <atomic>
+
+#define IRRLICHT_VERSION_10000 IRRLICHT_VERSION_MAJOR*10000 + IRRLICHT_VERSION_MINOR * 100 + IRRLICHT_VERSION_REVISION
 
 #ifdef _MSC_VER
 	#define SWPRINTF_CHARSTRING L"%S"
@@ -147,6 +150,7 @@ void signal_handler_init(void);
 // When the bool is true, program should quit.
 bool * signal_handler_killstatus(void);
 
+extern std::atomic_bool g_sighup, g_siginfo;
 /*
 	Path of static data directory.
 */
@@ -395,6 +399,46 @@ v2u32 getDisplaySize();
 v2u32 getWindowSize();
 #endif
 
+inline const char * getPlatformName()
+{
+	return
+#if defined(ANDROID)
+	"Android"
+#elif defined(linux) || defined(__linux) || defined(__linux__)
+	"Linux"
+#elif defined(_WIN32) || defined(_WIN64)
+	"Windows"
+#elif defined(__DragonFly__) || defined(__FreeBSD__) || \
+		defined(__NetBSD__) || defined(__OpenBSD__)
+	"BSD"
+#elif defined(__APPLE__) && defined(__MACH__)
+	#if TARGET_OS_MAC
+		"OSX"
+	#elif TARGET_OS_IPHONE
+		"iOS"
+	#else
+		"Apple"
+	#endif
+#elif defined(_AIX)
+	"AIX"
+#elif defined(__hpux)
+	"HP-UX"
+#elif defined(__sun) && defined(__SVR4)
+	"Solaris"
+#elif defined(__CYGWIN__)
+	"Cygwin"
+#elif defined(__unix__) || defined(__unix)
+	#if defined(_POSIX_VERSION)
+		"Posix"
+	#else
+		"Unix"
+	#endif
+#else
+	"?"
+#endif
+	;
+}
+
 } // namespace porting
 
 #ifdef __ANDROID__
@@ -410,4 +454,3 @@ v2u32 getWindowSize();
 #endif
 
 #endif // PORTING_HEADER
-

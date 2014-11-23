@@ -35,7 +35,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "settings.h"
 #include <algorithm>
 
+#include "mainmenumanager.h"  // for g_gamecallback
+
 #define KMaxButtonPerColumns 12
+
+extern MainGameCallback *g_gamecallback;
 
 enum
 {
@@ -51,6 +55,7 @@ enum
 	GUI_ID_KEY_JUMP_BUTTON,
 	GUI_ID_KEY_NOCLIP_BUTTON,
 	GUI_ID_KEY_CHAT_BUTTON,
+	GUI_ID_KEY_PL_LIST_BUTTON,
 	GUI_ID_KEY_CMD_BUTTON,
 	GUI_ID_KEY_CONSOLE_BUTTON,
 	GUI_ID_KEY_SNEAK_BUTTON,
@@ -238,7 +243,11 @@ bool GUIKeyChangeMenu::acceptInput()
 		if(e != NULL && e->getType() == gui::EGUIET_CHECK_BOX)
 			g_settings->setBool("doubletap_jump", ((gui::IGUICheckBox*)e)->isChecked());
 	}
+
 	clearKeyCache();
+
+	g_gamecallback->signalKeyConfigChange();
+
 	return true;
 }
 
@@ -401,6 +410,7 @@ void GUIKeyChangeMenu::init_keys()
 	this->add_key(GUI_ID_KEY_ZOOM_BUTTON,      wgettext("Zoom"),          "keymap_zoom");
 	this->add_key(GUI_ID_KEY_INVENTORY_BUTTON, wgettext("Inventory"),     "keymap_inventory");
 	this->add_key(GUI_ID_KEY_CHAT_BUTTON,      wgettext("Chat"),          "keymap_chat");
+	this->add_key(GUI_ID_KEY_PL_LIST_BUTTON,   wgettext("Player list"),   "keymap_playerlist");
 	this->add_key(GUI_ID_KEY_CMD_BUTTON,       wgettext("Command"),       "keymap_cmd");
 	this->add_key(GUI_ID_KEY_CONSOLE_BUTTON,   wgettext("Console"),       "keymap_console");
 	this->add_key(GUI_ID_KEY_FLY_BUTTON,       wgettext("Toggle fly"),    "keymap_freemove");

@@ -1,7 +1,7 @@
 /*
 noise.h
-Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
-Copyright (C) 2010-2013 kwolekr, Ryan Kwolek <kwolekr@minetest.net>
+ * Copyright (C) 2010-2014 celeron55, Perttu Ahola <celeron55@gmail.com>
+ * Copyright (C) 2010-2014 kwolekr, Ryan Kwolek <kwolekr@minetest.net>
 */
 
 /*
@@ -76,10 +76,12 @@ struct NoiseParams {
 	float farspread;
 	float farpersist;
 
+	bool eased;
+
 	NoiseParams() {}
 
 	NoiseParams(float offset_, float scale_, v3f spread_,
-		int seed_, int octaves_, float persist_,
+		int seed_, int octaves_, float persist_, bool eased_=false,
 		float farscale_ = 1, float farspread_ = 1, float farpersist_ = 1)
 	{
 		offset  = offset_;
@@ -88,10 +90,12 @@ struct NoiseParams {
 		seed    = seed_;
 		octaves = octaves_;
 		persist = persist_;
+		eased   = eased_;
 
 		farscale  = farscale_;
 		farspread = farspread_;
 		farpersist = farpersist_;
+
 	}
 };
 
@@ -114,13 +118,10 @@ public:
 	float *buf;
 	float *result;
 
-	Noise(NoiseParams *np, int seed, int sx, int sy);
-	Noise(NoiseParams *np, int seed, int sx, int sy, int sz);
-	virtual ~Noise();
+	Noise(NoiseParams *np, int seed, int sx, int sy, int sz=1);
+	~Noise();
 
-	virtual void init(NoiseParams *np, int seed, int sx, int sy, int sz);
-	void setSize(int sx, int sy);
-	void setSize(int sx, int sy, int sz);
+	void setSize(int sx, int sy, int sz=1);
 	void setSpreadFactor(v3f spread);
 	void setOctaves(int octaves);
 	void resizeNoiseBuf(bool is3d);
@@ -132,10 +133,10 @@ public:
 	void gradientMap3D(
 		float x, float y, float z,
 		float step_x, float step_y, float step_z,
-		int seed);
+		int seed, bool eased=false);
 	float *perlinMap2D(float x, float y);
 	float *perlinMap2DModulated(float x, float y, float *persist_map);
-	float *perlinMap3D(float x, float y, float z);
+	float *perlinMap3D(float x, float y, float z, bool eased=false);
 	void transformNoiseMap(float xx = 0, float yy = 0, float zz = 0);
 };
 
@@ -144,7 +145,7 @@ float noise2d(int x, int y, int seed);
 float noise3d(int x, int y, int z, int seed);
 
 float noise2d_gradient(float x, float y, int seed);
-float noise3d_gradient(float x, float y, float z, int seed);
+float noise3d_gradient(float x, float y, float z, int seed, bool eased=false);
 
 float noise2d_perlin(float x, float y, int seed,
 		int octaves, float persistence);
@@ -153,14 +154,16 @@ float noise2d_perlin_abs(float x, float y, int seed,
 		int octaves, float persistence);
 
 float noise3d_perlin(float x, float y, float z, int seed,
-		int octaves, float persistence);
+		int octaves, float persistence, bool eased=false);
 
 float noise3d_perlin_abs(float x, float y, float z, int seed,
-		int octaves, float persistence);
+		int octaves, float persistence, bool eased=false);
 
 inline float easeCurve(float t) {
 	return t * t * t * (t * (6.f * t - 15.f) + 10.f);
 }
+
+float contour(float v);
 
 #define NoisePerlin2D(np, x, y, s) \
 		((np)->offset + (np)->scale * noise2d_perlin( \
@@ -190,9 +193,10 @@ inline float easeCurve(float t) {
 		noise3d_perlin((float)(x) / (np)->spread.X, (float)(y) / (np)->spread.Y, \
 		(float)(z) / (np)->spread.Z, (s) + (np)->seed, (np)->octaves, (np)->persist))
 
-inline float linearInterpolation(float v0, float v1, float t) {
+inline float linearInterpolation(float v0, float v1, float t);
+/* {
     return v0 + (v1 - v0) * t;
-}
+} */
 
 float biLinearInterpolation(float v00, float v10,
 							float v01, float v11,
@@ -212,6 +216,11 @@ float farscale(float scale, float z);
 float farscale(float scale, float x, float z);
 float farscale(float scale, float x, float y, float z);
 
+
+#define NoisePerlin3DEased(np, x, y, z, s) ((np)->offset + (np)->scale * \
+		noise3d_perlin((float)(x) / (np)->spread.X, (float)(y) / (np)->spread.Y, \
+		(float)(z) / (np)->spread.Z, (s) + (np)->seed, (np)->octaves, \
+		(np)->persist, true))
 
 #endif
 

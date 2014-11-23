@@ -43,7 +43,6 @@ Player::Player(IGameDef *gamedef, const std::string & name):
 	is_climbing(false),
 	swimming_vertical(false),
 	camera_barely_in_ceiling(false),
-	light(0),
 	inventory(gamedef->idef()),
 	hp(PLAYER_MAX_HP),
 	hurt_tilt_timer(0),
@@ -220,7 +219,7 @@ void Player::deSerialize(std::istream &is, std::string playername)
 
 	//args.getS32("version"); // Version field value not used
 	std::string name = args.get("name");
-	name = m_name;
+	m_name = name;
 	setPitch(args.getFloat("pitch"));
 	setYaw(args.getFloat("yaw"));
 	setPosition(args.getV3F("position"));

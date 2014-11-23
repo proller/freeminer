@@ -28,6 +28,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "serialization.h"             // for SER_FMT_VER_INVALID
 #include "jthread/jmutex.h"
 #include "util/lock.h"
+#include "util/unordered_map_hash.h"
 
 #include <list>
 #include <vector>
@@ -282,7 +283,7 @@ public:
 		List of active objects that the client knows of.
 		Value is dummy.
 	*/
-	std::set<u16> m_known_objects;
+	maybe_shared_unordered_map<u16, bool> m_known_objects;
 
 	ClientState getState()
 		{ return m_state; }
@@ -336,7 +337,7 @@ private:
 		Key is position, value is dummy.
 		No MapBlock* is stored here because the blocks can get deleted.
 	*/
-	shared_map<v3s16, unsigned int> m_blocks_sent;
+	shared_unordered_map<v3POS, unsigned int, v3POSHash, v3POSEqual> m_blocks_sent;
 
 public:
 	s16 m_nearest_unsent_d;
@@ -397,6 +398,8 @@ public:
 	/* create client */
 	void CreateClient(u16 peer_id);
 
+	std::shared_ptr<RemoteClient> getClient(u16 peer_id,  ClientState state_min=CS_Active);
+
 	/* get a client by peer_id */
 	RemoteClient* getClientNoEx(u16 peer_id,  ClientState state_min=CS_Active);
 
@@ -425,8 +428,16 @@ public:
 	static std::string state2Name(ClientState state);
 
 public:
-	shared_map<u16, RemoteClient*>& getClientList()
-		{ return m_clients; }
+	std::vector<std::shared_ptr<RemoteClient>> getClientList() {
+		std::vector<std::shared_ptr<RemoteClient>> clients;
+		auto lock = m_clients.lock_shared_rec();
+		for(auto & ir : m_clients) {
+			auto c = ir.second;
+			if (c)
+				clients.emplace_back(c);
+		}
+		return clients;
+	}
 
 private:
 	/* update internal player list */
@@ -435,7 +446,7 @@ private:
 	// Connection
 	con::Connection* m_con;
 	// Connected clients (behind the con mutex)
-	shared_map<u16, RemoteClient*> m_clients;
+	shared_map<u16, std::shared_ptr<RemoteClient>> m_clients;
 	std::vector<std::string> m_clients_names; //for announcing masterserver
 
 	// Environment

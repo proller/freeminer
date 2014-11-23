@@ -45,6 +45,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/lock.h"
 #include <unordered_set>
 #include "util/container.h" // Queue
+#include <array>
+
 
 class ServerEnvironment;
 class ActiveBlockModifier;
@@ -90,14 +92,13 @@ public:
 	virtual void setTimeOfDay(u32 time)
 	{
 		m_time_of_day = time;
-		m_time_of_day_f = (float)time / 24000.0;
 	}
 
 	u32 getTimeOfDay()
 	{ return m_time_of_day; }
 
-	float getTimeOfDayF()
-	{ return m_time_of_day_f; }
+	inline float getTimeOfDayF()
+	{ return (float)m_time_of_day / 24000.0; }
 
 	void stepTimeOfDay(float dtime);
 
@@ -120,7 +121,6 @@ protected:
 	// Time of day in milli-hours (0-23999); determines day and night
 	std::atomic_int m_time_of_day;
 	// Time of day in 0...1
-	float m_time_of_day_f;
 	float m_time_of_day_speed;
 	// Used to buffer dtime for adding to m_time_of_day
 	float m_time_counter;
@@ -217,7 +217,7 @@ class ABMHandler
 {
 private:
 	ServerEnvironment *m_env;
-	std::list<ActiveABM> *m_aabms[CONTENT_ID_CAPACITY];
+	std::array<std::list<ActiveABM> *, CONTENT_ID_CAPACITY> m_aabms;
 	std::list<std::list<ActiveABM>*> m_aabms_list;
 	bool m_aabms_empty;
 public:
@@ -305,7 +305,8 @@ public:
 		inside a radius around a position
 	*/
 	void getAddedActiveObjects(v3s16 pos, s16 radius,
-			std::set<u16> &current_objects,
+			s16 player_radius,
+			maybe_shared_unordered_map<u16, bool> &current_objects,
 			std::set<u16> &added_objects);
 
 	/*
@@ -313,7 +314,8 @@ public:
 		inside a radius around a position
 	*/
 	void getRemovedActiveObjects(v3s16 pos, s16 radius,
-			std::set<u16> &current_objects,
+			s16 player_radius,
+			maybe_shared_unordered_map<u16, bool> &current_objects,
 			std::set<u16> &removed_objects);
 	
 	/*
@@ -423,8 +425,10 @@ private:
 	// Game definition
 	IGameDef *m_gamedef;
 	// Key-value storage
+public:
 	KeyValueStorage *m_key_value_storage;
 	KeyValueStorage *m_players_storage;
+private:
 	// World path
 	const std::string m_path_world;
 	// Active object list

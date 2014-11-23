@@ -48,7 +48,7 @@ class ServerMapSector;
 class MapBlock;
 class NodeMetadata;
 class IGameDef;
-class IRollbackReportSink;
+class IRollbackManager;
 class EmergeManager;
 class ServerEnvironment;
 struct BlockMakeData;
@@ -177,7 +177,7 @@ public:
 	// Returns InvalidPositionException if not found
 	MapBlock * getBlockNoCreate(v3s16 p);
 	// Returns NULL if not found
-	MapBlock * getBlockNoCreateNoEx(v3s16 p, bool trylock = false, bool nocache = false);
+	MapBlock * getBlockNoCreateNoEx(v3POS p, bool trylock = false, bool nocache = false);
 
 	/* Server overrides */
 	virtual MapBlock * emergeBlock(v3s16 p, bool allow_generate=true)
@@ -189,15 +189,16 @@ public:
 	bool isValidPosition(v3s16 p);
 
 	// throws InvalidPositionException if not found
-	MapNode getNode(v3s16 p);
-
-	// throws InvalidPositionException if not found
 	void setNode(v3s16 p, MapNode & n);
 
 	// Returns a CONTENT_IGNORE node if not found
-	MapNode getNodeNoEx(v3s16 p);
 	MapNode getNodeTry(v3s16 p);
 	//MapNode getNodeNoLock(v3s16 p); // dont use
+	// If is_valid_position is not NULL then this will be set to true if the
+	// position is valid, otherwise false
+	MapNode getNodeNoEx(v3s16 p, bool *is_valid_position = NULL);
+	MapNode getNode(v3POS p) { return getNodeNoEx(p); };
+	//MapNode getNodeLog(v3POS p);
 
 	void unspreadLight(enum LightBank bank,
 			std::map<v3s16, u8> & from_nodes,
@@ -223,11 +224,11 @@ public:
 			std::map<v3s16, MapBlock*> & modified_blocks);
 
 	u32 updateLighting(enum LightBank bank,
-			shared_map<v3s16, MapBlock*>  & a_blocks,
-			std::map<v3s16, MapBlock*> & modified_blocks, int max_cycle_ms = 0);
+			shared_map<v3POS, MapBlock*>  & a_blocks,
+			std::map<v3POS, MapBlock*> & modified_blocks, int max_cycle_ms = 0);
 
-	u32 updateLighting(shared_map<v3s16, MapBlock*>  & a_blocks,
-			std::map<v3s16, MapBlock*> & modified_blocks, int max_cycle_ms = 0);
+	u32 updateLighting(shared_map<v3POS, MapBlock*>  & a_blocks,
+			std::map<v3POS, MapBlock*> & modified_blocks, int max_cycle_ms = 0);
 
 	u32 updateLighting_last[2];
 
@@ -283,8 +284,8 @@ public:
 	// For debug printing. Prints "Map: ", "ServerMap: " or "ClientMap: "
 	virtual void PrintInfo(std::ostream &out);
 
-	u32 transformLiquids(Server *m_server, std::map<v3s16, MapBlock*> & modified_blocks, shared_map<v3s16, MapBlock*> & lighting_modified_blocks, int max_cycle_ms);
-	u32 transformLiquidsReal(Server *m_server, std::map<v3s16, MapBlock*> & modified_blocks, shared_map<v3s16, MapBlock*> & lighting_modified_blocks, int max_cycle_ms);
+	u32 transformLiquids(Server *m_server, int max_cycle_ms);
+	u32 transformLiquidsReal(Server *m_server, int max_cycle_ms);
 	/*
 		Node metadata
 		These are basically coordinate wrappers to MapBlock
@@ -321,7 +322,6 @@ public:
 	/*
 		Misc.
 	*/
-	//DELME std::map<v2s16, MapSector*> *getSectorsPtr(){return &m_sectors;}
 
 	/*
 		Variables
@@ -344,7 +344,7 @@ public:
 
 
 // from old mapsector:
-	typedef maybe_shared_unordered_map<v3s16, MapBlockP, v3s16Hash, v3s16Equal> m_blocks_type;
+	typedef maybe_shared_unordered_map<v3POS, MapBlockP, v3POSHash, v3POSEqual> m_blocks_type;
 	m_blocks_type m_blocks;
 	//MapBlock * getBlockNoCreateNoEx(v3s16 & p);
 	MapBlock * createBlankBlockNoInsert(v3s16 & p);
@@ -363,13 +363,13 @@ protected:
 
 	std::set<MapEventReceiver*> m_event_receivers;
 
-	//std::map<v2s16, MapSector*> m_sectors;
 	u32 m_blocks_update_last;
 	u32 m_blocks_save_last;
 
 	// Queued transforming water nodes
 public:
-	shared_unordered_map<v3s16, bool, v3s16Hash, v3s16Equal> m_transforming_liquid;
+	shared_unordered_map<v3POS, bool, v3POSHash, v3POSEqual> m_transforming_liquid;
+	shared_map<v3POS, MapBlock*> lighting_modified_blocks;
 protected:
 };
 
@@ -428,7 +428,7 @@ public:
 	void prepareBlock(MapBlock *block);
 
 	// Helper for placing objects on ground level
-	s16 findGroundLevel(v2s16 p2d, bool cacheBlocks);
+	s16 findGroundLevel(v2POS p2d, bool cacheBlocks);
 
 	/*
 		Misc. helper functions for fiddling with directory and file
@@ -468,8 +468,8 @@ public:
 	u64 getSeed();
 	s16 getWaterLevel();
 
-	virtual s16 updateBlockHeat(ServerEnvironment *env, v3s16 p, MapBlock *block = nullptr, std::map<v3s16, s16> *cache = nullptr);
-	virtual s16 updateBlockHumidity(ServerEnvironment *env, v3s16 p, MapBlock *block = nullptr, std::map<v3s16, s16> *cache = nullptr);
+	virtual s16 updateBlockHeat(ServerEnvironment *env, v3POS p, MapBlock *block = nullptr, std::map<v3POS, s16> *cache = nullptr);
+	virtual s16 updateBlockHumidity(ServerEnvironment *env, v3POS p, MapBlock *block = nullptr, std::map<v3POS, s16> *cache = nullptr);
 
 	//getSurface level starting on basepos.y up to basepos.y + searchup
 	//returns basepos.y -1 if no surface has been found
@@ -483,8 +483,9 @@ private:
 
 public:
 	std::string m_savedir;
-private:
 	bool m_map_saving_enabled;
+	bool m_map_loading_enabled;
+private:
 
 #if 0
 	// Chunk size in MapSectors
@@ -499,7 +500,9 @@ private:
 		This is reset to false when written on disk.
 	*/
 	bool m_map_metadata_changed;
+public:
 	Database *dbase;
+private:
 };
 
 

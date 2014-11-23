@@ -46,7 +46,7 @@ public:
 	// Open the console (height = desired fraction of screen size)
 	// This doesn't open immediately but initiates an animation.
 	// You should call isOpenInhibited() before this.
-	void openConsole(f32 height);
+	void openConsole(float height, bool close_on_return = false);
 
 	bool isOpen() const;
 
@@ -69,6 +69,8 @@ public:
 		bool blinking = false,
 		f32 blink_speed = 1.0,
 		f32 relative_height = 1.0);
+
+	void setPrompt(const std::wstring& input);
 
 	// Irrlicht draw method
 	virtual void draw();
@@ -102,6 +104,8 @@ private:
 
 	// should the console be opened or closed?
 	bool m_open;
+	// close console on return or not
+	bool m_close_on_return;
 	// current console height [pixels]
 	s32 m_height;
 	// desired height [pixels]

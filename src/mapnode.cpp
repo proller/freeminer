@@ -29,6 +29,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "serialization.h" // For ser_ver_supported
 #include "util/serialize.h"
 #include "log.h"
+#include "util/numeric.h"
 #include <string>
 #include <sstream>
 
@@ -80,19 +81,14 @@ u8 MapNode::getLight(enum LightBank bank, INodeDefManager *nodemgr) const
 {
 	// Select the brightest of [light source, propagated light]
 	const ContentFeatures &f = nodemgr->get(*this);
-	u8 light = 0;
+
+	u8 light;
 	if(f.param_type == CPT_LIGHT)
-	{
-		if(bank == LIGHTBANK_DAY)
-			light = param1 & 0x0f;
-		else if(bank == LIGHTBANK_NIGHT)
-			light = (param1>>4)&0x0f;
-		else
-			assert(0);
-	}
-	if(f.light_source > light)
-		light = f.light_source;
-	return light;
+		light = bank == LIGHTBANK_DAY ? param1 & 0x0f : (param1 >> 4) & 0x0f;
+	else
+		light = 0;
+
+	return MYMAX(f.light_source, light);
 }
 
 bool MapNode::getLightBanks(u8 &lightday, u8 &lightnight, INodeDefManager *nodemgr) const
@@ -362,6 +358,15 @@ std::vector<aabb3f> MapNode::getNodeBoxes(INodeDefManager *nodemgr) const
 	return transformNodeBox(*this, f.node_box, nodemgr);
 }
 
+std::vector<aabb3f> MapNode::getCollisionBoxes(INodeDefManager *nodemgr) const
+{
+	const ContentFeatures &f = nodemgr->get(*this);
+	if (f.collision_box.fixed.empty())
+		return transformNodeBox(*this, f.node_box, nodemgr);
+	else
+		return transformNodeBox(*this, f.collision_box, nodemgr);
+}
+
 std::vector<aabb3f> MapNode::getSelectionBoxes(INodeDefManager *nodemgr) const
 {
 	const ContentFeatures &f = nodemgr->get(*this);
@@ -440,10 +445,10 @@ u8 MapNode::addLevel(INodeDefManager *nodemgr, s8 add, bool compress)
 	return setLevel(nodemgr, level, compress);
 }
 
-void MapNode::freezeMelt(INodeDefManager *ndef, int direction) {
+int MapNode::freeze_melt(INodeDefManager *ndef, int direction) {
 	content_t to = ndef->getId(direction < 0 ? ndef->get(*this).freeze : ndef->get(*this).melt);
 	if (to == CONTENT_IGNORE)
-		return;
+		return 0;
 	u8 level_was_max = this->getMaxLevel(ndef);
 	u8 level_was = this->getLevel(ndef);
 	this->setContent(to);
@@ -457,6 +462,7 @@ void MapNode::freezeMelt(INodeDefManager *ndef, int direction) {
 	}
 	if (this->getMaxLevel(ndef) && !this->getLevel(ndef))
 		this->addLevel(ndef);
+	return direction;
 }
 
 u32 MapNode::serializedLength(u8 version)

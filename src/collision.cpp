@@ -210,9 +210,9 @@ collisionMoveResult collisionMoveSimple(Environment *env, IGameDef *gamedef,
 		return result;
 
 	// Limit speed for avoiding hangs
-	speed_f.Y=rangelim(speed_f.Y,-5000,5000);
-	speed_f.X=rangelim(speed_f.X,-5000,5000);
-	speed_f.Z=rangelim(speed_f.Z,-5000,5000);
+	speed_f.Y=rangelim(speed_f.Y,-1000,1000);
+	speed_f.X=rangelim(speed_f.X,-1000,1000);
+	speed_f.Z=rangelim(speed_f.Z,-1000,1000);
 
 	/*
 		Collect node boxes in movement range
@@ -241,15 +241,19 @@ collisionMoveResult collisionMoveSimple(Environment *env, IGameDef *gamedef,
 	for(s16 z = min_z; z <= max_z; z++)
 	{
 		v3s16 p(x,y,z);
-		try{
+
+		bool is_position_valid;
+		MapNode n = map->getNodeNoEx(p, &is_position_valid);
+
+		if (is_position_valid) {
 			// Object collides into walkable nodes
-			MapNode n = map->getNode(p);
+
 			const ContentFeatures &f = gamedef->getNodeDefManager()->get(n);
 			if(f.walkable == false)
 				continue;
 			int n_bouncy_value = itemgroup_get(f.groups, "bouncy");
 
-			std::vector<aabb3f> nodeboxes = n.getNodeBoxes(gamedef->ndef());
+			std::vector<aabb3f> nodeboxes = n.getCollisionBoxes(gamedef->ndef());
 			for(std::vector<aabb3f>::iterator
 					i = nodeboxes.begin();
 					i != nodeboxes.end(); i++)
@@ -265,8 +269,7 @@ collisionMoveResult collisionMoveSimple(Environment *env, IGameDef *gamedef,
 				is_object.push_back(false);
 			}
 		}
-		catch(InvalidPositionException &e)
-		{
+		else {
 			// Collide with unloaded nodes
 			aabb3f box = getNodeBox(p, BS);
 			cboxes.push_back(box);

@@ -44,6 +44,7 @@
 # Go down ladder / go down in fly mode / go fast in fast mode
 #keymap_special1 = KEY_KEY_E
 #keymap_chat = KEY_KEY_T
+#keymap_msg = @
 #keymap_cmd = /
 #keyman_console = KEY_F10
 #keymap_rangeselect = KEY_KEY_R
@@ -182,6 +183,8 @@
 #selectionbox_width = 2
 # maximum percentage of current window to be used for hotbar
 #hud_hotbar_max_width = 1.0
+# Save the map received by the client on disk
+#enable_local_map_saving = false
 # Enable highlighting for nodes (disables selectionboxes)
 #enable_node_highlighting = false
 # Texture filtering settings
@@ -221,6 +224,8 @@
 #enable_waving_plants = false
 # Set to true to disable wield light (enabled by default, requires shaders)
 #disable_wieldlight = false
+# Enables caching of facedir rotated meshes
+#enable_mesh_cache = true
 # The time in seconds it takes between repeated
 # right clicks when holding the right mouse button
 #repeat_rightclick_time = 0.25
@@ -324,7 +329,10 @@
 # See /privs in game for a full list on your server and mod configuration.
 #default_privs = interact, shout
 # Whether players are shown to clients without any range limit
+# deprecated, use the setting player_transfer_distance instead
 #unlimited_player_transfer_distance = true
+# Defines the maximal player transfer distance in blocks (0 = unlimited)
+#player_transfer_distance = 0
 # Whether to enable players killing each other
 #enable_pvp = true
 # If this is set, players will always (re)spawn at the given position
@@ -346,6 +354,9 @@
 #    "log"    = mimic and log backtrace of deprecated call (default for debug)
 #    "error"  = abort on usage of deprecated call (suggested for mod developers)
 #deprecated_lua_api_handling = legacy
+
+# Report broken recipes in mods
+#mod_debugging = false
 
 # Mod profiler
 #mod_profiling = false
@@ -464,7 +475,7 @@
 # Mapgen stuff
 #
 
-# Name of map generator to be used.  Currently supported: v6, v7, indev, singlenode, math
+# Name of map generator to be used.  Currently supported: v5, v6, indev, v7, math, singlenode
 #mg_name = v6
 # Water level of map.
 #water_level = 1
@@ -481,6 +492,18 @@
 #mgv6_freq_beach = 0.15
 # Perlin noise attributes for different map generation parameters
 # Offset, scale, spread factor, seed offset, number of octaves, persistence
+
+#mgv5_spflags = blobs
+#mgv5_np_filler_depth = 0, 1, (150, 150, 150), 261, 4, 0.7
+#mgv5_np_factor = 0, 1, (250, 250, 250), 920381, 3, 0.45
+#mgv5_np_height = 0, 10, (250, 250, 250), 84174, 4, 0.5
+#mgv5_np_cave1 = 0, 6, (50, 50, 50), 52534, 4, 0.5
+#mgv5_np_cave2 = 0, 6, (50, 50, 50), 10325, 4, 0.5
+#mgv5_np_ground = 0, 40, (80, 80, 80), 983240, 4, 0.55
+#mgv5_np_crumble = 0, 1, (20, 20, 20), 34413, 3, 1.3
+#mgv5_np_wetness = 0, 1, (40, 40, 40), 32474, 4, 1.1
+
+#mgv6_spflags = biomeblend, jungles, mudflow
 #mgv6_np_terrain_base = -4, 20, (250, 250, 250), 82341, 5, 0.6
 #mgv6_np_terrain_higher = 20, 16, (500, 500, 500), 85039, 5, 0.6
 #mgv6_np_steepness = 0.85, 0.5, (125, 125, 125), -932, 5, 0.7

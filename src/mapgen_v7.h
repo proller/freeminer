@@ -29,6 +29,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #define MGV7_MOUNTAINS   0x01
 #define MGV7_RIDGES      0x02
 
+class BiomeManager;
 
 extern FlagDesc flagdesc_mapgen_v7[];
 
@@ -49,7 +50,9 @@ struct MapgenV7Params : public MapgenSpecificParams {
 	NoiseParams np_float_islands1;
 	NoiseParams np_float_islands2;
 	NoiseParams np_float_islands3;
-	
+	NoiseParams np_layers;
+	Json::Value paramsj;
+
 	MapgenV7Params();
 	~MapgenV7Params() {}
 	
@@ -57,10 +60,10 @@ struct MapgenV7Params : public MapgenSpecificParams {
 	void writeParams(Settings *settings);
 };
 
-class MapgenV7 : public Mapgen {
+class MapgenV7 : public Mapgen, public Mapgen_features {
 public:
 	EmergeManager *emerge;
-	BiomeDefManager *bmgr;
+	BiomeManager *bmgr;
 
 	int ystride;
 	int zstride;
@@ -88,10 +91,9 @@ public:
 	Noise *noise_heat;
 	Noise *noise_humidity;
 	
+	//freeminer:
 	s16 float_islands;
-	Noise *noise_float_islands1;
-	Noise *noise_float_islands2;
-	Noise *noise_float_islands3;
+	content_t c_dirt_with_snow;
 
 	content_t c_stone;
 	content_t c_dirt;
@@ -117,7 +119,7 @@ public:
 	bool getMountainTerrainAtPoint(int x, int y, int z);
 	bool getMountainTerrainFromMap(int idx_xyz, int idx_xz, int y);
 	
-	void calculateNoise();
+	virtual void calculateNoise();
 	
 	virtual int generateTerrain();
 	int generateBaseTerrain();
@@ -132,7 +134,6 @@ public:
 	void generateCaves(int max_stone_y);
 
 	virtual void generateExperimental();
-	virtual void generateFloatIslands(int min_y);
 
 };
 

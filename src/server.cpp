@@ -47,7 +47,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "craftdef.h"
 #include "emerge.h"
 #include "mapgen.h"
-#include "biome.h"
+#include "mg_biome.h"
 #include "content_mapnode.h"
 #include "content_nodemeta.h"
 #include "content_abm.h"
@@ -68,9 +68,13 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/thread.h"
 #include "defaultsettings.h"
 #include "circuit.h"
+//#include "stat.h"
 
 #include <chrono>
 #include "util/thread_pool.h"
+#include "key_value_storage.h"
+#include "database.h"
+
 
 class ClientNotFoundException : public BaseException
 {
@@ -191,8 +195,8 @@ public:
 		int max_cycle_ms = 1000;
 		while(!StopRequested()) {
 			try {
-				shared_map<v3s16, MapBlock*> modified_blocks; //not used
-				int res = m_server->getEnv().getMap().transformLiquids(m_server, modified_blocks, m_server->m_lighting_modified_blocks, max_cycle_ms);
+				//shared_map<v3POS, MapBlock*> modified_blocks; //not used
+				int res = m_server->getEnv().getMap().transformLiquids(m_server, max_cycle_ms);
 				std::this_thread::sleep_for(std::chrono::milliseconds(std::max(300-res,1)));
 #ifdef NDEBUG
 			} catch (BaseException &e) {
@@ -375,11 +379,11 @@ Server::Server(
 			this),
 	m_banmanager(NULL),
 	m_rollback(NULL),
-	m_rollback_sink_enabled(true),
 	m_enable_rollback_recording(false),
 	m_emerge(NULL),
 	m_script(NULL),
 	m_circuit(NULL),
+	stat(path_world),
 	m_itemdef(createItemDefManager()),
 	m_nodedef(createNodeDefManager()),
 	m_craftdef(createCraftDefManager()),
@@ -401,6 +405,7 @@ Server::Server(
 	m_liquid_transform_interval = 1.0;
 	m_liquid_send_timer = 0.0;
 	m_liquid_send_interval = 1.0;
+	maintenance_status = 0;
 	m_print_info_timer = 0.0;
 	m_masterserver_timer = 0.0;
 	m_objectdata_timer = 0.0;
@@ -454,12 +459,11 @@ Server::Server(
 		throw ServerError("Failed to initialize world");
 
 	// Create ban manager
-	std::string ban_path = m_path_world+DIR_DELIM+"ipban.txt";
+	std::string ban_path = m_path_world + DIR_DELIM "ipban.txt";
 	m_banmanager = new BanManager(ban_path);
 
 	// Create rollback manager
-	std::string rollback_path = m_path_world+DIR_DELIM+"rollback.txt";
-	m_rollback = createRollbackManager(rollback_path, this);
+	m_rollback = new RollbackManager(m_path_world, this);
 
 	ModConfiguration modconf(m_path_world);
 	m_mods = modconf.getMods();
@@ -550,7 +554,10 @@ Server::Server(
 
 	// Apply item aliases in the node definition manager
 	m_nodedef->updateAliases(m_itemdef);
-	m_nodedef->updateTextures(nullptr,nullptr);
+	m_nodedef->updateTextures(this);
+
+	// Perform pending node name resolutions
+	m_nodedef->getResolver()->resolveNodes();
 
 	// Load the mapgen params from global settings now after any
 	// initial overrides have been set by the mods
@@ -906,6 +913,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 					m_env->getGameTime(),
 					m_lag,
 					m_gamespec.id,
+					m_emerge->params.mg_name,
 					m_mods);
 			counter = 0.01;
 		}
@@ -921,22 +929,23 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 		//infostream<<"Server: Checking added and deleted active objects"<<std::endl;
 		//JMutexAutoLock envlock(m_env_mutex);
 
-		auto & clients = m_clients.getClientList();
+		auto clients = m_clients.getClientList();
 		ScopeProfiler sp(g_profiler, "Server: checking added and deleted objs");
 
 		// Radius inside which objects are active
 		s16 radius = g_settings->getS16("active_object_send_range_blocks");
+		s16 player_radius = g_settings->getS16("player_transfer_distance");
+
+		if (player_radius == 0 && g_settings->exists("unlimited_player_transfer_distance") &&
+				!g_settings->getBool("unlimited_player_transfer_distance"))
+			player_radius = radius;
+
 		radius *= MAP_BLOCKSIZE;
 		s16 radius_deactivate = radius*3;
+		player_radius *= MAP_BLOCKSIZE;
 
-		auto lock = clients.try_lock_shared_rec();
-		if (lock->owns_lock())
-		for(auto
-			i = clients.begin();
-			i != clients.end(); ++i)
+		for(auto & client : clients)
 		{
-			RemoteClient *client = i->second;
-
 			// If definitions and textures have not been sent, don't
 			// send objects either
 			if (client->getState() < CS_DefinitionsSent)
@@ -955,9 +964,9 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 
 			std::set<u16> removed_objects;
 			std::set<u16> added_objects;
-			m_env->getRemovedActiveObjects(pos, radius_deactivate,
+			m_env->getRemovedActiveObjects(pos, radius_deactivate, player_radius,
 					client->m_known_objects, removed_objects);
-			m_env->getAddedActiveObjects(pos, radius,
+			m_env->getAddedActiveObjects(pos, radius, player_radius,
 					client->m_known_objects, added_objects);
 
 			// Ignore if nothing happened
@@ -1025,7 +1034,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 					data_buffer.append(serializeLongString(""));
 
 				// Add to known objects
-				client->m_known_objects.insert(id);
+				client->m_known_objects.set(id, true);
 
 				if(obj)
 					obj->m_known_by_count++;
@@ -1108,15 +1117,15 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 			message_list->push_back(aom);
 		}
 
-		auto & clients = m_clients.getClientList();
+
+
+
+
+		auto clients = m_clients.getClientList();
 		{
-		auto lock = clients.lock_shared_rec();
 		// Route data to every client
-		for(auto
-			i = clients.begin();
-			i != clients.end(); ++i)
+		for(auto & client : clients)
 		{
-			RemoteClient *client = i->second;
 			std::string reliable_data;
 			std::string unreliable_data;
 			// Go through all objects in message buffer
@@ -1208,7 +1217,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 		if(m_unsent_map_edit_queue.size() >= 4)
 			disable_single_change_sending = true;
 
-		int event_count = m_unsent_map_edit_queue.size();
+		//int event_count = m_unsent_map_edit_queue.size();
 
 		// We'll log the amount of each
 		Profiler prof;
@@ -1310,6 +1319,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 				break;
 		}
 
+/*
 		if(event_count >= 10){
 			infostream<<"Server: MapEditEvents count="<<count<<"/"<<event_count<<" :"<<std::endl;
 			prof.print(infostream);
@@ -1317,6 +1327,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 			verbosestream<<"Server: MapEditEvents count="<<count<<"/"<<event_count<<" :"<<std::endl;
 			prof.print(verbosestream);
 		}
+*/
 
 	}
 
@@ -1324,6 +1335,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 		Trigger emergethread (it somehow gets to a non-triggered but
 		bysy state sometimes)
 	*/
+	if (!maintenance_status)
 	{
 		TimeTaker timer_step("Server step: Trigger emergethread");
 		float &counter = m_emergethread_trigger_timer;
@@ -1337,6 +1349,29 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 			// Update m_enable_rollback_recording here too
 			m_enable_rollback_recording =
 					g_settings->getBool("enable_rollback_recording");
+		}
+	}
+
+	{
+		if (porting::g_sighup) {
+			porting::g_sighup = false;
+			if(!maintenance_status) {
+				maintenance_status = 1;
+				maintenance_start();
+				maintenance_status = 2;
+			} else if(maintenance_status == 2) {
+				maintenance_status = 3;
+				maintenance_end();
+				maintenance_status = 0;
+			}
+		}
+		if (porting::g_siginfo) {
+			// todo: add here more info
+			porting::g_siginfo = false;
+			infostream<<"uptime="<< (int)m_uptime.get()<<std::endl;
+			m_clients.UpdatePlayerList(); //print list
+			g_profiler->print(infostream);
+			g_profiler->clear();
 		}
 	}
 }
@@ -1360,7 +1395,7 @@ int Server::AsyncRunMapStep(float dtime, bool async) {
 	u32 max_cycle_ms = async ? 2000 : 300;
 
 	const float map_timer_and_unload_dtime = 10.92;
-	if(m_map_timer_and_unload_interval.step(dtime, map_timer_and_unload_dtime))
+	if(!maintenance_status && m_map_timer_and_unload_interval.step(dtime, map_timer_and_unload_dtime))
 	{
 		TimeTaker timer_step("Server step: Run Map's timers and unload unused data");
 		//JMutexAutoLock lock(m_env_mutex);
@@ -1386,8 +1421,8 @@ int Server::AsyncRunMapStep(float dtime, bool async) {
 		ScopeProfiler sp(g_profiler, "Server: liquid transform");
 
 		// not all liquid was processed per step, forcing on next step
-		shared_map<v3s16, MapBlock*> modified_blocks; //not used
-		if (m_env->getMap().transformLiquids(this, modified_blocks, m_lighting_modified_blocks, max_cycle_ms) > 0) {
+		//shared_map<v3POS, MapBlock*> modified_blocks; //not used
+		if (m_env->getMap().transformLiquids(this, max_cycle_ms) > 0) {
 			m_liquid_transform_timer = m_liquid_transform_interval /*  *0.8  */;
 			++ret;
 		}
@@ -1405,18 +1440,19 @@ int Server::AsyncRunMapStep(float dtime, bool async) {
 		if (m_liquid_send_timer > m_liquid_send_interval * 2)
 			m_liquid_send_timer = 0;
 
-		shared_map<v3s16, MapBlock*> modified_blocks; //not used
+		shared_map<v3POS, MapBlock*> modified_blocks; //not used
 
-		if (m_env->getMap().updateLighting(m_lighting_modified_blocks, modified_blocks, max_cycle_ms)) {
+		if (m_env->getMap().updateLighting(m_env->getMap().lighting_modified_blocks, modified_blocks, max_cycle_ms)) {
 			m_liquid_send_timer = m_liquid_send_interval;
 			++ret;
 			goto no_send;
 		}
 
-		for (auto i = m_clients.getClientList().begin(); i != m_clients.getClientList().end(); ++i)
-			if (i->second->m_nearest_unsent_nearest) {
-				i->second->m_nearest_unsent_d = 0;
-				i->second->m_nearest_unsent_nearest = 0;
+		auto clients = m_clients.getClientList();
+		for (auto & client : clients)
+			if (client->m_nearest_unsent_nearest) {
+				client->m_nearest_unsent_d = 0;
+				client->m_nearest_unsent_nearest = 0;
 			}
 
 		//JMutexAutoLock lock(m_env_mutex);
@@ -1432,8 +1468,14 @@ int Server::AsyncRunMapStep(float dtime, bool async) {
 	}
 	no_send:
 
+	ret += save(dtime, true);
+
+	return ret;
+}
+
+int Server::save(float dtime, bool breakable) {
 	// Save map, players and auth stuff
-	{
+	int ret = 0;
 		float &counter = m_savemap_timer;
 		counter += dtime;
 		if(counter >= g_settings->getFloat("server_map_save_interval"))
@@ -1444,18 +1486,18 @@ int Server::AsyncRunMapStep(float dtime, bool async) {
 
 			ScopeProfiler sp(g_profiler, "Server: saving stuff");
 
-			// Save ban file
-			if (m_banmanager->isModified()) {
-				m_banmanager->save();
-			}
-
-
 			// Save changed parts of map
-			if(m_env->getMap().save(MOD_STATE_WRITE_NEEDED, 1)) {
+			if(m_env->getMap().save(MOD_STATE_WRITE_NEEDED, breakable)) {
 				// partial save, will continue on next step
 				counter = g_settings->getFloat("server_map_save_interval");
 				++ret;
-				goto save_break;
+				if (breakable)
+					goto save_break;
+			}
+
+			// Save ban file
+			if (m_banmanager->isModified()) {
+				m_banmanager->save();
 			}
 
 			// Save players
@@ -1463,9 +1505,10 @@ int Server::AsyncRunMapStep(float dtime, bool async) {
 
 			// Save environment metadata
 			m_env->saveMeta();
+
+			stat.save();
 		}
 		save_break:;
-	}
 
 	return ret;
 }
@@ -2106,6 +2149,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		m_clients.event(peer_id, CSE_SetClientReady);
 		m_script->on_joinplayer(playersao);
 
+		stat.add("join", playersao->getPlayer()->getName());
 	}
 	else if(command == TOSERVER_GOTBLOCKS) // TODO: REMOVE IN NEXT, move wanted_range to new packet
 	{
@@ -2200,10 +2244,16 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		player->control.LMB = (bool)(keyPressed&128);
 		player->control.RMB = (bool)(keyPressed&256);
 
+		auto old_pos = playersao->m_last_good_position;
 		bool cheated = playersao->checkMovementCheat();
 		if(cheated){
 			// Call callbacks
 			m_script->on_cheat(playersao, "moved_too_fast");
+		}
+		else {
+			auto dist = (old_pos/BS).getDistanceFrom(playersao->m_last_good_position/BS);
+			if (dist)
+				stat.add("move", playersao->getPlayer()->getName(), dist);
 		}
 
 		auto obj = playersao; // copypasted from server step:
@@ -2389,6 +2439,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 				delete a;
 				return;
 			}
+			stat.add("drop", player->getName());
 		}
 		/*
 			Handle restrictions and special cases of the craft action
@@ -2413,6 +2464,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 				delete a;
 				return;
 			}
+			stat.add("craft", player->getName());
 		}
 
 		// Do the action
@@ -2479,6 +2531,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 				line += name;
 				line += L"> ";
 				line += message;
+				stat.add("chat", player->getName());
 			} else {
 				line += L"-!- You don't have permission to shout.";
 				send_to_sender_only = true;
@@ -2532,6 +2585,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 
 			if(playersao->m_hp_not_sent)
 				SendPlayerHP(peer_id);
+			stat.add("damage", player->getName(), damage);
 		}
 	}
 	else if(command == TOSERVER_BREATH)
@@ -2744,6 +2798,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 				v3s16 blockpos = getNodeBlockPos(floatToInt(pointed_pos_above, BS));
 				client->SetBlockNotSent(blockpos);
 			}
+			stat.add("interact_denied", player->getName());
 			return;
 		}
 
@@ -2765,17 +2820,18 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 					somebody is cheating, by checking the timing.
 				*/
 				MapNode n(CONTENT_IGNORE);
-				try
-				{
-					n = m_env->getMap().getNode(p_under);
-				}
-				catch(InvalidPositionException &e)
-				{
+				bool pos_ok;
+				n = m_env->getMap().getNodeNoEx(p_under, &pos_ok);
+				if (pos_ok)
+					n = m_env->getMap().getNodeNoEx(p_under, &pos_ok);
+
+				if (!pos_ok) {
 					infostream<<"Server: Not punching: Node not found."
 							<<" Adding block to emerge queue."
 							<<std::endl;
 					m_emerge->enqueueBlockEmerge(peer_id, getNodeBlockPos(p_above), false);
 				}
+
 				if(n.getContent() != CONTENT_IGNORE)
 					m_script->node_on_punch(p_under, n, playersao, pointed);
 				// Cheat prevention
@@ -2801,6 +2857,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 					playersao->resetTimeFromLastPunch();
 				pointed_object->punch(dir, &toolcap, playersao,
 						time_from_last_punch);
+				stat.add("punch", player->getName());
 			}
 
 		} // action == 0
@@ -2820,16 +2877,12 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			// Only digging of nodes
 			if(pointed.type == POINTEDTHING_NODE)
 			{
-				MapNode n(CONTENT_IGNORE);
-				try
-				{
-					n = m_env->getMap().getNode(p_under);
-				}
-				catch(InvalidPositionException &e)
-				{
-					infostream<<"Server: Not finishing digging: Node not found."
-							<<" Adding block to emerge queue."
-							<<std::endl;
+				bool pos_ok;
+				MapNode n = m_env->getMap().getNodeNoEx(p_under, &pos_ok);
+				if (!pos_ok) {
+					infostream << "Server: Not finishing digging: Node not found."
+					           << " Adding block to emerge queue."
+					           << std::endl;
 					m_emerge->enqueueBlockEmerge(peer_id, getNodeBlockPos(p_above), false);
 				}
 
@@ -2907,7 +2960,11 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 				/* Actually dig node */
 
 				if(is_valid_dig && n.getContent() != CONTENT_IGNORE)
+				{
 					m_script->node_on_dig(p_under, n, playersao);
+					stat.add("dig", player->getName());
+					stat.add("dig_"+ m_nodedef->get(n).name , player->getName());
+				}
 
 				v3s16 blockpos = getNodeBlockPos(floatToInt(pointed_pos_under, BS));
 				RemoteClient *client = getClient(peer_id);
@@ -2959,6 +3016,8 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 
 				// Apply returned ItemStack
 				playersao->setWieldedItem(item);
+				stat.add("place", player->getName());
+				//stat.add("place_" + item.name, player->getName());
 			}
 
 			// If item has node placement prediction, always send the
@@ -2995,6 +3054,8 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			{
 				// Apply returned ItemStack
 				playersao->setWieldedItem(item);
+				stat.add("use", player->getName());
+				stat.add("use_" + item.name, player->getName());
 			}
 
 		} // action == 4
@@ -4218,12 +4279,12 @@ int Server::SendBlocks(float dtime)
 			i = clients.begin();
 			i != clients.end(); ++i)
 		{
-			RemoteClient *client = m_clients.lockedGetClientNoEx(*i, CS_Active);
+			auto client = m_clients.getClient(*i, CS_Active);
 
 			if (client == NULL)
 				continue;
 
-			total += client->GetNextBlocks(m_env,m_emerge, dtime, m_uptime.get() + m_env->m_game_time_start, queue);
+			total += client->GetNextBlocks(m_env, m_emerge, dtime, m_uptime.get() + m_env->m_game_time_start, queue);
 		}
 	}
 
@@ -4619,6 +4680,8 @@ void Server::DiePlayer(u16 peer_id)
 
 	SendPlayerHP(peer_id);
 	SendDeathscreen(peer_id, false, v3f(0,0,0));
+
+	stat.add("die", playersao->getPlayer()->getName());
 }
 
 void Server::RespawnPlayer(u16 peer_id)
@@ -4639,6 +4702,8 @@ void Server::RespawnPlayer(u16 peer_id)
 		v3f pos = findSpawnPos(m_env->getServerMap());
 		playersao->setPos(pos);
 	}
+
+	stat.add("respawn", playersao->getPlayer()->getName());
 }
 
 void Server::DenyAccess(u16 peer_id, const std::wstring &reason)
@@ -5150,15 +5215,6 @@ Inventory* Server::createDetachedInventory(const std::string &name)
 	return inv;
 }
 
-void Server::deleteDetachedInventory(const std::string &name)
-{
-	if(m_detached_inventories.count(name) > 0){
-		infostream<<"Server deleting detached inventory \""<<name<<"\""<<std::endl;
-		delete m_detached_inventories[name];
-		m_detached_inventories.erase(name);
-	}
-}
-
 class BoolScopeSet
 {
 public:
@@ -5184,8 +5240,6 @@ bool Server::rollbackRevertActions(const std::list<RollbackAction> &actions,
 {
 	infostream<<"Server::rollbackRevertActions(len="<<actions.size()<<")"<<std::endl;
 	ServerMap *map = (ServerMap*)(&m_env->getMap());
-	// Disable rollback report sink while reverting
-	BoolScopeSet rollback_scope_disable(&m_rollback_sink_enabled, false);
 
 	// Fail if no actions to handle
 	if(actions.empty()){
@@ -5248,6 +5302,11 @@ IShaderSource* Server::getShaderSource()
 {
 	return NULL;
 }
+scene::ISceneManager* Server::getSceneManager()
+{
+	return NULL;
+}
+
 u16 Server::allocateUnknownNodeId(const std::string &name)
 {
 	return m_nodedef->allocateDummy(name);
@@ -5259,14 +5318,6 @@ ISoundManager* Server::getSoundManager()
 MtEventManager* Server::getEventManager()
 {
 	return m_event;
-}
-IRollbackReportSink* Server::getRollbackReportSink()
-{
-	if(!m_enable_rollback_recording)
-		return NULL;
-	if(!m_rollback_sink_enabled)
-		return NULL;
-	return m_rollback;
 }
 
 IWritableItemDefManager* Server::getWritableItemDefManager()
@@ -5388,6 +5439,11 @@ PlayerSAO* Server::emergePlayer(const char *name, u16 peer_id)
 		return NULL;
 	}
 
+	if (!player && maintenance_status) {
+		infostream<<"emergePlayer(): Maintenance in progress, disallowing loading player"<<std::endl;
+		return nullptr;
+	}
+
 	// Load player if it isn't already loaded
 	if (!player) {
 		player = static_cast<RemotePlayer*>(m_env->loadPlayer(name));
@@ -5484,3 +5540,42 @@ void dedicated_server_loop(Server &server, bool &kill)
 }
 
 
+
+
+
+
+//freeminer:
+
+void Server::deleteDetachedInventory(const std::string &name)
+{
+	if(m_detached_inventories.count(name) > 0){
+		infostream<<"Server deleting detached inventory \""<<name<<"\""<<std::endl;
+		delete m_detached_inventories[name];
+		m_detached_inventories.erase(name);
+	}
+}
+
+void Server::maintenance_start() {
+	infostream<<"Server: Starting maintenance: saving..."<<std::endl;
+	m_emerge->stopThreads();
+	save(0.1);
+	m_env->getServerMap().m_map_saving_enabled = false;
+	m_env->getServerMap().m_map_loading_enabled = false;
+	m_env->getServerMap().dbase->close();
+	m_env->m_key_value_storage->close();
+	m_env->m_players_storage->close();
+	stat.close();
+	actionstream<<"Server: Starting maintenance: bases closed now."<<std::endl;
+
+};
+
+void Server::maintenance_end() {
+	m_env->getServerMap().dbase->open();
+	m_env->m_key_value_storage->open();
+	m_env->m_players_storage->open();
+	stat.open();
+	m_env->getServerMap().m_map_saving_enabled = true;
+	m_env->getServerMap().m_map_loading_enabled = true;
+	m_emerge->startThreads();
+	actionstream<<"Server: Starting maintenance: ended."<<std::endl;
+};

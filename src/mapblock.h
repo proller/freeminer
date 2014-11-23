@@ -233,12 +233,12 @@ public:
 
 	void setLightingExpired(bool expired)
 	{
-		if(expired != m_lighting_expired){
+//		if(expired != m_lighting_expired){
 			m_lighting_expired = expired;
 /*
 			raiseModified(MOD_STATE_WRITE_NEEDED, "setLightingExpired");
 */
-		}
+//		}
 	}
 	bool getLightingExpired()
 	{
@@ -261,8 +261,8 @@ public:
 
 	bool isValid()
 	{
-		if(m_lighting_expired)
-			return false;
+		//if(m_lighting_expired)
+		//	return false;
 		if(data == NULL)
 			return false;
 		return true;
@@ -294,21 +294,33 @@ public:
 		Regular MapNode get-setters
 	*/
 	
+	bool isValidPosition(s16 x, s16 y, s16 z)
+	{
+		return data != NULL
+				&& x >= 0 && x < MAP_BLOCKSIZE
+				&& y >= 0 && y < MAP_BLOCKSIZE
+				&& z >= 0 && z < MAP_BLOCKSIZE;
+	}
+
 	bool isValidPosition(v3s16 p)
 	{
-		if(data == NULL)
-			return false;
-		return (p.X >= 0 && p.X < MAP_BLOCKSIZE
-				&& p.Y >= 0 && p.Y < MAP_BLOCKSIZE
-				&& p.Z >= 0 && p.Z < MAP_BLOCKSIZE);
+		return isValidPosition(p.X, p.Y, p.Z);
+	}
+
+	MapNode getNode(v3POS p, bool *valid_position)
+	{
+		*valid_position = isValidPosition(p.X, p.Y, p.Z);
+
+		if (!*valid_position)
+			return MapNode(CONTENT_IGNORE);
+
+		auto lock = lock_shared_rec();
+		return data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X];
 	}
 
 	MapNode getNode(v3s16 p)
 	{
-		auto n = getNodeNoEx(p);
-		if (n.getContent() == CONTENT_IGNORE)
-			throw InvalidPositionException("getnode = CONTENT_IGNORE");
-		return n;
+		return getNodeNoEx(p);
 	}
 
 	MapNode getNodeTry(v3s16 p)
@@ -319,14 +331,14 @@ public:
 		return getNodeNoLock(p);
 	}
 
-	MapNode getNodeNoLock(v3s16 p)
+	MapNode getNodeNoLock(v3POS p)
 	{
 		if (!data)
 			return MapNode(CONTENT_IGNORE);
 		return data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X];
 	}
 
-	MapNode getNodeNoEx(v3s16 p);
+	MapNode getNodeNoEx(v3POS p);
 
 	void setNode(v3s16 p, MapNode & n);
 
@@ -334,17 +346,19 @@ public:
 		Non-checking variants of the above
 	*/
 
-	MapNode getNodeNoCheck(s16 x, s16 y, s16 z)
+	MapNode getNodeNoCheck(s16 x, s16 y, s16 z, bool *valid_position)
 	{
-		if(data == NULL)
-			throw InvalidPositionException("getNodeNoCheck data=NULL");
+		*valid_position = data != NULL;
+		if(!valid_position)
+			return MapNode(CONTENT_IGNORE);
+
 		auto lock = lock_shared_rec();
 		return data[z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + y*MAP_BLOCKSIZE + x];
 	}
 	
-	MapNode getNodeNoCheck(v3s16 p)
+	MapNode getNodeNoCheck(v3s16 p, bool *valid_position)
 	{
-		return getNodeNoCheck(p.X, p.Y, p.Z);
+		return getNodeNoCheck(p.X, p.Y, p.Z, valid_position);
 	}
 	
 	void setNodeNoCheck(s16 x, s16 y, s16 z, MapNode & n)
@@ -366,7 +380,7 @@ public:
 		is not valid on this MapBlock.
 	*/
 	bool isValidPositionParent(v3s16 p);
-	MapNode getNodeParent(v3s16 p);
+	MapNode getNodeParent(v3s16 p, bool *is_valid_position = NULL);
 
 	void drawbox(s16 x0, s16 y0, s16 z0, s16 w, s16 h, s16 d, MapNode node)
 	{
@@ -611,7 +625,7 @@ private:
 		If this is false, lighting is exactly right.
 		If this is true, lighting might be wrong or right.
 	*/
-	bool m_lighting_expired;
+	std::atomic_bool m_lighting_expired;
 	
 	// Whether day and night lighting differs
 	bool m_day_night_differs;

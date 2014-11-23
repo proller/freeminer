@@ -30,6 +30,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <algorithm>
 #include <list>
 #include <cmath>
+#include <algorithm>
 
 // Calculate the borders of a "d-radius" cube
 void getFacePositions(std::list<v3s16> &list, u16 d);
@@ -115,15 +116,6 @@ inline bool isInArea(v3s16 p, v3s16 d)
 	);
 }
 
-inline s16 rangelim(s16 i, s16 max)
-{
-	if(i < 0)
-		return 0;
-	if(i > max)
-		return max;
-	return i;
-}
-
 #define rangelim(d, min, max) ((d) < (min) ? (min) : ((d)>(max)?(max):(d)))
 #define myfloor(x) ((x) > 0.0 ? (int)(x) : (int)(x) - 1)
 
@@ -143,6 +135,9 @@ inline v3s16 arealim(v3s16 p, s16 d)
 		p.Z = d-1;
 	return p;
 }
+
+#define ARRLEN(x) (sizeof(x) / sizeof((x)[0]))
+#define CONTAINS(c, v) (std::find((c).begin(), (c).end(), (v)) != (c).end())
 
 // The naive swap performs better than the xor version
 #define SWAP(t, x, y) do { \
@@ -373,6 +368,11 @@ inline int radius_box(const v3s16 & a, const v3s16 & b) {
 
 inline int radius_box(const v3f & a, const v3f & b) {
 	return std::max(std::max(std::fabs(a.X - b.X), std::fabs(a.Y - b.Y)), std::fabs(a.Z - b.Z));
+}
+
+inline bool is_power_of_two(u32 n)
+{
+	return n != 0 && (n & (n-1)) == 0;
 }
 
 #endif
