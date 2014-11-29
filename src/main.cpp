@@ -72,16 +72,13 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "profiler.h"
 #include "log.h"
 #include "mods.h"
-#if USE_FREETYPE
 #include "xCGUITTFont.h"
-#endif
 #include "util/string.h"
 #include "subgame.h"
 #include "quicktune.h"
 #include "serverlist.h"
 #include "httpfetch.h"
 #include "guiEngine.h"
-#include "player.h"
 
 #include "database-sqlite3.h"
 #ifdef USE_LEVELDB
@@ -91,6 +88,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #if USE_REDIS
 #include "database-redis.h"
 #endif
+
+#include "enet/enet.h"
 
 #ifdef HAVE_TOUCHSCREENGUI
 #include "touchscreengui.h"
@@ -127,7 +126,7 @@ static void list_game_ids();
 static void list_worlds();
 static void setup_log_params(const Settings &cmd_args);
 static bool create_userdata_path();
-static bool init_common(int *log_level, const Settings &cmd_args);
+static bool init_common(int *log_level, const Settings &cmd_args, int argc, char *argv[]);
 static void startup_message();
 static bool read_config_file(const Settings &cmd_args);
 static void init_debug_streams(int *log_level, const Settings &cmd_args);
@@ -688,7 +687,6 @@ public:
 	ClientLauncher() :
 		list_video_modes(false),
 		skip_main_menu(false),
-		use_freetype(false),
 		random_input(false),
 		address(""),
 		playername(""),
@@ -713,7 +711,7 @@ protected:
 	void init_args(GameParams &game_params, const Settings &cmd_args);
 	bool init_engine(int log_level);
 
-	bool launch_game(std::wstring *error_message, GameParams &game_params,
+	bool launch_game(std::string *error_message, GameParams &game_params,
 			const Settings &cmd_args);
 
 	void main_menu(MainMenuData *menudata);
@@ -721,7 +719,6 @@ protected:
 
 	bool list_video_modes;
 	bool skip_main_menu;
-	bool use_freetype;
 	bool random_input;
 	std::string address;
 	std::string playername;
@@ -752,7 +749,13 @@ static OptionList allowed_options;
 
 int main(int argc, char *argv[])
 {
-	int retval;
+	int retval = 0;
+
+	if (enet_initialize() != 0) {
+		std::cerr << "enet failed to initialize\n";
+		return EXIT_FAILURE;
+	}
+	atexit(enet_deinitialize);
 
 	log_add_output_maxlev(&main_stderr_log_out, LMT_ACTION);
 	log_add_output_all_levs(&main_dstream_no_stderr_log_out);
@@ -803,7 +806,7 @@ int main(int argc, char *argv[])
 	}
 
 	GameParams game_params;
-	if (!init_common(&game_params.log_level, cmd_args))
+	if (!init_common(&game_params.log_level, cmd_args, argc, argv))
 		return 1;
 
 #if !defined(__ANDROID__) && !defined(_MSC_VER)
@@ -1058,7 +1061,7 @@ static bool create_userdata_path()
 	return success;
 }
 
-static bool init_common(int *log_level, const Settings &cmd_args)
+static bool init_common(int *log_level, const Settings &cmd_args, int argc, char *argv[])
 {
 	startup_message();
 	set_default_settings(g_settings);
@@ -1072,7 +1075,11 @@ static bool init_common(int *log_level, const Settings &cmd_args)
 
 	init_debug_streams(log_level, cmd_args);
 
-	time_taker_enabled = g_settings->getU16("time_taker_enabled") ? g_settings->getU16("time_taker_enabled") : ((g_settings->getFloat("profiler_print_interval") || *log_level >= LMT_INFO) ? 100 : 0);
+	g_time_taker_enabled = g_settings->getU16("time_taker_enabled") ? g_settings->getU16("time_taker_enabled") : ((g_settings->getFloat("profiler_print_interval") || *log_level >= LMT_INFO) ? 100 : 0);
+
+	int autoexit_ = 0;
+	cmd_args.getS32NoEx("autoexit", autoexit_);
+	g_profiler_enabled = g_settings->getFloat("profiler_print_interval") || autoexit_;
 
 	// Initialize random seed
 	srand(time(0));
@@ -1551,10 +1558,8 @@ ClientLauncher::~ClientLauncher()
 	if (device)
 		device->drop();
 
-#if USE_FREETYPE
-	if (use_freetype && font != NULL)
+	if (font)
 		font->drop();
-#endif
 }
 
 bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
@@ -1610,9 +1615,7 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 	skin = guienv->getSkin();
 	std::string font_path = g_settings->get("font_path");
 
-#if USE_FREETYPE
-
-	if (use_freetype) {
+	{
 		std::string fallback;
 		if (is_yes(_("needs_fallback_font")))
 			fallback = "fallback_";
@@ -1623,12 +1626,9 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 		font = gui::CGUITTFont::createTTFont(guienv,
 				font_path.c_str(), font_size, true, true,
 				font_shadow, font_shadow_alpha);
-	} else {
-		font = guienv->getFont(font_path.c_str());
 	}
-#else
-	font = guienv->getFont(font_path.c_str());
-#endif
+	if (!font)
+		font = guienv->getFont(font_path.c_str());
 	if (font)
 		skin->setFont(font);
 	else
@@ -1676,7 +1676,7 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 
 	// If an error occurs, this is set to something by menu().
 	// It is then displayed before	the menu shows on the next call to menu()
-	std::wstring error_message = L"";
+	std::string error_message = "";
 
 	bool first_loop = true;
 
@@ -1727,12 +1727,14 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 				break;
 			}
 
+/*
 			if (current_playername.length() > PLAYERNAME_SIZE-1) {
 				error_message = wgettext("Player name too long.");
 				playername = current_playername.substr(0, PLAYERNAME_SIZE-1);
 				g_settings->set("name", playername);
 				continue;
 			}
+*/
 
 			device->getVideoDriver()->setTextureCreationFlag(
 					video::ETCF_CREATE_MIP_MAPS, g_settings->getBool("mip_map"));
@@ -1775,8 +1777,8 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 
 		} //try
 		catch (con::PeerNotFoundException &e) {
-			error_message = wgettext("Connection error (timed out?)");
-			errorstream << wide_to_narrow(error_message) << std::endl;
+			error_message = _("Connection error (timed out?)");
+			errorstream << error_message << std::endl;
 		}
 
 #ifdef NDEBUG
@@ -1785,15 +1787,15 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 			narrow_message += e.what();
 			narrow_message += "\"";
 			errorstream << narrow_message << std::endl;
-			error_message = narrow_to_wide(narrow_message);
+			error_message = narrow_message;
 		}
 #endif
 
 		// If no main menu, show error and exit
-		if (skip_main_menu) {
-			if (error_message != L"") {
+		if(skip_main_menu) {
+			if(error_message != ""){
 				verbosestream << "error_message = "
-				              << wide_to_narrow(error_message) << std::endl;
+				              << error_message << std::endl;
 				retval = false;
 			}
 			break;
@@ -1809,10 +1811,15 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 void ClientLauncher::init_args(GameParams &game_params, const Settings &cmd_args)
 {
 	address = g_settings->get("address");
+/*
 	if (game_params.world_path != "")
 		address = "";
-	else if (cmd_args.exists("address"))
+	else
+*/
+	if (cmd_args.exists("address")) {
 		address = cmd_args.get("address");
+		game_params.world_path = "";
+	}
 
 	playername = g_settings->get("name");
 	if (cmd_args.exists("name"))
@@ -1821,8 +1828,6 @@ void ClientLauncher::init_args(GameParams &game_params, const Settings &cmd_args
 	skip_main_menu = cmd_args.getFlag("go");
 
 	list_video_modes = cmd_args.getFlag("videomodes");
-
-	use_freetype = g_settings->getBool("freetype");
 
 	random_input = g_settings->getBool("random_input")
 			|| cmd_args.getFlag("random-input");
@@ -1839,7 +1844,7 @@ bool ClientLauncher::init_engine(int log_level)
 	return device != NULL;
 }
 
-bool ClientLauncher::launch_game(std::wstring *error_message,
+bool ClientLauncher::launch_game(std::string *error_message,
 		GameParams &game_params, const Settings &cmd_args)
 {
 	// Initialize menu data
@@ -1847,9 +1852,9 @@ bool ClientLauncher::launch_game(std::wstring *error_message,
 	menudata.address      = address;
 	menudata.name         = playername;
 	menudata.port         = itos(game_params.socket_port);
-	menudata.errormessage = wide_to_narrow(*error_message);
+	menudata.errormessage = (*error_message);
 
-	*error_message = L"";
+	*error_message = "";
 
 	if (cmd_args.exists("password"))
 		menudata.password = cmd_args.get("password");
@@ -1895,7 +1900,7 @@ bool ClientLauncher::launch_game(std::wstring *error_message,
 		/* The calling function will pass this back into this function upon the
 		 * next iteration (if any) causing it to be displayed by the GUI
 		 */
-		*error_message = narrow_to_wide(menudata.errormessage);
+		*error_message = (menudata.errormessage);
 		return false;
 	}
 
@@ -1904,7 +1909,7 @@ bool ClientLauncher::launch_game(std::wstring *error_message,
 	else
 		playername = menudata.name;
 
-	password = translatePassword(playername, narrow_to_wide(menudata.password));
+	password = translatePassword(playername, (menudata.password));
 
 	g_settings->set("name", playername);
 
@@ -1937,25 +1942,25 @@ bool ClientLauncher::launch_game(std::wstring *error_message,
 
 	if (current_address == "") { // If local game
 		if (worldspec.path == "") {
-			*error_message = wgettext("No world selected and no address "
+			*error_message = _("No world selected and no address "
 					"provided. Nothing to do.");
-			errorstream << wide_to_narrow(*error_message) << std::endl;
+			errorstream << (*error_message) << std::endl;
 			return false;
 		}
 
 		if (!fs::PathExists(worldspec.path)) {
-			*error_message = wgettext("Provided world path doesn't exist: ")
-					+ narrow_to_wide(worldspec.path);
-			errorstream << wide_to_narrow(*error_message) << std::endl;
+			*error_message = _("Provided world path doesn't exist: ")
+					+ (worldspec.path);
+			errorstream << (*error_message) << std::endl;
 			return false;
 		}
 
 		// Load gamespec for required game
 		gamespec = findWorldSubgame(worldspec.path);
 		if (!gamespec.isValid() && !game_params.game_spec.isValid()) {
-			*error_message = wgettext("Could not find or load game \"")
-					+ narrow_to_wide(worldspec.gameid) + L"\"";
-			errorstream << wide_to_narrow(*error_message) << std::endl;
+			*error_message = _("Could not find or load game \"")
+					+ (worldspec.gameid) + "\"";
+			errorstream << (*error_message) << std::endl;
 			return false;
 		}
 		if (game_params.game_spec.isValid() &&
@@ -1967,10 +1972,10 @@ bool ClientLauncher::launch_game(std::wstring *error_message,
 		}
 
 		if (!gamespec.isValid()) {
-			*error_message = wgettext("Invalid gamespec.");
-			*error_message += L" (world_gameid="
-					+ narrow_to_wide(worldspec.gameid) + L")";
-			errorstream << wide_to_narrow(*error_message) << std::endl;
+			*error_message = _("Invalid gamespec.");
+			*error_message += " (world_gameid="
+					+ (worldspec.gameid) + ")";
+			errorstream << *error_message << std::endl;
 			return false;
 		}
 	}

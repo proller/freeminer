@@ -40,9 +40,17 @@ struct FlagDesc {
 	u32 flag;
 };
 
+// try not to convert between wide/utf8 encodings; this can result in data loss
+// try to only convert between them when you need to input/output stuff via Irrlicht
+std::wstring utf8_to_wide(const std::string &input);
+std::string wide_to_utf8(const std::wstring &input);
+
+// NEVER use those two functions unless you have a VERY GOOD reason to
+// they just convert between wide and multibyte encoding
+// multibyte encoding depends on current locale, this is no good, especially on Windows
 std::wstring narrow_to_wide(const std::string& mbs);
 std::string wide_to_narrow(const std::wstring& wcs);
-std::string translatePassword(std::string playername, std::wstring password);
+std::string translatePassword(std::string playername, std::string password);
 std::string urlencode(std::string str);
 std::string urldecode(std::string str);
 u32 readFlagString(std::string str, const FlagDesc *flagdesc, u32 *flagmask);
@@ -299,7 +307,7 @@ inline s32 mystoi(const std::string &s)
  */
 inline s32 mystoi(const std::wstring &s)
 {
-	return atoi(wide_to_narrow(s).c_str());
+	return atoi(wide_to_utf8(s).c_str());
 }
 
 
@@ -490,7 +498,6 @@ inline bool is_number(const std::string &tocheck)
 
 	return !tocheck.empty();
 }
-
 
 /**
  * Returns a C-string, either "true" or "false", corresponding to v

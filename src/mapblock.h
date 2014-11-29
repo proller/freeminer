@@ -132,14 +132,8 @@ public:
 		if(data != NULL)
 			delete[] data;
 		u32 l = MAP_BLOCKSIZE * MAP_BLOCKSIZE * MAP_BLOCKSIZE;
-		data = new MapNode[l];
-		for(u32 i=0; i<l; i++){
-			//data[i] = MapNode();
-			data[i] = MapNode(CONTENT_IGNORE);
-		}
-/*
-		raiseModified(MOD_STATE_WRITE_NEEDED, "reallocate");
-*/
+		data = reinterpret_cast<MapNode*>( ::operator new(l * sizeof(MapNode)));
+		memset(data, 0, l * sizeof(MapNode));
 	}
 
 	/*
@@ -161,7 +155,7 @@ public:
 	void raiseModified(u32 mod)
 	{
 		if(mod >= MOD_STATE_WRITE_NEEDED && m_timestamp != BLOCK_TIMESTAMP_UNDEFINED) {
-			m_changed_timestamp = m_timestamp;
+			m_changed_timestamp = (unsigned int)m_timestamp;
 		}
 		if(mod > m_modified){
 			m_modified = mod;
@@ -459,10 +453,12 @@ public:
 	*/
 	void resetUsageTimer()
 	{
+		auto lock = lock_unique_rec();
 		m_usage_timer = 0;
 	}
 	u32 getUsageTimer()
 	{
+		auto lock = lock_shared_rec();
 		return m_usage_timer;
 	}
 	void incrementUsageTimer(float dtime);
@@ -514,9 +510,6 @@ public:
 	// unknown blocks from id-name mapping to wndef
 	void deSerialize(std::istream &is, u8 version, bool disk);
 
-	void serializeNetworkSpecific(std::ostream &os, u16 net_proto_version);
-	void deSerializeNetworkSpecific(std::istream &is);
-	
 	void pushElementsToCircuit(Circuit* circuit);
 
 #ifndef SERVER // Only on client
@@ -629,7 +622,7 @@ private:
 	
 	// Whether day and night lighting differs
 	bool m_day_night_differs;
-	bool m_day_night_differs_expired;
+	std::atomic_bool m_day_night_differs_expired;
 
 	bool m_generated;
 	
@@ -637,7 +630,7 @@ private:
 		When block is removed from active blocks, this is set to gametime.
 		Value BLOCK_TIMESTAMP_UNDEFINED=0xffffffff means there is no timestamp.
 	*/
-	u32 m_timestamp;
+	std::atomic_uint m_timestamp;
 	// The on-disk (or to-be on-disk) timestamp value
 	u32 m_disk_timestamp;
 

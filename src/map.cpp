@@ -2539,9 +2539,6 @@ s16 Map::getHeat(v3s16 p, bool no_random)
 	MapBlock *block = getBlockNoCreateNoEx(getNodeBlockPos(p));
 	if(block != NULL) {
 		s16 value = block->heat;
-		// compatibility with minetest
-		if (value == HEAT_UNDEFINED)
-			return 0;
 		return value + (no_random ? 0 : myrand_range(0, 1));
 	}
 	//errorstream << "No heat for " << p.X<<"," << p.Z << std::endl;
@@ -2553,9 +2550,6 @@ s16 Map::getHumidity(v3s16 p, bool no_random)
 	MapBlock *block = getBlockNoCreateNoEx(getNodeBlockPos(p));
 	if(block != NULL) {
 		s16 value = block->humidity;
-		// compatibility with minetest
-		if (value == HUMIDITY_UNDEFINED)
-			return 0;
 		return value + (no_random ? 0 : myrand_range(0, 1));
 	}
 	//errorstream << "No humidity for " << p.X<<"," << p.Z << std::endl;

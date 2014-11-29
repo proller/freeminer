@@ -1,3 +1,4 @@
+
 cmake_minimum_required(VERSION 2.6)
 if(${CMAKE_VERSION} STREQUAL "2.8.2")
   # bug http://vtk.org/Bug/view.php?id=11020
@@ -13,14 +14,15 @@ set(VERSION_EXTRA "" CACHE STRING "Stuff to append to version string")
 set(VERSION_MAJOR 0)
 set(VERSION_MINOR 4)
 set(VERSION_PATCH 10)
-set(VERSION_TWEAK 3)
+set(VERSION_TWEAK 4)
 set(VERSION_PATCH_ORIG ${VERSION_PATCH})
 
 if(VERSION_EXTRA)
 	set(VERSION_TWEAK ${VERSION_TWEAK}-${VERSION_EXTRA})
 else()
+	set(VERSION_TWEAK ${VERSION_TWEAK}-free)
 	# Comment the following line during release
-	set(VERSION_TWEAK ${VERSION_TWEAK}-free-dev)
+	set(VERSION_TWEAK ${VERSION_TWEAK}-dev)
 endif()
 set(VERSION_STRING "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}.${VERSION_TWEAK}")
 

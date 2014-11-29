@@ -1,7 +1,16 @@
 Engine
 ======
 
-### 0.4.10.4 (dev)
+### 0.4.10.5 (dev)
+
+#### Protocol (Incompatimble with minetest now)
+  * enet based networking (30x+  faster than before, more reliable)
+  * msgpack based protocol (easy extendable, better backward compatibility)
+  * use utf8 everywhere
+
+
+
+### 0.4.10.4 (Nov 24, 2014)
 
   * License switched to GPLv3
   * Start using C++11 features
@@ -21,8 +30,10 @@ Engine
   * Allow any player names `enable_any_name = 1`
   * Optimized block sending for farther range
   * Various death messages
+  * Statistic collector (per player, per server, timed (daily, weekly, monthly))
 
 #### Mapgens
+  * Layers added to mapgen v5
   * Indev mapgen - enchanced v6 mapgen, features:
     Farlands -  when moving to edges of map - higher mountains, larger biomes
     Floating islands (starts at ~ 500 , higher - bigger)
@@ -48,6 +59,8 @@ Engine
   * Liquids drop torches and plants
 
 #### Client
+  * Fixed some input issues: not working numpad and some keys in azerty layout
+  * Chat forms were replaced with console (opens up to 10% height of the screen)
   * Default keymap for console changed to tilde (~)
   * Farmesh - lose details on far meshes which allows
   rendering up to 1000 blocks (very dev) `farmesh = 2`

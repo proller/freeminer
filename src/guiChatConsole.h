@@ -27,9 +27,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "chat.h"
 #include "config.h"
 
-#if USE_FREETYPE
 #include "xCGUITTFont.h"
-#endif
 
 class Client;
 
@@ -133,12 +131,7 @@ private:
 	// font
 	gui::IGUIFont* m_font;
 	v2u32 m_fontsize;
-#if USE_FREETYPE
-	bool m_use_freetype;
 	gui::CGUITTFont *m_freetype_font;
-#else
-	void *m_freetype_font;
-#endif
 };
 
 

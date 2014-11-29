@@ -20,6 +20,11 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "connection_enet.h"
+#if 0
+Not used, keep for reduce MT merge conflicts
+
+
 #ifndef CONNECTION_HEADER
 #define CONNECTION_HEADER
 
@@ -1100,3 +1105,5 @@ private:
 
 #endif
 
+
+#endif

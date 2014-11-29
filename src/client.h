@@ -40,6 +40,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/thread_pool.h"
 #include "util/unordered_map_hash.h"
 
+#include <msgpack.hpp>
+
 struct MeshMakeData;
 class MapBlockMesh;
 class IWritableTextureSource;
@@ -325,6 +327,7 @@ public:
 	bool AsyncProcessPacket();
 	bool AsyncProcessData();
 	void Send(u16 channelnum, SharedBuffer<u8> data, bool reliable);
+	void Send(u16 channelnum, const msgpack::sbuffer &data, bool reliable);
 
 	void interact(u8 action, const PointedThing& pointed);
 
@@ -333,9 +336,9 @@ public:
 	void sendInventoryFields(const std::string &formname,
 			const std::map<std::string, std::string> &fields);
 	void sendInventoryAction(InventoryAction *a);
-	void sendChatMessage(const std::wstring &message);
-	void sendChangePassword(const std::wstring &oldpassword,
-	                        const std::wstring &newpassword);
+	void sendChatMessage(const std::string &message);
+	void sendChangePassword(const std::string &oldpassword,
+							const std::string &newpassword);
 	void sendDamage(u8 damage);
 	void sendBreath(u16 breath);
 	void sendRespawn();
@@ -388,7 +391,7 @@ public:
 	bool checkPrivilege(const std::string &priv)
 	{ return (m_privileges.count(priv) != 0); }
 
-	bool getChatMessage(std::wstring &message);
+	bool getChatMessage(std::string &message);
 	void typeChatMessage(const std::wstring& message);
 
 	u64 getMapSeed(){ return m_map_seed; }
@@ -409,7 +412,7 @@ public:
 	bool accessDenied()
 	{ return m_access_denied; }
 
-	std::wstring accessDeniedReason()
+	std::string accessDeniedReason()
 	{ return m_access_denied_reason; }
 
 	bool itemdefReceived()
@@ -456,8 +459,8 @@ public:
 private:
 
 	// Virtual methods from con::PeerHandler
-	void peerAdded(con::Peer *peer);
-	void deletingPeer(con::Peer *peer, bool timeout);
+	void peerAdded(u16 peer_id);
+	void deletingPeer(u16 peer_id, bool timeout);
 	
 	void ReceiveAll();
 	void Receive();
@@ -505,12 +508,12 @@ private:
 	// 0 <= m_daynight_i < DAYNIGHT_CACHE_COUNT
 	//s32 m_daynight_i;
 	//u32 m_daynight_ratio;
-	Queue<std::wstring> m_chat_queue;
+	Queue<std::string> m_chat_queue;
 	// The seed returned by the server in TOCLIENT_INIT is stored here
 	u64 m_map_seed;
 	std::string m_password;
 	bool m_access_denied;
-	std::wstring m_access_denied_reason;
+	std::string m_access_denied_reason;
 	Queue<ClientEvent> m_client_event_queue;
 	bool m_itemdef_received;
 	bool m_nodedef_received;
@@ -541,6 +544,9 @@ private:
 	std::map<std::string, Inventory*> m_detached_inventories;
 	double m_uptime;
 	bool m_simple_singleplayer_mode;
+public:
+	void sendDrawControl();
+private:
 
 	// Storage for mesh data for creating multiple instances of the same mesh
 	std::map<std::string, std::string> m_mesh_data;

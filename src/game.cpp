@@ -99,12 +99,7 @@ struct TextDestNodeMetadata : public TextDest {
 	// This is deprecated I guess? -celeron55
 	void gotText(std::wstring text)
 	{
-		std::string ntext = wide_to_narrow(text);
-		infostream << "Submitting 'text' field of node at (" << m_p.X << ","
-			   << m_p.Y << "," << m_p.Z << "): " << ntext << std::endl;
-		std::map<std::string, std::string> fields;
-		fields["text"] = ntext;
-		m_client->sendNodemetaFields(m_p, "", fields);
+		assert(0);
 	}
 	void gotText(std::map<std::string, std::string> fields)
 	{
@@ -458,7 +453,7 @@ void update_profiler_gui(gui::IGUIStaticText *guitext_profiler,
 
 		std::ostringstream os(std::ios_base::binary);
 		g_profiler->printPage(os, show_profiler, show_profiler_max);
-		std::wstring text = narrow_to_wide(os.str());
+		std::wstring text = utf8_to_wide(os.str());
 		guitext_profiler->setText(text.c_str());
 		guitext_profiler->setVisible(true);
 
@@ -597,16 +592,16 @@ public:
 			s32 texth = 15;
 			char buf[10];
 			snprintf(buf, 10, "%.3g", show_max);
-			font->draw(narrow_to_wide(buf).c_str(),
+			font->draw(utf8_to_wide(buf).c_str(),
 					core::rect<s32>(textx, y - graphh,
 						   textx2, y - graphh + texth),
 					meta.color);
 			snprintf(buf, 10, "%.3g", show_min);
-			font->draw(narrow_to_wide(buf).c_str(),
+			font->draw(utf8_to_wide(buf).c_str(),
 					core::rect<s32>(textx, y - texth,
 						   textx2, y),
 					meta.color);
-			font->draw(narrow_to_wide(id + " " + ftos(meta.cur)).c_str(),
+			font->draw(utf8_to_wide(id + " " + ftos(meta.cur)).c_str(),
 					core::rect<s32>(textx, y - graphh / 2 - texth / 2,
 						   textx2, y - graphh / 2 + texth / 2),
 					meta.color);
@@ -1172,14 +1167,14 @@ static void updateChat(Client &client, f32 dtime, bool show_debug,
 
 	// Get new messages from error log buffer
 	while (!chat_log_error_buf.empty()) {
-		chat_backend.addMessage(L"", narrow_to_wide(chat_log_error_buf.get()));
+		chat_backend.addMessage(L"", utf8_to_wide(chat_log_error_buf.get()));
 	}
 
 	// Get new messages from client
-	std::wstring message;
+	std::string message;
 
 	while (client.getChatMessage(message)) {
-		chat_backend.addUnparsedMessage(message);
+		chat_backend.addUnparsedMessage(utf8_to_wide(message));
 	}
 
 	// Remove old messages
@@ -1395,7 +1390,7 @@ struct GameRunData {
 	//freeminer:
 	v3f update_draw_list_last_cam_pos;
 	unsigned int autoexit;
-
+	bool profiler_state;
 
 	float time_of_day;
 	float time_of_day_smooth;
@@ -1463,7 +1458,7 @@ public:
 			// If address is "", local server is used and address is updated
 			std::string *address,
 			u16 port,
-			std::wstring *error_message,
+			std::string *error_message,
 			ChatBackend *chat_backend,
 			const SubgameSpec &gamespec,    // Used for local game
 			bool simple_singleplayer_mode);
@@ -1486,8 +1481,8 @@ protected:
 	// Client creation
 	bool createClient(const std::string &playername,
 			const std::string &password, std::string *address, u16 port,
-			std::wstring *error_message);
-	bool initGui(std::wstring *error_message);
+			std::string *error_message);
+	bool initGui(std::string *error_message);
 
 	// Client connection
 	bool connectToServer(const std::string &playername,
@@ -1615,7 +1610,7 @@ private:
 	scene::ISceneManager *smgr;
 	u32 text_height;
 	bool *kill;
-	std::wstring *error_message;
+	std::string *error_message;
 	IGameDef *gamedef;                     // Convenience (same as *client)
 	scene::ISceneNode *skybox;
 
@@ -1727,7 +1722,7 @@ bool Game::startup(bool *kill,
 		const std::string &password,
 		std::string *address,     // can change if simple_singleplayer_mode
 		u16 port,
-		std::wstring *error_message,
+		std::string *error_message,
 		ChatBackend *chat_backend,
 		const SubgameSpec &gamespec,
 		bool simple_singleplayer_mode)
@@ -1984,10 +1979,10 @@ bool Game::createSingleplayerServer(const std::string map_dir,
 	}
 
 	if (bind_addr.isIPv6() && !g_settings->getBool("enable_ipv6")) {
-		*error_message = L"Unable to listen on " +
-				narrow_to_wide(bind_addr.serializeString()) +
-				L" because IPv6 is disabled";
-		errorstream << wide_to_narrow(*error_message) << std::endl;
+		*error_message = "Unable to listen on " +
+				bind_addr.serializeString() +
+				" because IPv6 is disabled";
+		errorstream << *error_message << std::endl;
 		return false;
 	}
 
@@ -2001,7 +1996,7 @@ bool Game::createSingleplayerServer(const std::string map_dir,
 
 bool Game::createClient(const std::string &playername,
 		const std::string &password, std::string *address, u16 port,
-		std::wstring *error_message)
+		std::string *error_message)
 {
 	showOverlayMessage("Creating client...", 0, 50);
 
@@ -2018,19 +2013,19 @@ bool Game::createClient(const std::string &playername,
 		return false;
 
 	if (!could_connect) {
-		if (*error_message == L"" && !connect_aborted) {
+		if (*error_message == "" && !connect_aborted) {
 			// Should not happen if error messages are set properly
-			*error_message = L"Connection failed for unknown reason";
-			errorstream << wide_to_narrow(*error_message) << std::endl;
+			*error_message = "Connection failed for unknown reason";
+			errorstream << *error_message << std::endl;
 		}
 		return false;
 	}
 
 	if (!getServerContent(&connect_aborted)) {
-		if (*error_message == L"" && !connect_aborted) {
+		if (*error_message == "" && !connect_aborted) {
 			// Should not happen if error messages are set properly
-			*error_message = L"Connection failed for unknown reason";
-			errorstream << wide_to_narrow(*error_message) << std::endl;
+			*error_message = "Connection failed for unknown reason";
+			errorstream << *error_message << std::endl;
 		}
 		return false;
 	}
@@ -2049,9 +2044,9 @@ bool Game::createClient(const std::string &playername,
 	if (g_settings->getBool("enable_clouds")) {
 		clouds = new Clouds(smgr->getRootSceneNode(), smgr, -1, time(0));
 		if (!clouds) {
-			*error_message = L"Memory allocation error";
-			*error_message += narrow_to_wide(" (clouds)");
-			errorstream << wide_to_narrow(*error_message) << std::endl;
+			*error_message = "Memory allocation error";
+			*error_message += " (clouds)";
+			errorstream << *error_message << std::endl;
 			return false;
 		}
 	}
@@ -2064,9 +2059,9 @@ bool Game::createClient(const std::string &playername,
 	local_inventory = new Inventory(itemdef_manager);
 
 	if (!(sky && local_inventory)) {
-		*error_message = L"Memory allocation error";
-		*error_message += narrow_to_wide(" (sky or local inventory)");
-		errorstream << wide_to_narrow(*error_message) << std::endl;
+		*error_message = "Memory allocation error";
+		*error_message += " (sky or local inventory)";
+		errorstream << *error_message << std::endl;
 		return false;
 	}
 
@@ -2102,19 +2097,19 @@ bool Game::createClient(const std::string &playername,
 			player, local_inventory);
 
 	if (!hud) {
-		*error_message = L"Memory error: could not create HUD";
-		errorstream << wide_to_narrow(*error_message) << std::endl;
+		*error_message = "Memory error: could not create HUD";
+		errorstream << *error_message << std::endl;
 		return false;
 	}
 
 	return true;
 }
 
-bool Game::initGui(std::wstring *error_message)
+bool Game::initGui(std::string *error_message)
 {
 	// First line of debug text
 	guitext = guienv->addStaticText(
-			L"Minetest",
+			L"Freeminer",
 			core::rect<s32>(0, 0, 0, 0),
 			false, false, guiroot);
 
@@ -2141,13 +2136,11 @@ bool Game::initGui(std::wstring *error_message)
 	// Chat text
 	guitext_chat = nullptr;
 
-	#if USE_FREETYPE
-	if (g_settings->getBool("freetype")) {
+	{
 		guitext_chat = new gui::FMStaticText(L"", false, guienv, guienv->getRootGUIElement(), -1, core::rect<s32>(0, 0, 0, 0), false);
 		guitext_chat->setWordWrap(true);
 		guitext_chat->drop();
 	}
-	#endif
 
 	if (!guitext_chat) {
 	guitext_chat = guienv->addStaticText(
@@ -2164,8 +2157,8 @@ bool Game::initGui(std::wstring *error_message)
 	gui_chat_console = new GUIChatConsole(guienv, guienv->getRootGUIElement(),
 			-1, chat_backend, client);
 	if (!gui_chat_console) {
-		*error_message = L"Could not allocate memory for chat console";
-		errorstream << wide_to_narrow(*error_message) << std::endl;
+		*error_message = "Could not allocate memory for chat console";
+		errorstream << *error_message << std::endl;
 		return false;
 	}
 
@@ -2230,24 +2223,22 @@ bool Game::connectToServer(const std::string &playername,
 		if (connect_address.isZero()) { // i.e. INADDR_ANY, IN6ADDR_ANY
 			//connect_address.Resolve("localhost");
 			if (connect_address.isIPv6() || g_settings->getBool("ipv6_server")) {
-				IPv6AddressBytes addr_bytes;
-				addr_bytes.bytes[15] = 1;
-				connect_address.setAddress(&addr_bytes);
+				connect_address.setAddress(in6addr_loopback);
 			} else {
 				connect_address.setAddress(127, 0, 0, 1);
 			}
 		}
 	} catch (ResolveError &e) {
-		*error_message = L"Couldn't resolve address: " + narrow_to_wide(e.what());
-		errorstream << wide_to_narrow(*error_message) << std::endl;
+		*error_message = std::string("Couldn't resolve address: ") + e.what();
+		errorstream << *error_message << std::endl;
 		return false;
 	}
 
 	if (connect_address.isIPv6() && !g_settings->getBool("enable_ipv6")) {
-		*error_message = L"Unable to connect to " +
-				narrow_to_wide(connect_address.serializeString()) +
-				L" because IPv6 is disabled";
-		errorstream << wide_to_narrow(*error_message) << std::endl;
+		*error_message = "Unable to connect to " +
+				connect_address.serializeString() +
+				" because IPv6 is disabled";
+		errorstream << *error_message << std::endl;
 		return false;
 	}
 
@@ -2296,9 +2287,9 @@ bool Game::connectToServer(const std::string &playername,
 
 			// Break conditions
 			if (client->accessDenied()) {
-				*error_message = L"Access denied. Reason: "
+				*error_message = "Access denied. Reason: "
 						+ client->accessDeniedReason();
-				errorstream << wide_to_narrow(*error_message) << std::endl;
+				errorstream << *error_message << std::endl;
 				break;
 			}
 
@@ -2356,15 +2347,15 @@ bool Game::getServerContent(bool *aborted)
 
 		// Error conditions
 		if (client->accessDenied()) {
-			*error_message = L"Access denied. Reason: "
+			*error_message = "Access denied. Reason: "
 					+ client->accessDeniedReason();
-			errorstream << wide_to_narrow(*error_message) << std::endl;
+			errorstream << *error_message << std::endl;
 			return false;
 		}
 
 		if (client->getState() < LC_Init) {
-			*error_message = L"Client disconnected";
-			errorstream << wide_to_narrow(*error_message) << std::endl;
+			*error_message = "Client disconnected";
+			errorstream << *error_message << std::endl;
 			return false;
 		}
 
@@ -2449,9 +2440,9 @@ inline void Game::updateInteractTimers(GameRunData *args, f32 dtime)
 inline bool Game::checkConnection()
 {
 	if (client->accessDenied()) {
-		*error_message = L"Access denied. Reason: "
+		*error_message = "Access denied. Reason: "
 				+ client->accessDeniedReason();
-		errorstream << wide_to_narrow(*error_message) << std::endl;
+		errorstream << *error_message << std::endl;
 		return false;
 	}
 
@@ -2715,6 +2706,7 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 		decreaseViewRange(statustext_time);
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_RANGESELECT])) {
 		toggleFullViewRange(statustext_time);
+		client->sendDrawControl();
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_QUICKTUNE_NEXT]))
 		quicktune->next();
 	else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_QUICKTUNE_PREV]))
@@ -2768,7 +2760,7 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 				actual_height = row_height * players.size();
 			u32 max_width = 0;
 			for (size_t i = 0; i < players.size(); ++i)
-				max_width = std::max(max_width, font->getDimension(narrow_to_wide(players[i]).c_str()).Width);
+				max_width = std::max(max_width, font->getDimension(utf8_to_wide(players[i]).c_str()).Width);
 			max_width += 15;
 			u32 actual_width = columns * max_width;
 
@@ -3033,9 +3025,14 @@ void Game::toggleProfiler(float *statustext_time, u32 *profiler_current_page,
 		sstr << "Profiler shown (page " << *profiler_current_page
 		     << " of " << profiler_max_page << ")";
 		statustext = sstr.str();
+		if (*profiler_current_page == 1)
+			runData.profiler_state = g_profiler_enabled;
+		g_profiler_enabled = true;
 	} else {
 		statustext = L"Profiler hidden";
+		g_profiler_enabled = runData.profiler_state;
 	}
+
 	*statustext_time = 0;
 }
 
@@ -3186,10 +3183,21 @@ void Game::updatePlayerControl(const CameraOrientation &cam)
 		( (u32)(input->getRightState()                                       & 0x1) << 8
 	);
 
+	auto & draw_control = client->getEnv().getClientMap().getControl();
 	if (input->isKeyDown(keycache.key[KeyCache::KEYMAP_ID_ZOOM])) {
-		player->zoom=true;
+		bool changed = player->zoom == false;
+		player->zoom = true;
+		if (changed) {
+			draw_control.fov = g_settings->getFloat("zoom_fov");
+			client->sendDrawControl();
+		}
 	} else {
-		player->zoom=false;
+		bool changed = player->zoom == true;
+		player->zoom = false;
+		if (changed) {
+			draw_control.fov = g_settings->getFloat("fov");
+			client->sendDrawControl();
+		}
 	}
 
 	//tt.stop();
@@ -4065,6 +4073,7 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 	runData->time_of_day = time_of_day;
 	runData->time_of_day_smooth = time_of_day_smooth;
 
+	if (!flags.no_output)
 	sky->update(time_of_day_smooth, time_brightness, direct_brightness,
 			sunlight_seen, camera->getCameraMode(), player->getYaw(),
 			player->getPitch());
@@ -4559,7 +4568,7 @@ bool the_game(bool *kill,
 		const std::string &address,         // If empty local server is created
 		u16 port,
 
-		std::wstring &error_message,
+		std::string &error_message,
 		ChatBackend &chat_backend,
 		const SubgameSpec &gamespec,        // Used for local game
 		bool simple_singleplayer_mode,
@@ -4592,16 +4601,16 @@ bool the_game(bool *kill,
 
 #ifdef NDEBUG
 	} catch (SerializationError &e) {
-		error_message = L"A serialization error occurred:\n"
-				+ narrow_to_wide(e.what()) + L"\n\nThe server is probably "
-				L" running a different version of Minetest.";
-		errorstream << wide_to_narrow(error_message) << std::endl;
+		error_message = std::string("A serialization error occurred:\n")
+				+ e.what() + "\n\nThe server is probably "
+				" running a different version of Freeminer.";
+		errorstream << (error_message) << std::endl;
 	} catch (ServerError &e) {
-		error_message = narrow_to_wide(e.what());
+		error_message = e.what();
 		errorstream << "ServerError: " << e.what() << std::endl;
 	} catch (ModError &e) {
 		errorstream << "ModError: " << e.what() << std::endl;
-		error_message = narrow_to_wide(e.what()) + wgettext("\nCheck debug.txt for details.");
+		error_message = std::string() + e.what() + _("\nCheck debug.txt for details.");
 #else
 	} catch (int) { //nothing
 #endif

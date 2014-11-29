@@ -24,6 +24,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "porting.h"
 #include "filesys.h"
 #include "config.h"
+#include "connection.h" // ENET_IPV6
 #include "constants.h"
 #include "porting.h"
 
@@ -169,8 +170,6 @@ void set_default_settings(Settings *settings)
 	//
 	// Fonts
 	//
-#if USE_FREETYPE
-	settings->setDefault("freetype", "true");
 	settings->setDefault("font_path", porting::getDataPath("fonts" DIR_DELIM "liberationsans.ttf"));
 	settings->setDefault("font_shadow", "1");
 	settings->setDefault("font_shadow_alpha", "128");
@@ -179,11 +178,6 @@ void set_default_settings(Settings *settings)
 
 	settings->setDefault("fallback_font_shadow", "1");
 	settings->setDefault("fallback_font_shadow_alpha", "128");
-#else
-	settings->setDefault("freetype", "false");
-	settings->setDefault("font_path", porting::getDataPath("fonts" DIR_DELIM "fontlucida.png"));
-	settings->setDefault("mono_font_path", porting::getDataPath("fonts" DIR_DELIM "fontdejavusansmono.png"));
-#endif
 
 	//
 	// Map generation
@@ -321,8 +315,7 @@ void set_default_settings(Settings *settings)
 	
 	// Announcing and connection
 	settings->setDefault("server_announce", "false");
-	settings->setDefault("serverlist_url", "servers.minetest.net");
-	//settings->setDefault("serverlist_url", "servers.freeminer.org"); // uncomment after protocol change
+	settings->setDefault("serverlist_url", "servers.freeminer.org");
 	settings->setDefault("server_address", "");
 	settings->setDefault("bind_address", "");
 	settings->setDefault("port", "30000");
@@ -430,7 +423,7 @@ void set_default_settings(Settings *settings)
 
 	settings->setDefault("more_threads", win32 ? "false" : "true");
 
-#if !defined(_WIN32) && !CMAKE_USE_IPV4_DEFAULT
+#if !defined(_WIN32) && !CMAKE_USE_IPV4_DEFAULT && ENET_IPV6
 	settings->setDefault("ipv6_server", "true"); // problems on all windows versions (unable to play in local game)
 #endif
 

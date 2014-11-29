@@ -1,6 +1,6 @@
 /*
-util/timetaker.h
-Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
+util/msgpack_serialize.h
+Copyright (C) 2014 xyz, Ilya Zhuravlev <whatever@xyz.is>
 */
 
 /*
@@ -20,39 +20,17 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef UTIL_TIMETAKER_HEADER
-#define UTIL_TIMETAKER_HEADER
+#pragma once
 
-#include "../irrlichttypes.h"
-#include "../gettime.h"
+#include <map>
+#include <msgpack.hpp>
 
-/*
-	TimeTaker
-*/
-extern unsigned int g_time_taker_enabled;
+#define PACK(x, y) {pk.pack((int)x); pk.pack(y);}
+#define MSGPACK_COMMAND -1
+#define MSGPACK_PACKET_INIT(id, x) \
+	msgpack::sbuffer buffer; \
+	msgpack::packer<msgpack::sbuffer> pk(&buffer); \
+	pk.pack_map((x)+1); \
+	PACK(MSGPACK_COMMAND, id);
 
-class TimeTaker
-{
-public:
-	TimeTaker(const std::string &name, u32 *result=NULL,
-		TimePrecision=PRECISION_MILLI);
-
-	~TimeTaker()
-	{
-		stop();
-	}
-
-	u32 stop(bool quiet=false);
-
-	u32 getTimerTime();
-
-private:
-	std::string m_name;
-	u32 m_time1;
-	bool m_running;
-	TimePrecision m_precision;
-	u32 *m_result;
-};
-
-#endif
-
+typedef std::map<int, msgpack::object> MsgpackPacket;

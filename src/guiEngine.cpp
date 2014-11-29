@@ -61,7 +61,7 @@ void TextDestGuiEngine::gotText(std::map<std::string, std::string> fields)
 /******************************************************************************/
 void TextDestGuiEngine::gotText(std::wstring text)
 {
-	m_engine->getScriptIface()->handleMainMenuEvent(wide_to_narrow(text));
+	m_engine->getScriptIface()->handleMainMenuEvent(wide_to_utf8(text));
 }
 
 /******************************************************************************/
@@ -177,7 +177,7 @@ GUIEngine::GUIEngine(	irr::IrrlichtDevice* dev,
 	std::string t = std::string("Freeminer ") + minetest_version_hash;
 
 	m_irr_toplefttext =
-		m_device->getGUIEnvironment()->addStaticText(narrow_to_wide(t).c_str(),
+		m_device->getGUIEnvironment()->addStaticText(utf8_to_wide(t).c_str(),
 		rect,false,true,0,-1);
 
 	//create formspecsource
@@ -568,7 +568,7 @@ void GUIEngine::setTopleftText(std::string append)
 		toset += append;
 	}
 
-	m_irr_toplefttext->setText(narrow_to_wide(toset).c_str());
+	m_irr_toplefttext->setText(utf8_to_wide(toset).c_str());
 }
 
 /******************************************************************************/

@@ -42,6 +42,7 @@
 #include "porting.h"
 //#include "Keycodes.h"
 #include "log.h"
+//#include "util/string.h"
 
 /*
 	todo:
@@ -317,7 +318,6 @@ bool intlGUIEditBox::processKey(const SEvent& event)
 	s32 newMarkEnd = MarkEnd;
 
 	// control shortcut handling
-
 	if (event.KeyInput.Control)
 	{
 		// german backlash '\' entered with control + '?'
