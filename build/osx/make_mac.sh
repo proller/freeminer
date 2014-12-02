@@ -9,7 +9,7 @@ fi
 
 # Get default if it is not already there
 if [ ! -d "default" ]; then
-  git clone --recursive https://github.com/minetest/default
+  git clone --recursive https://github.com/freeminer/default
 fi
 
 # Update default from GitHub
