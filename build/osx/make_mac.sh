@@ -6,7 +6,8 @@ brew install cmake freetype gettext hiredis irrlicht jpeg leveldb libogg libvorb
 
 # Clone MT source code if not already there
 if [ ! -d "freeminer-git" ]; then
-  git clone --recursive https://github.com/freeminer/freeminer freeminer-git
+  #git clone --recursive https://github.com/freeminer/freeminer freeminer-git
+  git clone --recursive -b osx  https://github.com/proller/freeminer freeminer-git
 fi
 
 # Get default if it is not already there
