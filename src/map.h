@@ -178,6 +178,7 @@ public:
 	MapBlock * getBlockNoCreate(v3s16 p);
 	// Returns NULL if not found
 	MapBlock * getBlockNoCreateNoEx(v3POS p, bool trylock = false, bool nocache = false);
+	MapBlockP getBlock(v3POS p, bool trylock = false, bool nocache = false);
 
 	/* Server overrides */
 	virtual MapBlock * emergeBlock(v3s16 p, bool allow_generate=true)
@@ -372,6 +373,7 @@ public:
 	std::mutex m_transforming_liquid_mutex;
 	UniqueQueue<v3POS> m_transforming_liquid;
 	shared_map<v3POS, MapBlock*> lighting_modified_blocks;
+	std::atomic_uint time_life;
 protected:
 };
 
