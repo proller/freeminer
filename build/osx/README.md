@@ -27,7 +27,7 @@ The script
 
 ### Dependencies
 
-Install these pacakges with [Homebrew](http://brew.sh/) ("brew install cmake freetype gettext hiredis irrlicht jpeg leveldb libogg libvorbis luajit")
+Install these pacakges with [Homebrew](http://brew.sh/) ("brew install cmake freetype gettext hiredis irrlicht jpeg leveldb libogg libvorbis luajit msgpack")
 
 (snappy and libpng will get installed by brew automatically too.)
 

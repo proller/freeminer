@@ -2,6 +2,8 @@
 
 STARTDIR=`pwd`
 
+brew install cmake freetype gettext hiredis irrlicht jpeg leveldb libogg libvorbis luajit msgpack
+
 # Clone MT source code if not already there
 if [ ! -d "freeminer-git" ]; then
   git clone --recursive https://github.com/freeminer/freeminer freeminer-git
@@ -46,6 +48,12 @@ cmake . -DCMAKE_BUILD_TYPE=Release -DENABLE_FREETYPE=on -DENABLE_LEVELDB=on -DEN
 
 make clean
 make VERBOSE=1
+
+if [ ! -f "bin/freeminer" ]; then
+    echo "compile fail"
+    exit
+fi
+
 cp -p bin/freeminer ../releases/freeminer.app/Contents/Resources/bin
 cd ../releases
 
