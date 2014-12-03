@@ -1,12 +1,14 @@
 ## Script for automatic building of freeminer for OS X from GitHub
 
+Originally was here https://github.com/mdoege/mtmake-osx
+
 ### Usage
 
 Start Terminal.app (or any other terminal emulator for OS X) and install all dependencies (see below). It is recommended to use Homebrew for this, except for e.g. Xcode which you can download from Apple's Mac App Store for free.
 
 Then clone the mtmake-osx build scripts from GitHub and start the compilation process like this:
 
-    git clone https://github.com/freeminer/freeminer
+    git clone --recursive https://github.com/freeminer/freeminer
     cd build/osx
     bash make_mac.sh
 

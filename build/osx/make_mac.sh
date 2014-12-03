@@ -3,6 +3,7 @@
 STARTDIR=`pwd`
 
 brew install cmake freetype gettext hiredis irrlicht jpeg leveldb libogg libvorbis luajit msgpack
+git submodule update --init --recursive
 
 # Clone MT source code if not already there
 if [ ! -d "freeminer-git" ]; then
