@@ -6,8 +6,8 @@ Start Terminal.app (or any other terminal emulator for OS X) and install all dep
 
 Then clone the mtmake-osx build scripts from GitHub and start the compilation process like this:
 
-    git clone https://github.com/mdoege/mtmake-osx
-    cd mtmake-osx
+    git clone https://github.com/freeminer/freeminer
+    cd build/osx
     bash make_mac.sh
 
 This will compile freeminer, updating the app in releases/ and creating a ZIP file with the app bundle.
@@ -27,7 +27,7 @@ The script
 
 ### Dependencies
 
-Install these pacakges with [Homebrew](http://brew.sh/) ("brew install"): cmake, freetype, gettext, hiredis, irrlicht, jpeg, leveldb, libogg, libvorbis, luajit
+Install these pacakges with [Homebrew](http://brew.sh/) ("brew install cmake freetype gettext hiredis irrlicht jpeg leveldb libogg libvorbis luajit")
 
 (snappy and libpng will get installed by brew automatically too.)
 
