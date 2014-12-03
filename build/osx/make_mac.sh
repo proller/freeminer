@@ -58,7 +58,7 @@ echo "======== otool ======="
 otool -L freeminer.app/Contents/Resources/bin/freeminer | grep executable
 
 # Remove shared directories...
-mkdir -p freeminer.app/Contents/Resources/bin/share
+mkdir -p freeminer.app/Contents/Resources/bin/share/games
 (cd freeminer.app/Contents/Resources/bin/share && rm -fr builtin client fonts locale textures)
 
 # ...and copy new ones from source code directory
