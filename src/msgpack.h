@@ -1,7 +1,7 @@
 
-//#if defined(__APPLE__)
+#if defined(__APPLE__)
 	#undef nil
-	#define nil nil
-//#endif
+	//#define nil nil
+#endif
 
 #include <msgpack.hpp>

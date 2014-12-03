@@ -36,7 +36,7 @@ fi
 
 # Update source code and set version string
 cd freeminer-git
-git checkout master --force
+git checkout osx --force
 git pull
 git submodule update --init --recursive
 gitver=`git log -1 --format='%cd.%h' --date=short | tr -d -`
