@@ -1,14 +1,14 @@
 #!/bin/sh
 
 STARTDIR=`pwd`
+BRANCH='master'
 
 brew install cmake freetype gettext hiredis irrlicht jpeg leveldb libogg libvorbis luajit msgpack
 git submodule update --init --recursive
 
 # Clone MT source code if not already there
 if [ ! -d "freeminer-git" ]; then
-  #git clone --recursive https://github.com/freeminer/freeminer freeminer-git
-  git clone --recursive -b osx  https://github.com/proller/freeminer freeminer-git
+  git clone --recursive -b $BRANCH https://github.com/freeminer/freeminer freeminer-git
 fi
 
 # Get default if it is not already there
@@ -38,7 +38,7 @@ fi
 
 # Update source code and set version string
 cd freeminer-git
-git checkout --force osx --
+git checkout --force $BRANCH --
 git pull
 git submodule update --init --recursive
 gitver=`git log -1 --format='%cd.%h' --date=short | tr -d -`
