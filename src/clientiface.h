@@ -35,7 +35,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <map>
 #include <set>
 
-#include <msgpack.hpp>
+#include "msgpack.h"
 
 class MapBlock;
 class ServerEnvironment;
@@ -212,6 +212,7 @@ public:
 	s16 range_all;
 	s16 farmesh;
 	float fov;
+	bool block_overflow;
 
 	ServerEnvironment *m_env;
 

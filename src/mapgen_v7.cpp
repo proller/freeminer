@@ -378,11 +378,15 @@ float MapgenV7::baseTerrainLevelAtPoint(int x, int z) {
 	float persist = NoisePerlin2D(noise_terrain_persist->np, x, z, seed);
 	persist = rangelim(persist, 0.4, 0.9);
 
+	auto persist_save = noise_terrain_base->np->persist;
 	noise_terrain_base->np->persist = persist;
 	float height_base = NoisePerlin2D(noise_terrain_base->np, x, z, seed);
+	noise_terrain_base->np->persist = persist_save;
 
+	persist_save = noise_terrain_alt->np->persist;
 	noise_terrain_alt->np->persist = persist;
 	float height_alt = NoisePerlin2D(noise_terrain_alt->np, x, z, seed);
+	noise_terrain_alt->np->persist = persist_save;
 
 	if (height_alt > height_base)
 		return height_alt;
@@ -601,7 +605,7 @@ void MapgenV7::generateBiomes() {
 		Biome *biome  = (Biome *)bmgr->get(biomemap[index]);
 		s16 dfiller   = biome->depth_filler + noise_filler_depth->result[index];
 		s16 y0_top    = biome->depth_top;
-		s16 y0_filler = biome->depth_filler + biome->depth_top + dfiller;
+		s16 y0_filler = biome->depth_top + dfiller;
 
 		s16 nplaced = 0;
 		u32 i = vm->m_area.index(x, node_max.Y, z);	
@@ -629,21 +633,37 @@ void MapgenV7::generateBiomes() {
 				
 				if (c_below != CONTENT_AIR) {
 					if (nplaced < y0_top) {
-						// A hack to prevent dirt_with_grass from being
-						// placed below water.  TODO: fix later
-						content_t c_place = ((y < water_level) &&
-								(biome->c_top == c_dirt_with_grass)) ?
-								c_dirt : heat < -3 ? biome->c_top_cold : biome->c_top;
-						vm->m_data[i] = MapNode(c_place);
+						if(y < water_level)
+							vm->m_data[i] = MapNode(biome->c_filler);
+						else
+							vm->m_data[i] = MapNode(
+								((y < water_level) && (biome->c_top == c_dirt_with_grass))
+									? c_dirt
+									: heat < -3
+										? biome->c_top_cold
+										: biome->c_top
+							);
 						nplaced++;
 					} else if (nplaced < y0_filler && nplaced >= y0_top) {
 						vm->m_data[i] = MapNode(biome->c_filler);
 						nplaced++;
+					} else if (c == c_stone) {
+						have_air = false;
+						nplaced  = 0;
+						vm->m_data[i] = MapNode(biome->c_stone);
 					} else {
 						have_air = false;
 						nplaced  = 0;
 					}
+				} else if (c == c_stone) {
+					have_air = false;
+					nplaced = 0;
+					vm->m_data[i] = MapNode(biome->c_stone);
 				}
+			} else if (c == c_stone) {
+				have_air = false;
+				nplaced = 0;
+				vm->m_data[i] = MapNode(biome->c_stone);
 			} else if (c == c_water_source) {
 				have_air = true;
 				nplaced = 0;

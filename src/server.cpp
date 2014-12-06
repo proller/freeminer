@@ -70,7 +70,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "circuit.h"
 //#include "stat.h"
 
-#include <msgpack.hpp>
+#include "msgpack.h"
 #include <chrono>
 #include "util/thread_pool.h"
 #include "key_value_storage.h"
@@ -1319,6 +1319,8 @@ int Server::AsyncRunMapStep(float dtime, bool async) {
 
 	int ret = 0;
 
+	m_env->getMap().time_life = m_uptime.get() + m_env->m_game_time_start;
+
 /*
 	float dtime;
 	{
@@ -2048,6 +2050,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 
 	if(command == TOSERVER_PLAYERPOS)
 	{
+		if (playersao->m_time_from_last_respawn > 1)
 		player->setPosition(packet[TOSERVER_PLAYERPOS_POSITION].as<v3f>());
 		player->setSpeed(packet[TOSERVER_PLAYERPOS_SPEED].as<v3f>());
 		player->setPitch(wrapDegrees(packet[TOSERVER_PLAYERPOS_PITCH].as<f32>()));
@@ -2070,18 +2073,20 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			// Call callbacks
 			m_script->on_cheat(playersao, "moved_too_fast");
 		}
-		else {
+		else if (playersao->m_time_from_last_respawn > 3) {
 			auto dist = (old_pos/BS).getDistanceFrom(playersao->m_last_good_position/BS);
 			if (dist)
 				stat.add("move", playersao->getPlayer()->getName(), dist);
 		}
 
-		auto obj = playersao; // copypasted from server step:
-		auto uptime = m_uptime.get();
-		if (!obj->m_uptime_last)  // not very good place, but minimum modifications
-			obj->m_uptime_last = uptime - 0.1;
-		obj->step(uptime - obj->m_uptime_last, true); //todo: maybe limit count per time
-		obj->m_uptime_last = uptime;
+		if (playersao->m_time_from_last_respawn > 2) {
+			auto obj = playersao; // copypasted from server step:
+			auto uptime = m_uptime.get();
+			if (!obj->m_uptime_last)  // not very good place, but minimum modifications
+				obj->m_uptime_last = uptime - 0.1;
+			obj->step(uptime - obj->m_uptime_last, true); //todo: maybe limit count per time
+			obj->m_uptime_last = uptime;
+		}
 
 		/*infostream<<"Server::ProcessData(): Moved player "<<peer_id<<" to "
 															<<"("<<position.X<<","<<position.Y<<","<<position.Z<<")"
@@ -2803,6 +2808,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		client->range_all = packet[TOSERVER_DRAWCONTROL_RANGE_ALL].as<u32>();
 		client->farmesh  = packet[TOSERVER_DRAWCONTROL_FARMESH].as<u8>();
 		client->fov  = packet[TOSERVER_DRAWCONTROL_FOV].as<f32>();
+		client->block_overflow = packet[TOSERVER_DRAWCONTROL_BLOCK_OVERFLOW].as<bool>();
 	}
 	else
 	{
@@ -4009,7 +4015,10 @@ void Server::DiePlayer(u16 peer_id)
 	DSTACK(__FUNCTION_NAME);
 
 	PlayerSAO *playersao = getPlayerSAO(peer_id);
-	assert(playersao);
+	if (!playersao)
+		return;
+
+	playersao->m_time_from_last_respawn = 0;
 
 	infostream<<"Server::DiePlayer(): Player "
 			<<playersao->getPlayer()->getName()
@@ -4031,7 +4040,8 @@ void Server::RespawnPlayer(u16 peer_id)
 	DSTACK(__FUNCTION_NAME);
 
 	PlayerSAO *playersao = getPlayerSAO(peer_id);
-	assert(playersao);
+	if (!playersao)
+		return;
 
 	infostream<<"Server::RespawnPlayer(): Player "
 			<<playersao->getPlayer()->getName()
@@ -4044,6 +4054,8 @@ void Server::RespawnPlayer(u16 peer_id)
 		v3f pos = findSpawnPos(m_env->getServerMap());
 		playersao->setPos(pos);
 	}
+
+	playersao->m_time_from_last_respawn = 0;
 
 	stat.add("respawn", playersao->getPlayer()->getName());
 }

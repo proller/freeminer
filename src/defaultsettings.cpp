@@ -137,7 +137,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("keymap_toggle_hud", "KEY_F1");
 	settings->setDefault("keymap_toggle_chat", "KEY_F2");
 	settings->setDefault("keymap_toggle_force_fog_off", "KEY_F3");
-	//settings->setDefault("keymap_toggle_update_camera", "KEY_F4");
+	//settings->setDefault("keymap_toggle_update_camera", debug ? "KEY_F4" : "none");
 	settings->setDefault("keymap_toggle_block_boundaries", "KEY_F4");
 	settings->setDefault("keymap_toggle_debug", "KEY_F5");
 	settings->setDefault("keymap_toggle_profiler", "KEY_F6");
@@ -170,6 +170,7 @@ void set_default_settings(Settings *settings)
 	//
 	// Fonts
 	//
+	settings->setDefault("freetype", "true");
 	settings->setDefault("font_path", porting::getDataPath("fonts" DIR_DELIM "liberationsans.ttf"));
 	settings->setDefault("font_shadow", "1");
 	settings->setDefault("font_shadow_alpha", "128");
@@ -178,6 +179,14 @@ void set_default_settings(Settings *settings)
 
 	settings->setDefault("fallback_font_shadow", "1");
 	settings->setDefault("fallback_font_shadow_alpha", "128");
+
+	std::stringstream fontsize;
+	fontsize << TTF_DEFAULT_FONT_SIZE;
+
+	settings->setDefault("font_size", fontsize.str());
+	settings->setDefault("mono_font_size", fontsize.str());
+	settings->setDefault("fallback_font_size", fontsize.str());
+
 
 	//
 	// Map generation
@@ -309,7 +318,8 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("respawn_auto", "false");
 	settings->setDefault("enable_vbo", "false");
 	settings->setDefault("enable_local_map_saving", "false");
-	
+	settings->setDefault("enable_build_where_you_stand", "false" );
+
 	//
 	// Server stuff
 	//
@@ -469,22 +479,9 @@ void set_default_settings(Settings *settings)
 
 	settings->setDefault("farmesh", "1");
 	settings->setDefault("farmesh_step", "1");
-#endif
-}
 
-void late_init_default_settings(Settings* settings)
-{
-#ifndef SERVER
-	std::stringstream fontsize;
-	fontsize << floor(
-			DEFAULT_FONT_SIZE *
-			porting::getDisplayDensity() *
-			settings->getFloat("gui_scaling")
-			);
-
-	settings->setDefault("font_size", fontsize.str());
-	settings->setDefault("mono_font_size", fontsize.str());
-	settings->setDefault("fallback_font_size", fontsize.str());
+#else
+	settings->setDefault("screen_dpi", "72");
 #endif
 }
 

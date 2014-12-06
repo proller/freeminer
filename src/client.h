@@ -40,7 +40,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/thread_pool.h"
 #include "util/unordered_map_hash.h"
 
-#include <msgpack.hpp>
+#include "msgpack.h"
 
 struct MeshMakeData;
 class MapBlockMesh;
@@ -72,7 +72,7 @@ public:
 
 	~MeshUpdateQueue();
 
-	void addBlock(v3POS p, std::shared_ptr<MeshMakeData> data, bool urgent);
+	unsigned int addBlock(v3POS p, std::shared_ptr<MeshMakeData> data, bool urgent);
 	std::shared_ptr<MeshMakeData> pop();
 
 	shared_unordered_map<v3s16, bool, v3POSHash, v3POSEqual> m_process;
@@ -84,9 +84,9 @@ private:
 struct MeshUpdateResult
 {
 	v3s16 p;
-	std::shared_ptr<MapBlockMesh> mesh;
+	MapBlock::mesh_type mesh;
 
-	MeshUpdateResult(v3POS & p_, std::shared_ptr<MapBlockMesh> mesh_):
+	MeshUpdateResult(v3POS & p_, MapBlock::mesh_type mesh_):
 		p(p_),
 		mesh(mesh_)
 	{
@@ -290,6 +290,7 @@ public:
 			IrrlichtDevice *device,
 			const char *playername,
 			std::string password,
+			bool is_simple_singleplayer_game,
 			MapDrawControl &control,
 			IWritableTextureSource *tsrc,
 			IWritableShaderSource *shsrc,
@@ -298,7 +299,6 @@ public:
 			ISoundManager *sound,
 			MtEventManager *event,
 			bool ipv6
-			,bool simple_singleplayer_mode
 	);
 	
 	~Client();
@@ -382,7 +382,7 @@ public:
 	int getCrackLevel();
 	void setCrack(int level, v3s16 pos);
 
-	void setHighlighted(v3s16 pos, bool show_hud);
+	void setHighlighted(v3s16 pos, bool show_higlighted);
 	v3s16 getHighlighted(){ return m_highlighted_pos; }
 
 	u16 getHP();
@@ -398,7 +398,7 @@ public:
 
 	void addUpdateMeshTask(v3s16 blockpos, bool urgent=false);
 	// Including blocks at appropriate edges
-	void addUpdateMeshTaskWithEdge(v3s16 blockpos, bool urgent=false);
+	void addUpdateMeshTaskWithEdge(v3POS blockpos, bool urgent = false);
 	void addUpdateMeshTaskForNode(v3s16 nodepos, bool urgent=false);
 
 	void updateMeshTimestampWithEdge(v3s16 blockpos);
@@ -499,7 +499,7 @@ private:
 	float m_inventory_from_server_age;
 	std::set<v3s16> m_active_blocks;
 	PacketCounter m_packetcounter;
-	bool m_show_hud;
+	bool m_show_highlighted;
 	// Block mesh animation parameters
 	float m_animation_time;
 	int m_crack_level;

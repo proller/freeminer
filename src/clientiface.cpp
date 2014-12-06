@@ -386,7 +386,7 @@ int RemoteClient::GetNextBlocks(
 				auto lock = m_blocks_sent.lock_shared_rec();
 				block_sent = m_blocks_sent.find(p) != m_blocks_sent.end() ? m_blocks_sent.get(p) : 0;
 			}
-			if(block_sent > 0 && block_sent + (d <= 2 ? 1 : d*d) > m_uptime) {
+			if(block_sent > 0 && ((block_overflow && d>1) || block_sent + (d <= 2 ? 1 : d*d) > m_uptime)) {
 				continue;
 			}
 
@@ -399,6 +399,7 @@ int RemoteClient::GetNextBlocks(
 			bool block_is_invalid = false;
 			if(block != NULL)
 			{
+
 				if (block_sent > 0 && block_sent >= block->m_changed_timestamp) {
 					continue;
 				}
@@ -538,7 +539,7 @@ queue_full_break:
 
 	//infostream<<"Stopped at "<<d<<" d_start="<<d_start<< " d_max="<<d_max<<" nearest_emerged_d="<<nearest_emerged_d<<" nearest_emergefull_d="<<nearest_emergefull_d<< " new_nearest_unsent_d="<<new_nearest_unsent_d<< " sel="<<num_blocks_selected<< "+"<<num_blocks_sending <<std::endl;
 	num_blocks_selected += num_blocks_sending;
-	if(!num_blocks_selected && d_start == d) {
+	if(!num_blocks_selected && d_start <= d) {
 		//new_nearest_unsent_d = 0;
 		m_nothing_to_send_pause_timer = 1.0;
 	}

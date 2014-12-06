@@ -78,7 +78,6 @@ ClientMap::ClientMap(
 	m_drawlist_current(0),
 	m_drawlist_last(0)
 {
-	m_drawlist_work = false;
 	m_box = core::aabbox3d<f32>(-BS*1000000,-BS*1000000,-BS*1000000,
 			BS*1000000,BS*1000000,BS*1000000);
 }
@@ -273,7 +272,6 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 
 	std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> occlude_cache;
 
-	m_drawlist_work = true;
 	while (!draw_nearest.empty()) {
 		auto ir = draw_nearest.back();
 
@@ -332,7 +330,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 			v3s16 spn = cam_pos_nodes + v3s16(0,0,0);
 			s16 bs2 = MAP_BLOCKSIZE/2 + 1;
 			u32 needed_count = 1;
-			if( range > 1 &&
+			if( range > 1 && smesh_size &&
 				occlusion_culling_enabled &&
 				isOccluded(this, spn, cpn + v3s16(0,0,0),
 					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
@@ -374,7 +372,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 				m_client->addUpdateMeshTask(bp);
 				++m_mesh_queued;
 			}
-			if (block->getTimestamp() > mesh->timestamp && (m_mesh_queued < maxq*1.5 || range <= 2)) {
+			if (block->getTimestamp() > mesh->timestamp + (smesh_size ? 0 : range >= 1 ? 60 : 5) && (m_mesh_queued < maxq*1.5 || range <= 2)) {
 				m_client->addUpdateMeshTaskWithEdge(bp);
 				++m_mesh_queued;
 			}
@@ -386,7 +384,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 
 			// Add to set
 			block->refGrab();
-			drawlist.set(bp, block.get());
+			drawlist.set(bp, block);
 
 			blocks_drawn++;
 
@@ -403,9 +401,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 	}
 	m_drawlist_last = draw_nearest.size();
 
-	m_drawlist_work = false;
-
-//if (m_drawlist_last) infostream<<"breaked UDL "<<m_drawlist_last<<" collected="<<drawlist.size()<<" calls="<<calls<<" s="<<m_blocks.size()<<" maxms="<<max_cycle_ms<<" fw="<<getControl().fps_wanted<<" morems="<<porting::getTimeMs() - end_ms<< " meshq="<<m_mesh_queued<<" occache="<<occlude_cache.size()<<std::endl;
+	//if (m_drawlist_last) infostream<<"breaked UDL "<<m_drawlist_last<<" collected="<<drawlist.size()<<" calls="<<calls<<" s="<<m_blocks.size()<<" maxms="<<max_cycle_ms<<" fw="<<getControl().fps_wanted<<" morems="<<porting::getTimeMs() - end_ms<< " meshq="<<m_mesh_queued<<" occache="<<occlude_cache.size()<<std::endl;
 
 	if (m_drawlist_last)
 		return;
@@ -552,7 +548,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 	//ScopeProfiler sp(g_profiler, prefix+"drawing blocks", SPT_AVG);
 
 	MeshBufListList drawbufs;
-
+	std::vector<MapBlock::mesh_type> used_meshes; //keep shared_ptr
 	auto drawlist = m_drawlist.load();
 	auto lock = drawlist->lock_shared_rec();
 	for(auto & ir : *drawlist) {
@@ -563,6 +559,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 		auto mapBlockMesh = block->getMesh(mesh_step);
 		if (!mapBlockMesh)
 			continue;
+		used_meshes.emplace_back(mapBlockMesh);
 
 		float d = 0.0;
 		if(isBlockInSight(block->getPos(), camera_position,
@@ -627,7 +624,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 				if(transparent == is_transparent_pass)
 				{
 					if(buf->getVertexCount() == 0)
-						errorstream<<"Block ["<<analyze_block(block)
+						errorstream<<"Block ["<<analyze_block(block.get())
 								<<"] contains an empty meshbuf"<<std::endl;
 					drawbufs.add(buf);
 				}
@@ -697,7 +694,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 				if(transparent == is_transparent_pass)
 				{
 					if(buf->getVertexCount() == 0)
-						errorstream<<"Block ["<<analyze_block(block)
+						errorstream<<"Block ["<<analyze_block(block.get())
 								<<"] contains an empty meshbuf"<<std::endl;
 					/*
 						This *shouldn't* hurt too much because Irrlicht
