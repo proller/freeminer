@@ -35,9 +35,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "gettext.h"
 
-#if USE_FREETYPE
 #include "xCGUITTFont.h"
-#endif
 
 inline u32 clamp_u8(s32 value)
 {
@@ -59,6 +57,7 @@ GUIChatConsole::GUIChatConsole(
 	m_screensize(v2u32(0,0)),
 	m_animate_time_old(0),
 	m_open(false),
+	m_close_on_return(false),
 	m_height(0),
 	m_desired_height(0),
 	m_desired_height_fraction(0.0),
@@ -99,18 +98,9 @@ GUIChatConsole::GUIChatConsole(
 	// load the font
 	// FIXME should a custom texture_path be searched too?
 	std::string font_name = g_settings->get("mono_font_path");
-	#if USE_FREETYPE
-	m_use_freetype = g_settings->getBool("freetype");
-	if (m_use_freetype) {
-		u16 font_size = g_settings->getU16("mono_font_size");
-		m_freetype_font = gui::CGUITTFont::createTTFont(env, font_name.c_str(), font_size);
-		m_font = m_freetype_font;
-	} else {
-		m_font = env->getFont(font_name.c_str());
-	}
-	#else
-	m_font = env->getFont(font_name.c_str());
-	#endif
+	u16 font_size = g_settings->getU16("mono_font_size");
+	m_freetype_font = gui::CGUITTFont::createTTFont(env, font_name.c_str(), font_size);
+	m_font = m_freetype_font;
 	if (m_font == NULL)
 	{
 		dstream << "Unable to load font: " << font_name << std::endl;
@@ -130,15 +120,13 @@ GUIChatConsole::GUIChatConsole(
 
 GUIChatConsole::~GUIChatConsole()
 {
-#if USE_FREETYPE
-	if (m_use_freetype)
-		m_font->drop();
-#endif
+	m_font->drop();
 }
 
-void GUIChatConsole::openConsole(f32 height)
+void GUIChatConsole::openConsole(float height, bool close_on_return)
 {
 	m_open = true;
+	m_close_on_return = close_on_return;
 	m_desired_height_fraction = height;
 	m_desired_height = height * m_screensize.Y;
 	reformatConsole();
@@ -339,24 +327,13 @@ void GUIChatConsole::drawText()
 			s32 x = (fragment.column + 1) * m_fontsize.X;
 			core::rect<s32> destrect(
 				x, y, x + m_fontsize.X * fragment.text.size(), y + m_fontsize.Y);
-			#if USE_FREETYPE // how about we get rid of this option?
-			if (m_freetype_font)
-				m_freetype_font->draw(
-					fragment.text.c_str(),
-					destrect,
-					fragment.text.getColors(),
-					false,
-					false,
-					&AbsoluteClippingRect);
-			else
-			#endif
-				m_font->draw(
-					fragment.text.c_str(),
-					destrect,
-					video::SColor(255, 255, 255, 255),
-					false,
-					false,
-					&AbsoluteClippingRect);
+			m_freetype_font->draw(
+				fragment.text.c_str(),
+				destrect,
+				fragment.text.getColors(),
+				false,
+				false,
+				&AbsoluteClippingRect);
 		}
 	}
 }
@@ -413,6 +390,16 @@ void GUIChatConsole::drawPrompt()
 
 }
 
+void GUIChatConsole::setPrompt(const std::wstring& input) {
+	m_chat_backend->getPrompt().cursorOperation(
+			ChatPrompt::CURSOROP_DELETE,
+			ChatPrompt::CURSOROP_DIR_LEFT,
+			ChatPrompt::CURSOROP_SCOPE_LINE);
+	for (unsigned int i = 0; i < input.size(); i++) {
+		m_chat_backend->getPrompt().input(input[i]);
+	}
+}
+
 bool GUIChatConsole::OnEvent(const SEvent& event)
 {
 	if(event.EventType == EET_KEY_INPUT_EVENT && event.KeyInput.PressedDown)
@@ -434,12 +421,12 @@ bool GUIChatConsole::OnEvent(const SEvent& event)
 			// the_game will open the pause menu
 			return true;
 		}
-		else if(event.KeyInput.Key == KEY_PRIOR)
+		else if(event.KeyInput.Key == KEY_PRIOR && event.KeyInput.Char == 0)
 		{
 			m_chat_backend->scrollPageUp();
 			return true;
 		}
-		else if(event.KeyInput.Key == KEY_NEXT)
+		else if(event.KeyInput.Key == KEY_NEXT && event.KeyInput.Char == 0)
 		{
 			m_chat_backend->scrollPageDown();
 			return true;
@@ -448,23 +435,28 @@ bool GUIChatConsole::OnEvent(const SEvent& event)
 		{
 			std::wstring text = m_chat_backend->getPrompt().submit();
 			m_client->typeChatMessage(text);
+
+			if (m_close_on_return) {
+				closeConsole();
+				Environment->removeFocus(this);
+			}
 			return true;
 		}
-		else if(event.KeyInput.Key == KEY_UP)
+		else if(event.KeyInput.Key == KEY_UP && event.KeyInput.Char == 0)
 		{
 			// Up pressed
 			// Move back in history
 			m_chat_backend->getPrompt().historyPrev();
 			return true;
 		}
-		else if(event.KeyInput.Key == KEY_DOWN)
+		else if(event.KeyInput.Key == KEY_DOWN && event.KeyInput.Char == 0)
 		{
 			// Down pressed
 			// Move forward in history
 			m_chat_backend->getPrompt().historyNext();
 			return true;
 		}
-		else if(event.KeyInput.Key == KEY_LEFT)
+		else if(event.KeyInput.Key == KEY_LEFT && event.KeyInput.Char == 0)
 		{
 			// Left or Ctrl-Left pressed
 			// move character / word to the left
@@ -478,7 +470,7 @@ bool GUIChatConsole::OnEvent(const SEvent& event)
 				scope);
 			return true;
 		}
-		else if(event.KeyInput.Key == KEY_RIGHT)
+		else if(event.KeyInput.Key == KEY_RIGHT && event.KeyInput.Char == 0)
 		{
 			// Right or Ctrl-Right pressed
 			// move character / word to the right
@@ -492,7 +484,7 @@ bool GUIChatConsole::OnEvent(const SEvent& event)
 				scope);
 			return true;
 		}
-		else if(event.KeyInput.Key == KEY_HOME)
+		else if(event.KeyInput.Key == KEY_HOME && event.KeyInput.Char == 0)
 		{
 			// Home pressed
 			// move to beginning of line
@@ -502,7 +494,7 @@ bool GUIChatConsole::OnEvent(const SEvent& event)
 				ChatPrompt::CURSOROP_SCOPE_LINE);
 			return true;
 		}
-		else if(event.KeyInput.Key == KEY_END)
+		else if(event.KeyInput.Key == KEY_END && event.KeyInput.Char == 0)
 		{
 			// End pressed
 			// move to end of line
@@ -526,7 +518,7 @@ bool GUIChatConsole::OnEvent(const SEvent& event)
 				scope);
 			return true;
 		}
-		else if(event.KeyInput.Key == KEY_DELETE)
+		else if(event.KeyInput.Key == KEY_DELETE && (event.KeyInput.Char == 0 || event.KeyInput.Char == 127))
 		{
 			// Delete or Ctrl-Delete pressed
 			// delete character / word to the right

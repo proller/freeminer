@@ -167,16 +167,15 @@ int ModApiEnvMod::l_get_node_or_nil(lua_State *L)
 	// pos
 	v3s16 pos = read_v3s16(L, 1);
 	// Do it
-	try{
-		MapNode n = env->getMap().getNode(pos);
+	bool pos_ok;
+	MapNode n = env->getMap().getNodeNoEx(pos, &pos_ok);
+	if (pos_ok) {
 		// Return node
 		pushnode(L, n, env->getGameDef()->ndef());
-		return 1;
-	} catch(InvalidPositionException &e)
-	{
+	} else {
 		lua_pushnil(L);
-		return 1;
 	}
+	return 1;
 }
 
 // get_node_light(pos, timeofday)
@@ -193,16 +192,16 @@ int ModApiEnvMod::l_get_node_light(lua_State *L)
 		time_of_day = 24000.0 * lua_tonumber(L, 2);
 	time_of_day %= 24000;
 	u32 dnr = time_to_daynight_ratio(time_of_day, true);
-	try{
-		MapNode n = env->getMap().getNode(pos);
+
+	bool is_position_ok;
+	MapNode n = env->getMap().getNodeNoEx(pos, &is_position_ok);
+	if (is_position_ok) {
 		INodeDefManager *ndef = env->getGameDef()->ndef();
 		lua_pushinteger(L, n.getLightBlend(dnr, ndef));
-		return 1;
-	} catch(InvalidPositionException &e)
-	{
+	} else {
 		lua_pushnil(L);
-		return 1;
 	}
+	return 1;
 }
 
 // place_node(pos, node)
@@ -447,19 +446,6 @@ int ModApiEnvMod::l_add_item(lua_State *L)
 		script_error(L);
 	lua_remove(L, errorhandler); // Remove error handler
 	return 1;
-	/*lua_pushvalue(L, 1);
-	lua_pushstring(L, "__builtin:item");
-	lua_pushstring(L, item.getItemString().c_str());
-	return l_add_entity(L);*/
-	/*// Do it
-	ServerActiveObject *obj = createItemSAO(env, pos, item.getItemString());
-	int objectid = env->addActiveObject(obj);
-	// If failed to add, return nothing (reads as nil)
-	if(objectid == 0)
-		return 0;
-	// Return ObjectRef
-	objectrefGetOrCreate(L, obj);
-	return 1;*/
 }
 
 // get_player_by_name(name)
@@ -838,7 +824,7 @@ int ModApiEnvMod::l_transforming_liquid_add(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	auto pos = read_v3s16(L, 1);
+	auto pos = read_v3POS(L, 1);
 	env->getMap().transforming_liquid_push_back(pos);
 	return 1;
 }
@@ -849,7 +835,7 @@ int ModApiEnvMod::l_get_heat(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	auto pos = read_v3s16(L, 1);
+	auto pos = read_v3POS(L, 1);
 	lua_pushnumber(L, env->getServerMap().updateBlockHeat(env, pos));
 	return 1;
 }
@@ -860,7 +846,7 @@ int ModApiEnvMod::l_get_humidity(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	auto pos = read_v3s16(L, 1);
+	auto pos = read_v3POS(L, 1);
 	lua_pushnumber(L, env->getServerMap().updateBlockHumidity(env, pos));
 	return 1;
 }

@@ -29,6 +29,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "serialization.h" // For ser_ver_supported
 #include "util/serialize.h"
 #include "log.h"
+#include "util/numeric.h"
 #include <string>
 #include <sstream>
 
@@ -80,19 +81,14 @@ u8 MapNode::getLight(enum LightBank bank, INodeDefManager *nodemgr) const
 {
 	// Select the brightest of [light source, propagated light]
 	const ContentFeatures &f = nodemgr->get(*this);
-	u8 light = 0;
+
+	u8 light;
 	if(f.param_type == CPT_LIGHT)
-	{
-		if(bank == LIGHTBANK_DAY)
-			light = param1 & 0x0f;
-		else if(bank == LIGHTBANK_NIGHT)
-			light = (param1>>4)&0x0f;
-		else
-			assert(0);
-	}
-	if(f.light_source > light)
-		light = f.light_source;
-	return light;
+		light = bank == LIGHTBANK_DAY ? param1 & 0x0f : (param1 >> 4) & 0x0f;
+	else
+		light = 0;
+
+	return MYMAX(f.light_source, light);
 }
 
 bool MapNode::getLightBanks(u8 &lightday, u8 &lightnight, INodeDefManager *nodemgr) const
@@ -482,6 +478,24 @@ u32 MapNode::serializedLength(u8 version)
 		return 3;
 	else
 		return 4;
+}
+void MapNode::msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const
+{
+	pk.pack_array(3);
+	pk.pack(param0);
+	pk.pack(param1);
+	pk.pack(param2);
+}
+void MapNode::msgpack_unpack(msgpack::object o)
+{
+	std::vector<int> data;
+	o.convert(&data);
+	if (data.size() < 3)
+		throw msgpack::type_error();
+
+	param0 = data[0];
+	param1 = data[1];
+	param2 = data[2];
 }
 void MapNode::serialize(u8 *dest, u8 version)
 {

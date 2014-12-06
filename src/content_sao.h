@@ -29,9 +29,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "player.h"
 #include "object_properties.h"
 
-ServerActiveObject* createItemSAO(ServerEnvironment *env, v3f pos,
-                                  const std::string &itemstring);
-
 /*
 	LuaEntitySAO needs some internals exposed.
 */
@@ -291,7 +288,9 @@ private:
 	// Cheat prevention
 	LagPool m_dig_pool;
 	LagPool m_move_pool;
+public:
 	v3f m_last_good_position;
+private:
 	float m_time_from_last_punch;
 	v3s16 m_nocheat_dig_pos;
 	float m_nocheat_dig_time;

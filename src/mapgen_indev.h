@@ -23,6 +23,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef MAPGENINDEV_HEADER
 #define MAPGENINDEV_HEADER
 
+#include "json/json.h"
 #include "mapgen.h"
 #include "mapgen_v6.h"
 #include "cavegen.h"
@@ -30,12 +31,14 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #define getNoiseIndevParams(x, y) getStruct((x), "f,f,v3,s32,s32,f,f,f,f", &(y), sizeof(y))
 #define setNoiseIndevParams(x, y) setStruct((x), "f,f,v3,s32,s32,f,f,f,f", &(y))
 
+
 typedef struct {
 	content_t content;
 	MapNode node;
 	int height_min;
 	int height_max;
 	int thickness;
+	//std::string name; //dev
 } layer_data;
 
 class Mapgen_features {
@@ -46,12 +49,13 @@ public:
 
 	MapNode n_stone;
 	Noise *noise_layers;
+	float noise_layers_width;
 	std::vector<layer_data> layers;
 	std::vector<MapNode> layers_node;
 	unsigned int layers_node_size;
 	void layers_init(EmergeManager *emerge, const Json::Value & layersj);
 	void layers_prepare(const v3POS & node_min, const v3POS & node_max);
-	MapNode layers_get(int index);
+	MapNode layers_get(unsigned int index);
 
 	Noise *noise_float_islands1;
 	Noise *noise_float_islands2;
@@ -89,7 +93,7 @@ public:
 	MapgenIndev(int mapgenid, MapgenParams *params, EmergeManager *emerge);
 	~MapgenIndev();
 
-	void calculateNoise();
+	virtual void calculateNoise();
 	int generateGround();
 	void generateCaves(int max_stone_y);
 	void generateExperimental();

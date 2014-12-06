@@ -171,15 +171,16 @@ const std::string serialize(const std::vector<ServerListSpec> &serverlist)
 }
 
 
-#if USE_CURL
 void sendAnnounce(const std::string &action,
 		const std::vector<std::string> &clients_names,
 		const double uptime,
 		const u32 game_time,
 		const float lag,
 		const std::string &gameid,
+		const std::string &mg_name,
 		const std::vector<ModSpec> &mods)
 {
+#if USE_CURL
 	Json::Value server;
 	server["action"] = action;
 	server["port"]    = g_settings->getU16("port");
@@ -213,7 +214,7 @@ void sendAnnounce(const std::string &action,
 	if (action == "start") {
 		server["dedicated"]         = g_settings->getBool("server_dedicated");
 		server["rollback"]          = g_settings->getBool("enable_rollback_recording");
-		server["mapgen"]            = g_settings->get("mg_name");
+		server["mapgen"]            = mg_name;
 		server["privs"]             = g_settings->get("default_privs");
 		server["can_see_far_names"] = g_settings->getS16("player_transfer_distance") <= 0;
 		server["liquid_real"]       = g_settings->getBool("liquid_real");
@@ -246,7 +247,7 @@ void sendAnnounce(const std::string &action,
 */
 
 	httpfetch_async(fetch_request);
-}
 #endif
+}
 
 } //namespace ServerList

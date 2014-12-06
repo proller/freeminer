@@ -72,6 +72,8 @@ freetype = "freetype-2.5.2"
 luajit = "LuaJIT-2.0.2"
 gettext = "gettext-0.13.1"
 libiconv = "libiconv-1.9.1"
+MSGPACK_VERSION = "c4df1ba6cc6ed2f3ef937e4b10ade41b376f3a01"
+msgpack = "msgpack-c-{}".format(MSGPACK_VERSION)
 
 def main():
 	build_type = "Release"
@@ -79,11 +81,13 @@ def main():
 		build_type = "Debug"
 	msbuild = which("MSBuild.exe")
 	cmake = which("cmake.exe")
+	vcbuild = which("vcbuild.exe")
 	if not msbuild:
 		print("MSBuild.exe not found! Make sure you run 'Visual Studio Command Prompt', not cmd.exe")
 		return
 	if not cmake:
 		print("cmake.exe not found! Make sure you have CMake installed and added to PATH.")
+		return
 	print("Found msbuild: {}\nFound cmake: {}".format(msbuild, cmake))
 
 	print("Build type: {}".format(build_type))
@@ -233,11 +237,26 @@ def main():
 		
 		os.chdir("..")
 
+	if not os.path.exists(msgpack):
+		print("msgpack not found, downloading")
+		download("https://github.com/freeminer/msgpack-c/archive/{}.zip".format(MSGPACK_VERSION), "msgpack.zip")
+		extract_zip("msgpack.zip", ".")
+		os.chdir(msgpack)
+		patch(os.path.join("src", "msgpack", "type.hpp"), '#include "type/tr1/unordered_map.hpp"', '// #include "type/tr1/unordered_map.hpp"')
+		patch(os.path.join("src", "msgpack", "type.hpp"), '#include "type/tr1/unordered_set.hpp"', '// #include "type/tr1/unordered_set.hpp"')
+		patch("msgpack_vc2008.vcproj", 'RuntimeLibrary="2"', 'RuntimeLibrary="0"')
+		patch("msgpack_vc2008.vcproj", 'RuntimeLibrary="3"', 'RuntimeLibrary="1"')
+		# use newer compiler, won't link otherwise
+		os.system("vcupgrade msgpack_vc2008.vcproj")
+		os.system("MSBuild msgpack_vc2008.vcxproj /p:Configuration={}".format(build_type))
+		os.chdir("..")
+
 	if not os.path.exists("leveldb.nupkg"):
 		print("Downloading LevelDB + dependencies from NuGet")
 		download("http://www.nuget.org/api/v2/package/LevelDB/{}".format(LEVELDB_VERSION), "leveldb.nupkg")
 		download("http://www.nuget.org/api/v2/package/Crc32C/{}".format(CRC32C_VERSION), "crc32c.nupkg")
 		download("http://www.nuget.org/api/v2/package/Snappy/{}".format(SNAPPY_VERSION), "snappy.nupkg")		
+
 	
 	os.chdir("..")
 	
@@ -282,6 +301,8 @@ def main():
 		-DGETTEXT_MSGFMT=C:\usr\bin\msgfmt.exe
 		-DENABLE_GETTEXT=1
 		-DENABLE_LEVELDB=1
+		-DMSGPACK_INCLUDE_DIR=..\deps\{msgpack}\include\
+		-DMSGPACK_LIBRARY=..\deps\{msgpack}\lib\msgpack{msgpack_suffix}.lib
 		-DFORCE_LEVELDB=1
 	""".format(
 		curl_lib="libcurl_a.lib" if build_type != "Debug" else "libcurl_a_debug.lib",
@@ -294,12 +315,17 @@ def main():
 		openal=openal,
 		libogg=libogg,
 		libvorbis=libvorbis,
-		curl=curl
+		curl=curl,
+		msgpack=msgpack,
+		msgpack_suffix="d" if build_type == "Debug" else ""
 	).replace("\n", "")
 	
 	os.system(r"cmake ..\..\.. " + cmake_string)
 	patch(os.path.join("src", "freeminer.vcxproj"), "</AdditionalLibraryDirectories>", r";$(DXSDK_DIR)\Lib\x86</AdditionalLibraryDirectories>")
 	patch(os.path.join("src", "sqlite", "sqlite3.vcxproj"), "MultiThreadedDebugDLL", "MultiThreadedDebug")
+	# wtf, cmake?
+	patch(os.path.join("src", "enet", "enet.vcxproj"), "<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreaded</RuntimeLibrary>")
+	patch(os.path.join("src", "enet", "enet.vcxproj"), "<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>")
 
 	# install LevelDB package
 	os.system(r"..\NuGet.exe install LevelDB -source {}\..\deps".format(os.getcwd()))

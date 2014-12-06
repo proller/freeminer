@@ -6,12 +6,12 @@ Copyright (C) 2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 /*
 This file is part of Freeminer.
 
-Freeminer is free software: you can redistribute it and/or modify
+Freeminer is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-Freeminer  is distributed in the hope that it will be useful,
+This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
@@ -24,6 +24,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "porting.h"
 #include "filesys.h"
 #include "config.h"
+#include "connection.h" // ENET_IPV6
 #include "constants.h"
 #include "porting.h"
 
@@ -121,6 +122,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("keymap_inventory", "KEY_KEY_I");
 	settings->setDefault("keymap_special1", "KEY_KEY_E");
 	settings->setDefault("keymap_chat", "KEY_KEY_T");
+	settings->setDefault("keymap_msg", "@");
 	settings->setDefault("keymap_cmd", "/");
 #if IRRLICHT_VERSION_10000  >= 10703
 	settings->setDefault("keymap_console", "KEY_OEM_3");
@@ -157,7 +159,8 @@ void set_default_settings(Settings *settings)
 	// Connecting to server
 	settings->setDefault("address", "");
 	settings->setDefault("remote_port", "30000");
-	
+	settings->setDefault("reconnects", "10");
+
 	// Connecting to curl
 	settings->setDefault("curl_timeout", "5000");
 	settings->setDefault("curl_parallel_limit", "8");
@@ -167,8 +170,6 @@ void set_default_settings(Settings *settings)
 	//
 	// Fonts
 	//
-#if USE_FREETYPE
-	settings->setDefault("freetype", "true");
 	settings->setDefault("font_path", porting::getDataPath("fonts" DIR_DELIM "liberationsans.ttf"));
 	settings->setDefault("font_shadow", "1");
 	settings->setDefault("font_shadow_alpha", "128");
@@ -177,11 +178,6 @@ void set_default_settings(Settings *settings)
 
 	settings->setDefault("fallback_font_shadow", "1");
 	settings->setDefault("fallback_font_shadow_alpha", "128");
-#else
-	settings->setDefault("freetype", "false");
-	settings->setDefault("font_path", porting::getDataPath("fonts" DIR_DELIM "fontlucida.png"));
-	settings->setDefault("mono_font_path", porting::getDataPath("fonts" DIR_DELIM "fontdejavusansmono.png"));
-#endif
 
 	//
 	// Map generation
@@ -311,7 +307,8 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("repeat_rightclick_time", "0.25");
 	settings->setDefault("random_input", "false");
 	settings->setDefault("respawn_auto", "false");
-	settings->setDefault("enable_vbo", "true");
+	settings->setDefault("enable_vbo", "false");
+	settings->setDefault("enable_local_map_saving", "false");
 	
 	//
 	// Server stuff
@@ -319,8 +316,7 @@ void set_default_settings(Settings *settings)
 	
 	// Announcing and connection
 	settings->setDefault("server_announce", "false");
-	settings->setDefault("serverlist_url", "servers.minetest.net");
-	//settings->setDefault("serverlist_url", "servers.freeminer.org"); // uncomment after protocol change
+	settings->setDefault("serverlist_url", "servers.freeminer.org");
 	settings->setDefault("server_address", "");
 	settings->setDefault("bind_address", "");
 	settings->setDefault("port", "30000");
@@ -428,7 +424,7 @@ void set_default_settings(Settings *settings)
 
 	settings->setDefault("more_threads", win32 ? "false" : "true");
 
-#if !defined(_WIN32) && !CMAKE_USE_IPV4_DEFAULT
+#if !defined(_WIN32) && !CMAKE_USE_IPV4_DEFAULT && ENET_IPV6
 	settings->setDefault("ipv6_server", "true"); // problems on all windows versions (unable to play in local game)
 #endif
 
@@ -448,7 +444,6 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("enable_particles", "false");
 	settings->setDefault("video_driver", "ogles1");
 	settings->setDefault("touchtarget", "true");
-	settings->setDefault("main_menu_script","/sdcard/freeminer/builtin/mainmenu/init_android.lua");
 	settings->setDefault("TMPFolder","/sdcard/freeminer/tmp/");
 	settings->setDefault("touchscreen_threshold","20");
 	settings->setDefault("smooth_lighting", "false");

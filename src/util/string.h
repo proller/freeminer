@@ -40,9 +40,17 @@ struct FlagDesc {
 	u32 flag;
 };
 
+// try not to convert between wide/utf8 encodings; this can result in data loss
+// try to only convert between them when you need to input/output stuff via Irrlicht
+std::wstring utf8_to_wide(const std::string &input);
+std::string wide_to_utf8(const std::wstring &input);
+
+// NEVER use those two functions unless you have a VERY GOOD reason to
+// they just convert between wide and multibyte encoding
+// multibyte encoding depends on current locale, this is no good, especially on Windows
 std::wstring narrow_to_wide(const std::string& mbs);
 std::string wide_to_narrow(const std::wstring& wcs);
-std::string translatePassword(std::string playername, std::wstring password);
+std::string translatePassword(std::string playername, std::string password);
 std::string urlencode(std::string str);
 std::string urldecode(std::string str);
 u32 readFlagString(std::string str, const FlagDesc *flagdesc, u32 *flagmask);
@@ -216,11 +224,11 @@ inline std::string trim(const std::string &s)
 {
 	size_t front = 0;
 
-	while (isspace(s[front]))
+	while (std::isspace(s[front]))
 		++front;
 
 	size_t back = s.size();
-	while (back > front && isspace(s[back-1]))
+	while (back > front && std::isspace(s[back-1]))
 		--back;
 
 	return s.substr(front, back - front);
@@ -299,7 +307,7 @@ inline s32 mystoi(const std::string &s)
  */
 inline s32 mystoi(const std::wstring &s)
 {
-	return atoi(wide_to_narrow(s).c_str());
+	return atoi(wide_to_utf8(s).c_str());
 }
 
 
@@ -485,12 +493,11 @@ inline std::string unescape_string(std::string &s)
 inline bool is_number(const std::string &tocheck)
 {
 	for (size_t i = 0; i < tocheck.size(); i++)
-	    if (!isdigit(tocheck[i]))
+	    if (!std::isdigit(tocheck[i]))
 	        return false;
 
 	return !tocheck.empty();
 }
-
 
 /**
  * Returns a C-string, either "true" or "false", corresponding to v

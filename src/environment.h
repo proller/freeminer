@@ -41,6 +41,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/numeric.h"
 #include "mapnode.h"
 #include "mapblock.h"
+#include "connection.h"
 #include "fmbitset.h"
 #include "util/lock.h"
 #include <unordered_set>
@@ -455,7 +456,7 @@ private:
 	u32 m_blocks_added_last;
 	// Time from the beginning of the game in seconds.
 	// Incremented in step().
-	u32 m_game_time;
+	std::atomic_uint m_game_time;
 	// A helper variable for incrementing the latter
 	float m_game_time_fraction_counter;
 	std::list<ABMWithState> m_abms;

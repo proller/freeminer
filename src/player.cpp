@@ -51,7 +51,6 @@ Player::Player(IGameDef *gamedef, const std::string & name):
 	superspeed(false),
 	free_move(false),
 	movement_fov(0),
-	peer_id(PEER_ID_INEXISTENT),
 	keyPressed(0),
 // protected
 	m_gamedef(gamedef),
@@ -62,6 +61,7 @@ Player::Player(IGameDef *gamedef, const std::string & name):
 	m_position(0,0,0),
 	m_collisionbox(-BS*0.30,0.0,-BS*0.30,BS*0.30,BS*1.75,BS*0.30)
 {
+	peer_id = PEER_ID_INEXISTENT;
 	m_name = name;
 
 	inventory.clear();
@@ -219,7 +219,7 @@ void Player::deSerialize(std::istream &is, std::string playername)
 
 	//args.getS32("version"); // Version field value not used
 	std::string name = args.get("name");
-	name = m_name;
+	m_name = name;
 	setPitch(args.getFloat("pitch"));
 	setYaw(args.getFloat("yaw"));
 	setPosition(args.getV3F("position"));

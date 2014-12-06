@@ -30,6 +30,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <string>
 #include <vector>
 #include <list>
+#include <msgpack.hpp>
 
 class INodeDefManager;
 
@@ -58,13 +59,13 @@ typedef u16 content_t;
 	(instead of expanding the vector of node definitions each time
 	such a node is received).
 */
-#define CONTENT_UNKNOWN 125
+#define CONTENT_UNKNOWN 2
 
 /*
 	The common material through which the player can walk and which
 	is transparent to light
 */
-#define CONTENT_AIR 126
+#define CONTENT_AIR 1
 
 /*
 	Ignored node.
@@ -76,7 +77,7 @@ typedef u16 content_t;
 	Doesn't create faces with anything and is considered being
 	out-of-map in the game map.
 */
-#define CONTENT_IGNORE 127
+#define CONTENT_IGNORE 0
 
 enum LightBank
 {
@@ -244,6 +245,8 @@ struct MapNode
 	u8 addLevel(INodeDefManager *nodemgr, s8 add = 1, bool compress = 0);
 	int freeze_melt(INodeDefManager *nodemgr, int direction = 0);
 
+	bool operator!() { return param0 == CONTENT_IGNORE; };
+
 	/*
 		Serialization functions
 	*/
@@ -265,6 +268,9 @@ struct MapNode
 	static void deSerializeBulk(std::istream &is, int version,
 			MapNode *nodes, u32 nodecount,
 			u8 content_width, u8 params_width, bool compressed);
+
+	void msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const;
+	void msgpack_unpack(msgpack::object o);
 
 private:
 	// Deprecated serialization methods

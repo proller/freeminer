@@ -48,7 +48,7 @@ class ServerMapSector;
 class MapBlock;
 class NodeMetadata;
 class IGameDef;
-class IRollbackReportSink;
+class IRollbackManager;
 class EmergeManager;
 class ServerEnvironment;
 struct BlockMakeData;
@@ -177,7 +177,7 @@ public:
 	// Returns InvalidPositionException if not found
 	MapBlock * getBlockNoCreate(v3s16 p);
 	// Returns NULL if not found
-	MapBlock * getBlockNoCreateNoEx(v3s16 p, bool trylock = false, bool nocache = false);
+	MapBlock * getBlockNoCreateNoEx(v3POS p, bool trylock = false, bool nocache = false);
 
 	/* Server overrides */
 	virtual MapBlock * emergeBlock(v3s16 p, bool allow_generate=true)
@@ -189,15 +189,16 @@ public:
 	bool isValidPosition(v3s16 p);
 
 	// throws InvalidPositionException if not found
-	MapNode getNode(v3s16 p);
-
-	// throws InvalidPositionException if not found
 	void setNode(v3s16 p, MapNode & n);
 
 	// Returns a CONTENT_IGNORE node if not found
-	MapNode getNodeNoEx(v3s16 p);
 	MapNode getNodeTry(v3s16 p);
 	//MapNode getNodeNoLock(v3s16 p); // dont use
+	// If is_valid_position is not NULL then this will be set to true if the
+	// position is valid, otherwise false
+	MapNode getNodeNoEx(v3s16 p, bool *is_valid_position = NULL);
+	MapNode getNode(v3POS p) { return getNodeNoEx(p); };
+	//MapNode getNodeLog(v3POS p);
 
 	void unspreadLight(enum LightBank bank,
 			std::map<v3s16, u8> & from_nodes,
@@ -283,8 +284,8 @@ public:
 	// For debug printing. Prints "Map: ", "ServerMap: " or "ClientMap: "
 	virtual void PrintInfo(std::ostream &out);
 
-	u32 transformLiquids(Server *m_server, std::map<v3s16, MapBlock*> & modified_blocks, shared_map<v3s16, MapBlock*> & lighting_modified_blocks, int max_cycle_ms);
-	u32 transformLiquidsReal(Server *m_server, std::map<v3s16, MapBlock*> & modified_blocks, shared_map<v3s16, MapBlock*> & lighting_modified_blocks, int max_cycle_ms);
+	u32 transformLiquids(Server *m_server, int max_cycle_ms);
+	u32 transformLiquidsReal(Server *m_server, int max_cycle_ms);
 	/*
 		Node metadata
 		These are basically coordinate wrappers to MapBlock
@@ -368,6 +369,7 @@ protected:
 	// Queued transforming water nodes
 public:
 	shared_unordered_map<v3POS, bool, v3POSHash, v3POSEqual> m_transforming_liquid;
+	shared_map<v3POS, MapBlock*> lighting_modified_blocks;
 protected:
 };
 
@@ -466,8 +468,8 @@ public:
 	u64 getSeed();
 	s16 getWaterLevel();
 
-	virtual s16 updateBlockHeat(ServerEnvironment *env, v3s16 p, MapBlock *block = nullptr, std::map<v3s16, s16> *cache = nullptr);
-	virtual s16 updateBlockHumidity(ServerEnvironment *env, v3s16 p, MapBlock *block = nullptr, std::map<v3s16, s16> *cache = nullptr);
+	virtual s16 updateBlockHeat(ServerEnvironment *env, v3POS p, MapBlock *block = nullptr, std::map<v3POS, s16> *cache = nullptr);
+	virtual s16 updateBlockHumidity(ServerEnvironment *env, v3POS p, MapBlock *block = nullptr, std::map<v3POS, s16> *cache = nullptr);
 
 	//getSurface level starting on basepos.y up to basepos.y + searchup
 	//returns basepos.y -1 if no surface has been found

@@ -43,6 +43,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mapgen_v7.h"
 #include "mapgen_indev.h" //farscale
 #include "environment.h"
+#include "log_types.h"
+
 
 
 FlagDesc flagdesc_mapgen_v7[] = {
@@ -60,7 +62,7 @@ MapgenV7::MapgenV7(int mapgenid, MapgenParams *params, EmergeManager *emerge):
 	this->generating  = false;
 	this->id     = mapgenid;
 	this->emerge = emerge;
-	this->bmgr   = emerge->biomedef;
+	this->bmgr   = emerge->biomemgr;
 
 	this->seed        = (int)params->seed;
 	this->water_level = params->water_level;
@@ -79,6 +81,7 @@ MapgenV7::MapgenV7(int mapgenid, MapgenParams *params, EmergeManager *emerge):
 	this->ridge_heightmap = new s16[csize.X * csize.Z];
 
 	MapgenV7Params *sp = (MapgenV7Params *)params->sparams;
+	this->spflags = sp->spflags;
 
 	//// Terrain noise
 	noise_terrain_base    = new Noise(&sp->np_terrain_base,    seed, csize.X, csize.Z);
@@ -158,10 +161,10 @@ MapgenV7Params::MapgenV7Params() {
 	np_ridge           = NoiseParams(0,    1,   v3f(100, 100, 100), 6467,  4, 0.75);
 
 	float_islands = 500;
-	np_float_islands1  = NoiseParams(0,    1,   v3f(256, 256, 256), 3683,  6, 0.6,  1,   1.5);
-	np_float_islands2  = NoiseParams(0,    1,   v3f(8,   8,   8  ), 9292,  2, 0.5,  1,   1.5);
-	np_float_islands3  = NoiseParams(0,    1,   v3f(256, 256, 256), 6412,  2, 0.5,  1,   0.5);
-	np_layers          = NoiseParams(500,  500, v3f(500, 500, 500), 3663,  2, 0.4);
+	np_float_islands1  = NoiseParams(0,    1,   v3f(256, 256, 256), 3683,  6, 0.6,  false, 1,   1.5);
+	np_float_islands2  = NoiseParams(0,    1,   v3f(8,   8,   8  ), 9292,  2, 0.5,  false, 1,   1.5);
+	np_float_islands3  = NoiseParams(0,    1,   v3f(256, 256, 256), 6412,  2, 0.5,  false, 1,   0.5);
+	np_layers          = NoiseParams(500,  500, v3f(100, 50,  100), 3663,  5, 0.6,  false, 1,   5,   0.5);
 }
 
 
@@ -184,7 +187,6 @@ void MapgenV7Params::readParams(Settings *settings) {
 	settings->getNoiseIndevParams("mg_np_float_islands3", np_float_islands3);
 	settings->getNoiseIndevParams("mg_np_layers",         np_layers);
 	paramsj = settings->getJson("mg_params", paramsj);
-
 }
 
 
@@ -206,6 +208,8 @@ void MapgenV7Params::writeParams(Settings *settings) {
 	settings->setNoiseIndevParams("mg_np_float_islands2", np_float_islands2);
 	settings->setNoiseIndevParams("mg_np_float_islands3", np_float_islands3);
 	settings->setNoiseIndevParams("mg_np_layers",         np_layers);
+
+	settings->setJson("mg_params", paramsj);
 }
 
 
@@ -264,6 +268,13 @@ void MapgenV7::makeChunk(BlockMakeData *data) {
 	
 	// Make some noise
 	calculateNoise();
+
+	if (float_islands && node_max.Y >= float_islands) {
+		float_islands_prepare(node_min, node_max, float_islands);
+	}
+
+	layers_prepare(node_min, node_max);
+
 	
 	// Generate base terrain, mountains, and ridges with initial heightmaps
 	s16 stone_surface_max_y = generateTerrain();
@@ -271,12 +282,8 @@ void MapgenV7::makeChunk(BlockMakeData *data) {
 	updateHeightmap(node_min, node_max);
 	
 	// Calculate biomes
-	BiomeNoiseInput binput;
-	binput.mapsize      = v2s16(csize.X, csize.Z);
-	binput.heat_map     = noise_heat->result;
-	binput.humidity_map = noise_humidity->result;
-	binput.height_map   = heightmap;
-	bmgr->calcBiomes(&binput, biomemap);
+	bmgr->calcBiomes(csize.X, csize.Z, noise_heat->result,
+		noise_humidity->result, heightmap, biomemap);
 	
 	// Actually place the biome-specific nodes and what not
 	generateBiomes();
@@ -291,16 +298,12 @@ void MapgenV7::makeChunk(BlockMakeData *data) {
 		dgen.generate(blockseed, full_node_min, full_node_max);
 	}
 
-	for (size_t i = 0; i != emerge->decorations.size(); i++) {
-		Decoration *deco = emerge->decorations[i];
-		deco->placeDeco(this, blockseed + i, node_min, node_max);
-	}
+	// Generate the registered decorations
+	emerge->decomgr->placeAllDecos(this, blockseed, node_min, node_max);
 
-	for (size_t i = 0; i != emerge->ores.size(); i++) {
-		Ore *ore = emerge->ores[i];
-		ore->placeOre(this, blockseed + i, node_min, node_max);
-	}
-	
+	// Generate the registered ores
+	emerge->oremgr->placeAllOres(this, blockseed, node_min, node_max);
+
 	// Sprinkle some dust on top after everything else was generated
 	dustTopNodes();
 	
@@ -355,12 +358,6 @@ void MapgenV7::calculateNoise() {
 	noise_heat->perlinMap2D(x, z);
 	noise_humidity->perlinMap2D(x, z);
 	
-	if (float_islands && y >= float_islands) {
-		float_islands_prepare(node_min, node_max, float_islands);
-	}
-
-	layers_prepare(node_min, node_max);
-
 	//printf("calculateNoise: %dus\n", t.stop());
 }
 
@@ -601,11 +598,11 @@ void MapgenV7::generateBiomes() {
 	
 	for (s16 z = node_min.Z; z <= node_max.Z; z++)
 	for (s16 x = node_min.X; x <= node_max.X; x++, index++) {
-		Biome *biome  = bmgr->biomes[biomemap[index]];
+		Biome *biome  = (Biome *)bmgr->get(biomemap[index]);
 		s16 dfiller   = biome->depth_filler + noise_filler_depth->result[index];
 		s16 y0_top    = biome->depth_top;
 		s16 y0_filler = biome->depth_filler + biome->depth_top + dfiller;
-		
+
 		s16 nplaced = 0;
 		u32 i = vm->m_area.index(x, node_max.Y, z);	
 
@@ -627,7 +624,7 @@ void MapgenV7::generateBiomes() {
 				have_air = !getMountainTerrainFromMap(j, index, y);
 			}
 			
-			if (c == c_stone && have_air) {
+			if (c != CONTENT_AIR && c != c_water_source && have_air) {
 				content_t c_below = vm->m_data[i - em.X].getContent();
 				
 				if (c_below != CONTENT_AIR) {
@@ -671,7 +668,7 @@ void MapgenV7::dustTopNodes() {
 
 	for (s16 z = node_min.Z; z <= node_max.Z; z++)
 	for (s16 x = node_min.X; x <= node_max.X; x++, index++) {
-		Biome *biome = bmgr->biomes[biomemap[index]];
+		Biome *biome = (Biome *)bmgr->get(biomemap[index]);
 	
 		if (biome->c_dust == CONTENT_IGNORE)
 			continue;

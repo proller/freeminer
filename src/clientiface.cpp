@@ -372,7 +372,7 @@ int RemoteClient::GetNextBlocks(
 				FOV setting. The default of 72 degrees is fine.
 			*/
 
-			float camera_fov = (80.0*M_PI/180) * 4./3.;
+			float camera_fov = ((fov+5)*M_PI/180) * 4./3.;
 			if(can_skip && isBlockInSight(p, camera_pos, camera_dir, camera_fov, 10000*BS) == false)
 			{
 				continue;
@@ -399,7 +399,6 @@ int RemoteClient::GetNextBlocks(
 			bool block_is_invalid = false;
 			if(block != NULL)
 			{
-
 				if (block_sent > 0 && block_sent >= block->m_changed_timestamp) {
 					continue;
 				}
@@ -718,21 +717,6 @@ ClientInterface::ClientInterface(con::Connection* con)
 }
 ClientInterface::~ClientInterface()
 {
-	/*
-		Delete clients
-	*/
-	{
-		auto lock = m_clients.lock_unique_rec();
-
-		for(std::map<u16, RemoteClient*>::iterator
-			i = m_clients.begin();
-			i != m_clients.end(); ++i)
-		{
-
-			// Delete client
-			delete i->second;
-		}
-	}
 }
 
 std::list<u16> ClientInterface::getClientIDs(ClientState min_state)
@@ -740,7 +724,7 @@ std::list<u16> ClientInterface::getClientIDs(ClientState min_state)
 	std::list<u16> reply;
 	auto lock = m_clients.lock_shared_rec();
 
-	for(std::map<u16, RemoteClient*>::iterator
+	for(auto
 		i = m_clients.begin();
 		i != m_clients.end(); ++i)
 	{
@@ -804,15 +788,22 @@ void ClientInterface::send(u16 peer_id,u8 channelnum,
 	m_con->Send(peer_id, channelnum, data, reliable);
 }
 
+void ClientInterface::send(u16 peer_id,u8 channelnum,
+		const msgpack::sbuffer &buffer, bool reliable)
+{
+	SharedBuffer<u8> data((unsigned char*)buffer.data(), buffer.size());
+	send(peer_id, channelnum, data, reliable);
+}
+
 void ClientInterface::sendToAll(u16 channelnum,
 		SharedBuffer<u8> data, bool reliable)
 {
 	auto lock = m_clients.lock_shared_rec();
-	for(std::map<u16, RemoteClient*>::iterator
+	for(auto
 		i = m_clients.begin();
 		i != m_clients.end(); ++i)
 	{
-		RemoteClient *client = i->second;
+		RemoteClient *client = i->second.get();
 
 		if (client->net_proto_version != 0)
 		{
@@ -821,8 +812,21 @@ void ClientInterface::sendToAll(u16 channelnum,
 	}
 }
 
+void ClientInterface::sendToAll(u16 channelnum,
+		const msgpack::sbuffer &buffer, bool reliable)
+{
+	SharedBuffer<u8> data((unsigned char*)buffer.data(), buffer.size());
+	sendToAll(channelnum, data, reliable);
+}
+
+//TODO: return here shared_ptr
 RemoteClient* ClientInterface::getClientNoEx(u16 peer_id, ClientState state_min)
 {
+	auto client = getClient(peer_id, state_min);
+	return client.get();
+}
+
+std::shared_ptr<RemoteClient> ClientInterface::getClient(u16 peer_id, ClientState state_min) {
 	auto lock = m_clients.lock_shared_rec();
 	auto n = m_clients.find(peer_id);
 	// The client may not exist; clients are immediately removed if their
@@ -855,31 +859,23 @@ ClientState ClientInterface::getClientState(u16 peer_id)
 
 void ClientInterface::setPlayerName(u16 peer_id,std::string name)
 {
-	//JMutexAutoLock clientslock(m_clients_mutex);
-	auto lock = m_clients.lock_unique_rec();
-	auto n = m_clients.find(peer_id);
-	// The client may not exist; clients are immediately removed if their
-	// access is denied, and this event occurs later then.
-	if(n != m_clients.end())
-		n->second->setName(name);
+	auto client = getClient(peer_id, CS_Invalid);
+	if(!client)
+		return;
+
+	client->setName(name);
 }
 
 void ClientInterface::DeleteClient(u16 peer_id)
 {
-	auto lock = m_clients.lock_unique_rec();
-
-	// Error check
-	auto n = m_clients.find(peer_id);
-	// The client may not exist; clients are immediately removed if their
-	// access is denied, and this event occurs later then.
-	if(n == m_clients.end())
+	auto client = getClient(peer_id, CS_Invalid);
+	if(!client)
 		return;
 
 	/*
 		Mark objects to be not known by the client
 	*/
 	//TODO this should be done by client destructor!!!
-	RemoteClient *client = n->second;
 	// Handle objects
 	{
 	auto lock = client->m_known_objects.lock_unique_rec();
@@ -897,37 +893,31 @@ void ClientInterface::DeleteClient(u16 peer_id)
 	}
 
 	// Delete client
-	delete m_clients.get(peer_id);
+	//delete m_clients.get(peer_id);
 	m_clients.erase(peer_id);
 }
 
 void ClientInterface::CreateClient(u16 peer_id)
 {
-	auto lock = m_clients.lock_unique_rec();
-	// Error check
-	auto n = m_clients.find(peer_id);
-	// The client shouldn't already exist
-	if(n != m_clients.end()) return;
+	{
+		auto client = getClient(peer_id, CS_Invalid);
+		if(client)
+			return;
+	}
 
 	// Create client
-	RemoteClient *client = new RemoteClient(m_env);
+	auto client = std::shared_ptr<RemoteClient>(new RemoteClient(m_env));
 	client->peer_id = peer_id;
 	m_clients.set(client->peer_id, client);
 }
 
 void ClientInterface::event(u16 peer_id, ClientStateEvent event)
 {
-	{
-		auto lock = m_clients.lock_shared_rec();
+	auto client = getClient(peer_id, CS_Invalid);
+	if(!client)
+		return;
 
-		// Error check
-		auto n = m_clients.find(peer_id);
-
-		// No client to deliver event
-		if (n == m_clients.end())
-			return;
-		n->second->notifyEvent(event);
-	}
+	client->notifyEvent(event);
 
 	if ((event == CSE_SetClientReady) ||
 		(event == CSE_Disconnect)     ||
@@ -939,28 +929,18 @@ void ClientInterface::event(u16 peer_id, ClientStateEvent event)
 
 u16 ClientInterface::getProtocolVersion(u16 peer_id)
 {
-	auto lock = m_clients.lock_shared_rec();
-
-	// Error check
-	auto n = m_clients.find(peer_id);
-
-	// No client to get version
-	if (n == m_clients.end())
+	auto client = getClient(peer_id, CS_Invalid);
+	if(!client)
 		return 0;
 
-	return n->second->net_proto_version;
+	return client->net_proto_version;
 }
 
 void ClientInterface::setClientVersion(u16 peer_id, u8 major, u8 minor, u8 patch, std::string full)
 {
-	auto lock = m_clients.lock_unique_rec();
-
-	// Error check
-	auto n = m_clients.find(peer_id);
-
-	// No client to set versions
-	if (n == m_clients.end())
+	auto client = getClient(peer_id, CS_Invalid);
+	if(!client)
 		return;
 
-	n->second->setVersionInfo(major,minor,patch,full);
+	client->setVersionInfo(major,minor,patch,full);
 }

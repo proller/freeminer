@@ -41,10 +41,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "profiler.h"
 #include "log_types.h"
 #include "nodedef.h"
-#include "mapgen_v5.h"
 #include "mg_biome.h"
-#include "mg_decoration.h"
 #include "mg_ore.h"
+#include "mg_decoration.h"
+#include "mg_schematic.h"
 #include "mapgen_v5.h"
 #include "mapgen_v6.h"
 #include "mapgen_v7.h"
@@ -97,8 +97,11 @@ EmergeManager::EmergeManager(IGameDef *gamedef) {
 	registerMapgen("singlenode", new MapgenFactorySinglenode());
 	registerMapgen("math",       new MapgenFactoryMath());
 
-	this->ndef     = gamedef->getNodeDefManager();
-	this->biomedef = new BiomeDefManager(gamedef->getNodeDefManager()->getResolver());
+	this->ndef      = gamedef->getNodeDefManager();
+	this->biomemgr  = new BiomeManager(gamedef);
+	this->oremgr    = new OreManager(gamedef);
+	this->decomgr   = new DecorationManager(gamedef);
+	this->schemmgr  = new SchematicManager(gamedef);
 	this->gennotify = 0;
 
 	// Note that accesses to this variable are not synchronized.
@@ -124,12 +127,12 @@ EmergeManager::EmergeManager(IGameDef *gamedef) {
 	if (!g_settings->getU16NoEx("emergequeue_limit_diskonly", qlimit_diskonly))
 		{}
 	if (qlimit_diskonly < 1) {
-		qlimit_diskonly = nthreads * 10;
+		qlimit_diskonly = nthreads * 100;
 	}
 	if (!g_settings->getU16NoEx("emergequeue_limit_generate", qlimit_generate))
 		{}
 	if (qlimit_generate < 1) {
-		qlimit_generate = nthreads * 7;
+		qlimit_generate = nthreads * 32;
 	}
 	//errorstream<<"==> qlimit_generate="<<qlimit_generate<<"  qlimit_diskonly="<<qlimit_diskonly<<" qlimit_total="<<qlimit_total<<std::endl;
 
@@ -161,21 +164,15 @@ EmergeManager::~EmergeManager() {
 	emergethread.clear();
 	mapgen.clear();
 
-	for (unsigned int i = 0; i < ores.size(); i++)
-		delete ores[i];
-	ores.clear();
-
-	for (unsigned int i = 0; i < decorations.size(); i++)
-		delete decorations[i];
-	decorations.clear();
-
-	for (std::map<std::string, MapgenFactory *>::iterator it = mglist.begin();
-			it != mglist.end(); ++it) {
+	std::map<std::string, MapgenFactory *>::iterator it;
+	for (it = mglist.begin(); it != mglist.end(); ++it)
 		delete it->second;
-	}
 	mglist.clear();
 
-	delete biomedef;
+	delete biomemgr;
+	delete oremgr;
+	delete decomgr;
+	delete schemmgr;
 
 	if (params.sparams) {
 		delete params.sparams;
@@ -213,7 +210,8 @@ void EmergeManager::initMapgens() {
 	// Create the mapgens
 	for (size_t i = 0; i != emergethread.size(); i++) {
 		Mapgen *mg = createMapgen(params.mg_name, i, &params);
-		assert(mg);
+		if (!mg)
+			continue;
 		mapgen.push_back(mg);
 	}
 }
@@ -386,8 +384,7 @@ void EmergeManager::loadParamsFromSettings(Settings *settings) {
 	settings->getS16NoEx("chunksize",    params.chunksize);
 	settings->getFlagStrNoEx("mg_flags", params.flags, flagdesc_mapgen);
 
-	//delete params.sparams;
-	if (!params.sparams)
+	delete params.sparams;
 	params.sparams = createMapgenParams(params.mg_name);
 	if (params.sparams)
 		params.sparams->readParams(settings);
@@ -449,7 +446,7 @@ bool EmergeThread::getBlockOrStartGen(v3s16 p, MapBlock **b,
 	// Attempt to load block
 	MapBlock *block = map->getBlockNoCreateNoEx(p);
 	if (!block || block->isDummy()) {
-		EMERGE_DBG_OUT("not in memory, attempting to load from disk ag="<<allow_gen<<" block="<<block);
+		EMERGE_DBG_OUT("not in memory, attempting to load from disk ag="<<allow_gen<<" block="<<block<<" p="<<p);
 		block = map->loadBlock(p);
 		if(block)
 		{
@@ -585,7 +582,7 @@ void *EmergeThread::Thread() {
 		err << "----"<<std::endl;
 		err << "\""<<e.what()<<"\""<<std::endl;
 		err << "See debug.txt."<<std::endl;
-		err << "World probably saved by a newer version of Minetest."<<std::endl;
+		err << "World probably saved by a newer version of Freeminer."<<std::endl;
 		m_server->setAsyncFatalError(err.str());
 	}
 	catch (SerializationError &e) {

@@ -20,6 +20,11 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "connection_enet.cpp"
+#if 0
+Not used, keep for reduce MT merge conflicts
+
+
 #include <iomanip>
 #include <errno.h>
 #include "connection.h"
@@ -3152,3 +3157,6 @@ std::list<u16> Connection::getPeerIDs()
 }
 
 } // namespace
+
+
+#endif
