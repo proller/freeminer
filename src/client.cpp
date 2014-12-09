@@ -578,12 +578,12 @@ void Client::step(float dtime)
 
 					//block->scenenode = m_env.getClientMap().getSceneManager()->addOctreeSceneNode(r.mesh->getMesh());
 
-					auto tangentMesh = m_env.getClientMap().getSceneManager()->getMeshManipulator()->createMeshWithTangents(  r.mesh->getMesh() );
-					block->scenenode = m_env.getClientMap().getSceneManager()->addMeshSceneNode( tangentMesh );
-					tangentMesh->drop();
-					//!block->scenenode = m_env.getClientMap().getSceneManager()->addMeshSceneNode(r.mesh->getMesh());
+					//auto tangentMesh = m_env.getClientMap().getSceneManager()->getMeshManipulator()->createMeshWithTangents(  r.mesh->getMesh() );
+					//block->scenenode = m_env.getClientMap().getSceneManager()->addMeshSceneNode( tangentMesh );
+					//tangentMesh->drop();
+					block->scenenode = m_env.getClientMap().getSceneManager()->addMeshSceneNode(r.mesh->getMesh());
 					if (block->scenenode)
-						m_device->getVideoDriver()->addOcclusionQuery(block->scenenode);
+						m_device->getVideoDriver()->addOcclusionQuery(block->scenenode, r.mesh->getMesh());
 				} else {
 //infostream<<"nodraw mesh " <<r.mesh->step<< " c="<< r.mesh->getMesh()->getMeshBufferCount() <<std::endl;
 				}

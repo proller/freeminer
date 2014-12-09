@@ -222,8 +222,11 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 
 			if (!m_drawlist_last) {
 	TimeTaker timer_step("ClientMap::updateDrawList OcclusionQueries");
+				//driver->runAllOcclusionQueries(true);
+				//driver->runAllOcclusionQueries(false);
+				//driver->updateAllOcclusionQueries();
+				driver->updateAllOcclusionQueries(false);
 				driver->runAllOcclusionQueries(false);
-				driver->updateAllOcclusionQueries();
 			}
 
 
@@ -250,6 +253,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 
 		for(auto & ir : m_blocks) {
 			auto bp = ir.first;
+			auto & block = ir.second;
 
 		if(m_control.range_all == false)
 		{
@@ -260,7 +264,9 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 			|| bp.Y < p_blocks_min.Y
 			|| bp.Y > p_blocks_max.Y)
 			{
-				ir.second->scenenode_setVisible(false);
+				//ir.second->scenenode_setVisible(false);
+//				if (block->scenenode)
+//					getSceneManager()->addToDeletionQueue(block->scenenode);
 				continue;
 			}
 		}
@@ -275,7 +281,9 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 
 			f32 d = radius_box(blockpos, camera_position); //blockpos_relative.getLength();
 			if (d> range_max) {
-				ir.second->scenenode_setVisible(false);
+				//ir.second->scenenode_setVisible(false);
+//				if (block->scenenode)
+//					getSceneManager()->addToDeletionQueue(block->scenenode);
 				continue;
 			}
 			int range = d / (MAP_BLOCKSIZE * BS);
@@ -325,8 +333,10 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 			auto mesh = block->getMesh(mesh_step);
 
 			if (mesh && mesh->updateCameraOffset(m_camera_offset))
+{
+//errorstream<<"mesh offset up"<<std::endl;
 				block->scenenode_remove(); // TODO!!
-
+}
 			blocks_in_range++;
 
 			auto smesh_size = block->mesh_size;
@@ -444,8 +454,8 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 //				if (block->scenenode)
 //					block->scenenode->remove();
 				//block->scenenode = getSceneManager()->addOctreeSceneNode(mesh->getMesh());
-//				block->scenenode = getSceneManager()->addMeshSceneNode(mesh->getMesh());
-//				m_device->getVideoDriver()->addOcclusionQuery(r.mesh->scenenode, r.mesh->getMesh());
+				block->scenenode = getSceneManager()->addMeshSceneNode(mesh->getMesh());
+				driver->addOcclusionQuery(block->scenenode, mesh->getMesh());
 			} else {
 				//auto visible = driver->getOcclusionQueryResult(block->scenenode);
 				//infostream<<"block visible="<<visible<<std::endl;
