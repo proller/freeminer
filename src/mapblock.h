@@ -355,19 +355,7 @@ public:
 		return getNodeNoCheck(p.X, p.Y, p.Z, valid_position);
 	}
 	
-	void setNodeNoCheck(s16 x, s16 y, s16 z, MapNode & n)
-	{
-		if(data == NULL)
-			throw InvalidPositionException("setNodeNoCheck data=NULL");
-		auto lock = lock_unique_rec();
-		data[z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + y*MAP_BLOCKSIZE + x] = n;
-		raiseModified(MOD_STATE_WRITE_NEEDED/*, "setNodeNoCheck"*/);
-	}
-	
-	void setNodeNoCheck(v3s16 p, MapNode & n)
-	{
-		setNodeNoCheck(p.X, p.Y, p.Z, n);
-	}
+	void setNodeNoCheck(v3s16 p, MapNode & n);
 
 	/*
 		These functions consult the parent container if the position
@@ -513,8 +501,11 @@ public:
 	void pushElementsToCircuit(Circuit* circuit);
 
 #ifndef SERVER // Only on client
-	std::shared_ptr<MapBlockMesh> getMesh(int step = 1, bool no_fallback = false);
-	void setMesh(std::shared_ptr<MapBlockMesh> & rmesh);
+	//typedef typename std::atomic<std::shared_ptr<MapBlockMesh>> mesh_type;
+	typedef typename std::shared_ptr<MapBlockMesh> mesh_type;
+
+	MapBlock::mesh_type getMesh(int step = 1, bool no_fallback = false);
+	void setMesh(MapBlock::mesh_type & rmesh);
 	//void delMesh();
 	bool scenenode_remove();
 	bool scenenode_setVisible(bool value);
@@ -553,8 +544,8 @@ public:
 #ifndef SERVER // Only on client
 	irr::scene::ISceneNode * shadownode;
 	irr::scene::IMeshSceneNode * scenenode;
-	std::shared_ptr<MapBlockMesh> mesh;
-	std::shared_ptr<MapBlockMesh> mesh2, mesh4, mesh8, mesh16;
+	mesh_type mesh, mesh_old;
+	mesh_type mesh2, mesh4, mesh8, mesh16;
 	unsigned int mesh_size;
 #endif
 	

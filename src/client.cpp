@@ -60,7 +60,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 extern gui::IGUIEnvironment* guienv;
 
-#include <msgpack.hpp>
+#include "msgpack.h"
 
 /*
 	MeshUpdateQueue
@@ -74,7 +74,7 @@ MeshUpdateQueue::~MeshUpdateQueue()
 {
 }
 
-void MeshUpdateQueue::addBlock(v3POS p, std::shared_ptr<MeshMakeData> data, bool urgent)
+unsigned int MeshUpdateQueue::addBlock(v3POS p, std::shared_ptr<MeshMakeData> data, bool urgent)
 {
 	DSTACK(__FUNCTION_NAME);
 
@@ -91,15 +91,16 @@ void MeshUpdateQueue::addBlock(v3POS p, std::shared_ptr<MeshMakeData> data, bool
 			if (rmap.empty())
 				m_queue.erase(range_old);
 		} else {
-			return; //already queued
+			return m_ranges.size(); //already queued
 		}
 	}
 	auto & rmap = m_queue.get(range);
 	if (rmap.count(p))
-		return;
+		return m_ranges.size();
 	rmap[p] = data;
 	m_ranges[p] = range;
 	g_profiler->avg("Client: mesh make queue", m_ranges.size());
+	return m_ranges.size();
 }
 
 std::shared_ptr<MeshMakeData> MeshUpdateQueue::pop()
@@ -149,7 +150,7 @@ void * MeshUpdateThread::Thread()
 
 		ScopeProfiler sp(g_profiler, "Client: Mesh making " + itos(q->step));
 
-		m_queue_out.push_back(MeshUpdateResult(q->m_blockpos, std::shared_ptr<MapBlockMesh>(new MapBlockMesh(q.get(), m_camera_offset))));
+		m_queue_out.push_back(MeshUpdateResult(q->m_blockpos, MapBlock::mesh_type(new MapBlockMesh(q.get(), m_camera_offset))));
 
 		m_queue_in.m_process.erase(q->m_blockpos);
 
@@ -180,6 +181,7 @@ Client::Client(
 		IrrlichtDevice *device,
 		const char *playername,
 		std::string password,
+		bool is_simple_singleplayer_game,
 		MapDrawControl &control,
 		IWritableTextureSource *tsrc,
 		IWritableShaderSource *shsrc,
@@ -188,7 +190,6 @@ Client::Client(
 		ISoundManager *sound,
 		MtEventManager *event,
 		bool ipv6
-		, bool simple_singleplayer_mode
 ):
 	m_packetcounter_timer(0.0),
 	m_connection_reinit_timer(0.1),
@@ -209,17 +210,18 @@ Client::Client(
 		device->getSceneManager(),
 		tsrc, this, device
 	),
-	m_con(PROTOCOL_ID, simple_singleplayer_mode ? MAX_PACKET_SIZE_SINGLEPLAYER : MAX_PACKET_SIZE, CONNECTION_TIMEOUT, ipv6, this),
+	m_con(PROTOCOL_ID, is_simple_singleplayer_game ? MAX_PACKET_SIZE_SINGLEPLAYER : MAX_PACKET_SIZE, CONNECTION_TIMEOUT, ipv6, this),
 	m_device(device),
 	m_server_ser_ver(SER_FMT_VER_INVALID),
 	m_playeritem(0),
 	m_inventory_updated(false),
 	m_inventory_from_server(NULL),
 	m_inventory_from_server_age(0.0),
-	m_show_hud(true),
+	m_show_highlighted(false),
 	m_animation_time(0),
 	m_crack_level(-1),
 	m_crack_pos(0,0,0),
+	m_highlighted_pos(0,0,0),
 	m_map_seed(0),
 	m_password(password),
 	m_access_denied(false),
@@ -231,7 +233,7 @@ Client::Client(
 	m_time_of_day_update_timer(0),
 	m_recommended_send_interval(0.1),
 	m_removed_sounds_check_timer(0),
-	m_simple_singleplayer_mode(simple_singleplayer_mode),
+	m_simple_singleplayer_mode(is_simple_singleplayer_game),
 	m_state(LC_Created)
 {
 	/*
@@ -243,7 +245,8 @@ Client::Client(
 		m_env.addPlayer(player);
 	}
 
-	if (!simple_singleplayer_mode && g_settings->getBool("enable_local_map_saving")) {
+	if (g_settings->getBool("enable_local_map_saving")
+			&& !is_simple_singleplayer_game) {
 		const std::string world_path = porting::path_user + DIR_DELIM + "worlds"
 				+ DIR_DELIM + "server_" + g_settings->get("address")
 				+ "_" + g_settings->get("remote_port");
@@ -269,6 +272,8 @@ Client::Client(
 		localdb = NULL;
 		localserver = nullptr;
 	}
+
+	m_cache_smooth_lighting = g_settings->getBool("smooth_lighting");
 }
 
 void Client::Stop()
@@ -555,11 +560,11 @@ void Client::step(float dtime)
 
 		while(!m_mesh_update_thread.m_queue_out.empty_try())
 		{
-			if (getEnv().getClientMap().m_drawlist_work)
-				break;
 			num_processed_meshes++;
 			MeshUpdateResult r = m_mesh_update_thread.m_queue_out.pop_frontNoEx();
-			MapBlock *block = m_env.getMap().getBlockNoCreateNoEx(r.p);
+			if (!r.mesh)
+				continue;
+			auto block = m_env.getMap().getBlock(r.p);
 			if(block)
 			{
 
@@ -581,12 +586,12 @@ void Client::step(float dtime)
 			} else {
 				//delete r.mesh;
 			}
-			if (porting::getTimeMs() > end_ms)
+			if (porting::getTimeMs() > end_ms) {
 				break;
+			}
 		}
 		if(num_processed_meshes > 0)
 			g_profiler->graphAdd("num_processed_meshes", num_processed_meshes);
-
 		}
 	}
 
@@ -891,7 +896,8 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 
 		// Set player position
 		Player *player = m_env.getLocalPlayer();
-		assert(player != NULL);
+		if(!player)
+			return;
 
 		packet[TOCLIENT_INIT_SEED].convert(&m_map_seed);
 		infostream<<"Client: received map seed: "<<m_map_seed<<std::endl;
@@ -984,7 +990,16 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 		//infostream<<"Adding mesh update task for received block "<<p<<std::endl;
 		updateMeshTimestampWithEdge(p);
 
+/*
+#if !defined(NDEBUG)
+		if (m_env.getClientMap().m_block_boundary.size() > 150)
+			m_env.getClientMap().m_block_boundary.clear();
+		m_env.getClientMap().m_block_boundary[p] = block;
+#endif
+*/
+
 		}//step
+
 	}
 	else if(command == TOCLIENT_INVENTORY)
 	{
@@ -1766,10 +1781,8 @@ void Client::removeNode(v3s16 p)
 			i = modified_blocks.begin();
 			i != modified_blocks.end(); ++i)
 	{
-		addUpdateMeshTask(i->first, false);
+		addUpdateMeshTaskWithEdge(i->first, true);
 	}
-	// add urgent task to update the modified node
-	addUpdateMeshTaskForNode(p, true);
 }
 
 void Client::addNode(v3s16 p, MapNode n, bool remove_metadata)
@@ -1792,7 +1805,7 @@ void Client::addNode(v3s16 p, MapNode n, bool remove_metadata)
 			i = modified_blocks.begin();
 			i != modified_blocks.end(); ++i)
 	{
-		addUpdateMeshTask(i->first, false);
+		addUpdateMeshTaskWithEdge(i->first, true);
 	}
 }
 	
@@ -1938,9 +1951,9 @@ int Client::getCrackLevel()
 	return m_crack_level;
 }
 
-void Client::setHighlighted(v3s16 pos, bool show_hud)
+void Client::setHighlighted(v3s16 pos, bool show_highlighted)
 {
-	m_show_hud = show_hud;
+	m_show_highlighted = show_highlighted;
 	v3s16 old_highlighted_pos = m_highlighted_pos;
 	m_highlighted_pos = pos;
 	addUpdateMeshTaskForNode(old_highlighted_pos, true);
@@ -2023,8 +2036,8 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent, int step)
 	/*
 		Create a task to update the mesh of the block
 	*/
-
-	std::shared_ptr<MeshMakeData> data(new MeshMakeData(this, m_env.getMap(), m_env.getClientMap().getControl()));
+	auto & draw_control = m_env.getClientMap().getControl();
+	std::shared_ptr<MeshMakeData> data(new MeshMakeData(this, m_env.getMap(), draw_control));
 
 	{
 		//TimeTaker timer("data fill");
@@ -2037,8 +2050,8 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent, int step)
 #endif
 
 		data->setCrack(m_crack_level, m_crack_pos);
-		data->setHighlighted(m_highlighted_pos, m_show_hud);
-		data->setSmoothLighting(g_settings->getBool("smooth_lighting"));
+		data->setHighlighted(m_highlighted_pos, m_show_highlighted);
+		data->setSmoothLighting(m_cache_smooth_lighting);
 		data->step = step ? step : getFarmeshStep(data->draw_control, getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
 		data->range = getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p);
 		if (step)
@@ -2046,10 +2059,12 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent, int step)
 	}
 
 	// Add task to queue
-	m_mesh_update_thread.m_queue_in.addBlock(p, data, urgent);
+	unsigned int qsize = m_mesh_update_thread.m_queue_in.addBlock(p, data, urgent);
+	draw_control.block_overflow = qsize > 1000; // todo: depend on mesh make speed
+
 }
 
-void Client::addUpdateMeshTaskWithEdge(v3s16 blockpos, bool urgent)
+void Client::addUpdateMeshTaskWithEdge(v3POS blockpos, bool urgent)
 {
 	for (int i=0;i<7;i++)
 	{
@@ -2063,19 +2078,20 @@ void Client::addUpdateMeshTaskWithEdge(v3s16 blockpos, bool urgent)
 
 void Client::addUpdateMeshTaskForNode(v3s16 nodepos, bool urgent)
 {
+/*
 	{
 		v3s16 p = nodepos;
 		infostream<<"Client::addUpdateMeshTaskForNode(): "
 				<<"("<<p.X<<","<<p.Y<<","<<p.Z<<")"
 				<<std::endl;
 	}
+*/
 
 	v3s16 blockpos = getNodeBlockPos(nodepos);
 	v3s16 blockpos_relative = blockpos * MAP_BLOCKSIZE;
 
 	try{
-		v3s16 p = blockpos + v3s16(0,0,0);
-		addUpdateMeshTask(p, urgent);
+		addUpdateMeshTask(blockpos, urgent);
 	}
 	catch(InvalidPositionException &e){}
 
@@ -2167,7 +2183,7 @@ void Client::afterContentReceived(IrrlichtDevice *device, gui::IGUIFont* font)
 	{
 		verbosestream<<"Updating item textures and meshes"<<std::endl;
 		wchar_t* text = wgettext("Item textures...");
-		draw_load_screen(text, device, guienv, font, 0, 0);
+		draw_load_screen(text, device, guienv, 0, 0);
 		std::set<std::string> names = m_itemdef->getAll();
 		size_t size = names.size();
 		size_t count = 0;
@@ -2180,7 +2196,7 @@ void Client::afterContentReceived(IrrlichtDevice *device, gui::IGUIFont* font)
 			count++;
 			percent = count*100/size;
 			if (count%50 == 0) // only update every 50 item
-				draw_load_screen(text, device, guienv, font, 0, percent);
+				draw_load_screen(text, device, guienv, 0, percent);
 		}
 		delete[] text;
 	}
@@ -2188,7 +2204,7 @@ void Client::afterContentReceived(IrrlichtDevice *device, gui::IGUIFont* font)
 	// Start mesh update thread after setting up content definitions
 	infostream<<"- Starting mesh update thread"<<std::endl;
 	if (!no_output) {
-		auto threads = !g_settings->getBool("more_threads") ? 1 : (porting::getNumberOfProcessors() - (m_simple_singleplayer_mode ? 2 : 1));
+		auto threads = !g_settings->getBool("more_threads") ? 1 : (porting::getNumberOfProcessors() - (m_simple_singleplayer_mode ? 3 : 1));
 		m_mesh_update_thread.Start(threads < 1 ? 1 : threads);
 	}
 
@@ -2222,7 +2238,7 @@ void Client::makeScreenshot(IrrlichtDevice *device)
 	irr::video::IVideoDriver *driver = device->getVideoDriver();
 	irr::video::IImage* const raw_image = driver->createScreenShot();
 	if (raw_image) {
-		irr::video::IImage* const image = driver->createImage(video::ECF_R8G8B8, 
+		irr::video::IImage* const image = driver->createImage(video::ECF_R8G8B8,
 			raw_image->getDimension());
 
 		if (image) {
@@ -2321,12 +2337,13 @@ scene::IAnimatedMesh* Client::getMesh(const std::string &filename)
 
 //freeminer:
 void Client::sendDrawControl() {
-	MSGPACK_PACKET_INIT(TOSERVER_DRAWCONTROL, 4);
+	MSGPACK_PACKET_INIT(TOSERVER_DRAWCONTROL, 5);
 	const auto & draw_control = m_env.getClientMap().getControl();
 	PACK(TOSERVER_DRAWCONTROL_WANTED_RANGE, (u32)draw_control.wanted_range);
 	PACK(TOSERVER_DRAWCONTROL_RANGE_ALL, (u32)draw_control.range_all);
 	PACK(TOSERVER_DRAWCONTROL_FARMESH, (u8)draw_control.farmesh);
 	PACK(TOSERVER_DRAWCONTROL_FOV, draw_control.fov);
+	PACK(TOSERVER_DRAWCONTROL_BLOCK_OVERFLOW, draw_control.block_overflow);
 
 	Send(0, buffer, false);
 }

@@ -88,6 +88,7 @@ Map::Map(IGameDef *gamedef, Circuit* circuit):
 	m_blocks_save_last(0)
 {
 	updateLighting_last[LIGHTBANK_DAY] = updateLighting_last[LIGHTBANK_NIGHT] = 0;
+	time_life = 0;
 }
 
 Map::~Map()
@@ -1545,6 +1546,11 @@ u32 Map::timerUpdate(float uptime, float unload_timeout,
 			else
 			{
 
+#ifndef SERVER
+			if (block->mesh_old)
+				block->mesh_old = nullptr;
+#endif
+
 			if (!block->m_uptime_timer_last)  // not very good place, but minimum modifications
 				block->m_uptime_timer_last = uptime - 0.1;
 			block->incrementUsageTimer(uptime - block->m_uptime_timer_last);
@@ -1637,20 +1643,25 @@ struct NodeNeighbor {
 	int drop; //drop by liquid
 };
 
-void Map::transforming_liquid_push_back(v3s16 p) {
-	//JMutexAutoLock lock(m_transforming_liquid_mutex);
-	m_transforming_liquid.set(p, 1);
+void Map::transforming_liquid_push_back(v3POS p) {
+	std::lock_guard<std::mutex> lock(m_transforming_liquid_mutex);
+	//m_transforming_liquid.set(p, 1);
+	m_transforming_liquid.push_back(p);
 }
 
-v3s16 Map::transforming_liquid_pop() {
+v3POS Map::transforming_liquid_pop() {
+	std::lock_guard<std::mutex> lock(m_transforming_liquid_mutex);
+	return m_transforming_liquid.pop_front();
+
 	//auto lock = m_transforming_liquid.lock_unique_rec();
-	auto it = m_transforming_liquid.begin();
-	auto value = it->first;
-	m_transforming_liquid.erase(it);
-	return value;
+	//auto it = m_transforming_liquid.begin();
+	//auto value = it->first;
+	//m_transforming_liquid.erase(it);
+	//return value;
 }
 
 u32 Map::transforming_liquid_size() {
+	std::lock_guard<std::mutex> lock(m_transforming_liquid_mutex);
 	return m_transforming_liquid.size();
 }
 
@@ -1703,7 +1714,8 @@ u32 Map::transformLiquidsReal(Server *m_server, int max_cycle_ms)
 	int water_level = g_settings->getS16("water_level");
 
 	// list of nodes that due to viscosity have not reached their max level height
-	std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> must_reflow, must_reflow_second, must_reflow_third;
+	//std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> must_reflow, must_reflow_second, must_reflow_third;
+	std::list<v3POS> must_reflow, must_reflow_second, must_reflow_third;
 	// List of MapBlocks that will require a lighting update (due to lava)
 	u16 loop_rand = myrand();
 
@@ -1765,6 +1777,7 @@ u32 Map::transformLiquidsReal(Server *m_server, int max_cycle_ms)
 			if (nb.c == CONTENT_IGNORE) {
 				//if (i == D_SELF && (loopcount % 2) && initial_size < m_liquid_step_flow * 3)
 				//	must_reflow_third[nb.p] = 1;
+				//	must_reflow_third.push_back(nb.p);
 				continue;
 			}
 
@@ -1858,15 +1871,19 @@ u32 Map::transformLiquidsReal(Server *m_server, int max_cycle_ms)
 					if (e == 1 && neighbors[D_BOTTOM].weight && neighbors[D_SELF].weight > neighbors[D_BOTTOM].weight) {
 						setNode(neighbors[D_SELF].p, neighbors[D_BOTTOM].n);
 						setNode(neighbors[D_BOTTOM].p, neighbors[D_SELF].n);
-						must_reflow_second[neighbors[D_SELF].p] = 1;
-						must_reflow_second[neighbors[D_BOTTOM].p] = 1;
+						//must_reflow_second[neighbors[D_SELF].p] = 1;
+						//must_reflow_second[neighbors[D_BOTTOM].p] = 1;
+						must_reflow_second.push_back(neighbors[D_SELF].p);
+						must_reflow_second.push_back(neighbors[D_BOTTOM].p);
 						goto NEXT_LIQUID;
 					}
 					if (e == 2 && neighbors[D_SELF].weight && neighbors[D_TOP].weight > neighbors[D_SELF].weight) {
 						setNode(neighbors[D_SELF].p, neighbors[D_TOP].n);
 						setNode(neighbors[D_TOP].p, neighbors[D_SELF].n);
-						must_reflow_second[neighbors[D_SELF].p] = 1;
-						must_reflow_second[neighbors[D_TOP].p] = 1;
+						//must_reflow_second[neighbors[D_SELF].p] = 1;
+						//must_reflow_second[neighbors[D_TOP].p] = 1;
+						must_reflow_second.push_back(neighbors[D_SELF].p);
+						must_reflow_second.push_back(neighbors[D_TOP].p);
 						goto NEXT_LIQUID;
 					}
 				}
@@ -2047,7 +2064,8 @@ u32 Map::transformLiquidsReal(Server *m_server, int max_cycle_ms)
 				for (u16 ir = D_SELF + 1; ir < D_TOP; ++ir) { // only same level
 					u16 ii = liquid_random_map[(loopcount+loop_rand+4)%4][ir];
 					if (neighbors[ii].l)
-						must_reflow_second[neighbors[i].p + liquid_flow_dirs[ii]] = 1;
+						must_reflow_second.push_back(neighbors[i].p + liquid_flow_dirs[ii]);
+						//must_reflow_second[neighbors[i].p + liquid_flow_dirs[ii]] = 1;
 				}
 			}
 
@@ -2079,7 +2097,8 @@ u32 Map::transformLiquidsReal(Server *m_server, int max_cycle_ms)
 				if(!nodemgr->get(neighbors[i].n).light_propagates || nodemgr->get(neighbors[i].n).light_source) // better to update always
 					lighting_modified_blocks.set_try(block->getPos(), block);
 			}
-			must_reflow[neighbors[i].p] = 1;
+			//must_reflow[neighbors[i].p] = 1;
+			must_reflow.push_back(neighbors[i].p);
 
 		}
 
@@ -2111,12 +2130,20 @@ u32 Map::transformLiquidsReal(Server *m_server, int max_cycle_ms)
 
 	{
 		//TimeTaker timer13("transformLiquidsReal() reflow");
-		auto lock = m_transforming_liquid.lock_unique_rec();
-		m_transforming_liquid.insert(must_reflow.begin(), must_reflow.end());
+		//auto lock = m_transforming_liquid.lock_unique_rec();
+		std::lock_guard<std::mutex> lock(m_transforming_liquid_mutex);
+
+		//m_transforming_liquid.insert(must_reflow.begin(), must_reflow.end());
+		for (const auto & p : must_reflow)
+			m_transforming_liquid.push_back(p);
 		must_reflow.clear();
-		m_transforming_liquid.insert(must_reflow_second.begin(), must_reflow_second.end());
+		//m_transforming_liquid.insert(must_reflow_second.begin(), must_reflow_second.end());
+		for (const auto & p : must_reflow_second)
+			m_transforming_liquid.push_back(p);
 		must_reflow_second.clear();
-		m_transforming_liquid.insert(must_reflow_third.begin(), must_reflow_third.end());
+		//m_transforming_liquid.insert(must_reflow_third.begin(), must_reflow_third.end());
+		for (const auto & p : must_reflow_third)
+			m_transforming_liquid.push_back(p);
 		must_reflow_third.clear();
 	}
 

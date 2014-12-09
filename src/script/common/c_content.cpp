@@ -194,8 +194,8 @@ void read_object_properties(lua_State *L, int index,
 	getboolfield(L, -1, "is_visible", prop->is_visible);
 	getboolfield(L, -1, "makes_footstep_sound", prop->makes_footstep_sound);
 	getfloatfield(L, -1, "automatic_rotate", prop->automatic_rotate);
-	getfloatfield(L, -1, "stepheight", prop->stepheight);
-	prop->stepheight*=BS;
+	if (getfloatfield(L, -1, "stepheight", prop->stepheight))
+		prop->stepheight *= BS;
 	lua_getfield(L, -1, "automatic_face_movement_dir");
 	if (lua_isnumber(L, -1)) {
 		prop->automatic_face_movement_dir = true;
@@ -284,7 +284,7 @@ ContentFeatures read_content_features(lua_State *L, int index)
 	lua_getfield(L, index, "on_rightclick");
 	f.rightclickable = lua_isfunction(L, -1);
 	lua_pop(L, 1);
-	
+
 	/* Name */
 	getstringfield(L, index, "name", f.name);
 
@@ -1060,11 +1060,11 @@ void luaentity_get(lua_State *L, u16 id)
 }
 
 /******************************************************************************/
-NoiseParams *read_noiseparams(lua_State *L, int index)
+NoiseParams *get_noiseparams(lua_State *L, int index)
 {
 	NoiseParams *np = new NoiseParams;
 
-	if (!read_noiseparams_nc(L, index, np)) {
+	if (!read_noiseparams(L, index, np)) {
 		delete np;
 		np = NULL;
 	}
@@ -1072,7 +1072,7 @@ NoiseParams *read_noiseparams(lua_State *L, int index)
 	return np;
 }
 
-bool read_noiseparams_nc(lua_State *L, int index, NoiseParams *np)
+bool read_noiseparams(lua_State *L, int index, NoiseParams *np)
 {
 	if (index < 0)
 		index = lua_gettop(L) + 1 + index;
@@ -1080,12 +1080,16 @@ bool read_noiseparams_nc(lua_State *L, int index, NoiseParams *np)
 	if (!lua_istable(L, index))
 		return false;
 
-	np->offset  = getfloatfield_default(L, index, "offset",  0.0);
-	np->scale   = getfloatfield_default(L, index, "scale",   0.0);
-	np->persist = getfloatfield_default(L, index, "persist", 0.0);
-	np->seed    = getintfield_default(L,   index, "seed",    0);
-	np->octaves = getintfield_default(L,   index, "octaves", 0);
-	np->eased   = getboolfield_default(L,  index, "eased",   false);
+	np->offset     = getfloatfield_default(L, index, "offset",     0.0);
+	np->scale      = getfloatfield_default(L, index, "scale",      0.0);
+	np->persist    = getfloatfield_default(L, index, "persist",    0.0);
+	np->lacunarity = getfloatfield_default(L, index, "lacunarity", 2.0);
+	np->seed       = getintfield_default(L,   index, "seed",       0);
+	np->octaves    = getintfield_default(L,   index, "octaves",    0);
+
+	u32 flags = 0, flagmask = 0;
+	np->flags = getflagsfield(L, index, "flags", flagdesc_noiseparams,
+		&flags, &flagmask) ? flags : NOISE_FLAG_DEFAULTS;
 
 	lua_getfield(L, index, "spread");
 	np->spread  = read_v3f(L, -1);
@@ -1124,7 +1128,7 @@ bool read_schematic(lua_State *L, int index, Schematic *schem,
 	//// Get schematic data
 	lua_getfield(L, index, "data");
 	luaL_checktype(L, -1, LUA_TTABLE);
-	
+
 	int numnodes = size.X * size.Y * size.Z;
 	MapNode *schemdata = new MapNode[numnodes];
 	int i = 0;
@@ -1154,7 +1158,7 @@ bool read_schematic(lua_State *L, int index, Schematic *schem,
 
 			schemdata[i] = MapNode(ndef, name, param1, param2);
 		}
-		
+
 		i++;
 		lua_pop(L, 1);
 	}
@@ -1183,7 +1187,10 @@ bool read_schematic(lua_State *L, int index, Schematic *schem,
 		}
 	}
 
-	schem->flags       = 0;
+	// Here, we read the nodes directly from the INodeDefManager - there is no
+	// need for pending node resolutions so we'll mark this schematic as updated
+	schem->flags       = SCHEM_CIDS_UPDATED;
+
 	schem->size        = size;
 	schem->schemdata   = schemdata;
 	schem->slice_probs = slice_probs;

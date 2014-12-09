@@ -59,6 +59,7 @@ struct MapDrawControl
 	float drawtime_avg;
 
 	float fov;
+	bool block_overflow;
 };
 
 class Client;
@@ -134,7 +135,7 @@ public:
 	void renderPostFx(CameraMode cam_mode);
 
 	// For debugging the status and position of MapBlocks
-	void renderBlockBoundaries(std::map<v3s16, MapBlock*> blocks);
+	void renderBlockBoundaries(const std::map<v3POS, MapBlock*> & blocks);
 
 	// For debug printing
 	virtual void PrintInfo(std::ostream &out);
@@ -154,17 +155,21 @@ private:
 	v3s16 m_camera_offset;
 	JMutex m_camera_mutex;
 
-	std::atomic<shared_unordered_map<v3POS, MapBlock*, v3POSHash, v3POSEqual> *> m_drawlist;
-	shared_unordered_map<v3POS, MapBlock*, v3POSHash, v3POSEqual> m_drawlist_0;
-	shared_unordered_map<v3POS, MapBlock*, v3POSHash, v3POSEqual> m_drawlist_1;
+	std::atomic<shared_unordered_map<v3POS, MapBlockP, v3POSHash, v3POSEqual> *> m_drawlist;
+	shared_unordered_map<v3POS, MapBlockP, v3POSHash, v3POSEqual> m_drawlist_0;
+	shared_unordered_map<v3POS, MapBlockP, v3POSHash, v3POSEqual> m_drawlist_1;
 	int m_drawlist_current;
 	std::vector<std::pair<v3POS, int>> draw_nearest;
 public:
 	u32 m_drawlist_last;
 	irr::scene::SMesh * smesh;
 	std::atomic_bool m_drawlist_work;
+	std::map<v3POS, MapBlock*> m_block_boundary;
 private:
 
+	bool m_cache_trilinear_filter;
+	bool m_cache_bilinear_filter;
+	bool m_cache_anistropic_filter;
 };
 
 #endif

@@ -764,6 +764,17 @@ void MapBlock::deSerialize(std::istream &is, u8 version, bool disk)
 		auto lock = lock_unique_rec();
 		data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X] = n;
 		raiseModified(MOD_STATE_WRITE_NEEDED);
+		m_changed_timestamp = (unsigned int)m_parent->time_life;
+	}
+
+	void MapBlock::setNodeNoCheck(v3s16 p, MapNode & n)
+	{
+		if(data == NULL)
+			throw InvalidPositionException("setNodeNoCheck data=NULL");
+		auto lock = lock_unique_rec();
+		data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X] = n;
+		raiseModified(MOD_STATE_WRITE_NEEDED/*, "setNodeNoCheck"*/);
+		m_changed_timestamp = (unsigned int)m_parent->time_life;
 	}
 
 void MapBlock::pushElementsToCircuit(Circuit* circuit)
@@ -771,7 +782,7 @@ void MapBlock::pushElementsToCircuit(Circuit* circuit)
 }
 
 #ifndef SERVER
-std::shared_ptr<MapBlockMesh> MapBlock::getMesh(int step, bool no_fallback) {
+MapBlock::mesh_type MapBlock::getMesh(int step, bool no_fallback) {
 	if (step >= 16 && (no_fallback || mesh16)) return mesh16;
 	if (step >= 8  && (no_fallback || mesh8))  return mesh8;
 	if (step >= 4  && (no_fallback || mesh4))  return mesh4;
@@ -786,14 +797,14 @@ std::shared_ptr<MapBlockMesh> MapBlock::getMesh(int step, bool no_fallback) {
 	return mesh;
 }
 
-void MapBlock::setMesh(std::shared_ptr<MapBlockMesh> & rmesh) {
+void MapBlock::setMesh(MapBlock::mesh_type & rmesh) {
 	if (rmesh && !mesh_size)
 		mesh_size = rmesh->getMesh()->getMeshBufferCount();
-	     if (rmesh->step == 16) {mesh16 = rmesh;}
-	else if (rmesh->step == 8 ) {mesh8  = rmesh;}
-	else if (rmesh->step == 4 ) {mesh4  = rmesh;}
-	else if (rmesh->step == 2 ) {mesh2  = rmesh;}
-	else                        {mesh   = rmesh;}
+	     if (rmesh->step == 16) {mesh_old = mesh16; mesh16 = rmesh;}
+	else if (rmesh->step == 8 ) {mesh_old = mesh8;  mesh8  = rmesh;}
+	else if (rmesh->step == 4 ) {mesh_old = mesh4;  mesh4  = rmesh;}
+	else if (rmesh->step == 2 ) {mesh_old = mesh2;  mesh2  = rmesh;}
+	else                        {mesh_old = mesh;   mesh   = rmesh;}
 }
 
 /*

@@ -78,9 +78,22 @@ ClientMap::ClientMap(
 	m_drawlist_current(0),
 	m_drawlist_last(0)
 {
-	m_drawlist_work = false;
 	m_box = core::aabbox3d<f32>(-BS*1000000,-BS*1000000,-BS*1000000,
 			BS*1000000,BS*1000000,BS*1000000);
+
+	/* TODO: Add a callback function so these can be updated when a setting
+	 *       changes.  At this point in time it doesn't matter (e.g. /set
+	 *       is documented to change server settings only)
+	 *
+	 * TODO: Local caching of settings is not optimal and should at some stage
+	 *       be updated to use a global settings object for getting thse values
+	 *       (as opposed to the this local caching). This can be addressed in
+	 *       a later release.
+	 */
+	m_cache_trilinear_filter  = g_settings->getBool("trilinear_filter");
+	m_cache_bilinear_filter   = g_settings->getBool("bilinear_filter");
+	m_cache_anistropic_filter = g_settings->getBool("anisotropic_filter");
+
 }
 
 ClientMap::~ClientMap()
@@ -288,7 +301,6 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 
 	std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> occlude_cache;
 
-	m_drawlist_work = true;
 	while (!draw_nearest.empty()) {
 		auto ir = draw_nearest.back();
 
@@ -348,7 +360,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 			v3s16 spn = cam_pos_nodes + v3s16(0,0,0);
 			s16 bs2 = MAP_BLOCKSIZE/2 + 1;
 			u32 needed_count = 1;
-			if( range > 1 &&
+			if( range > 1 && smesh_size &&
 				occlusion_culling_enabled &&
 				isOccluded(this, spn, cpn + v3s16(0,0,0),
 					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
@@ -392,7 +404,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 				++m_mesh_queued;
 				continue;
 			}
-			if (block->getTimestamp() > mesh->timestamp && (m_mesh_queued < maxq*1.5 || range <= 2)) {
+			if (block->getTimestamp() > mesh->timestamp + (smesh_size ? 0 : range >= 1 ? 60 : 5) && (m_mesh_queued < maxq*1.5 || range <= 2)) {
 				m_client->addUpdateMeshTaskWithEdge(bp);
 				++m_mesh_queued;
 			}
@@ -444,7 +456,7 @@ infostream<<"req shadow "<<std::endl;
 /*
 			// Add to set
 			block->refGrab();
-			drawlist.set(bp, block.get());
+			drawlist.set(bp, block);
 */
 
 			blocks_drawn++;
@@ -462,9 +474,7 @@ infostream<<"req shadow "<<std::endl;
 	}
 	m_drawlist_last = draw_nearest.size();
 
-	m_drawlist_work = false;
-
-//if (m_drawlist_last) infostream<<"breaked UDL "<<m_drawlist_last<<" collected="<<drawlist.size()<<" calls="<<calls<<" s="<<m_blocks.size()<<" maxms="<<max_cycle_ms<<" fw="<<getControl().fps_wanted<<" morems="<<porting::getTimeMs() - end_ms<< " meshq="<<m_mesh_queued<<" occache="<<occlude_cache.size()<<std::endl;
+	//if (m_drawlist_last) infostream<<"breaked UDL "<<m_drawlist_last<<" collected="<<drawlist.size()<<" calls="<<calls<<" s="<<m_blocks.size()<<" maxms="<<max_cycle_ms<<" fw="<<getControl().fps_wanted<<" morems="<<porting::getTimeMs() - end_ms<< " meshq="<<m_mesh_queued<<" occache="<<occlude_cache.size()<<std::endl;
 
 	if (m_drawlist_last)
 		return;
@@ -544,10 +554,6 @@ return;
 	else
 		prefix = "CM: transparent: ";
 
-	bool use_trilinear_filter = g_settings->getBool("trilinear_filter");
-	bool use_bilinear_filter = g_settings->getBool("bilinear_filter");
-	bool use_anisotropic_filter = g_settings->getBool("anisotropic_filter");
-
 	/*
 		Get time for measuring timeout.
 
@@ -616,6 +622,7 @@ return;
 
 //auto smgr = getSceneManager();
 
+	std::vector<MapBlock::mesh_type> used_meshes; //keep shared_ptr
 	auto drawlist = m_drawlist.load();
 	auto lock = drawlist->lock_shared_rec();
 	for(auto & ir : *drawlist) {
@@ -626,6 +633,7 @@ return;
 		auto mapBlockMesh = block->getMesh(mesh_step);
 		if (!mapBlockMesh)
 			continue;
+		used_meshes.emplace_back(mapBlockMesh);
 
 //		smgr->addOctreeSceneNode(mapBlockMesh->getMesh()); //, 0, -1, 1024);
 //		continue;
@@ -682,9 +690,9 @@ return;
 			{
 				scene::IMeshBuffer *buf = mesh->getMeshBuffer(i);
 
-				buf->getMaterial().setFlag(video::EMF_TRILINEAR_FILTER, use_trilinear_filter);
-				buf->getMaterial().setFlag(video::EMF_BILINEAR_FILTER, use_bilinear_filter);
-				buf->getMaterial().setFlag(video::EMF_ANISOTROPIC_FILTER, use_anisotropic_filter);
+				buf->getMaterial().setFlag(video::EMF_TRILINEAR_FILTER, m_cache_trilinear_filter);
+				buf->getMaterial().setFlag(video::EMF_BILINEAR_FILTER, m_cache_bilinear_filter);
+				buf->getMaterial().setFlag(video::EMF_ANISOTROPIC_FILTER, m_cache_anistropic_filter);
 
 				const video::SMaterial& material = buf->getMaterial();
 				video::IMaterialRenderer* rnd =
@@ -693,7 +701,7 @@ return;
 				if(transparent == is_transparent_pass)
 				{
 					if(buf->getVertexCount() == 0)
-						errorstream<<"Block ["<<analyze_block(block)
+						errorstream<<"Block ["<<analyze_block(block.get())
 								<<"] contains an empty meshbuf"<<std::endl;
 					drawbufs.add(buf);
 				}
@@ -771,7 +779,7 @@ auto smgr = getSceneManager();
 				if(transparent == is_transparent_pass)
 				{
 					if(buf->getVertexCount() == 0)
-						errorstream<<"Block ["<<analyze_block(block)
+						errorstream<<"Block ["<<analyze_block(block.get())
 								<<"] contains an empty meshbuf"<<std::endl;
 					/*
 						This *shouldn't* hurt too much because Irrlicht
@@ -1027,7 +1035,7 @@ void ClientMap::renderPostFx(CameraMode cam_mode)
 	}
 }
 
-void ClientMap::renderBlockBoundaries(std::map<v3s16, MapBlock*> blocks)
+void ClientMap::renderBlockBoundaries(const std::map<v3POS, MapBlock*> & blocks)
 {
 	video::IVideoDriver* driver = SceneManager->getVideoDriver();
 	video::SMaterial mat;
@@ -1035,8 +1043,7 @@ void ClientMap::renderBlockBoundaries(std::map<v3s16, MapBlock*> blocks)
 	mat.ZWriteEnable = false;
 
 	core::aabbox3d<f32> bound;
-//	std::map<v3s16, MapBlock*>& blocks = m_drawlist;
-//		const_cast<std::map<v3s16, bool>&>(nextBlocksToRequest());
+	//auto & blocks = *m_drawlist;
 	const v3f inset(BS/2);
 	const v3f blocksize(MAP_BLOCKSIZE);
 
@@ -1052,7 +1059,7 @@ void ClientMap::renderBlockBoundaries(std::map<v3s16, MapBlock*> blocks)
 		}
 		driver->setMaterial(mat);
 
-		for(std::map<v3s16, MapBlock*>::iterator i = blocks.begin(); i != blocks.end(); ++i) {
+		for(auto i = blocks.begin(); i != blocks.end(); ++i) {
 			video::SColor color(255, 0, 0, 0);
 			if (i->second) {
 				color.setBlue(255);

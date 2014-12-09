@@ -45,6 +45,7 @@ public:
 
 	content_t c_top;
 	content_t c_filler;
+	content_t c_stone;
 	content_t c_water;
 	content_t c_ice;
 	content_t c_dust;
@@ -91,9 +92,15 @@ public:
 	s16 calcBlockHeat(v3s16 p, uint64_t seed, float timeofday, float totaltime, bool use_weather = 1);
 	s16 calcBlockHumidity(v3s16 p, uint64_t seed, float timeofday, float totaltime, bool use_weather = 1);
 
+	void clear();
+
 	void calcBiomes(s16 sx, s16 sy, float *heat_map, float *humidity_map,
 		s16 *height_map, u8 *biomeid_map);
 	Biome *getBiome(float heat, float humidity, s16 y);
+
+private:
+	NodeResolver *m_resolver;
 };
 
 #endif
+

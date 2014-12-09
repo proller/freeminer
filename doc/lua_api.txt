@@ -1294,6 +1294,7 @@ vector.distance(p1, p2) -> number
 vector.length(v) -> number
 vector.normalize(v) -> vector
 vector.round(v) -> vector
+vector.apply(v, func) -> vector
 vector.equals(v1, v2) -> bool
 For the following functions x can be either a vector or a number.
 vector.add(v, x) -> vector
@@ -1310,6 +1311,9 @@ dump(obj, dumped={})
 math.hypot(x, y)
 ^ Get the hypotenuse of a triangle with legs x and y.
   Useful for distance calculation.
+math.sign(x, tolerance)
+^ Get the sign of a number
+  Optional: Also returns 0 when the absolute value is within the tolerance (default 0)
 string:split(separator)
 ^ e.g. string:split("a,b", ",") == {"a","b"}
 string:trim()
@@ -1317,13 +1321,15 @@ string:trim()
 minetest.pos_to_string({x=X,y=Y,z=Z}) -> "(X,Y,Z)"
 ^ Convert position to a printable string
 minetest.string_to_pos(string) -> position
-^ Same but in reverse
+^ Same but in reverse. Returns nil if the string can't be parsed to a position.
 minetest.formspec_escape(string) -> string
 ^ escapes characters [ ] \ , ;  that can not be used in formspecs
 minetest.is_yes(arg)
 ^ returns whether arg can be interpreted as yes
 minetest.get_us_time()
 ^ returns time with microsecond precision
+table.copy(table) -> table
+^ returns a deep copy of a table
 
 minetest namespace reference
 -----------------------------
@@ -1524,6 +1530,7 @@ minetest.place_node(pos, node)
 ^ Place node with the same effects that a player would cause
 minetest.dig_node(pos)
 ^ Dig node with the same effects that a player would cause
+  Returns true if successful, false on failure (e.g. protected location)
 minetest.punch_node(pos)
 ^ Punch node with the same effects that a player would cause
 
@@ -1547,10 +1554,11 @@ minetest.get_perlin(seeddiff, octaves, persistence, scale)
 ^ Return world-specific perlin noise (int(worldseed)+seeddiff)
 minetest.get_voxel_manip()
 ^ Return voxel manipulator object
-minetest.set_gen_notify(flags)
+minetest.set_gen_notify(flags, {deco_ids})
 ^ Set the types of on-generate notifications that should be collected
-^ flags is a comma-delimited combination of:
-^ dungeon, temple, cave_begin, cave_end, large_cave_begin, large_cave_end
+^ flags is a flag field with the available flags:
+^   dungeon, temple, cave_begin, cave_end, large_cave_begin, large_cave_end, decoration
+^ The second parameter is a list of IDS of decorations which notification is requested for
 minetest.get_mapgen_object(objectname)
 ^ Return requested mapgen object if available (see Mapgen objects)
 minetest.set_mapgen_params(MapgenParams)
@@ -1915,7 +1923,7 @@ Class reference
 ----------------
 NodeMetaRef: Node metadata - reference extra data and functionality stored
              in a node
-- Can be gotten via minetest.get_nodemeta(pos)
+- Can be gotten via minetest.get_meta(pos)
 methods:
 - set_string(name, value)
 - get_string(name)
@@ -2082,8 +2090,11 @@ methods:
     can be fully added to the list
 - contains_item(listname, stack): returns true if the stack of items
     can be fully taken from the list
-  remove_item(listname, stack): take as many items as specified from the list,
-    returns the items that were actually removed (as an ItemStack)
+- remove_item(listname, stack): take as many items as specified from the list,
+    returns the items that were actually removed (as an ItemStack) - note that
+    any item metadata is ignored, so attempting to remove a specific unique
+    item this way will likely remove the wrong one - to do that use set_stack
+    with an empty ItemStack
 - get_location() -> location compatible to minetest.get_inventory(location)
                  -> {type="undefined"} in case location is not known
 
@@ -2242,7 +2253,9 @@ current mapgen.
     Returns a table mapping requested generation notification types to arrays of positions at which the
 corresponding generated structures are located at within the current chunk.  To set the capture of positions
 of interest to be recorded on generate, use minetest.set_gen_notify().
-Possible fields of the table returned are:  dungeon, temple, cave_begin, cave_end, large_cave_begin, large_cave_end
+Possible fields of the table returned are:
+	dungeon, temple, cave_begin, cave_end, large_cave_begin, large_cave_end, decoration
+Decorations have a key in the format of "decoration#id", where id is the numeric unique decoration ID.
 
 Registered entities
 --------------------
@@ -2254,7 +2267,9 @@ Registered entities
   - on_activate(self, staticdata)
     ^ Called when the object is instantiated.
   - on_step(self, dtime)
-    ^ Called on every server tick (dtime is usually 0.1 seconds)
+    ^ Called on every server tick, after movement and collision processing.
+      dtime is usually 0.1 seconds, as per the dedicated_server_step setting
+      in minetest.conf.
   - on_punch(self, puncher, time_from_last_punch, tool_capabilities, dir)
     ^ Called when somebody punches the object.
     ^ Note that you probably want to handle most punches using the

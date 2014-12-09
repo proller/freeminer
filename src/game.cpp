@@ -78,6 +78,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/string.h"
 #include "drawscene.h"
 #include "content_cao.h"
+#include "fontengine.h"
 
 #ifdef HAVE_TOUCHSCREENGUI
 #include "touchscreengui.h"
@@ -443,9 +444,8 @@ PointedThing getPointedThing(Client *client, v3f player_position,
 
 /* Profiler display */
 
-void update_profiler_gui(gui::IGUIStaticText *guitext_profiler,
-		gui::IGUIFont *font, u32 text_height, u32 show_profiler,
-		u32 show_profiler_max)
+void update_profiler_gui(gui::IGUIStaticText *guitext_profiler, FontEngine *fe,
+		u32 show_profiler, u32 show_profiler_max, s32 screen_height)
 {
 	if (show_profiler == 0) {
 		guitext_profiler->setVisible(false);
@@ -457,14 +457,25 @@ void update_profiler_gui(gui::IGUIStaticText *guitext_profiler,
 		guitext_profiler->setText(text.c_str());
 		guitext_profiler->setVisible(true);
 
-		s32 w = font->getDimension(text.c_str()).Width;
+		s32 w = fe->getTextWidth(text.c_str());
 
 		if (w < 400)
 			w = 400;
 
-		core::rect<s32> rect(6, 4 + (text_height + 5) * 2, 12 + w,
-				     8 + (text_height + 5) * 2 +
-				     font->getDimension(text.c_str()).Height);
+		unsigned text_height = fe->getTextHeight();
+
+		core::position2di upper_left, lower_right;
+
+		upper_left.X  = 6;
+		upper_left.Y  = (text_height + 5) * 2;
+		lower_right.X = 12 + w;
+		lower_right.Y = upper_left.Y + (text_height + 1) * MAX_PROFILER_TEXT_ROWS;
+
+		if (lower_right.Y > screen_height * 2 / 3)
+			lower_right.Y = screen_height * 2 / 3;
+
+		core::rect<s32> rect(upper_left, lower_right);
+
 		guitext_profiler->setRelativePosition(rect);
 		guitext_profiler->setVisible(true);
 	}
@@ -860,6 +871,15 @@ public:
 		services->setPixelShaderConstant("eyePosition", (irr::f32 *)&eye_position, 3);
 		services->setVertexShaderConstant("eyePosition", (irr::f32 *)&eye_position, 3);
 
+		v3f sun_moon_position;
+		if (m_sky->sun_moon_light) {
+			sun_moon_position = m_sky->sun_moon_light->getPosition();
+		} else {
+			sun_moon_position = v3f(0.0, eye_position.Y*BS+900.0, 0.0);
+		}
+		services->setPixelShaderConstant("sunPosition", (irr::f32 *)&sun_moon_position, 3);
+		services->setVertexShaderConstant("sunPosition", (irr::f32 *)&sun_moon_position, 3);
+
 		// Uniform sampler layers
 		int layer0 = 0;
 		int layer1 = 1;
@@ -1159,8 +1179,7 @@ static void show_pause_menu(GUIFormSpecMenu **cur_formspec,
 /******************************************************************************/
 static void updateChat(Client &client, f32 dtime, bool show_debug,
 		const v2u32 &screensize, bool show_chat, u32 show_profiler,
-		ChatBackend &chat_backend, gui::IGUIStaticText *guitext_chat,
-		gui::IGUIFont *font)
+		ChatBackend &chat_backend, gui::IGUIStaticText *guitext_chat)
 {
 	// Add chat log output for errors to be shown in chat
 	static LogOutputBuffer chat_log_error_buf(LMT_ERROR);
@@ -1183,9 +1202,7 @@ static void updateChat(Client &client, f32 dtime, bool show_debug,
 	// Display all messages in a static text element
 	unsigned int recent_chat_count = chat_backend.getRecentBuffer().getLineCount();
 	std::wstring recent_chat       = chat_backend.getRecentChat();
-
-	// TODO replace by fontengine fcts
-	unsigned int line_height       = font->getDimension(L"Ay").Height + font->getKerningHeight();
+	unsigned int line_height       = g_fontengine->getLineHeight();
 
 	guitext_chat->setText(recent_chat.c_str());
 
@@ -1196,7 +1213,7 @@ static void updateChat(Client &client, f32 dtime, bool show_debug,
 		chat_y += line_height;
 
 	// first pass to calculate height of text to be set
-	s32 width = std::min(font->getDimension(recent_chat.c_str()).Width + 10,
+	s32 width = std::min(g_fontengine->getTextWidth(recent_chat) + 10,
 			     porting::getWindowSize().X - 20);
 	core::rect<s32> rect(10, chat_y, width, chat_y + porting::getWindowSize().Y);
 	guitext_chat->setRelativePosition(rect);
@@ -1451,7 +1468,6 @@ public:
 			bool random_input,
 			InputHandler *input,
 			IrrlichtDevice *device,
-			gui::IGUIFont *font,
 			const std::string &map_dir,
 			const std::string &playername,
 			const std::string &password,
@@ -1556,8 +1572,9 @@ protected:
 	void updateFrame(std::vector<aabb3f> &highlight_boxes, ProfilerGraph *graph,
 			RunStats *stats, GameRunData *runData,
 			f32 dtime, const VolatileRunFlags &flags, const CameraOrientation &cam);
-	void updateGui(float *statustext_time, const RunStats &stats, f32 dtime,
-			const VolatileRunFlags &flags, const CameraOrientation &cam);
+	void updateGui(float *statustext_time, const RunStats &stats,
+			const GameRunData& runData, f32 dtime, const VolatileRunFlags &flags,
+			const CameraOrientation &cam);
 	void updateProfilerGraphs(ProfilerGraph *graph);
 
 	// Misc
@@ -1571,8 +1588,6 @@ private:
 
 	Client *client;
 	Server *server;
-
-	gui::IGUIFont *font;
 
 	IWritableTextureSource *texture_src;
 	IWritableShaderSource *shader_src;
@@ -1608,7 +1623,6 @@ private:
 	IrrlichtDevice *device;
 	video::IVideoDriver *driver;
 	scene::ISceneManager *smgr;
-	u32 text_height;
 	bool *kill;
 	std::string *error_message;
 	IGameDef *gamedef;                     // Convenience (same as *client)
@@ -1650,12 +1664,28 @@ private:
 	KeyCache keycache;
 
 	IntervalLimiter profiler_interval;
+
+	/* TODO: Add a callback function so these can be updated when a setting
+	 *       changes.  At this point in time it doesn't matter (e.g. /set
+	 *       is documented to change server settings only)
+	 *
+	 * TODO: Local caching of settings is not optimal and should at some stage
+	 *       be updated to use a global settings object for getting thse values
+	 *       (as opposed to the this local caching). This can be addressed in
+	 *       a later release.
+	 */
+	bool m_cache_doubletap_jump;
+	bool m_cache_enable_node_highlighting;
+	bool m_cache_enable_clouds;
+	bool m_cache_enable_particles;
+	bool m_cache_enable_fog;
+	f32  m_cache_mouse_sensitivity;
+	f32  m_repeat_right_click_time;
 };
 
 Game::Game() :
 	client(NULL),
 	server(NULL),
-	font(NULL),
 	texture_src(NULL),
 	shader_src(NULL),
 	itemdef_manager(NULL),
@@ -1678,7 +1708,13 @@ Game::Game() :
 	playerlist(nullptr),
 	mapper(nullptr)
 {
-
+	m_cache_doubletap_jump            = g_settings->getBool("doubletap_jump");
+	m_cache_enable_node_highlighting  = g_settings->getBool("enable_node_highlighting");
+	m_cache_enable_clouds             = g_settings->getBool("enable_clouds");
+	m_cache_enable_particles          = g_settings->getBool("enable_particles");
+	m_cache_enable_fog                = g_settings->getBool("enable_fog");
+	m_cache_mouse_sensitivity         = g_settings->getFloat("mouse_sensitivity");
+	m_repeat_right_click_time         = g_settings->getFloat("repeat_rightclick_time");
 }
 
 
@@ -1716,7 +1752,6 @@ bool Game::startup(bool *kill,
 		bool random_input,
 		InputHandler *input,
 		IrrlichtDevice *device,
-		gui::IGUIFont *font,
 		const std::string &map_dir,
 		const std::string &playername,
 		const std::string &password,
@@ -1729,7 +1764,6 @@ bool Game::startup(bool *kill,
 {
 	// "cache"
 	this->device        = device;
-	this->font          = font;
 	this->kill          = kill;
 	this->error_message = error_message;
 	this->random_input  = random_input;
@@ -1739,7 +1773,8 @@ bool Game::startup(bool *kill,
 
 	driver              = device->getVideoDriver();
 	smgr                = device->getSceneManager();
-	text_height         = font->getDimension(L"Random test string").Height;
+
+	smgr->getParameters()->setAttribute(scene::OBJ_LOADER_IGNORE_MATERIAL_FILES, true);
 
 	if (!init(map_dir, address, port, gamespec))
 		return false;
@@ -2031,7 +2066,7 @@ bool Game::createClient(const std::string &playername,
 	}
 
 	// Update cached textures, meshes and materials
-	client->afterContentReceived(device, font);
+	client->afterContentReceived(device, g_fontengine->getFont());
 
 	/* Camera
 	 */
@@ -2041,7 +2076,7 @@ bool Game::createClient(const std::string &playername,
 
 	/* Clouds
 	 */
-	if (g_settings->getBool("enable_clouds")) {
+	if (m_cache_enable_clouds) {
 		clouds = new Clouds(smgr->getRootSceneNode(), smgr, -1, time(0));
 		if (!clouds) {
 			*error_message = "Memory allocation error";
@@ -2093,8 +2128,7 @@ bool Game::createClient(const std::string &playername,
 	player->hurt_tilt_timer = 0;
 	player->hurt_tilt_strength = 0;
 
-	hud = new Hud(driver, smgr, guienv, font, text_height, gamedef,
-			player, local_inventory);
+	hud = new Hud(driver, smgr, guienv, gamedef, player, local_inventory);
 
 	if (!hud) {
 		*error_message = "Memory error: could not create HUD";
@@ -2123,7 +2157,7 @@ bool Game::initGui(std::string *error_message)
 	// Object infos are shown in this
 	guitext_info = guienv->addStaticText(
 			L"",
-			core::rect<s32>(0, 0, 400, text_height * 5 + 5) + v2s32(100, 200),
+			core::rect<s32>(0, 0, 400, g_fontengine->getTextHeight() * 5 + 5) + v2s32(100, 200),
 			false, true, guiroot);
 
 	// Status text (displays info when showing and hiding GUI stuff, etc.)
@@ -2242,9 +2276,11 @@ bool Game::connectToServer(const std::string &playername,
 		return false;
 	}
 
-	client = new Client(device, playername.c_str(), password, *draw_control,
-		    texture_src, shader_src, itemdef_manager, nodedef_manager, sound,
-			eventmgr, connect_address.isIPv6(), simple_singleplayer_mode);
+	client = new Client(device,
+			playername.c_str(), password, simple_singleplayer_mode,
+			*draw_control, texture_src, shader_src,
+			itemdef_manager, nodedef_manager, sound, eventmgr,
+			connect_address.isIPv6());
 
 	if (!client)
 		return false;
@@ -2371,12 +2407,12 @@ bool Game::getServerContent(bool *aborted)
 		if (!client->itemdefReceived()) {
 			wchar_t *text = wgettext("Item definitions...");
 			progress = 0;
-			draw_load_screen(text, device, guienv, font, dtime, progress);
+			draw_load_screen(text, device, guienv, dtime, progress);
 			delete[] text;
 		} else if (!client->nodedefReceived()) {
 			wchar_t *text = wgettext("Node definitions...");
 			progress = 25;
-			draw_load_screen(text, device, guienv, font, dtime, progress);
+			draw_load_screen(text, device, guienv, dtime, progress);
 			delete[] text;
 		} else {
 			std::stringstream message;
@@ -2398,7 +2434,7 @@ bool Game::getServerContent(bool *aborted)
 
 			progress = 50 + client->mediaReceiveProgress() * 50 + 0.5;
 			draw_load_screen(narrow_to_wide(message.str().c_str()), device,
-					guienv, font, dtime, progress);
+					guienv, dtime, progress);
 		}
 
 		if (progress_old != progress) {
@@ -2522,8 +2558,9 @@ void Game::updateProfilers(const GameRunData &run_data, const RunStats &stats,
 			g_profiler->print(infostream);
 		}
 
-		update_profiler_gui(guitext_profiler, font, text_height,
-				run_data.profiler_current_page, run_data.profiler_max_page);
+		update_profiler_gui(guitext_profiler, g_fontengine,
+				run_data.profiler_current_page, run_data.profiler_max_page,
+				driver->getScreenSize().Height);
 
 		g_profiler->clear();
 	}
@@ -2635,7 +2672,7 @@ void Game::processUserInput(VolatileRunFlags *flags,
 #endif
 
 	// Increase timer for double tap of "keymap_jump"
-	if (g_settings->getBool("doubletap_jump") && interact_args->jump_timer <= 0.2)
+	if (m_cache_doubletap_jump && interact_args->jump_timer <= 0.2)
 		interact_args->jump_timer += dtime;
 
 	processKeyboardInput(
@@ -2726,11 +2763,11 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 	}
 
 	//freeminer
-/*
+#if !defined(NDEBUG)
 	if (input->wasKeyDown(getKeySetting("keymap_toggle_block_boundaries"))) {
 		toggleBlockBoundaries(statustext_time, flags);
 	}
-*/
+#endif
 
 		if (playerlist)
 			playerlist->setSelected(-1);
@@ -2750,7 +2787,7 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 
 			u32 max_height = screensize.Y * 0.7;
 
-			u32 row_height = font->getDimension(L"A").Height + 4;
+			u32 row_height = g_fontengine->getTextHeight() + 4;
 			u32 rows = max_height / row_height;
 			u32 columns = players.size() / rows;
 			if (players.size() % rows > 0)
@@ -2760,7 +2797,7 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 				actual_height = row_height * players.size();
 			u32 max_width = 0;
 			for (size_t i = 0; i < players.size(); ++i)
-				max_width = std::max(max_width, font->getDimension(utf8_to_wide(players[i]).c_str()).Width);
+				max_width = std::max(max_width, g_fontengine->getTextWidth(utf8_to_wide(players[i]).c_str()));
 			max_width += 15;
 			u32 actual_width = columns * max_width;
 
@@ -2901,7 +2938,7 @@ void Game::toggleFreeMove(float *statustext_time)
 
 void Game::toggleFreeMoveAlt(float *statustext_time, float *jump_timer)
 {
-	if (g_settings->getBool("doubletap_jump") && *jump_timer < 0.2f)
+	if (m_cache_doubletap_jump && *jump_timer < 0.2f)
 		toggleFreeMove(statustext_time);
 }
 
@@ -2951,7 +2988,8 @@ void Game::toggleHud(float *statustext_time, bool *flag)
 	*flag = !*flag;
 	*statustext_time = 0;
 	statustext = msg[*flag];
-	client->setHighlighted(client->getHighlighted(), *flag);
+	if (g_settings->getBool("enable_node_highlighting"))
+		client->setHighlighted(client->getHighlighted(), *flag);
 }
 
 
@@ -3017,8 +3055,8 @@ void Game::toggleProfiler(float *statustext_time, u32 *profiler_current_page,
 	*profiler_current_page = (*profiler_current_page + 1) % (profiler_max_page + 1);
 
 	// FIXME: This updates the profiler with incomplete values
-	update_profiler_gui(guitext_profiler, font, text_height,
-			    *profiler_current_page, profiler_max_page);
+	update_profiler_gui(guitext_profiler, g_fontengine, *profiler_current_page,
+			profiler_max_page, driver->getScreenSize().Height);
 
 	if (*profiler_current_page != 0) {
 		std::wstringstream sstr;
@@ -3127,7 +3165,7 @@ void Game::updateCameraDirection(CameraOrientation *cam,
 
 			//infostream<<"window active, pos difference "<<dx<<","<<dy<<std::endl;
 
-			float d = g_settings->getFloat("mouse_sensitivity");
+			float d = m_cache_mouse_sensitivity;
 			d = rangelim(d, 0.01, 100.0);
 			cam->camera_yaw -= dx * d;
 			cam->camera_pitch += dy * d;
@@ -3635,7 +3673,7 @@ void Game::processPlayerInteraction(std::vector<aabb3f> &highlight_boxes,
 						<<std::endl;
 */
 
-		if (g_settings->getBool("enable_node_highlighting")) {
+		if (m_cache_enable_node_highlighting) {
 			if (pointed.type == POINTEDTHING_NODE) {
 				client->setHighlighted(pointed.node_undersurface, show_hud);
 			} else {
@@ -3748,8 +3786,7 @@ void Game::handlePointingAtNode(GameRunData *runData,
 	}
 
 	if ((input->getRightClicked() ||
-			runData->repeat_rightclick_timer >=
-			g_settings->getFloat("repeat_rightclick_time")) &&
+			runData->repeat_rightclick_timer >= m_repeat_right_click_time) &&
 			client->checkPrivilege("interact")) {
 		runData->repeat_rightclick_timer = 0;
 		infostream << "Ground right-clicked" << std::endl;
@@ -3906,7 +3943,7 @@ void Game::handleDigging(GameRunData *runData,
 	} else {
 		runData->dig_time_complete = params.time;
 
-		if (g_settings->getBool("enable_particles")) {
+		if (m_cache_enable_particles) {
 			const ContentFeatures &features =
 					client->getNodeDefManager()->get(n);
 			addPunchingParticles(gamedef, smgr, player,
@@ -3953,7 +3990,7 @@ void Game::handleDigging(GameRunData *runData,
 		if (is_valid_position)
 			client->removeNode(nodepos);
 
-		if (g_settings->getBool("enable_particles")) {
+		if (m_cache_enable_particles) {
 			const ContentFeatures &features =
 				client->getNodeDefManager()->get(wasnode);
 			addDiggingParticles
@@ -4103,7 +4140,7 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 		Fog
 	*/
 
-	if (g_settings->getBool("enable_fog") && !flags.force_fog_off) {
+	if (m_cache_enable_fog && !flags.force_fog_off) {
 		driver->setFog(
 				sky->getBgColor(),
 				video::EFT_FOG_LINEAR,
@@ -4135,7 +4172,7 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 
 	updateChat(*client, dtime, flags.show_debug, screensize,
 			flags.show_chat, runData->profiler_current_page,
-			*chat_backend, guitext_chat, font);
+			*chat_backend, guitext_chat);
 
 	/*
 		Inventory
@@ -4196,7 +4233,7 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 				runData->update_draw_list_last_cam_pos = camera->getPosition();
 		}
 
-	updateGui(&runData->statustext_time, *stats, dtime, flags, cam);
+	updateGui(&runData->statustext_time, *stats, *runData, dtime, flags, cam);
 
 	/*
 	   make sure menu is on top
@@ -4242,7 +4279,7 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 		Profiler graph
 	*/
 	if (flags.show_profiler_graph)
-		graph->draw(10, screensize.Y - 10, driver, font);
+		graph->draw(10, screensize.Y - 10, driver, g_fontengine->getFont());
 
 	/*
 		Damage flash
@@ -4308,8 +4345,9 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 }
 
 
-void Game::updateGui(float *statustext_time, const RunStats& stats,
-		f32 dtime, const VolatileRunFlags &flags, const CameraOrientation &cam)
+void Game::updateGui(float *statustext_time, const RunStats &stats,
+		const GameRunData& runData, f32 dtime, const VolatileRunFlags &flags,
+		const CameraOrientation &cam)
 {
 	v2u32 screensize = driver->getScreenSize();
 	LocalPlayer *player = client->getEnv().getLocalPlayer();
@@ -4362,7 +4400,7 @@ void Game::updateGui(float *statustext_time, const RunStats& stats,
 	if (guitext->isVisible()) {
 		core::rect<s32> rect(
 				5,              5,
-				screensize.X,   5 + text_height
+				screensize.X,   5 + g_fontengine->getTextHeight()
 		);
 		guitext->setRelativePosition(rect);
 	}
@@ -4385,22 +4423,20 @@ void Game::updateGui(float *statustext_time, const RunStats& stats,
 		   << "%"
 		   << ")";
 
-		// Node definition parameters:
-		// name - tile1 - drawtype - paramtype - paramtype2
 		if (runData.pointed_old.type == POINTEDTHING_NODE) {
-			INodeDefManager *nodedef = client->getNodeDefManager();
 			ClientMap &map = client->getEnv().getClientMap();
-			MapNode n = map.getNode(runData.pointed_old.node_undersurface);
-			if (nodedef->get(n).name != "unknown") {
-				const auto & features = nodedef->get(n);
-				os << " (pointing_at = " << features.name <<
+			const INodeDefManager *nodedef = client->getNodeDefManager();
+			MapNode n = map.getNodeNoEx(runData.pointed_old.node_undersurface);
+			const ContentFeatures &features = nodedef->get(n);
+			if (n.getContent() != CONTENT_IGNORE && features.name != "unknown") {
+				os << " (pointing_at = " << features.name
 #if !defined(NDEBUG)
-					" - " << features.tiledef[0].name.c_str() <<
-					" - " << features.drawtype <<
-					" - " << features.param_type <<
-					" - " << features.param_type_2 <<
+					<< " - " << features.tiledef[0].name.c_str()
+					<< " - " << features.drawtype
+					<< " - " << features.param_type
+					<< " - " << features.param_type_2
 #endif
-					")";
+				   << ")";
 			}
 		}
 
@@ -4408,8 +4444,8 @@ void Game::updateGui(float *statustext_time, const RunStats& stats,
 		guitext2->setVisible(true);
 
 		core::rect<s32> rect(
-				5,             5 + text_height,
-				screensize.X,  5 + text_height * 2
+				5,             5 + g_fontengine->getTextHeight(),
+				screensize.X,  5 + g_fontengine->getTextHeight() * 2
 		);
 		guitext2->setRelativePosition(rect);
 	} else {
@@ -4520,7 +4556,7 @@ void Game::showOverlayMessage(const char *msg, float dtime,
 		int percent, bool draw_clouds)
 {
 	wchar_t *text = wgettext(msg);
-	draw_load_screen(text, device, guienv, font, dtime, percent, draw_clouds);
+	draw_load_screen(text, device, guienv, dtime, percent, draw_clouds);
 	delete[] text;
 }
 
@@ -4560,7 +4596,6 @@ bool the_game(bool *kill,
 		bool random_input,
 		InputHandler *input,
 		IrrlichtDevice *device,
-		gui::IGUIFont *font,
 
 		const std::string &map_dir,
 		const std::string &playername,
@@ -4588,7 +4623,7 @@ bool the_game(bool *kill,
 
 		bool started = false;
 		game.runData  = { 0 };
-		if (game.startup(kill, random_input, input, device, font, map_dir,
+		if (game.startup(kill, random_input, input, device, map_dir,
 					playername, password, &server_address, port,
 					&error_message, &chat_backend, gamespec,
 					simple_singleplayer_mode)) {

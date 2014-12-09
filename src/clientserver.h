@@ -28,7 +28,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <utility>
 #include <string>
 #include "irrlichttypes.h"
-#include <msgpack.hpp>
+#include "msgpack.h"
 
 #define MAX_PACKET_SIZE 1400
 
@@ -796,7 +796,8 @@ enum {
 	TOSERVER_DRAWCONTROL_WANTED_RANGE,
 	TOSERVER_DRAWCONTROL_RANGE_ALL,
 	TOSERVER_DRAWCONTROL_FARMESH,
-	TOSERVER_DRAWCONTROL_FOV
+	TOSERVER_DRAWCONTROL_FOV,
+	TOSERVER_DRAWCONTROL_BLOCK_OVERFLOW
 };
 
 #endif

@@ -158,7 +158,7 @@ void MeshMakeData::fillSingleNode(MapNode *node)
 	m_vmanip.addArea(area);
 
 	// Fill in data
-	MapNode *data = new MapNode[volume];
+	MapNode *data = reinterpret_cast<MapNode*>( ::operator new(volume * sizeof(MapNode)));
 	for(s32 i = 0; i < volume; i++)
 	{
 		if(i == our_node_index)
@@ -1184,6 +1184,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 					os.str()+"0",
 					&p.tile.texture_id);
 		}
+		}
 		// - Texture animation
 		if(p.tile.material_flags & MATERIAL_FLAG_ANIMATION_VERTICAL_FRAMES)
 		{
@@ -1202,7 +1203,6 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 			// Replace tile texture with the first animation frame
 			FrameSpec animation_frame = p.tile.frames.find(0)->second;
 			p.tile.texture = animation_frame.texture;
-		}
 		}
 
 		if(m_enable_highlighting && p.tile.material_flags & MATERIAL_FLAG_HIGHLIGHTED)
@@ -1227,12 +1227,16 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 					applyFacesShading (vc, 0.836660);
 				}
 			}
-			// - Classic lighting
-			// Set initial real color and store for later updates
-			u8 day = vc.getRed();
-			u8 night = vc.getGreen();
-			finalColorBlend(vc, day, night, 1000);
-			m_daynight_diffs[i][j] = std::make_pair(day, night);
+			if(!m_enable_shaders)
+			{
+				// - Classic lighting (shaders handle this by themselves)
+				// Set initial real color and store for later updates
+				u8 day = vc.getRed();
+				u8 night = vc.getGreen();
+				finalColorBlend(vc, day, night, 1000);
+				if(day != night)
+					m_daynight_diffs[i][j] = std::make_pair(day, night);
+			}
 		}
 
 		// Create material
@@ -1314,6 +1318,9 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 MapBlockMesh::~MapBlockMesh()
 {
+	if (!m_mesh)
+		return;
+
 	if(clearHardwareBuffer)
 		for(u32 i=0; i<m_mesh->getMeshBufferCount(); i++){
 			scene::IMeshBuffer *buf = m_mesh->getMeshBuffer(i);
@@ -1409,7 +1416,7 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack, u32 daynight_rat
 	}
 
 	// Day-night transition
-	if(daynight_ratio != m_last_daynight_ratio)
+	if(!m_enable_shaders && (daynight_ratio != m_last_daynight_ratio))
 	{
 		for(std::map<u32, std::map<u32, std::pair<u8, u8> > >::iterator
 				i = m_daynight_diffs.begin();
