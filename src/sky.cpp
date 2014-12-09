@@ -89,12 +89,7 @@ Sky::Sky(scene::ISceneNode* parent, scene::ISceneManager* mgr, s32 id):
 
 	m_directional_colored_fog = g_settings->getBool("directional_colored_fog");
 
-	shadow_enabled = g_settings->getBool("shadows");
-	if (shadow_enabled) {
-		sun_moon_light = mgr->addLightSceneNode(this, core::vector3df(0,MAP_GENERATION_LIMIT*BS*2,0), video::SColorf(1.0f, 0.6f, 0.7f, 1.0f), MAP_GENERATION_LIMIT*BS*5);
-	} else {
-		sun_moon_light = nullptr;
-	}
+	sun_moon_light = mgr->addLightSceneNode(this, core::vector3df(0,MAP_GENERATION_LIMIT*BS*2,0), video::SColorf(1.0f, 0.6f, 0.7f, 1.0f), MAP_GENERATION_LIMIT*BS*5);
 }
 
 void Sky::OnRegisterSceneNode()
@@ -347,7 +342,7 @@ void Sky::render()
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 			}
 
-			if (shadow_enabled && sun_moon_light) {
+			if (sun_moon_light) {
 				auto light_vector = core::vector3df(0, MAP_GENERATION_LIMIT*BS*2, 0);
 				light_vector.rotateXZBy(90);
 				light_vector.rotateXYBy(wicked_time_of_day * 360 + 180);
@@ -435,7 +430,7 @@ void Sky::render()
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 			}
 
-			if (shadow_enabled && !sun_light_drawed && sun_moon_light) {
+			if (!sun_light_drawed && sun_moon_light) {
 				auto light_vector = core::vector3df(0, -MAP_GENERATION_LIMIT*BS*2, 0);
 				light_vector.rotateXZBy(90);
 				light_vector.rotateXYBy(wicked_time_of_day * 360 - 180);

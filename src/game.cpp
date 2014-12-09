@@ -4209,13 +4209,14 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 	auto camera_position = camera->getPosition();
 
 		if (!flags.no_output)
-		if (client->getEnv().getClientMap().m_drawlist_last || runData->update_draw_list_timer >= 0.5 ||
+		if (client->getEnv().getClientMap().m_drawlist_last || runData->update_draw_list_timer >= 10 ||
 				runData->update_draw_list_last_cam_pos.getDistanceFrom(camera_position) > MAP_BLOCKSIZE*BS*2 ||
 				flags.camera_offset_changed){
 			runData->update_draw_list_timer = 0;
 			bool allow = true;
 #if CMAKE_THREADS && CMAKE_HAVE_FUTURE
-			if (g_settings->getBool("more_threads")) {
+
+			if (0 && g_settings->getBool("more_threads")) {
 				bool allow = true;
 				if (updateDrawList_future.valid()) {
 					auto res = updateDrawList_future.wait_for(std::chrono::milliseconds(0));

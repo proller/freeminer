@@ -1246,6 +1246,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 		material.setFlag(video::EMF_BILINEAR_FILTER, false);
 		material.setFlag(video::EMF_FOG_ENABLE, true);
 		material.setFlag(video::EMF_NORMALIZE_NORMALS, true);
+		//material.setFlag(video::EMF_WIREFRAME, true);
 		material.setTexture(0, p.tile.texture);
 
 		if (p.tile.material_flags & MATERIAL_FLAG_HIGHLIGHTED) {

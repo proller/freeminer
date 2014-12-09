@@ -142,7 +142,6 @@ private:
 
 public:
 	irr::scene::ILightSceneNode * sun_moon_light;
-	bool shadow_enabled;
 private:
 
 };

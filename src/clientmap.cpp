@@ -173,6 +173,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 
 	if (!max_cycle_ms)
 		max_cycle_ms = 300/getControl().fps_wanted;
+		//max_cycle_ms = 1000;
 
 	m_camera_mutex.Lock();
 	v3f camera_position = m_camera_position;
@@ -220,8 +221,9 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 	float farthest_drawn = 0;
 
 			if (!m_drawlist_last) {
-				//driver->runAllOcclusionQueries(false);
-				//driver->updateAllOcclusionQueries();
+	TimeTaker timer_step("ClientMap::updateDrawList OcclusionQueries");
+				driver->runAllOcclusionQueries(false);
+				driver->updateAllOcclusionQueries();
 			}
 
 
@@ -349,7 +351,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 			/*
 				Occlusion culling
 			*/
-
+/*
 			v3s16 cpn = bp * MAP_BLOCKSIZE;
 			cpn += v3s16(MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2);
 
@@ -386,7 +388,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 				block->scenenode_setVisible(false);
 				continue;
 			}
-
+*/
 			// This block is in range. Reset usage timer.
 			block->resetUsageTimer();
 
@@ -427,11 +429,11 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 				auto mesh_shadow = block->getMesh(shadow_step, true);
 				if (mesh_shadow) {
 					if (mesh_shadow->getMesh()->getMeshBufferCount()) {
-infostream<<"adding shadow "<<mesh_shadow->step <<" "<<mesh_shadow->getMesh()->getMeshBufferCount()<<std::endl;
+//infostream<<"adding shadow "<<mesh_shadow->step <<" "<<mesh_shadow->getMesh()->getMeshBufferCount()<<std::endl;
 						block->shadownode = block->scenenode->addShadowVolumeSceneNode(mesh_shadow->getMesh());
 					}
 				} else {
-infostream<<"req shadow "<<std::endl;
+//infostream<<"req shadow "<<std::endl;
 					m_client->addUpdateMeshTask(bp, false, shadow_step);
 				}
 			}
@@ -446,10 +448,17 @@ infostream<<"req shadow "<<std::endl;
 //				m_device->getVideoDriver()->addOcclusionQuery(r.mesh->scenenode, r.mesh->getMesh());
 			} else {
 				//auto visible = driver->getOcclusionQueryResult(block->scenenode);
-				//errorstream<<"block visible="<<visible<<std::endl;
+				//infostream<<"block visible="<<visible<<std::endl;
 				//block->scenenode->setVisible(visible>0);
+				//if (!visible)
+				//	getSceneManager()->addToDeletionQueue(block->scenenode);
+/*
+				block->scenenode_setVisible(visible>0);
+				if (block->shadownode)
+					block->shadownode->setVisible(visible>0);
+*/
 			}
-			block->scenenode_setVisible(true);
+			//block->scenenode_setVisible(true);
 
 //continue;
 
@@ -479,12 +488,12 @@ infostream<<"req shadow "<<std::endl;
 	if (m_drawlist_last)
 		return;
 
-	for (auto & ir : *m_drawlist)
-		ir.second->refDrop();
+	//for (auto & ir : *m_drawlist)
+	//	ir.second->refDrop();
 
-	auto m_drawlist_old = !m_drawlist_current ? &m_drawlist_1 : &m_drawlist_0;
-	m_drawlist = m_drawlist_current ? &m_drawlist_1 : &m_drawlist_0;
-	m_drawlist_old->clear();
+	//auto m_drawlist_old = !m_drawlist_current ? &m_drawlist_1 : &m_drawlist_0;
+	//m_drawlist = m_drawlist_current ? &m_drawlist_1 : &m_drawlist_0;
+	//m_drawlist_old->clear();
 
 	m_control.blocks_would_have_drawn = blocks_would_have_drawn;
 	m_control.blocks_drawn = blocks_drawn;
