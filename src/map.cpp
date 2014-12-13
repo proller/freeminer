@@ -95,9 +95,10 @@ Map::~Map()
 {
 	auto lock = m_blocks.lock_unique_rec();
 #ifndef SERVER
+	if(g_settings->getBool("enable_vbo"))
 	for(auto &i : m_blocks) {
 		// We dont have gamedef here anymore, so we cant remove the hardwarebuffers
-		if(i.second->mesh)
+		if(i.second && i.second->mesh)
 			i.second->mesh->clearHardwareBuffer = false;
 	}
 #endif
@@ -281,7 +282,7 @@ void Map::unspreadLight(enum LightBank bank,
 		v3s16(-1,0,0), // left
 	};
 
-	if(from_nodes.size() == 0)
+	if(from_nodes.empty())
 		return;
 
 	u32 blockchangecount = 0;
@@ -427,7 +428,7 @@ void Map::unspreadLight(enum LightBank bank,
 			<<" for "<<from_nodes.size()<<" nodes"
 			<<std::endl;*/
 
-	if(unlighted_nodes.size() > 0)
+	if(!unlighted_nodes.empty())
 		unspreadLight(bank, unlighted_nodes, light_sources, modified_blocks);
 }
 
@@ -464,7 +465,7 @@ void Map::spreadLight(enum LightBank bank,
 		v3s16(-1,0,0), // left
 	};
 
-	if(from_nodes.size() == 0)
+	if(from_nodes.empty())
 		return;
 
 	u32 blockchangecount = 0;
@@ -589,9 +590,9 @@ void Map::spreadLight(enum LightBank bank,
 			<<" for "<<from_nodes.size()<<" nodes"
 			<<std::endl;*/
 
-	if(lighted_nodes.size() > 0 && recursive <= 32) { // maybe 32 too small
+	if(!lighted_nodes.empty() && recursive <= 32) { // maybe 32 too small
 /*
-		infostream<<"spreadLight(): recursive("<<count<<"): changed=" <<blockchangecount
+		infostream<<"spreadLight(): recursive("<<recursive<<"): changed=" <<blockchangecount
 			<<" from="<<from_nodes.size()
 			<<" lighted="<<lighted_nodes.size()
 			<<" modifiedB="<<modified_blocks.size()
@@ -752,9 +753,9 @@ u32 Map::updateLighting(enum LightBank bank,
 			if(!block || block->isDummy())
 				break;
 
-			auto lock = block->try_lock_unique_rec(); // may cause dark areas
+			auto lock = block->try_lock_unique_rec();
 			if (!lock->owns_lock())
-				break;
+				break; // may cause dark areas
 			v3s16 pos = block->getPos();
 			v3s16 posnodes = block->getPosRelative();
 			modified_blocks[pos] = block;
@@ -3131,7 +3132,7 @@ s16 ServerMap::findGroundLevel(v2POS p2d, bool cacheBlocks)
 
 	// Cache the block to be inspected.
 	if(cacheBlocks) {
-		emergeBlock(blockPosition, true);
+		emergeBlock(blockPosition, false);
 	}
 
 	// Probes the nodes in the given column
@@ -3143,7 +3144,7 @@ s16 ServerMap::findGroundLevel(v2POS p2d, bool cacheBlocks)
 
 			// If the node is in an different block, cache it
 			if(blockPosition != prevBlockPosition) {
-				emergeBlock(blockPosition, true);
+				emergeBlock(blockPosition, false);
 				prevBlockPosition = blockPosition;
 			}
 		}
@@ -3364,10 +3365,8 @@ bool ServerMap::saveBlock(MapBlock *block, Database *db)
 {
 	v3s16 p3d = block->getPos();
 
-	// Dummy blocks are not written
-	if (block->isDummy()) {
-		errorstream << "WARNING: saveBlock: Not writing dummy block "
-			<< PP(p3d) << std::endl;
+	if (!block->isGenerated()) {
+		infostream << "WARNING: saveBlock: Not writing not generated block p="<< p3d << std::endl;
 		return true;
 	}
 
@@ -3427,7 +3426,8 @@ MapBlock * ServerMap::loadBlock(v3s16 p3d)
 		}
 
 		// Read basic data
-		block->deSerialize(is, version, true);
+		if (!block->deSerialize(is, version, true))
+			return nullptr;
 
 		// If it's a new block, insert it to the map
 		if(created_new)

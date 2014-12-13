@@ -130,7 +130,7 @@ public:
 	{
 		auto lock = lock_unique_rec();
 		if(data != NULL)
-			delete[] data;
+			delete data;
 		u32 l = MAP_BLOCKSIZE * MAP_BLOCKSIZE * MAP_BLOCKSIZE;
 		data = reinterpret_cast<MapNode*>( ::operator new(l * sizeof(MapNode)));
 		memset(data, 0, l * sizeof(MapNode));
@@ -444,7 +444,7 @@ public:
 		auto lock = lock_unique_rec();
 		m_usage_timer = 0;
 	}
-	u32 getUsageTimer()
+	float getUsageTimer()
 	{
 		auto lock = lock_shared_rec();
 		return m_usage_timer;
@@ -496,17 +496,15 @@ public:
 	void serialize(std::ostream &os, u8 version, bool disk);
 	// If disk == true: In addition to doing other things, will add
 	// unknown blocks from id-name mapping to wndef
-	void deSerialize(std::istream &is, u8 version, bool disk);
+	bool deSerialize(std::istream &is, u8 version, bool disk);
 
 	void pushElementsToCircuit(Circuit* circuit);
 
 #ifndef SERVER // Only on client
-	//typedef typename std::atomic<std::shared_ptr<MapBlockMesh>> mesh_type;
-	typedef typename std::shared_ptr<MapBlockMesh> mesh_type;
+	typedef std::shared_ptr<MapBlockMesh> mesh_type;
 
 	MapBlock::mesh_type getMesh(int step = 1, bool no_fallback = false);
 	void setMesh(MapBlock::mesh_type & rmesh);
-	//void delMesh();
 	bool scenenode_remove();
 	bool scenenode_setVisible(bool value);
 #endif

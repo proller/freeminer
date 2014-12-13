@@ -94,7 +94,7 @@ MapBlock::~MapBlock()
 #endif
 
 	if(data)
-		delete[] data;
+		delete data;
 	data = nullptr;
 }
 
@@ -175,14 +175,9 @@ bool MapBlock::propagateSunlight(std::set<v3s16> & light_sources,
 			bool is_valid_position;
 			MapNode n = getNodeParent(v3s16(x, MAP_BLOCKSIZE, z),
 				&is_valid_position);
-			if (is_valid_position)
+			if (n)
 			{
-				if(n.getContent() == CONTENT_IGNORE)
-				{
-					// Trust heuristics
-					no_sunlight = is_underground;
-				}
-				else if(n.getLight(LIGHTBANK_DAY, m_gamedef->ndef()) != LIGHT_SUN)
+				if(n.getLight(LIGHTBANK_DAY, m_gamedef->ndef()) != LIGHT_SUN)
 				{
 					no_sunlight = true;
 				}
@@ -200,7 +195,7 @@ bool MapBlock::propagateSunlight(std::set<v3s16> & light_sources,
 				else
 				{
 					MapNode n = getNodeNoEx(v3s16(x, MAP_BLOCKSIZE-1, z));
-					if(m_gamedef->ndef()->get(n).sunlight_propagates == false)
+					if(n && m_gamedef->ndef()->get(n).sunlight_propagates == false)
 					{
 						no_sunlight = true;
 					}
@@ -303,7 +298,7 @@ bool MapBlock::propagateSunlight(std::set<v3s16> & light_sources,
 			if(block_below_is_valid)
 			{
 				MapNode n = getNodeParent(v3s16(x, -1, z), &is_valid_position);
-				if (is_valid_position) {
+				if (n) {
 					if(nodemgr->get(n).light_propagates)
 					{
 						if(n.getLight(LIGHTBANK_DAY, nodemgr) == LIGHT_SUN
@@ -569,7 +564,11 @@ void MapBlock::serialize(std::ostream &os, u8 version, bool disk)
 	if(m_lighting_expired)
 		flags |= 0x04;
 	if(m_generated == false)
+	{
 		flags |= 0x08;
+		infostream<<" serialize not generated block"<<std::endl;
+	}
+
 	writeU8(os, flags);
 	
 	/*
@@ -635,7 +634,7 @@ void MapBlock::serialize(std::ostream &os, u8 version, bool disk)
 	}
 }
 
-void MapBlock::deSerialize(std::istream &is, u8 version, bool disk)
+bool MapBlock::deSerialize(std::istream &is, u8 version, bool disk)
 {
 	auto lock = lock_unique_rec();
 	if(!ser_ver_supported(version))
@@ -649,7 +648,7 @@ void MapBlock::deSerialize(std::istream &is, u8 version, bool disk)
 	if(version <= 21)
 	{
 		deSerialize_pre22(is, version, disk);
-		return;
+		return true;
 	}
 
 	u8 flags = readU8(is);
@@ -657,6 +656,11 @@ void MapBlock::deSerialize(std::istream &is, u8 version, bool disk)
 	m_day_night_differs = (flags & 0x02) ? true : false;
 	m_lighting_expired = (flags & 0x04) ? true : false;
 	m_generated = (flags & 0x08) ? false : true;
+
+	if (!m_generated) {
+		infostream<<"MapBlock::deSerialize(): deserialize not generated block"<<std::endl;
+		return false;
+	}
 
 	/*
 		Bulk node data
@@ -741,6 +745,7 @@ void MapBlock::deSerialize(std::istream &is, u8 version, bool disk)
 		
 	TRACESTREAM(<<"MapBlock::deSerialize "<<PP(getPos())
 			<<": Done."<<std::endl);
+	return true;
 }
 
 	MapNode MapBlock::getNodeNoEx(v3POS p) {

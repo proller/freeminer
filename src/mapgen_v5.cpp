@@ -50,8 +50,8 @@ MapgenV5::MapgenV5(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 	: Mapgen(mapgenid, params, emerge)
 	, Mapgen_features(mapgenid, params, emerge)
 {
-	this->emerge = emerge;
-	this->bmgr   = emerge->biomemgr;
+	this->m_emerge = emerge;
+	this->bmgr     = emerge->biomemgr;
 
 	// amount of elements to skip for the next index
 	// for noise/height/biome maps (not vmanip)
@@ -77,8 +77,8 @@ MapgenV5::MapgenV5(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 	noise_wetness      = new Noise(&sp->np_wetness, seed, csize.X, csize.Y + 2, csize.Z);
 
 	// Biome noise
-	noise_heat         = new Noise(bmgr->np_heat,     seed, csize.X, csize.Z);
-	noise_humidity     = new Noise(bmgr->np_humidity, seed, csize.X, csize.Z);
+	noise_heat         = new Noise(&params->np_biome_heat,     seed, csize.X, csize.Z);
+	noise_humidity     = new Noise(&params->np_biome_humidity, seed, csize.X, csize.Z);
 
 	//// Resolve nodes to be used
 	INodeDefManager *ndef = emerge->ndef;
@@ -223,12 +223,12 @@ void MapgenV5Params::writeParams(Settings *settings) {
 int MapgenV5::getGroundLevelAtPoint(v2s16 p) {
 	//TimeTaker t("getGroundLevelAtPoint", NULL, PRECISION_MICRO);
 
-	float f = 0.55 + NoisePerlin2D(noise_factor->np, p.X, p.Y, seed);
+	float f = 0.55 + NoisePerlin2D(&noise_factor->np, p.X, p.Y, seed);
 	if(f < 0.01)
 		f = 0.01;
 	else if(f >= 1.0)
 		f *= 1.6;
-	float h = water_level + NoisePerlin2D(noise_height->np, p.X, p.Y, seed);
+	float h = water_level + NoisePerlin2D(&noise_height->np, p.X, p.Y, seed);
 
 	s16 search_top = water_level + 15;
 	s16 search_base = water_level;
@@ -238,7 +238,7 @@ int MapgenV5::getGroundLevelAtPoint(v2s16 p) {
 
 	s16 level = -31000;
 	for (s16 y = search_top; y >= search_base; y--) {
-		float n_ground = NoisePerlin3DEased(noise_ground->np, p.X, y, p.Y, seed);
+		float n_ground = NoisePerlin3D(&noise_ground->np, p.X, y, p.Y, seed);
 		if(n_ground * f > y - h) {
 			if(y >= search_top - 7)
 				break;
@@ -276,7 +276,7 @@ void MapgenV5::makeChunk(BlockMakeData *data) {
 	full_node_max = (blockpos_max + 2) * MAP_BLOCKSIZE - v3s16(1, 1, 1);
 
 	// Create a block-specific seed
-	blockseed = emerge->getBlockSeed(full_node_min);  //////use getBlockSeed2()!
+	blockseed = m_emerge->getBlockSeed(full_node_min);  //////use getBlockSeed2()!
 
 	// Make some noise
 	calculateNoise();
@@ -310,10 +310,10 @@ void MapgenV5::makeChunk(BlockMakeData *data) {
 	}
 
 	// Generate the registered decorations
-	emerge->decomgr->placeAllDecos(this, blockseed, node_min, node_max);
+	m_emerge->decomgr->placeAllDecos(this, blockseed, node_min, node_max);
 
 	// Generate the registered ores
-	emerge->oremgr->placeAllOres(this, blockseed, node_min, node_max);
+	m_emerge->oremgr->placeAllOres(this, blockseed, node_min, node_max);
 
 	// Sprinkle some dust on top after everything else was generated
 	dustTopNodes();
@@ -341,14 +341,10 @@ void MapgenV5::calculateNoise() {
 	noise_filler_depth->perlinMap2D(x, z);
 	noise_factor->perlinMap2D(x, z);
 	noise_height->perlinMap2D(x, z);
-	noise_height->transformNoiseMap();
 
 	noise_cave1->perlinMap3D(x, y, z);
-	noise_cave1->transformNoiseMap();
 	noise_cave2->perlinMap3D(x, y, z);
-	noise_cave2->transformNoiseMap();
 	noise_ground->perlinMap3D(x, y, z);
-	noise_ground->transformNoiseMap();
 
 	if (spflags & MGV5_BLOBS) {
 		noise_crumble->perlinMap3D(x, y, z);

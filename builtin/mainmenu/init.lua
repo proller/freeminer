@@ -404,20 +404,20 @@ function tabbuilder.tab_singleplayer()
 		gameidx = menu.lastgame().id
 	end
 	formspec = "label[0,2;Game: " .. core.formspec_escape(gameidx) .. "]" ..
-			"button[6.5,5;3,0.5;world_delete;".. fgettext("Delete") .. "]" ..
-			"label[6.5,0;".. fgettext("Select World:") .. "]"..
-			"checkbox[6.5,4.1;cb_creative_mode;".. fgettext("Creative Mode") .. ";" ..
+			"button[7.1,8;3,0.5;world_delete;".. fgettext("Delete") .. "]" ..
+			"label[7.1,0;".. fgettext("Select World:") .. "]"..
+			"checkbox[7.1,7.1;cb_creative_mode;".. fgettext("Creative Mode") .. ";" ..
 			dump(core.setting_getbool("creative_mode")) .. "]"..
-			"checkbox[9.5,4.1;cb_enable_damage;".. fgettext("Enable Damage") .. ";" ..
+			"checkbox[10.1,7.1;cb_enable_damage;".. fgettext("Enable Damage") .. ";" ..
 			dump(core.setting_getbool("enable_damage")) .. "]"..
-			"textlist[6.5,0.5;8.8,3.7;sp_worlds;" ..
+			"textlist[7.1,0.5;8.8,6.5;sp_worlds;" ..
 			menu.render_world_list() ..
 			";" .. index .. "]" ..
 			menubar.formspec
 	if #gamemgr.games > 0 then
-		formspec = formspec .. "button[12.25,6.95;3.25,0.5;play;".. fgettext("Play") .. "]" ..
-			"button[9.5,5;3,0.5;world_create;".. fgettext("New") .. "]" ..
-			"button[12.5,5;3,0.5;world_configure;".. fgettext("Configure") .. "]"
+		formspec = formspec .. "button[12.85,8.95;3.25,0.5;play;".. fgettext("Play") .. "]" ..
+			"button[10.1,8;3,0.5;world_create;".. fgettext("New") .. "]" ..
+			"button[13.1,8;3,0.5;world_configure;".. fgettext("Configure") .. "]"
 	end
 	return formspec
 end
@@ -514,21 +514,21 @@ local selected_server = {}
 function tabbuilder.tab_multiplayer()
 	local e = core.formspec_escape
 	local retval =
-		"field[6.75,7.5;6.75,0.5;te_address;" .. fgettext("Address") .. ";" ..core.setting_get("address") .."]" ..
-		"field[13.45,7.5;2.3,0.5;te_port;" .. fgettext("Port") .. ";" ..core.setting_get("remote_port") .."]" ..
-		"checkbox[6.5,-0.43;cb_public_serverlist;".. fgettext("Public Serverlist") .. ";" ..
+		"field[7.35,9;6.75,0.5;te_address;" .. fgettext("Address") .. ";" ..core.setting_get("address") .."]" ..
+		"field[14.05,9;2.3,0.5;te_port;" .. fgettext("Port") .. ";" ..core.setting_get("remote_port") .."]" ..
+		"checkbox[7.1,-0.43;cb_public_serverlist;".. fgettext("Public Serverlist") .. ";" ..
 		dump(core.setting_getbool("public_serverlist")) .. "]"
 
 	if not core.setting_getbool("public_serverlist") then
 		retval = retval ..
-			"button[13.25,3.95;2.25,0.5;btn_delete_favorite;".. fgettext("Delete") .. "]"
+			"button[13.85,3.95;2.25,0.5;btn_delete_favorite;".. fgettext("Delete") .. "]"
 	end
 
 	retval = retval ..
-		"button[12.75,10;2.75,0.5;btn_mp_connect;".. fgettext("Connect") .. "]" ..
-		"field[6.75,8.8;5.5,0.5;te_name;" .. fgettext("Name") .. ";" ..(selected_server.playername or  core.setting_get("name")) .."]" ..
-		"pwdfield[12.3,8.8;3.45,0.5;te_pwd;" .. fgettext("Password") ..(selected_server.playerpassword and (";"..selected_server.playerpassword) or "").. "]" ..
-		"textarea[6.75,3.8;8.8,2.75;;"
+		"button[13.35,11;2.75,0.5;btn_mp_connect;".. fgettext("Connect") .. "]" ..
+		"field[7.35,10.4;5.5,0.5;te_name;" .. fgettext("Name") .. ";" ..(selected_server.playername or  core.setting_get("name")) .."]" ..
+		"pwdfield[12.9,10.4;3.45,0.5;te_pwd;" .. fgettext("Password") ..(selected_server.playerpassword and (";"..selected_server.playerpassword) or "").. "]" ..
+		"textarea[7.35,6.5;8.8,2.5;;"
 	if menu.fav_selected ~= nil and
 		menu.favorites[menu.fav_selected].description ~= nil then
 		retval = retval ..
@@ -548,7 +548,7 @@ function tabbuilder.tab_multiplayer()
 		"text" ..
 		"]"
 	retval = retval .. "table[" ..
-		"6.5,0.35;8.8,3.35;favourites;"
+		"7.1,0.35;8.8,6;favourites;"
 
 	local render_details = 1 -- core.setting_getbool("public_serverlist")
 

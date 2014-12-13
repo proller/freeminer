@@ -60,8 +60,8 @@ MapgenV7::MapgenV7(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 	: Mapgen(mapgenid, params, emerge)
 	, Mapgen_features(mapgenid, params, emerge)
 {
-	this->emerge = emerge;
-	this->bmgr   = emerge->biomemgr;
+	this->m_emerge = emerge;
+	this->bmgr     = emerge->biomemgr;
 
 	//// amount of elements to skip for the next index
 	//// for noise/height/biome maps (not vmanip)
@@ -89,8 +89,8 @@ MapgenV7::MapgenV7(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 	noise_ridge    = new Noise(&sp->np_ridge,    seed, csize.X, csize.Y, csize.Z);
 
 	//// Biome noise
-	noise_heat     = new Noise(bmgr->np_heat,     seed, csize.X, csize.Z);
-	noise_humidity = new Noise(bmgr->np_humidity, seed, csize.X, csize.Z);
+	noise_heat     = new Noise(&params->np_biome_heat,     seed, csize.X, csize.Z);
+	noise_humidity = new Noise(&params->np_biome_humidity, seed, csize.X, csize.Z);
 
 	//// Resolve nodes to be used
 	INodeDefManager *ndef = emerge->ndef;
@@ -215,7 +215,7 @@ int MapgenV7::getGroundLevelAtPoint(v2s16 p) {
 
 	// Ridge/river terrain calculation
 	float width = 0.3;
-	float uwatern = NoisePerlin2DNoTxfm(noise_ridge_uwater->np, p.X, p.Y, seed) * 2;
+	float uwatern = NoisePerlin2D(&noise_ridge_uwater->np, p.X, p.Y, seed) * 2;
 	// actually computing the depth of the ridge is much more expensive;
 	// if inside a river, simply guess
 	if (uwatern >= -width && uwatern <= width)
@@ -257,7 +257,7 @@ void MapgenV7::makeChunk(BlockMakeData *data) {
 	full_node_min = (blockpos_min - 1) * MAP_BLOCKSIZE;
 	full_node_max = (blockpos_max + 2) * MAP_BLOCKSIZE - v3s16(1, 1, 1);
 
-	blockseed = emerge->getBlockSeed(full_node_min);  //////use getBlockSeed2()!
+	blockseed = m_emerge->getBlockSeed(full_node_min);  //////use getBlockSeed2()!
 
 	// Make some noise
 	calculateNoise();
@@ -291,10 +291,10 @@ void MapgenV7::makeChunk(BlockMakeData *data) {
 	}
 
 	// Generate the registered decorations
-	emerge->decomgr->placeAllDecos(this, blockseed, node_min, node_max);
+	m_emerge->decomgr->placeAllDecos(this, blockseed, node_min, node_max);
 
 	// Generate the registered ores
-	emerge->oremgr->placeAllOres(this, blockseed, node_min, node_max);
+	m_emerge->oremgr->placeAllOres(this, blockseed, node_min, node_max);
 
 	// Sprinkle some dust on top after everything else was generated
 	dustTopNodes();
@@ -320,26 +320,18 @@ void MapgenV7::calculateNoise() {
 	int z = node_min.Z;
 
 	noise_height_select->perlinMap2D(x, z);
-	noise_height_select->transformNoiseMap();
-
 	noise_terrain_persist->perlinMap2D(x, z);
-	noise_terrain_persist->transformNoiseMap();
 	float *persistmap = noise_terrain_persist->result;
 	for (int i = 0; i != csize.X * csize.Z; i++)
 		persistmap[i] = rangelim(persistmap[i], 0.4, 0.9);
 
 	noise_terrain_base->perlinMap2D(x, z, persistmap);
-	noise_terrain_base->transformNoiseMap();
-
 	noise_terrain_alt->perlinMap2D(x, z, persistmap);
-	noise_terrain_alt->transformNoiseMap();
-
 	noise_filler_depth->perlinMap2D(x, z);
 
 	if (spflags & MGV7_MOUNTAINS) {
 		noise_mountain->perlinMap3D(x, y, z);
 		noise_mount_height->perlinMap2D(x, z);
-		noise_mount_height->transformNoiseMap();
 	}
 
 	if (spflags & MGV7_RIDGES) {
@@ -355,8 +347,8 @@ void MapgenV7::calculateNoise() {
 
 
 Biome *MapgenV7::getBiomeAtPoint(v3s16 p) {
-	float heat      = NoisePerlin2D(bmgr->np_heat, p.X, p.Z, seed);
-	float humidity  = NoisePerlin2D(bmgr->np_humidity, p.X, p.Z, seed);
+	float heat      = NoisePerlin2D(&noise_heat->np, p.X, p.Z, seed);
+	float humidity  = NoisePerlin2D(&noise_humidity->np, p.X, p.Z, seed);
 	s16 groundlevel = baseTerrainLevelAtPoint(p.X, p.Z);
 
 	return bmgr->getBiome(heat, humidity, groundlevel);
@@ -364,21 +356,21 @@ Biome *MapgenV7::getBiomeAtPoint(v3s16 p) {
 
 //needs to be updated
 float MapgenV7::baseTerrainLevelAtPoint(int x, int z) {
-	float hselect = NoisePerlin2D(noise_height_select->np, x, z, seed);
+	float hselect = NoisePerlin2D(&noise_height_select->np, x, z, seed);
 	hselect = rangelim(hselect, 0.0, 1.0);
 
-	float persist = NoisePerlin2D(noise_terrain_persist->np, x, z, seed);
+	float persist = NoisePerlin2D(&noise_terrain_persist->np, x, z, seed);
 	persist = rangelim(persist, 0.4, 0.9);
 
-	auto persist_save = noise_terrain_base->np->persist;
-	noise_terrain_base->np->persist = persist;
-	float height_base = NoisePerlin2D(noise_terrain_base->np, x, z, seed);
-	noise_terrain_base->np->persist = persist_save;
+	auto persist_save = noise_terrain_base->np.persist;
+	noise_terrain_base->np.persist = persist;
+	float height_base = NoisePerlin2D(&noise_terrain_base->np, x, z, seed);
+	noise_terrain_base->np.persist = persist_save;
 
-	persist_save = noise_terrain_alt->np->persist;
-	noise_terrain_alt->np->persist = persist;
-	float height_alt = NoisePerlin2D(noise_terrain_alt->np, x, z, seed);
-	noise_terrain_alt->np->persist = persist_save;
+	persist_save = noise_terrain_alt->np.persist;
+	noise_terrain_alt->np.persist = persist;
+	float height_alt = NoisePerlin2D(&noise_terrain_alt->np, x, z, seed);
+	noise_terrain_alt->np.persist = persist_save;
 
 	if (height_alt > height_base)
 		return height_alt;
@@ -400,9 +392,9 @@ float MapgenV7::baseTerrainLevelFromMap(int index) {
 
 
 bool MapgenV7::getMountainTerrainAtPoint(int x, int y, int z) {
-	float mnt_h_n = NoisePerlin2D(noise_mount_height->np, x, z, seed);
+	float mnt_h_n = NoisePerlin2D(&noise_mount_height->np, x, z, seed);
 	float height_modifier = -((float)y / rangelim(mnt_h_n, 80.0, 150.0));
-	float mnt_n = NoisePerlin3D(noise_mountain->np, x, y, z, seed);
+	float mnt_n = NoisePerlin3D(&noise_mountain->np, x, y, z, seed);
 
 	return mnt_n + height_modifier >= 0.6;
 }
@@ -427,10 +419,10 @@ void MapgenV7::carveRivers() {
 	for (s16 x = node_min.X; x <= node_max.X; x++, index++) {
 		float terrain_mod  = noise_terrain_mod->result[index];
 		NoiseParams *np = noise_terrain_river->np;
-		np->persist = noise_terrain_persist->result[index];
+		np.persist = noise_terrain_persist->result[index];
 		float terrain_river = NoisePerlin2DNoTxfm(np, x, z, seed);
 		float height = terrain_river * (1 - abs(terrain_mod)) *
-						noise_terrain_river->np->scale;
+						noise_terrain_river->np.scale;
 		height = log(height * height); //log(h^3) is pretty interesting for terrain
 
 		s16 y = heightmap[index];
@@ -484,7 +476,7 @@ int MapgenV7::generateBaseTerrain() {
 		if (surface_y > stone_surface_max_y)
 			stone_surface_max_y = surface_y;
 
-		s16 heat = emerge->env->m_use_weather ? emerge->env->getServerMap().updateBlockHeat(emerge->env, v3POS(x,node_max.Y,z), nullptr, &heat_cache) : 0;
+		s16 heat = m_emerge->env->m_use_weather ? m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env, v3POS(x,node_max.Y,z), nullptr, &heat_cache) : 0;
 
 		u32 i = vm->m_area.index(x, node_min.Y, z);
 		for (s16 y = node_min.Y; y <= node_max.Y; y++) {
@@ -572,7 +564,7 @@ void MapgenV7::generateRidgeTerrain() {
 			if (y < ridge_heightmap[j])
 				ridge_heightmap[j] = y - 1;
 
-			s16 heat = emerge->env->m_use_weather ? emerge->env->getServerMap().updateBlockHeat(emerge->env, v3POS(x,node_max.Y,z), NULL, &heat_cache) : 0;
+			s16 heat = m_emerge->env->m_use_weather ? m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env, v3POS(x,node_max.Y,z), NULL, &heat_cache) : 0;
 			MapNode n_water_or_ice = (heat < 0 && y > water_level + heat/4) ? n_ice : n_water;
 
 			vm->m_data[vi] = (y > water_level) ? n_air : n_water_or_ice;
@@ -605,7 +597,7 @@ void MapgenV7::generateBiomes() {
 		content_t c_above = vm->m_data[i + em.X].getContent();
 		bool have_air = c_above == CONTENT_AIR;
 
-		s16 heat = emerge->env->m_use_weather ? emerge->env->getServerMap().updateBlockHeat(emerge->env, v3POS(x,node_max.Y,z), NULL, &heat_cache) : 0;
+		s16 heat = m_emerge->env->m_use_weather ? m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env, v3POS(x,node_max.Y,z), NULL, &heat_cache) : 0;
 
 		for (s16 y = node_max.Y; y >= node_min.Y; y--) {
 			content_t c = vm->m_data[i].getContent();

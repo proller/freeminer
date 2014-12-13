@@ -72,6 +72,7 @@ MeshMakeData::MeshMakeData(IGameDef *gamedef, Map & map_, MapDrawControl& draw_c
 	,step(1),
 	range(1),
 	no_draw(false),
+	timestamp(0),
 	block(nullptr),
 	map(map_),
 	draw_control(draw_control_),
@@ -171,7 +172,7 @@ void MeshMakeData::fillSingleNode(MapNode *node)
 		}
 	}
 	m_vmanip.copyFrom(data, area, area.MinEdge, area.MinEdge, area.getExtent());
-	delete[] data;
+	delete data;
 #endif
 }
 
@@ -304,8 +305,8 @@ static u16 getSmoothLightCombined(v3s16 p, MeshMakeData *data)
 			light_source_max = f.light_source;
 		// Check f.solidness because fast-style leaves look better this way
 		if (f.param_type == CPT_LIGHT && f.solidness != 2) {
-			light_day += decode_light(n.getLight(LIGHTBANK_DAY, ndef));
-			light_night += decode_light(n.getLight(LIGHTBANK_NIGHT, ndef));
+			light_day += decode_light(n.getLightNoChecks(LIGHTBANK_DAY, &f));
+			light_night += decode_light(n.getLightNoChecks(LIGHTBANK_NIGHT, &f));
 			light_count++;
 		} else {
 			ambient_occlusion++;

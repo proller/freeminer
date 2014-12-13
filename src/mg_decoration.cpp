@@ -27,7 +27,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 const char *DecorationManager::ELEMENT_TITLE = "decoration";
 
-FlagDesc flagdesc_deco_schematic[] = {
+FlagDesc flagdesc_deco[] = {
 	{"place_center_x", DECO_PLACE_CENTER_X},
 	{"place_center_y", DECO_PLACE_CENTER_Y},
 	{"place_center_z", DECO_PLACE_CENTER_Z},
@@ -36,6 +36,12 @@ FlagDesc flagdesc_deco_schematic[] = {
 
 
 ///////////////////////////////////////////////////////////////////////////////
+
+
+DecorationManager::DecorationManager(IGameDef *gamedef) :
+	GenElementManager(gamedef)
+{
+}
 
 
 size_t DecorationManager::placeAllDecos(Mapgen *mg, u32 seed, v3s16 nmin, v3s16 nmax)
@@ -55,21 +61,33 @@ size_t DecorationManager::placeAllDecos(Mapgen *mg, u32 seed, v3s16 nmin, v3s16 
 }
 
 
+void DecorationManager::clear()
+{
+	for (size_t i = 0; i < m_elements.size(); i++) {
+		Decoration *deco = (Decoration *)m_elements[i];
+		if (!deco)
+			continue;
+
+		deco->dropResolverEntries(m_resolver);
+	}
+	m_elements.clear();
+}
+
+
 ///////////////////////////////////////////////////////////////////////////////
 
 
 Decoration::Decoration()
 {
 	mapseed    = 0;
-	np         = NULL;
 	fill_ratio = 0;
 	sidelen    = 1;
+	flags      = 0;
 }
 
 
 Decoration::~Decoration()
 {
-	delete np;
 }
 
 
@@ -104,8 +122,8 @@ size_t Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 		);
 
 		// Amount of decorations
-		float nval = np ?
-			NoisePerlin2D(np, p2d_center.X, p2d_center.Y, mapseed) :
+		float nval = (flags & DECO_USE_NOISE) ?
+			NoisePerlin2D(&np, p2d_center.X, p2d_center.Y, mapseed) :
 			fill_ratio;
 		u32 deco_count = area * MYMAX(nval, 0.f);
 
@@ -137,7 +155,7 @@ size_t Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 			if (mg->biomemap) {
 				std::set<u8>::iterator iter;
 
-				if (biomes.size()) {
+				if (!biomes.empty()) {
 					iter = biomes.find(mg->biomemap[mapindex]);
 					if (iter == biomes.end())
 						continue;
@@ -289,6 +307,13 @@ size_t DecoSimple::generate(Mapgen *mg, PseudoRandom *pr, s16 max_y, v3s16 p)
 int DecoSimple::getHeight()
 {
 	return (deco_height_max > 0) ? deco_height_max : deco_height;
+}
+
+
+void DecoSimple::dropResolverEntries(NodeResolver *resolver)
+{
+	resolver->cancelNodeList(&c_decos);
+	resolver->cancelNodeList(&c_spawnby);
 }
 
 
