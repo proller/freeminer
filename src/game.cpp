@@ -4209,7 +4209,7 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 	auto camera_position = camera->getPosition();
 
 		if (!flags.no_output)
-		if (client->getEnv().getClientMap().m_drawlist_last || runData->update_draw_list_timer >= 10 ||
+		if (client->getEnv().getClientMap().m_drawlist_last || runData->update_draw_list_timer >= 5 ||
 				runData->update_draw_list_last_cam_pos.getDistanceFrom(camera_position) > MAP_BLOCKSIZE*BS*2 ||
 				flags.camera_offset_changed){
 			runData->update_draw_list_timer = 0;

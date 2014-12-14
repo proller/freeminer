@@ -568,22 +568,31 @@ void Client::step(float dtime)
 			if(block)
 			{
 
+/*
 				if (!r.mesh->no_draw) {
 					if (block->scenenode)
 						m_env.getClientMap().getSceneManager()->addToDeletionQueue(block->scenenode);
 					block->scenenode_remove();
 				}
+*/
 				block->setMesh(r.mesh);
 				if (!r.mesh->no_draw) {
-
+					if (block->scenenode) {
+						block->scenenode->setMesh(r.mesh->getMesh());
+					}
 					//block->scenenode = m_env.getClientMap().getSceneManager()->addOctreeSceneNode(r.mesh->getMesh());
+/*
+					auto tangentMesh = m_env.getClientMap().getSceneManager()->getMeshManipulator()->createMeshWithTangents(  r.mesh->getMesh() );
+					block->scenenode = m_env.getClientMap().getSceneManager()->addMeshSceneNode( tangentMesh );
+					tangentMesh->drop();
 
-					//auto tangentMesh = m_env.getClientMap().getSceneManager()->getMeshManipulator()->createMeshWithTangents(  r.mesh->getMesh() );
-					//block->scenenode = m_env.getClientMap().getSceneManager()->addMeshSceneNode( tangentMesh );
-					//tangentMesh->drop();
-					block->scenenode = m_env.getClientMap().getSceneManager()->addMeshSceneNode(r.mesh->getMesh());
-					if (block->scenenode)
-						m_device->getVideoDriver()->addOcclusionQuery(block->scenenode, r.mesh->getMesh());
+					//block->scenenode = m_env.getClientMap().getSceneManager()->addMeshSceneNode(r.mesh->getMesh());
+					if (block->scenenode) {
+						//m_device->getVideoDriver()->addOcclusionQuery(block->scenenode, r.mesh->getMesh());
+						m_device->getVideoDriver()->addOcclusionQuery(block->scenenode);
+						//block->scenenode->setVisible(false);
+					}
+*/
 				} else {
 //infostream<<"nodraw mesh " <<r.mesh->step<< " c="<< r.mesh->getMesh()->getMeshBufferCount() <<std::endl;
 				}

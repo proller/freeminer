@@ -221,15 +221,16 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max
 	// Distance to farthest drawn block
 	float farthest_drawn = 0;
 
+// /*
 			if (!m_drawlist_last) {
 	TimeTaker timer_step("ClientMap::updateDrawList OcclusionQueries");
 				//driver->runAllOcclusionQueries(true);
-				//driver->runAllOcclusionQueries(false);
+				driver->runAllOcclusionQueries(false);
 				//driver->updateAllOcclusionQueries();
 				driver->updateAllOcclusionQueries(false);
-				driver->runAllOcclusionQueries(false);
+				//driver->runAllOcclusionQueries(false);
 			}
-
+//  */
 
 	int m_mesh_queued = 0;
 
@@ -436,7 +437,8 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 */
 				}
 			} else if (shadows && !block->shadownode && block->scenenode && mesh->getMesh()->getMeshBufferCount() /*&& ++shadows_added < 3*/ ) {
-				auto shadow_step = mesh_step <= 2 ? 4 : 16;
+				//auto shadow_step = mesh_step <= 2 ? 4 : 16;
+				auto shadow_step = mesh_step;
 				auto mesh_shadow = block->getMesh(shadow_step, true);
 				if (mesh_shadow) {
 					if (mesh_shadow->getMesh()->getMeshBufferCount()) {
@@ -455,19 +457,35 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 //				if (block->scenenode)
 //					block->scenenode->remove();
 				//block->scenenode = getSceneManager()->addOctreeSceneNode(mesh->getMesh());
-				block->scenenode = getSceneManager()->addMeshSceneNode(mesh->getMesh());
-				driver->addOcclusionQuery(block->scenenode, mesh->getMesh());
+				//block->scenenode = getSceneManager()->addMeshSceneNode(mesh->getMesh());
+
+					//block->scenenode = getSceneManager()->addOctreeSceneNode(mesh->getMesh());
+
+					//auto tangentMesh = getSceneManager()->getMeshManipulator()->createMeshWithTangents(  mesh->getMesh(), 0, 1, 1 ,1);
+					//block->scenenode = getSceneManager()->addMeshSceneNode( tangentMesh );
+					//tangentMesh->drop();
+
+					block->scenenode = getSceneManager()->addMeshSceneNode(mesh->getMesh());
+
+					if (block->scenenode)
+						driver->addOcclusionQuery(block->scenenode, mesh->getMesh());
+				
+				
 			} else {
-				//auto visible = driver->getOcclusionQueryResult(block->scenenode);
-				//infostream<<"block visible="<<visible<<std::endl;
+				//driver->runOcclusionQuery(block->scenenode);
+				//driver->updateOcclusionQuery(block->scenenode, false);
+				auto visible = driver->getOcclusionQueryResult(block->scenenode);
+if (visible != 0xffffffff) {
+if(visible)
+				infostream<<"block visible="<<visible<<std::endl;
 				//block->scenenode->setVisible(visible>0);
 				//if (!visible)
 				//	getSceneManager()->addToDeletionQueue(block->scenenode);
-/*
-				block->scenenode_setVisible(visible>0);
-				if (block->shadownode)
-					block->shadownode->setVisible(visible>0);
-*/
+
+				//block->scenenode_setVisible(visible>0);
+				//if (block->shadownode)
+				//	block->shadownode->setVisible(visible>0);
+}
 			}
 			//block->scenenode_setVisible(true);
 
@@ -498,6 +516,17 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 
 	if (m_drawlist_last)
 		return;
+
+
+			if (!m_drawlist_last) {
+	//TimeTaker timer_step("ClientMap::updateDrawList OcclusionQueries");
+				//driver->runAllOcclusionQueries(true);
+				//driver->runAllOcclusionQueries(false);
+				//driver->updateAllOcclusionQueries();
+				//driver->updateAllOcclusionQueries(false);
+				//driver->runAllOcclusionQueries(false);
+			}
+
 
 	//for (auto & ir : *m_drawlist)
 	//	ir.second->refDrop();
