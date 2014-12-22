@@ -105,6 +105,26 @@ const core::aabbox3d<f32>& Sky::getBoundingBox() const
 	return Box;
 }
 
+void Sky::sky_rotate (const scene::ICameraSceneNode* camera, SKY_ROTATE type, float wicked_time_of_day, v3f & Pos) {
+	v3POS player_position = floatToInt(camera->getPosition(), BS)-camera_offset;
+	double shift = (double)player_position.Z / MAP_GENERATION_LIMIT;
+	double xz = 90;
+	double xy = wicked_time_of_day * 360 - 90;
+	double yz = 70 * shift; // 70 - maximum angle near end of map
+
+	if (type == SKY_ROTATE::MOON)
+		xz *= -1;
+
+	if (type == SKY_ROTATE::MOONLIGHT)
+		xy -= 90;
+	else if (type == SKY_ROTATE::SUNLIGHT)
+		xy += 90 + 180;
+
+	Pos.rotateXZBy(xz);
+	Pos.rotateXYBy(xy);
+	Pos.rotateYZBy(yz);
+}
+
 //! renders the node.
 void Sky::render()
 {
@@ -192,15 +212,19 @@ void Sky::render()
 		//video::SColor cloudyfogcolor(255,255,255,255);
 		video::SColor cloudyfogcolor = m_bgcolor;
 		//video::SColor cloudyfogcolor = m_bgcolor.getInterpolated(m_skycolor, 0.5);
+
+		v3POS player_position = floatToInt(camera->getPosition(), BS)-camera_offset;
+		float shift1 = (float)player_position.Y / MAP_GENERATION_LIMIT;
+		float shifty = shift1 * 0.4;
 		
 		// Draw far cloudy fog thing
 		for(u32 j=0; j<4; j++)
 		{
 			video::SColor c = cloudyfogcolor.getInterpolated(m_skycolor, 0.45);
-			vertices[0] = video::S3DVertex(-1, 0.08,-1, 0,0,1, c, t, t);
-			vertices[1] = video::S3DVertex( 1, 0.08,-1, 0,0,1, c, o, t);
-			vertices[2] = video::S3DVertex( 1, 0.12,-1, 0,0,1, c, o, o);
-			vertices[3] = video::S3DVertex(-1, 0.12,-1, 0,0,1, c, t, o);
+			vertices[0] = video::S3DVertex(-1, 0.08+shifty,-1, 0,0,1, c, t, t);
+			vertices[1] = video::S3DVertex( 1, 0.08+shifty,-1, 0,0,1, c, o, t);
+			vertices[2] = video::S3DVertex( 1, 0.12+shifty,-1, 0,0,1, c, o, o);
+			vertices[3] = video::S3DVertex(-1, 0.12+shifty,-1, 0,0,1, c, t, o);
 			for(u32 i=0; i<4; i++){
 				if(j==0)
 					// Don't switch
@@ -220,10 +244,10 @@ void Sky::render()
 		for(u32 j=0; j<4; j++)
 		{
 			video::SColor c = cloudyfogcolor;
-			vertices[0] = video::S3DVertex(-1,-1.0,-1, 0,0,1, c, t, t);
-			vertices[1] = video::S3DVertex( 1,-1.0,-1, 0,0,1, c, o, t);
-			vertices[2] = video::S3DVertex( 1, 0.08,-1, 0,0,1, c, o, o);
-			vertices[3] = video::S3DVertex(-1, 0.08,-1, 0,0,1, c, t, o);
+			vertices[0] = video::S3DVertex(-1,-1.0, 0, 0,0,0, c, t, t);
+			vertices[1] = video::S3DVertex( 1,-1.0, 0, 0,0,0, c, o, t);
+			vertices[2] = video::S3DVertex( 1, 0.08+shifty,-1, 0,0,1, c, o, o);
+			vertices[3] = video::S3DVertex(-1, 0.08+shifty,-1, 0,0,1, c, t, o);
 			for(u32 i=0; i<4; i++){
 				if(j==0)
 					// Don't switch
@@ -244,17 +268,17 @@ void Sky::render()
 		driver->setMaterial(m_materials[2]);
 
 		{
-			float mid1 = 0.25;
+			float mid1 = 0.25 + 0.06 * shift1;
 			float mid = (wicked_time_of_day < 0.5 ? mid1 : (1.0 - mid1));
 			float a_ = 1.0 - fabs(wicked_time_of_day - mid) * 35.0;
 			float a = easeCurve(MYMAX(0, MYMIN(1, a_)));
 			//std::cerr<<"a_="<<a_<<" a="<<a<<std::endl;
 			video::SColor c(255,255,255,255);
 			float y = -(1.0 - a) * 0.2;
-			vertices[0] = video::S3DVertex(-1,-0.05+y,-1, 0,0,1, c, t, t);
-			vertices[1] = video::S3DVertex( 1,-0.05+y,-1, 0,0,1, c, o, t);
-			vertices[2] = video::S3DVertex( 1, 0.2+y,-1, 0,0,1, c, o, o);
-			vertices[3] = video::S3DVertex(-1, 0.2+y,-1, 0,0,1, c, t, o);
+			vertices[0] = video::S3DVertex(-1,-0.05+y+shifty,-1, 0,0,1, c, t, t);
+			vertices[1] = video::S3DVertex( 1,-0.05+y+shifty,-1, 0,0,1, c, o, t);
+			vertices[2] = video::S3DVertex( 1, 0.2+y+shifty,-1, 0,0,1, c, o, o);
+			vertices[3] = video::S3DVertex(-1, 0.2+y+shifty,-1, 0,0,1, c, t, o);
 			for(u32 i=0; i<4; i++){
 				if(wicked_time_of_day < 0.5)
 					// Switch from -Z (south) to +X (east)
@@ -280,8 +304,7 @@ void Sky::render()
 				vertices[3] = video::S3DVertex(-d, d,-1, 0,0,1, c, t, o);
 				for(u32 i=0; i<4; i++){
 					// Switch from -Z (south) to +X (east)
-					vertices[i].Pos.rotateXZBy(90);
-					vertices[i].Pos.rotateXYBy(wicked_time_of_day * 360 - 90);
+					sky_rotate(camera, SKY_ROTATE::SUN, wicked_time_of_day, vertices[i].Pos);
 				}
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 
@@ -294,8 +317,7 @@ void Sky::render()
 				vertices[3] = video::S3DVertex(-d, d,-1, 0,0,1, c, t, o);
 				for(u32 i=0; i<4; i++){
 					// Switch from -Z (south) to +X (east)
-					vertices[i].Pos.rotateXZBy(90);
-					vertices[i].Pos.rotateXYBy(wicked_time_of_day * 360 - 90);
+					sky_rotate(camera, SKY_ROTATE::SUN, wicked_time_of_day, vertices[i].Pos);
 				}
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 
@@ -306,8 +328,7 @@ void Sky::render()
 				vertices[3] = video::S3DVertex(-d, d,-1, 0,0,1, suncolor, t, o);
 				for(u32 i=0; i<4; i++){
 					// Switch from -Z (south) to +X (east)
-					vertices[i].Pos.rotateXZBy(90);
-					vertices[i].Pos.rotateXYBy(wicked_time_of_day * 360 - 90);
+					sky_rotate(camera, SKY_ROTATE::SUN, wicked_time_of_day, vertices[i].Pos);
 				}
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 
@@ -318,8 +339,7 @@ void Sky::render()
 				vertices[3] = video::S3DVertex(-d, d,-1, 0,0,1, suncolor2, t, o);
 				for(u32 i=0; i<4; i++){
 					// Switch from -Z (south) to +X (east)
-					vertices[i].Pos.rotateXZBy(90);
-					vertices[i].Pos.rotateXYBy(wicked_time_of_day * 360 - 90);
+					sky_rotate(camera, SKY_ROTATE::SUN, wicked_time_of_day, vertices[i].Pos);
 				}
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 			} else {
@@ -336,16 +356,14 @@ void Sky::render()
 				vertices[3] = video::S3DVertex(-d, d,-1, 0,0,1, c, t, o);
 				for(u32 i=0; i<4; i++){
 					// Switch from -Z (south) to +X (east)
-					vertices[i].Pos.rotateXZBy(90);
-					vertices[i].Pos.rotateXYBy(wicked_time_of_day * 360 - 90);
+					sky_rotate(camera, SKY_ROTATE::SUN, wicked_time_of_day, vertices[i].Pos);
 				}
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 			}
 
 			if (sun_moon_light) {
 				auto light_vector = core::vector3df(0, MAP_GENERATION_LIMIT*BS*2, 0);
-				light_vector.rotateXZBy(90);
-				light_vector.rotateXYBy(wicked_time_of_day * 360 + 180);
+				sky_rotate(camera, SKY_ROTATE::SUNLIGHT, wicked_time_of_day, light_vector);
 				if (light_vector.Y > 0) {
 					sun_moon_light->setPosition(light_vector);
 					sun_light_drawed = true;
@@ -368,8 +386,7 @@ void Sky::render()
 				vertices[3] = video::S3DVertex(-d, d,-1, 0,0,1, c, t, o);
 				for(u32 i=0; i<4; i++){
 					// Switch from -Z (south) to -X (west)
-					vertices[i].Pos.rotateXZBy(-90);
-					vertices[i].Pos.rotateXYBy(wicked_time_of_day * 360 - 90);
+					sky_rotate(camera, SKY_ROTATE::MOON, wicked_time_of_day, vertices[i].Pos);
 				}
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 			
@@ -382,8 +399,7 @@ void Sky::render()
 				vertices[3] = video::S3DVertex(-d, d,-1, 0,0,1, c, t, o);
 				for(u32 i=0; i<4; i++){
 					// Switch from -Z (south) to -X (west)
-					vertices[i].Pos.rotateXZBy(-90);
-					vertices[i].Pos.rotateXYBy(wicked_time_of_day * 360 - 90);
+					sky_rotate(camera, SKY_ROTATE::MOON, wicked_time_of_day, vertices[i].Pos);
 				}
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 
@@ -394,8 +410,7 @@ void Sky::render()
 				vertices[3] = video::S3DVertex(-d, d,-1, 0,0,1, mooncolor, t, o);
 				for(u32 i=0; i<4; i++){
 					// Switch from -Z (south) to -X (west)
-					vertices[i].Pos.rotateXZBy(-90);
-					vertices[i].Pos.rotateXYBy(wicked_time_of_day * 360 - 90);
+					sky_rotate(camera, SKY_ROTATE::MOON, wicked_time_of_day, vertices[i].Pos);
 				}
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 
@@ -406,8 +421,7 @@ void Sky::render()
 				vertices[3] = video::S3DVertex(-d, d2,-1, 0,0,1, mooncolor2, t, o);
 				for(u32 i=0; i<4; i++){
 					// Switch from -Z (south) to -X (west)
-					vertices[i].Pos.rotateXZBy(-90);
-					vertices[i].Pos.rotateXYBy(wicked_time_of_day * 360 - 90);
+					sky_rotate(camera, SKY_ROTATE::MOON, wicked_time_of_day, vertices[i].Pos);
 				}
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 			} else {
@@ -424,16 +438,14 @@ void Sky::render()
 				vertices[3] = video::S3DVertex(-d, d,-1, 0,0,1, c, t, o);
 				for(u32 i=0; i<4; i++){
 					// Switch from -Z (south) to -X (west)
-					vertices[i].Pos.rotateXZBy(-90);
-					vertices[i].Pos.rotateXYBy(wicked_time_of_day * 360 - 90);
+					sky_rotate(camera, SKY_ROTATE::MOON, wicked_time_of_day, vertices[i].Pos);
 				}
 				driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 			}
 
 			if (!sun_light_drawed && sun_moon_light) {
 				auto light_vector = core::vector3df(0, -MAP_GENERATION_LIMIT*BS*2, 0);
-				light_vector.rotateXZBy(90);
-				light_vector.rotateXYBy(wicked_time_of_day * 360 - 180);
+				sky_rotate(camera, SKY_ROTATE::MOONLIGHT, wicked_time_of_day, light_vector);
 				if (light_vector.Y > 0)
 					sun_moon_light->setPosition(light_vector);
 			}
@@ -487,14 +499,15 @@ void Sky::render()
 					scene::EPT_QUADS, video::EIT_16BIT);
 		}while(0);
 		
+
 		for(u32 j=0; j<2; j++)
 		{
 			//video::SColor c = m_skycolor;
 			video::SColor c = cloudyfogcolor;
 			vertices[0] = video::S3DVertex(-1,-1.0,-1, 0,0,1, c, t, t);
 			vertices[1] = video::S3DVertex( 1,-1.0,-1, 0,0,1, c, o, t);
-			vertices[2] = video::S3DVertex( 1,-0.02,-1, 0,0,1, c, o, o);
-			vertices[3] = video::S3DVertex(-1,-0.02,-1, 0,0,1, c, t, o);
+			vertices[2] = video::S3DVertex( 1,-0.02+shifty,-1, 0,0,1, c, o, o);
+			vertices[3] = video::S3DVertex(-1,-0.02+shifty,-1, 0,0,1, c, t, o);
 			for(u32 i=0; i<4; i++){
 				//if(wicked_time_of_day < 0.5)
 				if(j==0)
@@ -506,6 +519,7 @@ void Sky::render()
 			}
 			driver->drawIndexedTriangleFan(&vertices[0], 4, indices, 2);
 		}
+
 	}
 }
 

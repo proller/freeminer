@@ -58,6 +58,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "server.h"
 #include "database.h" //remove with g sunsed shit localdb
 
+#include "emerge.h"
+
+
 extern gui::IGUIEnvironment* guienv;
 
 #include "msgpack.h"
@@ -414,7 +417,7 @@ void Client::step(float dtime)
 		Do stuff if connected
 	*/
 	
-	int max_cycle_ms = 500/g_settings->getFloat("wanted_fps");
+	unsigned int max_cycle_ms = 200/g_settings->getFloat("wanted_fps");
 	/*
 		Run Map's timers and unload unused data
 	*/
@@ -922,6 +925,14 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 		infostream<<"Client: received recommended send interval "
 				<<m_recommended_send_interval<<std::endl;
 
+		// TOCLIENT_INIT_POS
+
+		if (localserver) {
+			Settings settings;
+			packet[TOCLIENT_INIT_MAP_PARAMS].convert(&settings);
+			localserver->getEmergeManager()->loadParamsFromSettings(&settings);
+		}
+
 		// Reply to server
 		MSGPACK_PACKET_INIT(TOSERVER_INIT2, 0);
 		m_con.Send(PEER_ID_SERVER, 1, buffer, true);
@@ -960,7 +971,7 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 	if(command == TOCLIENT_REMOVENODE)
 	{
 		v3s16 p = packet[TOCLIENT_REMOVENODE_POS].as<v3s16>();
-		removeNode(p);
+		removeNode(p, 2); //use light from top node
 	}
 	else if(command == TOCLIENT_ADDNODE)
 	{
@@ -968,7 +979,7 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 		MapNode n = packet[TOCLIENT_ADDNODE_NODE].as<MapNode>();
 		bool remove_metadata = packet[TOCLIENT_ADDNODE_REMOVE_METADATA].as<bool>();
 
-		addNode(p, n, remove_metadata);
+		addNode(p, n, remove_metadata, 1); //fast add
 	}
 	else if(command == TOCLIENT_BLOCKDATA)
 	{
@@ -1781,13 +1792,13 @@ void Client::sendPlayerItem(u16 item)
 	Send(0, buffer, true);
 }
 
-void Client::removeNode(v3s16 p)
+void Client::removeNode(v3s16 p, int fast)
 {
 	std::map<v3s16, MapBlock*> modified_blocks;
 
 	try
 	{
-		m_env.getMap().removeNodeAndUpdate(p, modified_blocks);
+		m_env.getMap().removeNodeAndUpdate(p, modified_blocks, fast ? fast : 2);
 	}
 	catch(InvalidPositionException &e)
 	{
@@ -1801,7 +1812,7 @@ void Client::removeNode(v3s16 p)
 	}
 }
 
-void Client::addNode(v3s16 p, MapNode n, bool remove_metadata)
+void Client::addNode(v3s16 p, MapNode n, bool remove_metadata, int fast)
 {
 	//TimeTaker timer1("Client::addNode()");
 
@@ -1810,7 +1821,7 @@ void Client::addNode(v3s16 p, MapNode n, bool remove_metadata)
 	try
 	{
 		//TimeTaker timer3("Client::addNode(): addNodeAndUpdate");
-		m_env.getMap().addNodeAndUpdate(p, n, modified_blocks, remove_metadata);
+		m_env.getMap().addNodeAndUpdate(p, n, modified_blocks, remove_metadata, fast ? fast : 2);
 	}
 	catch(InvalidPositionException &e)
 	{}

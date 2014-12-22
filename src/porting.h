@@ -439,18 +439,14 @@ inline const char * getPlatformName()
 	;
 }
 
+void setXorgClassHint(const video::SExposedVideoData &video_data,
+	const std::string &name);
+
 } // namespace porting
 
 #ifdef __ANDROID__
 #include "porting_android.h"
 #endif
 
-
-#if CMAKE_HAVE_THREAD_LOCAL
-#define THREAD_LOCAL thread_local
-#else
-#define NO_THREAD_LOCAL
-#define THREAD_LOCAL
-#endif
 
 #endif // PORTING_HEADER

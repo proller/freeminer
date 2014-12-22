@@ -160,7 +160,7 @@ static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
 	return false;
 }
 
-void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, int max_cycle_ms)
+void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigned int max_cycle_ms)
 {
 	ScopeProfiler sp(g_profiler, "CM::updateDrawList()", SPT_AVG);
 	//g_profiler->add("CM::updateDrawList() count", 1);
@@ -750,7 +750,7 @@ return;
 				if(transparent == is_transparent_pass)
 				{
 					if(buf->getVertexCount() == 0)
-						errorstream<<"Block ["<<analyze_block(block.get())
+						errorstream<<"Block ["<<analyze_block(block)
 								<<"] contains an empty meshbuf"<<std::endl;
 					drawbufs.add(buf);
 				}
@@ -828,7 +828,7 @@ auto smgr = getSceneManager();
 				if(transparent == is_transparent_pass)
 				{
 					if(buf->getVertexCount() == 0)
-						errorstream<<"Block ["<<analyze_block(block.get())
+						errorstream<<"Block ["<<analyze_block(block)
 								<<"] contains an empty meshbuf"<<std::endl;
 					/*
 						This *shouldn't* hurt too much because Irrlicht

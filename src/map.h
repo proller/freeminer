@@ -40,6 +40,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "mapblock.h"
 #include <unordered_set>
+#include "config.h"
 
 class Database;
 class ClientMap;
@@ -226,10 +227,10 @@ public:
 
 	u32 updateLighting(enum LightBank bank,
 			shared_map<v3POS, MapBlock*>  & a_blocks,
-			std::map<v3POS, MapBlock*> & modified_blocks, int max_cycle_ms = 0);
+			std::map<v3POS, MapBlock*> & modified_blocks, unsigned int max_cycle_ms = 0);
 
 	u32 updateLighting(shared_map<v3POS, MapBlock*>  & a_blocks,
-			std::map<v3POS, MapBlock*> & modified_blocks, int max_cycle_ms = 0);
+			std::map<v3POS, MapBlock*> & modified_blocks, unsigned int max_cycle_ms = 0);
 
 	u32 updateLighting_last[2];
 
@@ -238,9 +239,11 @@ public:
 	*/
 	void addNodeAndUpdate(v3s16 p, MapNode n,
 			std::map<v3s16, MapBlock*> &modified_blocks,
-			bool remove_metadata = true);
+			bool remove_metadata = true,
+			int fast = 0
+			);
 	void removeNodeAndUpdate(v3s16 p,
-			std::map<v3s16, MapBlock*> &modified_blocks);
+			std::map<v3s16, MapBlock*> &modified_blocks, int fast = 0);
 
 	/*
 		Wrappers for the latter ones.
@@ -273,7 +276,7 @@ public:
 		Updates usage timers and unloads unused blocks and sectors.
 		Saves modified blocks before unloading on MAPTYPE_SERVER.
 	*/
-	u32 timerUpdate(float uptime, float unload_timeout, int max_cycle_ms = 100,
+	u32 timerUpdate(float uptime, float unload_timeout, unsigned int max_cycle_ms = 100,
 			std::list<v3s16> *unloaded_blocks=NULL);
 
 	/*
@@ -285,8 +288,8 @@ public:
 	// For debug printing. Prints "Map: ", "ServerMap: " or "ClientMap: "
 	virtual void PrintInfo(std::ostream &out);
 
-	u32 transformLiquids(Server *m_server, int max_cycle_ms);
-	u32 transformLiquidsReal(Server *m_server, int max_cycle_ms);
+	u32 transformLiquids(Server *m_server, unsigned int max_cycle_ms);
+	u32 transformLiquidsReal(Server *m_server, unsigned int max_cycle_ms);
 	/*
 		Node metadata
 		These are basically coordinate wrappers to MapBlock
@@ -356,25 +359,39 @@ public:
 	std::map<MapBlockP, int> m_blocks_delete_1, m_blocks_delete_2;
 	//void getBlocks(std::list<MapBlock*> &dest);
 
+#if CMAKE_THREADS && !CMAKE_HAVE_THREAD_LOCAL
+	try_shared_mutex m_block_cache_mutex;
+#endif
+#if !CMAKE_HAVE_THREAD_LOCAL
+	MapBlockP m_block_cache;
+	v3POS m_block_cache_p;
+#endif
+
 protected:
 	friend class LuaVoxelManip;
 
 	IGameDef *m_gamedef;
-	Circuit* m_circuit;
-
 	std::set<MapEventReceiver*> m_event_receivers;
 
+	// Queued transforming water nodes
+
+private:
+	f32 m_transforming_liquid_loop_count_multiplier;
+	u32 m_unprocessed_count;
+	u32 m_inc_trending_up_start_time; // milliseconds
+	bool m_queue_size_timer_started;
+
+protected:
+	Circuit* m_circuit;
 	u32 m_blocks_update_last;
 	u32 m_blocks_save_last;
 
-	// Queued transforming water nodes
 public:
 	//shared_unordered_map<v3POS, bool, v3POSHash, v3POSEqual> m_transforming_liquid;
 	std::mutex m_transforming_liquid_mutex;
 	UniqueQueue<v3POS> m_transforming_liquid;
 	shared_map<v3POS, MapBlock*> lighting_modified_blocks;
 	std::atomic_uint time_life;
-protected:
 };
 
 /*

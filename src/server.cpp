@@ -40,7 +40,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "genericobject.h"
 #include "settings.h"
 #include "profiler.h"
-#include "log.h"
+#include "log_types.h"
 #include "scripting_game.h"
 #include "nodedef.h"
 #include "itemdef.h"
@@ -193,7 +193,7 @@ public:
 
 		porting::setThreadName("Liquid");
 		porting::setThreadPriority(4);
-		int max_cycle_ms = 1000;
+		unsigned int max_cycle_ms = 1000;
 		while(!StopRequested()) {
 			try {
 				//shared_map<v3POS, MapBlock*> modified_blocks; //not used
@@ -1149,7 +1149,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 
 		// Single change sending is disabled if queue size is not small
 		bool disable_single_change_sending = false;
-		if(m_unsent_map_edit_queue.size() >= 4)
+		if(m_unsent_map_edit_queue.size() > 1)
 			disable_single_change_sending = true;
 
 		//int event_count = m_unsent_map_edit_queue.size();
@@ -1880,10 +1880,17 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			Answer with a TOCLIENT_INIT
 		*/
 		{
-			MSGPACK_PACKET_INIT(TOCLIENT_INIT, 3);
+			MSGPACK_PACKET_INIT(TOCLIENT_INIT, 4);
 			PACK(TOCLIENT_INIT_DEPLOYED, deployed);
 			PACK(TOCLIENT_INIT_SEED, m_env->getServerMap().getSeed());
 			PACK(TOCLIENT_INIT_STEP, g_settings->getFloat("dedicated_server_step"));
+
+			//if (player) //todo : remake me
+			//	PACK(TOCLIENT_INIT_POS, player->getPosition());
+
+			Settings params;
+			m_emerge->saveParamsToSettings(&params);
+			PACK(TOCLIENT_INIT_MAP_PARAMS, params);
 
 			// Send as reliable
 			m_clients.send(peer_id, 0, buffer, true);

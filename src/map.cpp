@@ -83,12 +83,20 @@ Map::Map(IGameDef *gamedef, Circuit* circuit):
 	m_liquid_step_flow(1000),
 	m_blocks_delete(&m_blocks_delete_1),
 	m_gamedef(gamedef),
+	m_transforming_liquid_loop_count_multiplier(1.0f),
+	m_unprocessed_count(0),
+	m_inc_trending_up_start_time(0),
+	m_queue_size_timer_started(false)
+    ,
 	m_circuit(circuit),
 	m_blocks_update_last(0),
 	m_blocks_save_last(0)
 {
 	updateLighting_last[LIGHTBANK_DAY] = updateLighting_last[LIGHTBANK_NIGHT] = 0;
 	time_life = 0;
+#if !CMAKE_HAVE_THREAD_LOCAL
+	m_block_cache = nullptr;
+#endif
 }
 
 Map::~Map()
@@ -102,6 +110,12 @@ Map::~Map()
 			i.second->mesh->clearHardwareBuffer = false;
 	}
 #endif
+	for (auto & ir : m_blocks_delete_1)
+		delete ir.first;
+	for (auto & ir : m_blocks_delete_2)
+		delete ir.first;
+	for(auto & ir : m_blocks)
+		delete ir.second;
 }
 
 void Map::addEventReceiver(MapEventReceiver *event_receiver)
@@ -706,7 +720,7 @@ s16 Map::propagateSunlight(v3s16 start,
 
 u32 Map::updateLighting(enum LightBank bank,
 		shared_map<v3POS, MapBlock*> & a_blocks,
-		std::map<v3POS, MapBlock*> & modified_blocks, int max_cycle_ms)
+		std::map<v3POS, MapBlock*> & modified_blocks, unsigned int max_cycle_ms)
 {
 	INodeDefManager *nodemgr = m_gamedef->ndef();
 
@@ -954,7 +968,7 @@ u32 Map::updateLighting(enum LightBank bank,
 }
 
 u32 Map::updateLighting(shared_map<v3POS, MapBlock*> & a_blocks,
-		std::map<v3POS, MapBlock*> & modified_blocks, int max_cycle_ms)
+		std::map<v3POS, MapBlock*> & modified_blocks, unsigned int max_cycle_ms)
 {
 	int ret = 0;
 {
@@ -995,8 +1009,16 @@ TimeTaker timer("updateLighting expireDayNightDiff");
 */
 void Map::addNodeAndUpdate(v3s16 p, MapNode n,
 		std::map<v3s16, MapBlock*> &modified_blocks,
-		bool remove_metadata)
+		bool remove_metadata, int fast)
 {
+
+	if (fast == 1) {
+		if (remove_metadata)
+			removeNodeMetadata(p);
+		setNode(p, n);
+		return;
+	}
+
 	INodeDefManager *ndef = m_gamedef->ndef();
 
 	/*PrintInfo(m_dout);
@@ -1166,6 +1188,8 @@ void Map::addNodeAndUpdate(v3s16 p, MapNode n,
 		v3s16(0,-1,0), // bottom
 		v3s16(-1,0,0), // left
 	};
+
+	if (!fast)
 	for(u16 i=0; i<7; i++)
 	{
 		v3s16 p2 = p + dirs[i];
@@ -1182,7 +1206,7 @@ void Map::addNodeAndUpdate(v3s16 p, MapNode n,
 /*
 */
 void Map::removeNodeAndUpdate(v3s16 p,
-		std::map<v3s16, MapBlock*> &modified_blocks)
+		std::map<v3s16, MapBlock*> &modified_blocks, int fast)
 {
 	INodeDefManager *ndef = m_gamedef->ndef();
 
@@ -1196,6 +1220,21 @@ void Map::removeNodeAndUpdate(v3s16 p,
 
 	// Node will be replaced with this
 	content_t replace_material = CONTENT_AIR;
+
+	if (fast == 1 || fast == 2) { // fast: 1: just place node; 2: place ang get light from top; 3: place, recalculate light and skip liquid queue
+		MapNode n;
+		n.setContent(replace_material);
+		if (fast == 2) {
+			MapNode topnode = getNodeNoEx(toppos);
+			if (topnode) {
+				n.setLight(LIGHTBANK_DAY,   topnode.getLight(LIGHTBANK_DAY, ndef), ndef);
+				n.setLight(LIGHTBANK_NIGHT, topnode.getLight(LIGHTBANK_NIGHT, ndef), ndef);
+			}
+		}
+		removeNodeMetadata(p);
+		setNode(p, n);
+		return;
+	}
 
 	/*
 		Collect old node for rollback
@@ -1347,6 +1386,8 @@ void Map::removeNodeAndUpdate(v3s16 p,
 		v3s16(-1,0,0), // left
 		v3s16(0,0,0), // self
 	};
+
+	if (!fast)
 	for(u16 i=0; i<7; i++)
 	{
 		v3s16 p2 = p + dirs[i];
@@ -1479,7 +1520,7 @@ bool Map::getDayNightDiff(v3s16 blockpos)
 	Updates usage timers
 */
 u32 Map::timerUpdate(float uptime, float unload_timeout,
-		int max_cycle_ms,
+		unsigned int max_cycle_ms,
 		std::list<v3s16> *unloaded_blocks)
 {
 	bool save_before_unloading = (mapType() == MAPTYPE_SERVER);
@@ -1490,6 +1531,8 @@ u32 Map::timerUpdate(float uptime, float unload_timeout,
 	if (/*!m_blocks_update_last && */ m_blocks_delete->size() > 1000) {
 		m_blocks_delete = (m_blocks_delete == &m_blocks_delete_1 ? &m_blocks_delete_2 : &m_blocks_delete_1);
 		verbosestream<<"Deleting blocks="<<m_blocks_delete->size()<<std::endl;
+		for (auto & ir : *m_blocks_delete)
+			delete ir.first;
 		m_blocks_delete->clear();
 	}
 
@@ -1532,7 +1575,7 @@ u32 Map::timerUpdate(float uptime, float unload_timeout,
 					//modprofiler.add(block->getModifiedReason(), 1);
 					if(!save_started++)
 						beginSave();
-					if (!saveBlock(block.get()))
+					if (!saveBlock(block))
 						continue;
 					saved_blocks_count++;
 				}
@@ -1701,8 +1744,9 @@ const s8 liquid_random_map[4][7] = {
 #define D_TOP 6
 #define D_SELF 1
 
-u32 Map::transformLiquidsReal(Server *m_server, int max_cycle_ms)
+u32 Map::transformLiquidsReal(Server *m_server, unsigned int max_cycle_ms)
 {
+
 	INodeDefManager *nodemgr = m_gamedef->ndef();
 
 	DSTACK(__FUNCTION_NAME);
@@ -2155,7 +2199,7 @@ u32 Map::transformLiquidsReal(Server *m_server, int max_cycle_ms)
 
 #define WATER_DROP_BOOST 4
 
-u32 Map::transformLiquids(Server *m_server, int max_cycle_ms)
+u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 {
 
 	if (g_settings->getBool("liquid_real"))
@@ -2171,6 +2215,8 @@ u32 Map::transformLiquids(Server *m_server, int max_cycle_ms)
 	u32 loopcount = 0;
 	u32 initial_size = transforming_liquid_size();
 
+	u32 curr_time = getTime(PRECISION_MILLI);
+
 	/*if(initial_size != 0)
 		infostream<<"transformLiquids(): initial_size="<<initial_size<<std::endl;*/
 
@@ -2181,6 +2227,28 @@ u32 Map::transformLiquids(Server *m_server, int max_cycle_ms)
 	//std::map<v3s16, MapBlock*> lighting_modified_blocks;
 
 	u32 end_ms = porting::getTimeMs() + max_cycle_ms;
+
+	u32 liquid_loop_max = g_settings->getS32("liquid_loop_max");
+	u32 loop_max = liquid_loop_max;
+
+//	std::cout << "transformLiquids(): loopmax initial="
+//	           << loop_max * m_transforming_liquid_loop_count_multiplier;
+
+	// If liquid_loop_max is not keeping up with the queue size increase
+	// loop_max up to a maximum of liquid_loop_max * dedicated_server_step.
+	if (m_transforming_liquid.size() > loop_max * 2) {
+		// "Burst" mode
+		float server_step = g_settings->getFloat("dedicated_server_step");
+		if (m_transforming_liquid_loop_count_multiplier - 1.0 < server_step)
+			m_transforming_liquid_loop_count_multiplier *= 1.0 + server_step / 10;
+	} else {
+		m_transforming_liquid_loop_count_multiplier = 1.0;
+	}
+
+	loop_max *= m_transforming_liquid_loop_count_multiplier;
+
+//	std::cout << " queue sz=" << m_transforming_liquid.size()
+//	           << " loop_max=" << loop_max;
 
 	while(transforming_liquid_size() != 0)
 	{
@@ -2451,8 +2519,55 @@ u32 Map::transformLiquids(Server *m_server, int max_cycle_ms)
 	//infostream<<"Map::transformLiquids(): loopcount="<<loopcount<<" per="<<timer.getTimerTime()<<" ret="<<ret<<std::endl;
 
 	while (must_reflow.size() > 0)
-		transforming_liquid_push_back(must_reflow.pop_front());
+		m_transforming_liquid.push_back(must_reflow.pop_front());
 	//updateLighting(lighting_modified_blocks, modified_blocks);
+
+	/*
+	 * Queue size limiting
+	 */
+	u32 prev_unprocessed = m_unprocessed_count;
+	m_unprocessed_count = m_transforming_liquid.size();
+
+	// if unprocessed block count is decreasing or stable
+	if (m_unprocessed_count <= prev_unprocessed) {
+		m_queue_size_timer_started = false;
+	} else {
+		if (!m_queue_size_timer_started)
+			m_inc_trending_up_start_time = curr_time;
+		m_queue_size_timer_started = true;
+	}
+
+	u16 time_until_purge = g_settings->getU16("liquid_queue_purge_time");
+	time_until_purge *= 1000;	// seconds -> milliseconds
+
+//	std::cout << " growing for: "
+//	           << (m_queue_size_timer_started ? curr_time - m_inc_trend_up_start_time : 0)
+//	           << "ms" << std::endl;
+
+	// Account for curr_time overflowing
+	if (m_queue_size_timer_started && m_inc_trending_up_start_time > curr_time)
+		m_queue_size_timer_started = false;
+
+	/* If the queue has been growing for more than liquid_queue_purge_time seconds
+	 * and the number of unprocessed blocks is still > liquid_loop_max then we
+	 * cannot keep up; dump the oldest blocks from the queue so that the queue
+	 * has liquid_loop_max items in it
+	 */
+	if (m_queue_size_timer_started
+			&& curr_time - m_inc_trending_up_start_time > time_until_purge
+			&& m_unprocessed_count > liquid_loop_max) {
+
+		size_t dump_qty = m_unprocessed_count - liquid_loop_max;
+
+		infostream << "transformLiquids(): DUMPING " << dump_qty
+		           << " blocks from the queue" << std::endl;
+
+		while (dump_qty--)
+			m_transforming_liquid.pop_front();
+
+		m_queue_size_timer_started = false; // optimistically assume we can keep up now
+		m_unprocessed_count = m_transforming_liquid.size();
+	}
 
 	g_profiler->add("Server: liquids processed", loopcount);
 
@@ -3219,7 +3334,7 @@ s32 ServerMap::save(ModifiedState save_level, bool breakable)
 				m_blocks_save_last = 0;
 			++calls;
 
-			MapBlock *block = jr.second.get();
+			MapBlock *block = jr.second;
 
 			if (!block)
 				continue;
@@ -3307,25 +3422,26 @@ void ServerMap::saveMapMeta()
 	Settings params;
 
 	m_emerge->saveParamsToSettings(&params);
-	params.writeLines(ss);
 
-	ss<<"[end_of_params]\n";
-
-	if(!fs::safeWriteToFile(fullpath, ss.str()))
-	{
-		infostream<<"ERROR: ServerMap::saveMapMeta(): "
-				<<"could not write "<<fullpath<<std::endl;
-		throw FileNotGoodException("Cannot save chunk metadata");
+	if (!params.writeJsonFile(m_savedir + DIR_DELIM + "map_meta.json")) {
+		errorstream<<"cant write "<<m_savedir + DIR_DELIM + "map_meta.json"<<std::endl;
 	}
 
 	m_map_metadata_changed = false;
+
 }
 
 void ServerMap::loadMapMeta()
 {
 	DSTACK(__FUNCTION_NAME);
 
+	Settings params;
+
+	if (!params.readJsonFile(m_savedir + DIR_DELIM + "map_meta.json")) {
+	//todo: remove deprecated
+
 	std::string fullpath = m_savedir + DIR_DELIM "map_meta.txt";
+	infostream<<"Cant read map_meta.json , fallback to " << fullpath << std::endl;
 	std::ifstream is(fullpath.c_str(), std::ios_base::binary);
 	if (!is.good()) {
 		errorstream << "ServerMap::loadMapMeta(): "
@@ -3333,11 +3449,11 @@ void ServerMap::loadMapMeta()
 		throw FileNotGoodException("Cannot open map metadata");
 	}
 
-	Settings params;
-
 	if (!params.parseConfigLines(is, "[end_of_params]")) {
 		throw SerializationError("ServerMap::loadMapMeta(): "
 				"[end_of_params] not found!");
+	}
+
 	}
 
 	m_emerge->loadParamsFromSettings(&params);
