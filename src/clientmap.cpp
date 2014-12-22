@@ -221,13 +221,14 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigne
 	// Distance to farthest drawn block
 	float farthest_drawn = 0;
 
+int hw_culling = 0;
 // /*
-			if (!m_drawlist_last) {
+			if (!m_drawlist_last && hw_culling) {
 	TimeTaker timer_step("ClientMap::updateDrawList OcclusionQueries");
 				//driver->runAllOcclusionQueries(true);
 				driver->runAllOcclusionQueries(false);
-				//driver->updateAllOcclusionQueries();
-				driver->updateAllOcclusionQueries(false);
+				driver->updateAllOcclusionQueries();
+				//driver->updateAllOcclusionQueries(false);
 				//driver->runAllOcclusionQueries(false);
 			}
 //  */
@@ -257,6 +258,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigne
 			auto bp = ir.first;
 			auto & block = ir.second;
 
+/*
 		if(m_control.range_all == false)
 		{
 			if(bp.X < p_blocks_min.X
@@ -266,13 +268,13 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigne
 			|| bp.Y < p_blocks_min.Y
 			|| bp.Y > p_blocks_max.Y)
 			{
-				//ir.second->scenenode_setVisible(false);
+				ir.second->scenenode_setVisible(false);
 //				if (block->scenenode)
 //					getSceneManager()->addToDeletionQueue(block->scenenode);
 				continue;
 			}
 		}
-
+*/
 			v3s16 blockpos_nodes = bp * MAP_BLOCKSIZE;
 			// Block center position
 			v3f blockpos(
@@ -282,11 +284,14 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigne
 			);
 
 			f32 d = radius_box(blockpos, camera_position); //blockpos_relative.getLength();
-			if (d> range_max) {
-				//ir.second->scenenode_setVisible(false);
+//errorstream<<" bp="<<blockpos<<" d="<<d<<" range_max=" << range_max<<std::endl;
+			if (!m_control.range_all && d> range_max) {
+				ir.second->scenenode_setVisible(false);
 //				if (block->scenenode)
 //					getSceneManager()->addToDeletionQueue(block->scenenode);
 				continue;
+			} else {
+				ir.second->scenenode_setVisible(true);
 			}
 			int range = d / (MAP_BLOCKSIZE * BS);
 			draw_nearest.emplace_back(std::make_pair(bp, range));
@@ -363,7 +368,8 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigne
 			/*
 				Occlusion culling
 			*/
-/*
+// /*
+if (!hw_culling) {
 			v3s16 cpn = bp * MAP_BLOCKSIZE;
 			cpn += v3s16(MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2);
 
@@ -400,7 +406,8 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigne
 				block->scenenode_setVisible(false);
 				continue;
 			}
-*/
+}
+// */
 			// This block is in range. Reset usage timer.
 			block->resetUsageTimer();
 
@@ -451,6 +458,7 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 				}
 			}
 
+//infostream<<"inc usage "<<bp<<" "<<dtime<<std::endl;
 			mesh->incrementUsageTimer(dtime);
 
 			if (!block->scenenode) {
@@ -465,15 +473,17 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 					//block->scenenode = getSceneManager()->addMeshSceneNode( tangentMesh );
 					//tangentMesh->drop();
 
+					mesh->setStatic();
 					block->scenenode = getSceneManager()->addMeshSceneNode(mesh->getMesh());
 
-					if (block->scenenode)
+					if (block->scenenode && hw_culling)
 						driver->addOcclusionQuery(block->scenenode, mesh->getMesh());
 				
 				
-			} else {
+			} else if (hw_culling) {
 				//driver->runOcclusionQuery(block->scenenode);
 				//driver->updateOcclusionQuery(block->scenenode, false);
+/*
 				auto visible = driver->getOcclusionQueryResult(block->scenenode);
 if (visible != 0xffffffff) {
 if(visible)
@@ -486,6 +496,7 @@ if(visible)
 				//if (block->shadownode)
 				//	block->shadownode->setVisible(visible>0);
 }
+*/
 			}
 			//block->scenenode_setVisible(true);
 
@@ -518,7 +529,7 @@ if(visible)
 		return;
 
 
-			if (!m_drawlist_last) {
+			if (!m_drawlist_last && hw_culling) {
 	//TimeTaker timer_step("ClientMap::updateDrawList OcclusionQueries");
 				//driver->runAllOcclusionQueries(true);
 				//driver->runAllOcclusionQueries(false);

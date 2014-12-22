@@ -1084,13 +1084,14 @@ void MapBlock::incrementUsageTimer(float dtime)
 /*
 #ifndef SERVER
 	if(mesh){
-		if(mesh->getUsageTimer() > 10)
-			mesh->setStatic();
-		else
+		//if(mesh->getUsageTimer() > 10)
+		//	mesh->setStatic();
+		//else
 			mesh->incrementUsageTimer(dtime);
 	}
 #endif
 */
+
 }
 
 /* here for errorstream

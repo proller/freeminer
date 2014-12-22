@@ -1334,7 +1334,7 @@ MapBlockMesh::~MapBlockMesh()
 
 void MapBlockMesh::setStatic()
 {
-	if(g_settings->getBool("enable_vbo")){
+	if(!clearHardwareBuffer && g_settings->getBool("enable_vbo")){
 		m_mesh->setHardwareMappingHint(scene::EHM_STATIC);
 		clearHardwareBuffer = true;
 	}
