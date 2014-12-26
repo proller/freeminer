@@ -551,16 +551,8 @@ void Client::step(float dtime)
 		TimeTaker timer_step("Client: Replace updated meshes");
 
 		int num_processed_meshes = 0;
-		u32 end_ms = porting::getTimeMs() + 10;
-
-		/*
-		auto lock = m_env.getMap().m_blocks.try_lock_shared_rec();
-		if (!lock->owns_lock()) {
-			infostream<<"skip updating meshes"<<std::endl;
-		} else 
-		*/
-		{
-
+		u32 end_ms = porting::getTimeMs() + 5;
+		int process_max = m_mesh_update_thread.m_queue_out.size()/10;
 		while(!m_mesh_update_thread.m_queue_out.empty_try())
 		{
 			num_processed_meshes++;
@@ -572,13 +564,13 @@ void Client::step(float dtime)
 			{
 				block->setMesh(r.mesh);
 			}
-			if (porting::getTimeMs() > end_ms) {
+			if (num_processed_meshes > process_max || porting::getTimeMs() > end_ms) {
+				infostream<<"skip updating meshes "<<num_processed_meshes<<" / "<<m_mesh_update_thread.m_queue_out.size()<<std::endl;
 				break;
 			}
 		}
 		if(num_processed_meshes > 0)
 			g_profiler->graphAdd("num_processed_meshes", num_processed_meshes);
-		}
 	}
 
 	/*
