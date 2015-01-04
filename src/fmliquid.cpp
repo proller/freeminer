@@ -133,7 +133,7 @@ bool debug = 1;
 			nb.weight = 0;
 			nb.drop = 0;
 
-			if (nb.c == CONTENT_IGNORE) {
+			if (!nb.c) {
 				//if (i == D_SELF && (loopcount % 2) && initial_size < m_liquid_step_flow * 3)
 				//	must_reflow_third[nb.p] = 1;
 				//	must_reflow_third.push_back(nb.p);
@@ -147,7 +147,7 @@ bool debug = 1;
 						nb.l = 1;
 					}
 					//TODO: if (nb.c == CONTENT_AIR || nodemgr->get(nb.n).buildable_to && !nodemgr->get(nb.n).walkable) { // need lua drop api for drop torches
-					else if (	melt_kind_flowing != CONTENT_IGNORE &&
+					else if (	melt_kind_flowing &&
 							nb.c == melt_kind_flowing &&
 							nb.t != NEIGHBOR_UPPER &&
 							!(loopcount % 2)) {
@@ -156,7 +156,7 @@ bool debug = 1;
 						liquid_levels[i] = (float)my_max_level / melt_max_level * nb.n.getLevel(nodemgr);
 						if (liquid_levels[i])
 							nb.l = 1;
-					} else if (	melt_kind != CONTENT_IGNORE &&
+					} else if (	melt_kind &&
 							nb.c == melt_kind &&
 							nb.t != NEIGHBOR_UPPER &&
 							!(loopcount % 8)) {
@@ -177,21 +177,21 @@ bool debug = 1;
 				case LIQUID_SOURCE:
 					// if this node is not (yet) of a liquid type,
 					// choose the first liquid type we encounter
-					if (liquid_kind_flowing == CONTENT_IGNORE)
+					if (!liquid_kind_flowing)
 						liquid_kind_flowing = nodemgr->getId(
 							nodemgr->get(nb.n).liquid_alternative_flowing);
-					if (liquid_kind == CONTENT_IGNORE)
+					if (!liquid_kind)
 						liquid_kind = nb.c;
-					if (liquid_kind_flowing == CONTENT_IGNORE)
+					if (!liquid_kind_flowing)
 						liquid_kind_flowing = liquid_kind;
-					if (melt_kind == CONTENT_IGNORE)
+					if (!melt_kind)
 						melt_kind = nodemgr->getId(nodemgr->get(nb.n).melt);
-					if (melt_kind_flowing == CONTENT_IGNORE)
+					if (!melt_kind_flowing)
 						melt_kind_flowing =
 							nodemgr->getId(
 							nodemgr->get(nodemgr->getId(nodemgr->get(nb.n).melt)
 									).liquid_alternative_flowing);
-					if (melt_kind_flowing == CONTENT_IGNORE)
+					if (!melt_kind_flowing)
 						melt_kind_flowing = melt_kind;
 					if (nb.c == liquid_kind) {
 						liquid_levels[i] = nb.n.getLevel(nodemgr); //LIQUID_LEVEL_SOURCE;
@@ -202,19 +202,19 @@ bool debug = 1;
 				case LIQUID_FLOWING:
 					// if this node is not (yet) of a liquid type,
 					// choose the first liquid type we encounter
-					if (liquid_kind_flowing == CONTENT_IGNORE)
+					if (!liquid_kind_flowing)
 						liquid_kind_flowing = nb.c;
-					if (liquid_kind == CONTENT_IGNORE)
+					if (!liquid_kind)
 						liquid_kind = nodemgr->getId(
 							nodemgr->get(nb.n).liquid_alternative_source);
-					if (liquid_kind == CONTENT_IGNORE)
+					if (!liquid_kind)
 						liquid_kind = liquid_kind_flowing;
-					if (melt_kind_flowing == CONTENT_IGNORE)
+					if (!melt_kind_flowing)
 						melt_kind_flowing = nodemgr->getId(nodemgr->get(nb.n).melt);
-					if (melt_kind == CONTENT_IGNORE)
+					if (!melt_kind)
 						melt_kind = nodemgr->getId(nodemgr->get(nodemgr->getId(
 							nodemgr->get(nb.n).melt)).liquid_alternative_source);
-					if (melt_kind == CONTENT_IGNORE)
+					if (!melt_kind)
 						melt_kind = melt_kind_flowing;
 					if (nb.c == liquid_kind_flowing) {
 						liquid_levels[i] = nb.n.getLevel(nodemgr);
@@ -272,7 +272,7 @@ bool debug = 1;
 			*/
 		}
 
-		if (liquid_kind == CONTENT_IGNORE || !neighbors[D_SELF].l || total_level <= 0)
+		if (!liquid_kind || !neighbors[D_SELF].l || total_level <= 0)
 			continue;
 
 		s16 level_max = nodemgr->get(liquid_kind_flowing).getMaxLevel();
@@ -326,7 +326,7 @@ infostream<<" go: "
 		if (	liquid_levels[D_TOP] == 0 &&
 			p0.Y > water_level &&
 			level_max > 1 &&
-			neighbors[D_BOTTOM].c == CONTENT_IGNORE &&
+			!neighbors[D_BOTTOM].c &&
 			!(loopcount % 3)) {
 			--total_level;
 		}
