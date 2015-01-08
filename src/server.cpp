@@ -67,7 +67,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/serialize.h"
 #include "util/thread.h"
 #include "defaultsettings.h"
-#include "circuit.h"
 //#include "stat.h"
 
 #include "msgpack.h"
@@ -383,7 +382,6 @@ Server::Server(
 	m_enable_rollback_recording(false),
 	m_emerge(NULL),
 	m_script(NULL),
-	m_circuit(NULL),
 	stat(path_world),
 	m_itemdef(createItemDefManager()),
 	m_nodedef(createNodeDefManager()),
@@ -519,7 +517,7 @@ Server::Server(
 	m_emerge->loadMapgenParams();
 
 	// Create the Map (loads map_meta.txt, overriding configured mapgen params)
-	ServerMap *servermap = new ServerMap(path_world, this, m_emerge, m_circuit);
+	ServerMap *servermap = new ServerMap(path_world, this, m_emerge);
 
 	// Initialize scripting
 	infostream<<"Server: Initializing Lua"<<std::endl;
@@ -563,12 +561,13 @@ Server::Server(
 	if (!simple_singleplayer_mode)
 		m_nodedef->updateTextures(this);
 
+	m_nodedef->setNodeRegistrationStatus(true);
+
 	// Perform pending node name resolutions
 	m_nodedef->runNodeResolverCallbacks();
 
 	// Initialize Environment
-	m_circuit = new Circuit(m_script, servermap, ndef(), path_world);
-	m_env = new ServerEnvironment(servermap, m_script, m_circuit, this, m_path_world);
+	m_env = new ServerEnvironment(servermap, m_script, this, m_path_world);
 	m_emerge->env = m_env;
 
 	m_clients.setEnv(m_env);
@@ -591,6 +590,8 @@ Server::Server(
 
 	// Add some test ActiveBlockModifiers to environment
 	add_legacy_abms(m_env, m_nodedef);
+
+	m_env->m_abmhandler.init(m_env->m_abms); // uses result of add_legacy_abms and m_script->initializeEnvironment
 
 	m_liquid_transform_interval = g_settings->getFloat("liquid_update");
 	m_liquid_send_interval = g_settings->getFloat("liquid_send");
@@ -648,7 +649,6 @@ Server::~Server()
 	delete m_itemdef;
 	delete m_nodedef;
 	delete m_craftdef;
-	delete m_circuit;
 
 	// Deinitialize scripting
 	infostream<<"Server: Deinitializing scripting"<<std::endl;
@@ -3693,7 +3693,7 @@ void Server::SendBlockNoLock(u16 peer_id, MapBlock *block, u8 ver, u16 net_proto
 
 	g_profiler->add("Connection: blocks sent", 1);
 
-	MSGPACK_PACKET_INIT(TOCLIENT_BLOCKDATA, 5);
+	MSGPACK_PACKET_INIT(TOCLIENT_BLOCKDATA, 6);
 	PACK(TOCLIENT_BLOCKDATA_POS, block->getPos());
 
 	std::ostringstream os(std::ios_base::binary);
@@ -3703,6 +3703,8 @@ void Server::SendBlockNoLock(u16 peer_id, MapBlock *block, u8 ver, u16 net_proto
 	PACK(TOCLIENT_BLOCKDATA_HEAT, (s16)block->heat);
 	PACK(TOCLIENT_BLOCKDATA_HUMIDITY, (s16)block->humidity);
 	PACK(TOCLIENT_BLOCKDATA_STEP, (s8)1);
+	PACK(TOCLIENT_BLOCKDATA_CONTENT_ONLY, block->content_only);
+
 
 	//JMutexAutoLock lock(m_env_mutex);
 	/*
@@ -4926,8 +4928,8 @@ void Server::maintenance_start() {
 	m_env->getServerMap().m_map_saving_enabled = false;
 	m_env->getServerMap().m_map_loading_enabled = false;
 	m_env->getServerMap().dbase->close();
-	m_env->m_key_value_storage->close();
-	m_env->m_players_storage->close();
+	m_env->m_key_value_storage.close();
+	m_env->m_players_storage.close();
 	stat.close();
 	actionstream<<"Server: Starting maintenance: bases closed now."<<std::endl;
 
@@ -4935,8 +4937,8 @@ void Server::maintenance_start() {
 
 void Server::maintenance_end() {
 	m_env->getServerMap().dbase->open();
-	m_env->m_key_value_storage->open();
-	m_env->m_players_storage->open();
+	m_env->m_key_value_storage.open();
+	m_env->m_players_storage.open();
 	stat.open();
 	m_env->getServerMap().m_map_saving_enabled = true;
 	m_env->getServerMap().m_map_loading_enabled = true;

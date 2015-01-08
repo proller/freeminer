@@ -23,7 +23,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mg_biome.h"
 #include "gamedef.h"
 #include "nodedef.h"
-#include "map.h" //for ManualMapVoxelManipulator
+#include "map.h" //for MMVManip
 #include "log_types.h"
 #include "util/numeric.h"
 #include "main.h"
@@ -199,6 +199,7 @@ void Biome::resolveNodeNames(NodeResolveInfo *nri)
 	m_ndef->getIdFromResolveInfo(nri, "mapgen_water_source",    CONTENT_AIR,    c_water);
 	m_ndef->getIdFromResolveInfo(nri, "air",                    CONTENT_IGNORE, c_dust);
 
-	m_ndef->getIdFromResolveInfo(nri, "mapgen_ice",             CONTENT_IGNORE, c_ice);
+	m_ndef->getIdFromResolveInfo(nri, "mapgen_ice",             c_water,        c_ice);
+	m_ndef->getIdFromResolveInfo(nri, "mapgen_dirt_with_snow",  c_top,          c_top_cold);
 }
 
