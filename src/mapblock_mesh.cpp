@@ -739,8 +739,7 @@ TileSpec getNodeTile(MapNode mn, v3s16 p, v3s16 dir, MeshMakeData *data)
 
 	// Get rotation for things like chests
 	u8 facedir = mn.getFaceDir(ndef);
-	if (facedir > 23)
-		facedir = 0;
+
 	static const u16 dir_to_tile[24 * 16] =
 	{
 		// 0     +X    +Y    +Z           -Z    -Y    -X   ->   value=tile,rotation
@@ -1070,7 +1069,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	clearHardwareBuffer(false),
 	step(data->step),
 	timestamp(data->timestamp),
-	m_mesh(new scene::SMesh()),
+	m_mesh(nullptr),
 	m_gamedef(data->m_gamedef),
 	m_animation_force_timer(0), // force initial animation
 	m_last_crack(-1),
@@ -1080,6 +1079,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	m_daynight_diffs(),
 	m_usage_timer(0)
 {
+	m_mesh = new scene::SMesh();
 	m_enable_shaders = g_settings->getBool("enable_shaders");
 	m_enable_highlighting = g_settings->getBool("enable_node_highlighting");
 
@@ -1245,6 +1245,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 		material.setFlag(video::EMF_BILINEAR_FILTER, false);
 		material.setFlag(video::EMF_FOG_ENABLE, true);
 		//material.setFlag(video::EMF_WIREFRAME, true);
+
 		material.setTexture(0, p.tile.texture);
 
 		if (p.tile.material_flags & MATERIAL_FLAG_HIGHLIGHTED) {

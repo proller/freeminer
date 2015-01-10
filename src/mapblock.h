@@ -161,17 +161,7 @@ public:
 	}
 	
 	// m_modified methods
-	void raiseModified(u32 mod)
-	{
-		if(mod >= MOD_STATE_WRITE_NEEDED && m_timestamp != BLOCK_TIMESTAMP_UNDEFINED) {
-			m_changed_timestamp = (unsigned int)m_timestamp;
-		}
-		if(mod > m_modified){
-			m_modified = mod;
-			if(m_modified >= MOD_STATE_WRITE_AT_UNLOAD)
-				m_disk_timestamp = m_timestamp;
-		}
-	}
+	void raiseModified(u32 mod);
 	void raiseModified(u32 mod, const std::string &reason)
 	{
 		raiseModified(mod);
@@ -565,7 +555,6 @@ public:
 	// Last really changed time (need send to client)
 	std::atomic_uint m_changed_timestamp;
 	u32 m_next_analyze_timestamp;
-	bool abm_active;
 	typedef std::list<abm_trigger_one> abm_triggers_type;
 	std::unique_ptr<abm_triggers_type> abm_triggers;
 	void abmTriggersRun(ServerEnvironment * m_env, u32 time, bool activate = false);

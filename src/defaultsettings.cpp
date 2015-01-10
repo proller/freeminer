@@ -310,6 +310,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("selectionbox_color", "(0,0,0)");
 	settings->setDefault("crosshair_color", "(255,255,255)");
 	settings->setDefault("crosshair_alpha", "255");
+	settings->setDefault("hud_scaling", "1.0");
 	settings->setDefault("gui_scaling", "1.0");
 	settings->setDefault("hud_hotbar_max_width","1.0");
 	
@@ -321,6 +322,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("repeat_rightclick_time", "0.25");
 	settings->setDefault("random_input", "false");
 	settings->setDefault("respawn_auto", "false");
+	settings->setDefault("autojump", "0");
 	settings->setDefault("enable_vbo", "false");
 	settings->setDefault("enable_local_map_saving", "false");
 	settings->setDefault("enable_build_where_you_stand", "false");
@@ -369,7 +371,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("max_packets_per_iteration","1024");
 	settings->setDefault("cache_block_before_spawn", "true");
 	settings->setDefault("active_object_send_range_blocks", "3");
-	settings->setDefault("active_block_range", "4");
+	settings->setDefault("active_block_range", "3");
 	settings->setDefault("abm_random", "false");
 	settings->setDefault("enable_force_load", "true");
 	settings->setDefault("max_simultaneous_block_sends_per_client", "50");
@@ -478,15 +480,19 @@ void set_default_settings(Settings *settings)
 	float x_inches = ((double) porting::getDisplaySize().X /
 			(160 * porting::getDisplayDensity()));
 	if (x_inches  < 3.5) {
-		settings->setDefault("gui_scaling", "0.6");
+		settings->setDefault("hud_scaling", "0.6");
 	}
 	else if (x_inches < 4.5) {
-		settings->setDefault("gui_scaling", "0.7");
+		settings->setDefault("hud_scaling", "0.7");
 	}
 	settings->setDefault("curl_verify_cert","false");
 
-	settings->setDefault("farmesh", "1");
+	settings->setDefault("farmesh", "2");
 	settings->setDefault("farmesh_step", "1");
+	settings->setDefault("new_style_leaves", "false");
+	settings->setDefault("mip_map", "true");
+	settings->setDefault("active_block_range", "1");
+	settings->setDefault("autojump", "1");
 
 #else
 	settings->setDefault("screen_dpi", "72");
