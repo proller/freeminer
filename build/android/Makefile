@@ -503,6 +503,7 @@ curl_download :
 		wget ${CURL_URL_HTTP} || exit 1;                                       \
 		tar -xjf curl-${CURL_VERSION}.tar.bz2 || exit 1;                       \
 		rm curl-${CURL_VERSION}.tar.bz2;                                       \
+		ln -s curl-${CURL_VERSION} curl;                                       \
 	fi
 
 curl : $(CURL_LIB)
@@ -546,7 +547,8 @@ $(CURL_LIB): $(CURL_TIMESTAMP) $(OPENSSL_LIB)
 	fi
 	
 clean_curl :
-	$(RM) -rf deps/curl-${CURL_VERSION}
+	$(RM) -rf deps/curl-${CURL_VERSION}                                        \
+	$(RM) -f deps/curl
 	
 	
 curl_binary: 
@@ -744,7 +746,7 @@ clean_msgpack :
 
 
 ICONV_VERSION = 1.14
-ICONV_DIR = $(ROOT)/deps/libiconv-$(ICONV_VERSION)
+ICONV_DIR = $(ROOT)/deps/libiconv
 ICONV_LIB = $(ICONV_DIR)/lib/.libs/libiconv.a
 ICONV_TIMESTAMP = $(ICONV_DIR)timestamp
 ICONV_TIMESTAMP_INT = $(ROOT)/deps/iconv_timestamp
@@ -762,8 +764,9 @@ iconv_download :
 		echo "iconv sources missing, downloading...";                          \
 		mkdir -p ${ROOT}/deps;                                                 \
 		cd ${ROOT}/deps ;                                                      \
-		wget ${ICONV_URL} -O $(ICONV_FILE) || exit 1;                          \
+		[ -f $(ICONV_FILE) ] || wget ${ICONV_URL} -O $(ICONV_FILE) || exit 1;                          \
 		tar -xzf $(ICONV_FILE);                                                \
+		mv libiconv-$(ICONV_VERSION) ${ICONV_DIR};                             \
 		cd ${ICONV_DIR};                                                       \
 		patch -p1 < ../../iconv.patch;                                         \
 	fi
@@ -819,7 +822,6 @@ apk: $(PATHCFGFILE) assets $(IRRLICHT_LIB) $(CURL_LIB) $(LEVELDB_TARGET)       \
 	mkdir -p ${ROOT}/src;                                                      \
 	ndk-build NDK_MODULE_PATH=${NDK_MODULE_PATH} -j${PARALLEL}                 \
 	GPROF=${GPROF} APP_ABI=${TARGET_ABI} HAVE_LEVELDB=${HAVE_LEVELDB}          \
-	CMAKE_HAVE_FUTURE=1 CMAKE_HAVE_THREAD_LOCAL=1                              \
 	APP_PLATFORM=${APP_PLATFORM}                                               \
 	TARGET_LIBDIR=${TARGET_LIBDIR}                                             \
 	TARGET_CFLAGS+="${TARGET_CFLAGS_ADDON}"                                    \

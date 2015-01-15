@@ -294,16 +294,18 @@ void * ServerThread::Thread()
 	{
 		try{
 			//TimeTaker timer("AsyncRunStep() + Receive()");
-			auto time_now = porting::getTimeMs();
+			u32 time_now = porting::getTimeMs();
+			u32 end_ms = time_now + u32(1000 * dedicated_server_step);
 			m_server->AsyncRunStep((time_now - time)/1000.0f);
 			time = time_now;
 
 			// Loop used only when 100% cpu load or on old slow hardware.
 			// usually only one packet recieved here
-			u32 end_ms = porting::getTimeMs() + u32(1000 * dedicated_server_step);
-			for (u16 i = 0; i < 1000; ++i)
-				if (!m_server->Receive() || porting::getTimeMs() > end_ms)
+			for (u16 i = 0; i < 1000; ++i) {
+				m_server->Receive();
+				if (porting::getTimeMs() > end_ms)
 					break;
+			}
 		}
 		catch(con::NoIncomingDataException &e)
 		{
@@ -1281,7 +1283,11 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 
 			// Update m_enable_rollback_recording here too
 			m_enable_rollback_recording =
-					g_settings->getBool("enable_rollback_recording");
+#if USE_SQLITE
+ 					g_settings->getBool("enable_rollback_recording");
+#else
+					0;
+#endif
 		}
 	}
 
@@ -4064,7 +4070,7 @@ void Server::DenyAccess(u16 peer_id, const std::string &reason)
 
 void Server::DenyAccess(u16 peer_id, const std::wstring &reason)
 {
-    DenyAccess(peer_id, wide_to_narrow(reason));
+    DenyAccess(peer_id, wide_to_utf8(reason));
 }
 
 void Server::DeleteClient(u16 peer_id, ClientDeletionReason reason)

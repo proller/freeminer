@@ -192,7 +192,7 @@ struct LocalFormspecHandler : public TextDest {
 			if ((fields.find("btn_send") != fields.end()) ||
 					(fields.find("quit") != fields.end())) {
 				if (fields.find("f_text") != fields.end()) {
-					m_client->typeChatMessage(utf8_to_wide(fields["f_text"]));
+					m_client->typeChatMessage(narrow_to_wide(fields["f_text"]));
 				}
 
 				return;
@@ -1063,7 +1063,7 @@ static void show_chat_menu(GUIFormSpecMenu **cur_formspec,
 		FORMSPEC_VERSION_STRING
 		SIZE_TAG
 		"field[3,2.35;6,0.5;f_text;;" + text + "]"
-		"button_exit[4,3;3,0.5;btn_send;" + wide_to_narrow(wstrgettext("Proceed")) + "]"
+		"button_exit[4,3;3,0.5;btn_send;" + (_("Proceed")) + "]"
 		;
 
 	/* Create menu */
@@ -1104,7 +1104,7 @@ static void show_pause_menu(GUIFormSpecMenu **cur_formspec,
 		bool singleplayermode)
 {
 #ifdef __ANDROID__
-	std::string control_text = wide_to_narrow(wstrgettext("Default Controls:\n"
+	std::string control_text = (_("Default Controls:\n"
 				   "No menu visible:\n"
 				   "- single tap: button activate\n"
 				   "- double tap: place/use\n"
@@ -1118,7 +1118,7 @@ static void show_pause_menu(GUIFormSpecMenu **cur_formspec,
 				   " --> place single item to slot\n"
 							     ));
 #else
-	std::string control_text = wide_to_narrow(wstrgettext("Default Controls:\n"
+	std::string control_text = (_("Default Controls:\n"
 				   "- WASD: move\n"
 				   "- Space: jump/climb\n"
 				   "- Shift: sneak/go down\n"
@@ -1137,21 +1137,23 @@ static void show_pause_menu(GUIFormSpecMenu **cur_formspec,
 
 	os << FORMSPEC_VERSION_STRING  << SIZE_TAG
 	   << "button_exit[4," << (ypos++) << ";3,0.5;btn_continue;"
-	   << wide_to_narrow(wstrgettext("Continue"))     << "]";
+	   << (_("Continue"))     << "]";
 
 	if (!singleplayermode) {
 		os << "button_exit[4," << (ypos++) << ";3,0.5;btn_change_password;"
-		   << wide_to_narrow(wstrgettext("Change Password")) << "]";
+		   << (_("Change Password")) << "]";
 	}
-
+	
+#ifndef __ANDROID__
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_sound;"
-			<< wide_to_narrow(wstrgettext("Sound Volume")) << "]";
+			<< (_("Sound Volume")) << "]";
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_key_config;"
-			<< wide_to_narrow(wstrgettext("Change Keys"))  << "]";
+			<< (_("Change Keys"))  << "]";
+#endif
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_exit_menu;"
-			<< wide_to_narrow(wstrgettext("Exit to Menu")) << "]";
+			<< (_("Exit to Menu")) << "]";
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_exit_os;"
-			<< wide_to_narrow(wstrgettext("Exit to OS"))   << "]"
+			<< (_("Exit to OS"))   << "]"
 ;
 /*
 			<< "textarea[7.5,0.25;3.9,6.25;;" << control_text << ";]"
@@ -2449,7 +2451,7 @@ bool Game::getServerContent(bool *aborted)
 			}
 
 			progress = 30 + client->mediaReceiveProgress() * 35 + 0.5;
-			draw_load_screen(utf8_to_wide(message.str()), device,
+			draw_load_screen(utf8_to_wide(message.str().c_str()), device,
 					guienv, dtime, progress);
 		}
 
@@ -2853,7 +2855,7 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 
 	if (quicktune->hasMessage()) {
 		std::string msg = quicktune->getMessage();
-		statustext = utf8_to_wide(msg);
+		statustext = narrow_to_wide(msg);
 		*statustext_time = 0;
 	}
 }
@@ -3746,13 +3748,13 @@ void Game::handlePointingAtNode(GameRunData *runData,
 	NodeMetadata *meta = map.getNodeMetadata(nodepos);
 
 	if (meta) {
-		infotext = narrow_to_wide(meta->getString("infotext"));
+		infotext = utf8_to_wide(meta->getString("infotext"));
 	} else {
 		MapNode n = map.getNodeNoEx(nodepos);
 
 		if (nodedef_manager->get(n).tiledef[0].name == "unknown_node.png") {
 			infotext = L"Unknown node: ";
-			infotext += narrow_to_wide(nodedef_manager->get(n).name);
+			infotext += utf8_to_wide(nodedef_manager->get(n).name);
 		}
 	}
 
@@ -4363,7 +4365,7 @@ void Game::updateGui(float *statustext_time, const RunStats &stats,
 	} else if (flags.show_hud || flags.show_chat) {
 		std::ostringstream os(std::ios_base::binary);
 		os << "Freeminer " << minetest_version_hash;
-		guitext->setText(narrow_to_wide(os.str()).c_str());
+		guitext->setText(utf8_to_wide(os.str()).c_str());
 		guitext->setVisible(true);
 	} else {
 		guitext->setVisible(false);
@@ -4414,7 +4416,7 @@ void Game::updateGui(float *statustext_time, const RunStats &stats,
 			}
 		}
 
-		guitext2->setText(utf8_to_wide(os.str()).c_str());
+		guitext2->setText(narrow_to_wide(os.str()).c_str());
 		guitext2->setVisible(true);
 
 		core::rect<s32> rect(

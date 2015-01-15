@@ -48,12 +48,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "database.h"
 #include "database-dummy.h"
 #include "database-sqlite3.h"
-#if USE_LEVELDB
 #include "database-leveldb.h"
-#endif
-#if USE_REDIS
 #include "database-redis.h"
-#endif
 
 #define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
@@ -183,41 +179,6 @@ MapNode Map::getNodeNoEx(v3s16 p, bool *is_valid_position)
 		*is_valid_position = is_valid_p;
 	return node;
 }
-
-MapNode Map::getNodeTry(v3POS p)
-{
-#ifndef NDEBUG
-	ScopeProfiler sp(g_profiler, "Map: getNodeTry");
-#endif
-	auto blockpos = getNodeBlockPos(p);
-	auto block = getBlockNoCreateNoEx(blockpos, true);
-	if(!block)
-		return MapNode(CONTENT_IGNORE);
-	auto relpos = p - blockpos*MAP_BLOCKSIZE;
-	return block->getNodeTry(relpos);
-}
-
-/*
-MapNode Map::getNodeLog(v3POS p){
-	auto blockpos = getNodeBlockPos(p);
-	auto block = getBlockNoCreateNoEx(blockpos);
-	v3s16 relpos = p - blockpos*MAP_BLOCKSIZE;
-	auto node = block->getNodeNoEx(relpos);
-	infostream<<"getNodeLog("<<p<<") blockpos="<<blockpos<<" block="<<block<<" relpos="<<relpos<<" n="<<node<<std::endl;
-	return node;
-}
-*/
-
-/*
-MapNode Map::getNodeNoLock(v3s16 p) //dont use
-{
-	v3s16 blockpos = getNodeBlockPos(p);
-	MapBlock *block = getBlockNoCreateNoEx(blockpos);
-	if(block == NULL)
-		return MapNode(CONTENT_IGNORE);
-	return block->getNodeNoLock(p - blockpos*MAP_BLOCKSIZE);
-}
-*/
 
 #if 0
 // Deprecated
@@ -1530,7 +1491,7 @@ u32 Map::timerUpdate(float uptime, float unload_timeout,
 	// Profile modified reasons
 	Profiler modprofiler;
 
-	if (/*!m_blocks_update_last && */ m_blocks_delete->size() > 1000) {
+	if (/*!m_blocks_update_last && */ m_blocks_delete->size() > 100) {
 		m_blocks_delete = (m_blocks_delete == &m_blocks_delete_1 ? &m_blocks_delete_2 : &m_blocks_delete_1);
 		verbosestream<<"Deleting blocks="<<m_blocks_delete->size()<<std::endl;
 		for (auto & ir : *m_blocks_delete)
@@ -1685,17 +1646,6 @@ void Map::transforming_liquid_push_back(v3POS p) {
 	std::lock_guard<std::mutex> lock(m_transforming_liquid_mutex);
 	//m_transforming_liquid.set(p, 1);
 	m_transforming_liquid.push_back(p);
-}
-
-v3POS Map::transforming_liquid_pop() {
-	std::lock_guard<std::mutex> lock(m_transforming_liquid_mutex);
-	return m_transforming_liquid.pop_front();
-
-	//auto lock = m_transforming_liquid.lock_unique_rec();
-	//auto it = m_transforming_liquid.begin();
-	//auto value = it->first;
-	//m_transforming_liquid.erase(it);
-	//return value;
 }
 
 u32 Map::transforming_liquid_size() {
@@ -2025,8 +1975,10 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 
 	//infostream<<"Map::transformLiquids(): loopcount="<<loopcount<<" per="<<timer.getTimerTime()<<" ret="<<ret<<std::endl;
 
-	while (must_reflow.size() > 0)
-		m_transforming_liquid.push_back(must_reflow.pop_front());
+	while (must_reflow.size() > 0) {
+		m_transforming_liquid.push_back(must_reflow.front());
+		must_reflow.pop_front();
+	}
 	//updateLighting(lighting_modified_blocks, modified_blocks);
 
 	/* ----------------------------------------------------------------------
@@ -2185,28 +2137,6 @@ void Map::removeNodeTimer(v3s16 p)
 	block->m_node_timers.remove(p_rel);
 }
 
-s16 Map::getHeat(v3s16 p, bool no_random)
-{
-	MapBlock *block = getBlockNoCreateNoEx(getNodeBlockPos(p));
-	if(block != NULL) {
-		s16 value = block->heat;
-		return value + (no_random ? 0 : myrand_range(0, 1));
-	}
-	//errorstream << "No heat for " << p.X<<"," << p.Z << std::endl;
-	return 0;
-}
-
-s16 Map::getHumidity(v3s16 p, bool no_random)
-{
-	MapBlock *block = getBlockNoCreateNoEx(getNodeBlockPos(p));
-	if(block != NULL) {
-		s16 value = block->humidity;
-		return value + (no_random ? 0 : myrand_range(0, 1));
-	}
-	//errorstream << "No humidity for " << p.X<<"," << p.Z << std::endl;
-	return 0;
-}
-
 /*
 	ServerMap
 */
@@ -2227,14 +2157,22 @@ ServerMap::ServerMap(std::string savedir, IGameDef *gamedef, EmergeManager *emer
 	bool succeeded = conf.readConfigFile(conf_path.c_str());
 	if (!succeeded || !conf.exists("backend")) {
 		// fall back to sqlite3
+		#if USE_LEVELDB
+		dbase = new Database_LevelDB(this, savedir);
+		conf.set("backend", "leveldb");
+		#elif USE_SQLITE3
 		dbase = new Database_SQLite3(this, savedir);
 		conf.set("backend", "sqlite3");
-	} else {
+		#endif
+	}
+	else {
 		std::string backend = conf.get("backend");
 		if (backend == "dummy")
 			dbase = new Database_Dummy(this);
+		#if USE_SQLITE3
 		else if (backend == "sqlite3")
 			dbase = new Database_SQLite3(this, savedir);
+		#endif
 		#if USE_LEVELDB
 		else if (backend == "leveldb")
 			dbase = new Database_LevelDB(this, savedir);
@@ -2489,10 +2427,6 @@ void ServerMap::finishBlockMake(BlockMakeData *data,
 	}
 
 	EMERGE_DBG_OUT("finishBlockMake: changed_blocks.size()=" << changed_blocks.size());
-
-	/*
-		Do stuff in central blocks
-	*/
 
 	/*
 		Update lighting
@@ -3087,95 +3021,22 @@ MapBlock * ServerMap::loadBlock(v3s16 p3d)
 	return nullptr;
 }
 
+bool ServerMap::deleteBlock(v3s16 blockpos)
+{
+	if (!dbase->deleteBlock(blockpos))
+		return false;
+
+	MapBlock *block = getBlockNoCreateNoEx(blockpos);
+	if (block) {
+		deleteBlock(blockpos);
+	}
+
+	return true;
+}
+
 void ServerMap::PrintInfo(std::ostream &out)
 {
 	out<<"ServerMap: ";
-}
-
-s16 ServerMap::updateBlockHeat(ServerEnvironment *env, v3POS p, MapBlock *block, std::map<v3POS, s16> * cache)
-{
-	auto bp = getNodeBlockPos(p);
-	auto gametime = env->getGameTime();
-	if (block) {
-		if (gametime < block->heat_last_update)
-			return block->heat + myrand_range(0, 1);
-	} else if (!cache) {
-		block = getBlockNoCreateNoEx(bp, true);
-	}
-	if (cache && cache->count(bp))
-		return cache->at(bp) + myrand_range(0, 1);
-
-	auto value = m_emerge->biomemgr->calcBlockHeat(p, getSeed(),
-			env->getTimeOfDayF(), gametime * env->getTimeOfDaySpeed(), env->m_use_weather);
-
-	if(block) {
-		block->heat = value;
-		block->heat_last_update = env->m_use_weather ? gametime + 30 : -1;
-	}
-	if (cache)
-		(*cache)[bp] = value;
-	return value + myrand_range(0, 1);
-}
-
-s16 ServerMap::updateBlockHumidity(ServerEnvironment *env, v3POS p, MapBlock *block, std::map<v3POS, s16> * cache)
-{
-	auto bp = getNodeBlockPos(p);
-	auto gametime = env->getGameTime();
-	if (block) {
-		if (gametime < block->humidity_last_update)
-			return block->humidity + myrand_range(0, 1);
-	} else if (!cache) {
-		block = getBlockNoCreateNoEx(bp, true);
-	}
-	if (cache && cache->count(bp))
-		return cache->at(bp) + myrand_range(0, 1);
-
-	auto value = m_emerge->biomemgr->calcBlockHumidity(p, getSeed(),
-			env->getTimeOfDayF(), gametime * env->getTimeOfDaySpeed(), env->m_use_weather);
-
-	if(block) {
-		block->humidity = value;
-		block->humidity_last_update = env->m_use_weather ? gametime + 30 : -1;
-	}
-	if (cache)
-		(*cache)[bp] = value;
-	return value + myrand_range(0, 1);
-}
-
-int ServerMap::getSurface(v3s16 basepos, int searchup, bool walkable_only) {
-
-	s16 max = MYMIN(searchup + basepos.Y,0x7FFF);
-
-	MapNode last_node = getNodeNoEx(basepos);
-	MapNode node = last_node;
-	v3s16 runpos = basepos;
-	INodeDefManager *nodemgr = m_gamedef->ndef();
-
-	bool last_was_walkable = nodemgr->get(node).walkable;
-
-	while ((runpos.Y < max) && (node.param0 != CONTENT_AIR)) {
-		runpos.Y += 1;
-		last_node = node;
-		node = getNodeNoEx(runpos);
-
-		if (!walkable_only) {
-			if ((last_node.param0 != CONTENT_AIR) &&
-				(last_node.param0 != CONTENT_IGNORE) &&
-				(node.param0 == CONTENT_AIR)) {
-				return runpos.Y;
-			}
-		}
-		else {
-			bool is_walkable = nodemgr->get(node).walkable;
-
-			if (last_was_walkable && (!is_walkable)) {
-				return runpos.Y;
-			}
-			last_was_walkable = is_walkable;
-		}
-	}
-
-	return basepos.Y -1;
 }
 
 MMVManip::MMVManip(Map *map):
@@ -3250,8 +3111,7 @@ void MMVManip::initialEmerge(v3s16 blockpos_min, v3s16 blockpos_max,
 				block = svrmap->emergeBlock(p, false);
 				if (block == NULL)
 					block = svrmap->createBlock(p);
-				else
-					block->copyTo(*this);
+				block->copyTo(*this);
 			} else {
 				flags |= VMANIP_BLOCK_DATA_INEXIST;
 
@@ -3308,11 +3168,3 @@ void MMVManip::blitBackAll(std::map<v3s16, MapBlock*> *modified_blocks,
 }
 
 //END
-
-// freeminer:
-
-INodeDefManager* Map::getNodeDefManager()
-{
-	return m_gamedef->ndef();
-}
-
