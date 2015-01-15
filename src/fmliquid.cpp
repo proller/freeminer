@@ -344,6 +344,7 @@ infostream
 <<" total_level2="<<(int)total_level
 <<std::endl;
 
+if (pressure)
 infostream<<" press: ";
 		if (pressure && total_level > 0 && neighbors[D_BOTTOM].liquid) { // bottom pressure +1
 			++liquid_levels_want[D_BOTTOM];
