@@ -410,8 +410,7 @@ inline std::string wrap_rows(const std::string &from,
 
 
 /**
- * Removes all backslashes from a string that had been escaped (FormSpec strings)
- *
+ * Removes backslashes from an escaped string (FormSpec strings)
  */
 template <typename T>
 inline std::basic_string<T> unescape_string(std::basic_string<T> &s)
@@ -419,8 +418,11 @@ inline std::basic_string<T> unescape_string(std::basic_string<T> &s)
 	std::basic_string<T> res;
 
 	for (size_t i = 0; i < s.length(); i++) {
-		if (s[i] == '\\')
-			++i;
+		if (s[i] == '\\') {
+			i++;
+			if (i >= s.length())
+				break;
+		}
 		res += s[i];
 	}
 
