@@ -32,6 +32,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "../porting.h"
 #include "../log.h"
 
+#include "../config.h"
+
 #ifndef _WIN32
 #include <iconv.h>
 #else
@@ -55,7 +57,8 @@ size_t convert(const char *to, const char *from, char *outbuf, size_t outbuf_siz
 	return 0;
 }
 
-std::wstring utf8_to_wide(const std::string &input) {
+#if CMAKE_UTF8
+std::wstring narrow_to_wide(const std::string &input) {
 	size_t inbuf_size = input.length() + 1;
 	// maximum possible size, every character is sizeof(wchar_t) bytes
 	size_t outbuf_size = (input.length() + 1) * sizeof(wchar_t);
@@ -74,7 +77,7 @@ std::wstring utf8_to_wide(const std::string &input) {
 	return out;
 }
 
-std::string wide_to_utf8(const std::wstring &input) {
+std::string wide_to_narrow(const std::wstring &input) {
 	size_t inbuf_size = (input.length() + 1) * sizeof(wchar_t);
 	// maximum possible size: utf-8 encodes codepoints using 1 up to 6 bytes
 	size_t outbuf_size = (input.length() + 1) * 6;
@@ -92,8 +95,10 @@ std::string wide_to_utf8(const std::wstring &input) {
 
 	return out;
 }
+#endif
+
 #else
-std::wstring utf8_to_wide(const std::string &input) {
+std::wstring narrow_to_wide(const std::string &input) {
 	size_t outbuf_size = input.size() + 1;
 	wchar_t *outbuf = new wchar_t[outbuf_size];
 	memset(outbuf, 0, outbuf_size * sizeof(wchar_t));
@@ -103,7 +108,7 @@ std::wstring utf8_to_wide(const std::string &input) {
 	return out;
 }
 
-std::string wide_to_utf8(const std::wstring &input) {
+std::string wide_to_narrow(const std::wstring &input) {
 	size_t outbuf_size = (input.size() + 1) * 6;
 	char *outbuf = new char[outbuf_size];
 	memset(outbuf, 0, outbuf_size);
@@ -122,14 +127,17 @@ std::string wide_to_utf8(const std::wstring &input) {
 static bool parseHexColorString(const std::string &value, video::SColor &color);
 static bool parseNamedColorString(const std::string &value, video::SColor &color);
 
-#ifdef __ANDROID__
+#if !CMAKE_UTF8
+std::wstring narrow_to_wide(const std::string &input) { return narrow_to_wide_real(input); }
+std::string wide_to_narrow(const std::wstring &input) { return wide_to_narrow_real(input); }
+
+int wctomb(char *s, wchar_t wc) { return wcrtomb(s,wc,NULL); }
+int mbtowc(wchar_t *pwc, const char *s, size_t n) { return mbrtowc(pwc, s, n, NULL); }
+
 const wchar_t* wide_chars =
 	L" !\"#$%&'()*+,-./0123456789:;<=>?@"
 	L"ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`"
 	L"abcdefghijklmnopqrstuvwxyz{|}~";
-
-int wctomb(char *s, wchar_t wc) { return wcrtomb(s,wc,NULL); }
-int mbtowc(wchar_t *pwc, const char *s, size_t n) { return mbrtowc(pwc, s, n, NULL); }
 
 int NOT_USED_wctomb(char *s, wchar_t wc)
 {
@@ -159,7 +167,7 @@ int NOT_USED_mbtowc(wchar_t *pwc, const char *s, size_t n)
 	}
 }
 
-std::wstring narrow_to_wide(const std::string& mbs) {
+std::wstring narrow_to_wide_real(const std::string& mbs) {
 	size_t wcl = mbs.size();
 
 	std::wstring retval = L"";
@@ -180,7 +188,7 @@ std::wstring narrow_to_wide(const std::string& mbs) {
 }
 #else
 
-std::wstring narrow_to_wide(const std::string& mbs)
+std::wstring narrow_to_wide_real(const std::string& mbs)
 {
 	size_t wcl = mbs.size();
 	Buffer<wchar_t> wcs(wcl+1);
@@ -194,7 +202,7 @@ std::wstring narrow_to_wide(const std::string& mbs)
 #endif
 
 #ifdef __ANDROID__
-std::string wide_to_narrow(const std::wstring& wcs) {
+std::string wide_to_narrow_real(const std::wstring& wcs) {
 	size_t mbl = wcs.size()*4;
 
 	std::string retval = "";
@@ -220,7 +228,7 @@ std::string wide_to_narrow(const std::wstring& wcs) {
 	return retval;
 }
 #else
-std::string wide_to_narrow(const std::wstring& wcs)
+std::string wide_to_narrow_real(const std::wstring& wcs)
 {
 	size_t mbl = wcs.size()*4;
 	SharedBuffer<char> mbs(mbl+1);
@@ -678,7 +686,7 @@ std::wstring colorizeText(const std::wstring &s, std::vector<video::SColor> &col
 	video::SColor color = initial_color;
 	while (i < s.length()) {
 		if (s[i] == L'\v' && i + 6 < s.length()) {
-			parseColorString("#" + wide_to_utf8(s.substr(i + 1, 6)), color);
+			parseColorString("#" + wide_to_narrow(s.substr(i + 1, 6)), color);
 			i += 7;
 			continue;
 		}
