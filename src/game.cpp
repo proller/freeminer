@@ -1817,6 +1817,8 @@ void Game::run()
 	flags.dedicated_server_step = g_settings->getFloat("dedicated_server_step");
 	flags.use_weather = g_settings->getBool("weather");
 	flags.no_output = device->getVideoDriver()->getDriverType() == video::EDT_NULL;
+	flags.connected = false;
+	flags.reconnect = false;
 
 
 	/* Clear the profiler */
@@ -2345,7 +2347,7 @@ bool Game::connectToServer(const std::string &playername,
 			showOverlayMessage("Connecting to server...", dtime, 20);
 
 			if (porting::getTimeMs() > end_ms) {
-				flags.reconnect = true;
+				//flags.reconnect = true;
 				return false;
 			}
 		}
@@ -2361,6 +2363,7 @@ bool Game::connectToServer(const std::string &playername,
 		return false;
 #else
 	} catch (int) { //nothing
+		return false;
 #endif
 	}
 
@@ -2665,6 +2668,14 @@ void Game::processUserInput(VolatileRunFlags *flags,
 		input->clear();
 	}
 
+#ifdef __ANDROID__
+	if (gui_chat_console->isOpen()) {
+		if (gui_chat_console->getAndroidUIInput()) {
+			//gui_chat_console->closeConsoleAtOnce();
+		}
+	}
+#endif
+
 	if (!guienv->hasFocus(gui_chat_console) && gui_chat_console->isOpen()) {
 		gui_chat_console->closeConsoleAtOnce();
 	}
@@ -2936,6 +2947,12 @@ void Game::openConsole(float height, bool close_on_return, const std::wstring& i
 		}
 		gui_chat_console->openConsole(height, close_on_return);
 		guienv->setFocus(gui_chat_console);
+
+#ifdef __ANDROID__
+		int type = 1;
+		porting::showInputDialog(_("ok"), "", wide_to_narrow(gui_chat_console->getText()), type);
+#endif
+
 	}
 }
 
