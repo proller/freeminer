@@ -404,6 +404,44 @@ core.register_chatcommand("set", {
 	end,
 })
 
+core.register_chatcommand("deleteblocks", {
+	params = "[here] [<pos1> <pos2>]",
+	description = "delete map blocks contained in area pos1 to pos2",
+	privs = {server=true},
+	func = function(name, param)
+		local p1 = {}
+		local p2 = {}
+		if param == "here" then
+			local player = core.get_player_by_name(name)
+			if player == nil then
+				core.log("error", "player is nil")
+				return false, "Unable to get current position; player is nil"
+			end
+			p1 = player:getpos()
+			p2 = p1
+		else
+			local pos1, pos2 = unpack(param:split(") ("))
+			if pos1 == nil or pos2 == nil then
+				return false, "Incorrect area format. Expected: (x1,y1,z1) (x2,y2,z2)"
+			end
+
+			p1 = core.string_to_pos(pos1 .. ")")
+			p2 = core.string_to_pos("(" .. pos2)
+
+			if p1 == nil or p2 == nil then
+				return false, "Incorrect area format. Expected: (x1,y1,z1) (x2,y2,z2)"
+			end
+		end
+
+		if core.delete_area(p1, p2) then
+			return true, "Successfully cleared area ranging from " ..
+				core.pos_to_string(p1, 1) .. " to " .. core.pos_to_string(p2, 1)
+		else
+			return false, "Failed to clear one or more blocks in area"
+		end
+	end,
+})
+
 core.register_chatcommand("mods", {
 	params = "",
 	description = "List mods installed on the server",
@@ -759,5 +797,13 @@ core.register_chatcommand("last-login", {
 core.register_chatcommand( "stat", {
 	params = "[name]",
 	description = "show in-game action statistics",
-	func = core.show_stat_summary
+	func = function(name, param)
+		if param == "" then
+			param = name
+		elseif not core.get_player_by_name(param) then
+			return false, "No such player."
+		end
+		local formspec = core.stat_formspec(param)
+		core.show_formspec(name, 'stat', formspec)
+	end
 })

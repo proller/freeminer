@@ -56,7 +56,7 @@ FlagDesc flagdesc_mapgen_v6[] = {
 MapgenV6::MapgenV6(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 	: Mapgen(mapgenid, params, emerge)
 {
-	this->emerge  = emerge;
+	this->m_emerge = emerge;
 	this->ystride = csize.X; //////fix this
 
 	MapgenV6Params *sp = (MapgenV6Params *)params->sparams;
@@ -119,7 +119,8 @@ MapgenV6::MapgenV6(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 }
 
 
-MapgenV6::~MapgenV6() {
+MapgenV6::~MapgenV6()
+{
 	delete noise_terrain_base;
 	delete noise_terrain_higher;
 	delete noise_steepness;
@@ -130,26 +131,28 @@ MapgenV6::~MapgenV6() {
 }
 
 
-MapgenV6Params::MapgenV6Params() {
+MapgenV6Params::MapgenV6Params()
+{
 	spflags     = MGV6_BIOMEBLEND | MGV6_MUDFLOW;
 	freq_desert = 0.45;
 	freq_beach  = 0.15;
 
-	np_terrain_base   = NoiseParams(-4,  20.0, v3f(250.0, 250.0, 250.0), 82341,  5, 0.6);
-	np_terrain_higher = NoiseParams(20,  16.0, v3f(500.0, 500.0, 500.0), 85039,  5, 0.6);
-	np_steepness      = NoiseParams(0.85,0.5,  v3f(125.0, 125.0, 125.0), -932,   5, 0.7);
-	np_height_select  = NoiseParams(0.5, 1.0,  v3f(250.0, 250.0, 250.0), 4213,   5, 0.69);
-	np_mud            = NoiseParams(4,   2.0,  v3f(200.0, 200.0, 200.0), 91013,  3, 0.55);
-	np_beach          = NoiseParams(0,   1.0,  v3f(250.0, 250.0, 250.0), 59420,  3, 0.50);
-	np_biome          = NoiseParams(0,   1.0,  v3f(250.0, 250.0, 250.0), 9130,   3, 0.50);
-	np_cave           = NoiseParams(6,   6.0,  v3f(250.0, 250.0, 250.0), 34329,  3, 0.50);
-	np_humidity       = NoiseParams(0.5, 0.5,  v3f(500.0, 500.0, 500.0), 72384,  4, 0.66);
-	np_trees          = NoiseParams(0,   1.0,  v3f(125.0, 125.0, 125.0), 2,      4, 0.66);
-	np_apple_trees    = NoiseParams(0,   1.0,  v3f(100.0, 100.0, 100.0), 342902, 3, 0.45);
+	np_terrain_base   = NoiseParams(-4,  20.0, v3f(250.0, 250.0, 250.0), 82341,  5, 0.6, 2.0);
+	np_terrain_higher = NoiseParams(20,  16.0, v3f(500.0, 500.0, 500.0), 85039,  5, 0.6, 2.0);
+	np_steepness      = NoiseParams(0.85,0.5,  v3f(125.0, 125.0, 125.0), -932,   5, 0.7, 2.0);
+	np_height_select  = NoiseParams(0,   1.0,  v3f(250.0, 250.0, 250.0), 4213,   5, 0.69, 2.0);
+	np_mud            = NoiseParams(4,   2.0,  v3f(200.0, 200.0, 200.0), 91013,  3, 0.55, 2.0);
+	np_beach          = NoiseParams(0,   1.0,  v3f(250.0, 250.0, 250.0), 59420,  3, 0.50, 2.0);
+	np_biome          = NoiseParams(0,   1.0,  v3f(250.0, 250.0, 250.0), 9130,   3, 0.50, 2.0);
+	np_cave           = NoiseParams(6,   6.0,  v3f(250.0, 250.0, 250.0), 34329,  3, 0.50, 2.0);
+	np_humidity       = NoiseParams(0.5, 0.5,  v3f(500.0, 500.0, 500.0), 72384,  4, 0.66, 2.0);
+	np_trees          = NoiseParams(0,   1.0,  v3f(125.0, 125.0, 125.0), 2,      4, 0.66, 2.0);
+	np_apple_trees    = NoiseParams(0,   1.0,  v3f(100.0, 100.0, 100.0), 342902, 3, 0.45, 2.0);
 }
 
 
-void MapgenV6Params::readParams(Settings *settings) {
+void MapgenV6Params::readParams(Settings *settings)
+{
 	settings->getFlagStrNoEx("mgv6_spflags", spflags, flagdesc_mapgen_v6);
 	settings->getFloatNoEx("mgv6_freq_desert", freq_desert);
 	settings->getFloatNoEx("mgv6_freq_beach",  freq_beach);
@@ -168,7 +171,8 @@ void MapgenV6Params::readParams(Settings *settings) {
 }
 
 
-void MapgenV6Params::writeParams(Settings *settings) {
+void MapgenV6Params::writeParams(Settings *settings)
+{
 	settings->setFlagStr("mgv6_spflags", spflags, flagdesc_mapgen_v6, (u32)-1);
 	settings->setFloat("mgv6_freq_desert", freq_desert);
 	settings->setFloat("mgv6_freq_beach",  freq_beach);
@@ -191,7 +195,8 @@ void MapgenV6Params::writeParams(Settings *settings) {
 
 
 // Returns Y one under area minimum if not found
-s16 MapgenV6::find_stone_level(v2s16 p2d) {
+s16 MapgenV6::find_stone_level(v2s16 p2d)
+{
 	v3s16 em = vm->m_area.getExtent();
 	s16 y_nodes_max = vm->m_area.MaxEdge.Y;
 	s16 y_nodes_min = vm->m_area.MinEdge.Y;
@@ -229,7 +234,8 @@ bool MapgenV6::block_is_underground(u64 seed, v3s16 blockpos)
 //////////////////////// Base terrain height functions
 
 float MapgenV6::baseTerrainLevel(float terrain_base, float terrain_higher,
-									float steepness, float height_select) {
+	float steepness, float height_select)
+{
 	float base   = 1 + terrain_base;
 	float higher = 1 + terrain_higher;
 
@@ -255,17 +261,18 @@ float MapgenV6::baseTerrainLevel(float terrain_base, float terrain_higher,
 }
 
 
-float MapgenV6::baseTerrainLevelFromNoise(v2s16 p) {
+float MapgenV6::baseTerrainLevelFromNoise(v2s16 p)
+{
 	if (flags & MG_FLAT)
 		return water_level;
 
-	float terrain_base   = NoisePerlin2DPosOffset(noise_terrain_base->np,
+	float terrain_base   = NoisePerlin2D_PO(&noise_terrain_base->np,
 							p.X, 0.5, p.Y, 0.5, seed);
-	float terrain_higher = NoisePerlin2DPosOffset(noise_terrain_higher->np,
+	float terrain_higher = NoisePerlin2D_PO(&noise_terrain_higher->np,
 							p.X, 0.5, p.Y, 0.5, seed);
-	float steepness      = NoisePerlin2DPosOffset(noise_steepness->np,
+	float steepness      = NoisePerlin2D_PO(&noise_steepness->np,
 							p.X, 0.5, p.Y, 0.5, seed);
-	float height_select  = NoisePerlin2DNoTxfmPosOffset(noise_height_select->np,
+	float height_select  = NoisePerlin2D_PO(&noise_height_select->np,
 							p.X, 0.5, p.Y, 0.5, seed);
 
 	return baseTerrainLevel(terrain_base, terrain_higher,
@@ -273,13 +280,15 @@ float MapgenV6::baseTerrainLevelFromNoise(v2s16 p) {
 }
 
 
-float MapgenV6::baseTerrainLevelFromMap(v2s16 p) {
+float MapgenV6::baseTerrainLevelFromMap(v2s16 p)
+{
 	int index = (p.Y - node_min.Z) * ystride + (p.X - node_min.X);
 	return baseTerrainLevelFromMap(index);
 }
 
 
-float MapgenV6::baseTerrainLevelFromMap(int index) {
+float MapgenV6::baseTerrainLevelFromMap(int index)
+{
 	if (flags & MG_FLAT)
 		return water_level;
 
@@ -293,31 +302,36 @@ float MapgenV6::baseTerrainLevelFromMap(int index) {
 }
 
 
-s16 MapgenV6::find_ground_level_from_noise(u64 seed, v2s16 p2d, s16 precision) {
+s16 MapgenV6::find_ground_level_from_noise(u64 seed, v2s16 p2d, s16 precision)
+{
 	return baseTerrainLevelFromNoise(p2d) + AVERAGE_MUD_AMOUNT;
 }
 
 
-int MapgenV6::getGroundLevelAtPoint(v2s16 p) {
+int MapgenV6::getGroundLevelAtPoint(v2s16 p)
+{
 	return baseTerrainLevelFromNoise(p) + AVERAGE_MUD_AMOUNT;
 }
 
 
 //////////////////////// Noise functions
 
-float MapgenV6::getMudAmount(v2s16 p) {
+float MapgenV6::getMudAmount(v2s16 p)
+{
 	int index = (p.Y - node_min.Z) * ystride + (p.X - node_min.X);
 	return getMudAmount(index);
 }
 
 
-bool MapgenV6::getHaveBeach(v2s16 p) {
+bool MapgenV6::getHaveBeach(v2s16 p)
+{
 	int index = (p.Y - node_min.Z) * ystride + (p.X - node_min.X);
 	return getHaveBeach(index);
 }
 
 
-BiomeV6Type MapgenV6::getBiome(v2s16 p) {
+BiomeV6Type MapgenV6::getBiome(v2s16 p)
+{
 	int index = (p.Y - node_min.Z) * ystride + (p.X - node_min.X);
 	return getBiome(index, p);
 }
@@ -421,7 +435,8 @@ u32 MapgenV6::get_blockseed(u64 seed, v3s16 p)
 
 //////////////////////// Map generator
 
-void MapgenV6::makeChunk(BlockMakeData *data) {
+void MapgenV6::makeChunk(BlockMakeData *data)
+{
 	assert(data->vmanip);
 	assert(data->nodedef);
 	assert(data->blockpos_requested.X >= data->blockpos_min.X &&
@@ -436,7 +451,6 @@ void MapgenV6::makeChunk(BlockMakeData *data) {
 	this->ndef = data->nodedef;
 
 	// Hack: use minimum block coords for old code that assumes a single block
-	v3s16 blockpos = data->blockpos_requested;
 	v3s16 blockpos_min = data->blockpos_min;
 	v3s16 blockpos_max = data->blockpos_max;
 
@@ -498,7 +512,7 @@ void MapgenV6::makeChunk(BlockMakeData *data) {
 	}
 
 	// Add dungeons
-	if (flags & MG_DUNGEONS) {
+	if ((flags & MG_DUNGEONS) && (stone_surface_max_y >= node_min.Y)) {
 		DungeonParams dp;
 
 		dp.np_rarity  = nparams_dungeon_rarity;
@@ -542,63 +556,39 @@ void MapgenV6::makeChunk(BlockMakeData *data) {
 		placeTreesAndJungleGrass();
 
 	// Generate the registered decorations
-	emerge->decomgr->placeAllDecos(this, blockseed, node_min, node_max);
+	m_emerge->decomgr->placeAllDecos(this, blockseed, node_min, node_max);
 
 	// Generate the registered ores
-	emerge->oremgr->placeAllOres(this, blockseed, node_min, node_max);
+	m_emerge->oremgr->placeAllOres(this, blockseed, node_min, node_max);
 
 	// Calculate lighting
 	if (flags & MG_LIGHT)
-		calcLighting(node_min - v3s16(1, 1, 1) * MAP_BLOCKSIZE,
-					 node_max + v3s16(1, 0, 1) * MAP_BLOCKSIZE);
+		calcLighting(node_min, node_max);
 
 	this->generating = false;
 }
 
 
-void MapgenV6::calculateNoise() {
+void MapgenV6::calculateNoise()
+{
 	int x = node_min.X;
-	int y = node_min.Z;
 	int z = node_min.Z;
 
-	// Need to adjust for the original implementation's +.5 offset...
 	if (!(flags & MG_FLAT)) {
-		noise_terrain_base->perlinMap2D(
-			x + 0.5 * noise_terrain_base->np->spread.X * farscale(noise_terrain_base->np->farspread, x, z),
-			z + 0.5 * noise_terrain_base->np->spread.Z * farscale(noise_terrain_base->np->farspread, x, z));
-		noise_terrain_base->transformNoiseMap(x, y, z);
-
-		noise_terrain_higher->perlinMap2D(
-			x + 0.5 * noise_terrain_higher->np->spread.X * farscale(noise_terrain_higher->np->farspread, x, z),
-			z + 0.5 * noise_terrain_higher->np->spread.Z * farscale(noise_terrain_higher->np->farspread, x, z));
-		noise_terrain_higher->transformNoiseMap(x, y, z);
-
-		noise_steepness->perlinMap2D(
-			x + 0.5 * noise_steepness->np->spread.X * farscale(noise_steepness->np->farspread, x, z),
-			z + 0.5 * noise_steepness->np->spread.Z * farscale(noise_steepness->np->farspread, x, z));
-		noise_steepness->transformNoiseMap(x, y, z);
-
-		noise_height_select->perlinMap2D(
-			x + 0.5 * noise_height_select->np->spread.X * farscale(noise_height_select->np->farspread, x, z),
-			z + 0.5 * noise_height_select->np->spread.Z * farscale(noise_height_select->np->farspread, x, z));
-
-		noise_mud->perlinMap2D(
-			x + 0.5 * noise_mud->np->spread.X * farscale(noise_mud->np->farspread, x, z),
-			z + 0.5 * noise_mud->np->spread.Z * farscale(noise_mud->np->farspread, x, z));
-		noise_mud->transformNoiseMap(x, y, z);
+		noise_terrain_base->perlinMap2D_PO(x, 0.5, z, 0.5);
+		noise_terrain_higher->perlinMap2D_PO(x, 0.5, z, 0.5);
+		noise_steepness->perlinMap2D_PO(x, 0.5, z, 0.5);
+		noise_height_select->perlinMap2D_PO(x, 0.5, z, 0.5);
+		noise_mud->perlinMap2D_PO(x, 0.5, z, 0.5);
 	}
 
-	noise_beach->perlinMap2D(
-		x + 0.2 * noise_beach->np->spread.X * farscale(noise_beach->np->farspread, x, z),
-		z + 0.7 * noise_beach->np->spread.Z * farscale(noise_beach->np->farspread, x, z));
-
-	noise_biome->perlinMap2D(
-		x + 0.6 * noise_biome->np->spread.X * farscale(noise_biome->np->farspread, x, z),
-		z + 0.2 * noise_biome->np->spread.Z * farscale(noise_biome->np->farspread, x, z));
+	noise_beach->perlinMap2D_PO(x, 0.2, z, 0.7);
+	noise_biome->perlinMap2D_PO(x, 0.6, z, 0.2);
 }
 
 
-int MapgenV6::generateGround() {
+int MapgenV6::generateGround()
+{
 	//TimeTaker timer1("Generating ground level");
 	MapNode n_air(CONTENT_AIR), n_water_source(c_water_source);
 	MapNode n_stone(c_stone), n_desert_stone(c_desert_stone);
@@ -616,7 +606,7 @@ int MapgenV6::generateGround() {
 			stone_surface_max_y = surface_y;
 
 		BiomeV6Type bt = getBiome(index, v2s16(x, z));
-		s16 heat = emerge->env->m_use_weather ? emerge->env->getServerMap().updateBlockHeat(emerge->env, v3POS(x,node_max.Y,z), nullptr, &heat_cache) : 0;
+		s16 heat = m_emerge->env->m_use_weather ? m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env, v3POS(x,node_max.Y,z), nullptr, &heat_cache) : 0;
 
 		// Fill ground with stone
 		v3s16 em = vm->m_area.getExtent();
@@ -640,7 +630,8 @@ int MapgenV6::generateGround() {
 }
 
 
-void MapgenV6::addMud() {
+void MapgenV6::addMud()
+{
 	// 15ms @cs=8
 	//TimeTaker timer1("add mud");
 	MapNode n_dirt(c_dirt), n_gravel(c_gravel);
@@ -700,7 +691,8 @@ void MapgenV6::addMud() {
 }
 
 
-void MapgenV6::flowMud(s16 &mudflow_minpos, s16 &mudflow_maxpos) {
+void MapgenV6::flowMud(s16 &mudflow_minpos, s16 &mudflow_maxpos)
+{
 	// 340ms @cs=8
 	//TimeTaker timer1("flow mud");
 
@@ -835,7 +827,8 @@ void MapgenV6::flowMud(s16 &mudflow_minpos, s16 &mudflow_maxpos) {
 }
 
 
-void MapgenV6::addDirtGravelBlobs() {
+void MapgenV6::addDirtGravelBlobs()
+{
 	if (getBiome(v2s16(node_min.X, node_min.Z)) != BT_NORMAL)
 		return;
 
@@ -873,7 +866,8 @@ void MapgenV6::addDirtGravelBlobs() {
 }
 
 
-void MapgenV6::placeTreesAndJungleGrass() {
+void MapgenV6::placeTreesAndJungleGrass()
+{
 	//TimeTaker t("placeTrees");
 
 	PseudoRandom grassrandom(blockseed + 53);
@@ -989,7 +983,8 @@ void MapgenV6::placeTreesAndJungleGrass() {
 }
 
 
-void MapgenV6::growGrass() {
+void MapgenV6::growGrass()
+{
 	for (s16 z = full_node_min.Z; z <= full_node_max.Z; z++)
 	for (s16 x = full_node_min.X; x <= full_node_max.X; x++) {
 		// Find the lowest surface to which enough light ends up to make
@@ -1014,8 +1009,8 @@ void MapgenV6::growGrass() {
 		MapNode *n = &vm->m_data[i];
 		if (n->getContent() == c_dirt && surface_y >= water_level - 20)
 		{
-			if (emerge->env->m_use_weather) {
-				int heat = emerge->env->getServerMap().updateBlockHeat(emerge->env, v3POS(x, surface_y, z), nullptr, &heat_cache);
+			if (m_emerge->env->m_use_weather) {
+				int heat = m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env, v3POS(x, surface_y, z), nullptr, &heat_cache);
 				n->setContent(heat < -10 ? c_dirt_with_snow : (heat < -5 || heat > 50) ? c_dirt : c_dirt_with_grass);
 			} else
 			n->setContent(c_dirt_with_grass);
@@ -1024,7 +1019,8 @@ void MapgenV6::growGrass() {
 }
 
 
-void MapgenV6::generateCaves(int max_stone_y) {
+void MapgenV6::generateCaves(int max_stone_y)
+{
 	float cave_amount = NoisePerlin2D(np_cave, node_min.X, node_min.Y, seed);
 	int volume_nodes = (node_max.X - node_min.X + 1) *
 					   (node_max.Y - node_min.Y + 1) * MAP_BLOCKSIZE;

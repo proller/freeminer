@@ -13,14 +13,13 @@ set(VERSION_EXTRA "" CACHE STRING "Stuff to append to version string")
 # Also remember to set PROTOCOL_VERSION in clientserver.h when releasing
 set(VERSION_MAJOR 0)
 set(VERSION_MINOR 4)
-set(VERSION_PATCH 10)
-set(VERSION_TWEAK 4)
+set(VERSION_PATCH 11)
+set(VERSION_TWEAK 5)
 set(VERSION_PATCH_ORIG ${VERSION_PATCH})
 
 if(VERSION_EXTRA)
 	set(VERSION_TWEAK ${VERSION_TWEAK}-${VERSION_EXTRA})
 else()
-	set(VERSION_TWEAK ${VERSION_TWEAK}-free)
 	# Comment the following line during release
 	set(VERSION_TWEAK ${VERSION_TWEAK}-dev)
 endif()
@@ -80,7 +79,7 @@ if(WIN32)
 	set(LOCALEDIR "locale")
 elseif(APPLE)
 	set(SHAREDIR ".")
-	set(BINDIR "./bin")
+	set(BINDIR ".")
 	set(DOCDIR "./doc/${PROJECT_NAME}")
 	set(EXAMPLE_CONF_DIR ${DOCDIR})
 	set(LOCALEDIR "locale")
@@ -231,13 +230,11 @@ if(WIN32)
 	# This might be needed for some installer
 	#set(CPACK_PACKAGE_EXECUTABLES bin/freeminer.exe "Freeminer" bin/freeminerserver.exe "Freeminer Server")
 elseif(APPLE)
-	# see http://cmake.org/Wiki/CMake:CPackPackageGenerators#Bundle_.28OSX_only.29
 	set(CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${VERSION_STRING}-osx")
-	set(CPACK_PACKAGE_ICON ${CMAKE_CURRENT_SOURCE_DIR}/misc/mac/freeminer-icon.icns)
+	set(CPACK_PACKAGE_ICON ${CMAKE_CURRENT_SOURCE_DIR}/misc/freeminer-icon.icns)
 	set(CPACK_BUNDLE_NAME ${PROJECT_NAME})
 	set(CPACK_BUNDLE_ICON ${CPACK_PACKAGE_ICON})
-	set(CPACK_BUNDLE_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/misc/mac/Info.plist)
-	set(CPACK_BUNDLE_STARTUP_COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/misc/mac/freeminer-mac.sh)
+	set(CPACK_BUNDLE_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/misc/Info.plist)
 	set(CPACK_GENERATOR "Bundle")
 else()
 	set(CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${VERSION_STRING}-linux")
@@ -246,4 +243,15 @@ else()
 endif()
 
 include(CPack)
+
+# Add a target to generate API documentation with Doxygen
+find_package(Doxygen)
+if(DOXYGEN_FOUND)
+	configure_file(${CMAKE_CURRENT_SOURCE_DIR}/doc/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/doc/Doxyfile @ONLY)
+	add_custom_target(doc
+		${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/doc/Doxyfile
+		WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/doc
+		COMMENT "Generating API documentation with Doxygen" VERBATIM
+	)
+endif(DOXYGEN_FOUND)
 

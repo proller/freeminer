@@ -155,32 +155,32 @@ function dump(o, indent, nested, level)
 end
 
 --------------------------------------------------------------------------------
-function string.split(str, delim, include_empty, max_splits)
+-- Localize functions to avoid table lookups (better performance).
+local table_insert = table.insert
+local str_sub, str_find = string.sub, string.find
+function string.split(str, delim, include_empty, max_splits, sep_is_pattern)
 	delim = delim or ","
-	max_splits = max_splits or 0
-	local fields = {}
-	local num_splits = 0
-	local last_pos = 0
-	for part, pos in str:gmatch("(.-)[" .. delim .. "]()") do
-		last_pos = pos
-		if include_empty or part ~= "" then
-			num_splits = num_splits + 1
-			fields[num_splits] = part
-			if max_splits > 0 and num_splits + 1 >= max_splits then
-				break
-			end
+	max_splits = max_splits or -1
+	local items = {}
+	local pos, len, seplen = 1, #str, #delim
+	local plain = not sep_is_pattern
+	max_splits = max_splits + 1
+	repeat
+		local np, npe = str_find(str, delim, pos, plain)
+		np, npe = (np or (len+1)), (npe or (len+1))
+		if (not np) or (max_splits == 1) then
+			np = len + 1
+			npe = np
 		end
-	end
-	-- Handle the last field
-	if max_splits <= 0 or num_splits <= max_splits then
-		local last_part = str:sub(last_pos)
-		if include_empty or last_part ~= "" then
-			fields[num_splits + 1] = last_part
+		local s = str_sub(str, pos, np - 1)
+		if include_empty or (s ~= "") then
+			max_splits = max_splits - 1
+			table_insert(items, s)
 		end
-	end
-	return fields
+		pos = npe + 1
+	until (max_splits == 0) or (pos > (len + 1))
+	return items
 end
-
 
 --------------------------------------------------------------------------------
 function file_exists(filename)
@@ -351,8 +351,8 @@ end
 --------------------------------------------------------------------------------
 
 if INIT == "game" then
-	local dirs1 = {8, 17, 6, 15}
-	local dirs2 = {22, 21, 20, 23}
+	local dirs1 = {9, 18, 7, 12}
+	local dirs2 = {20, 23, 22, 21}
 
 	function core.rotate_and_place(itemstack, placer, pointed_thing,
 				infinitestacks, orient_flags)
@@ -571,7 +571,8 @@ function core.explode_table_event(evt)
 			local t = parts[1]:trim()
 			local r = tonumber(parts[2]:trim())
 			local c = tonumber(parts[3]:trim())
-			if type(r) == "number" and type(c) == "number" and t ~= "INV" then
+			if type(r) == "number" and type(c) == "number"
+					and t ~= "INV" then
 				return {type=t, row=r, column=c}
 			end
 		end
@@ -605,9 +606,46 @@ function core.explode_scrollbar_event(evt)
 end
 
 --------------------------------------------------------------------------------
-function core.pos_to_string(pos)
-	return "(" .. pos.x .. "," .. pos.y .. "," .. pos.z .. ")"
+function core.pos_to_string(pos, decimal_places)
+	local x = pos.x
+	local y = pos.y
+	local z = pos.z
+	if decimal_places ~= nil then
+		x = string.format("%." .. decimal_places .. "f", x)
+		y = string.format("%." .. decimal_places .. "f", y)
+		z = string.format("%." .. decimal_places .. "f", z)
+	end
+	return "(" .. x .. "," .. y .. "," .. z .. ")"
 end
+
+--------------------------------------------------------------------------------
+function core.string_to_pos(value)
+	if value == nil then
+		return nil
+	end
+
+	local p = {}
+	p.x, p.y, p.z = string.match(value, "^([%d.-]+)[, ] *([%d.-]+)[, ] *([%d.-]+)$")
+	if p.x and p.y and p.z then
+		p.x = tonumber(p.x)
+		p.y = tonumber(p.y)
+		p.z = tonumber(p.z)
+		return p
+	end
+	local p = {}
+	p.x, p.y, p.z = string.match(value, "^%( *([%d.-]+)[, ] *([%d.-]+)[, ] *([%d.-]+) *%)$")
+	if p.x and p.y and p.z then
+		p.x = tonumber(p.x)
+		p.y = tonumber(p.y)
+		p.z = tonumber(p.z)
+		return p
+	end
+	return nil
+end
+
+assert(core.string_to_pos("10.0, 5, -2").x == 10)
+assert(core.string_to_pos("( 10.0, 5, -2)").z == -2)
+assert(core.string_to_pos("asd, 5, -2)") == nil)
 
 --------------------------------------------------------------------------------
 function table.copy(t, seen)
@@ -615,12 +653,11 @@ function table.copy(t, seen)
 	seen = seen or {}
 	seen[t] = n
 	for k, v in pairs(t) do
-		n[type(k) ~= "table" and k or seen[k] or table.copy(k, seen)] =
-			type(v) ~= "table" and v or seen[v] or table.copy(v, seen)
+		n[(type(k) == "table" and (seen[k] or table.copy(k, seen))) or k] =
+			(type(v) == "table" and (seen[v] or table.copy(v, seen))) or v
 	end
 	return n
 end
-
 --------------------------------------------------------------------------------
 -- mainmenu only functions
 --------------------------------------------------------------------------------
@@ -640,16 +677,18 @@ if INIT == "mainmenu" then
 		local arg = {n=select('#', ...), ...}
 		if arg.n >= 1 then
 			-- Insert positional parameters ($1, $2, ...)
-			result = ''
-			pos = 1
+			local result = ''
+			local pos = 1
 			while pos <= text:len() do
-				newpos = text:find('[$]', pos)
+				local newpos = text:find('[$]', pos)
 				if newpos == nil then
 					result = result .. text:sub(pos)
 					pos = text:len() + 1
 				else
-					paramindex = tonumber(text:sub(newpos+1, newpos+1))
-					result = result .. text:sub(pos, newpos-1) .. tostring(arg[paramindex])
+					local paramindex =
+						tonumber(text:sub(newpos+1, newpos+1))
+					result = result .. text:sub(pos, newpos-1)
+						.. tostring(arg[paramindex])
 					pos = newpos + 2
 				end
 			end

@@ -29,7 +29,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "emerge.h"
 #include "environment.h"
 
-NoiseParams nparams_caveliquids(0, 1, v3f(150.0, 150.0, 150.0), 776, 3, 0.6);
+NoiseParams nparams_caveliquids(0, 1, v3f(150.0, 150.0, 150.0), 776, 3, 0.6, 2.0);
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -128,7 +128,7 @@ void CaveV6::makeCave(v3s16 nmin, v3s16 nmax, int max_stone_height) {
 	// Add generation notify end event
 	abs_pos = v3s16(of.X + orp.X, of.Y + orp.Y, of.Z + orp.Z);
 	notifytype = large_cave ?
-		GENNOTIFY_LARGECAVE_BEGIN : GENNOTIFY_CAVE_BEGIN;
+		GENNOTIFY_LARGECAVE_END : GENNOTIFY_CAVE_END;
 	mg->gennotify.addEvent(notifytype, abs_pos);
 }
 
@@ -258,7 +258,7 @@ void CaveV6::carveRoute(v3f vec, float f, bool randomize_xz) {
 				if (!ndef->get(c).is_ground_content)
 					continue;
 
-				s16 heat = mg->emerge->env->m_use_weather ? mg->emerge->env->getServerMap().updateBlockHeat(mg->emerge->env, p, nullptr, &mg->heat_cache) : 0;
+				s16 heat = mg->m_emerge->env->m_use_weather ? mg->m_emerge->env->getServerMap().updateBlockHeat(mg->m_emerge->env, p, nullptr, &mg->heat_cache) : 0;
 				MapNode n_water_or_ice = (heat < 0 && (p.Y > water_level + heat/4 || p.Y > startp.Y - 2 + heat/4)) ? n_ice : waternode;
 				if (large_cave) {
 					int full_ymin = node_min.Y - MAP_BLOCKSIZE;

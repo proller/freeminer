@@ -34,7 +34,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 FontEngine* g_fontengine = NULL;
 
 /** callback to be used on change of font size setting */
-static void font_setting_changed(const std::string) {
+static void font_setting_changed(const std::string, void *userdata) {
 	g_fontengine->readSettings();
 }
 
@@ -43,14 +43,13 @@ FontEngine::FontEngine(Settings* main_settings, gui::IGUIEnvironment* env) :
 	m_settings(main_settings),
 	m_env(env),
 	m_font_cache(),
-	m_default_size(),
 	m_currentMode(FM_Standard),
 	m_lastMode(),
 	m_lastSize(0),
 	m_lastFont(NULL)
 {
 
-	for ( unsigned int i = 0; i < FM_MaxMode; i++) {
+	for (unsigned int i = 0; i < FM_MaxMode; i++) {
 		m_default_size[i] = (FontMode) FONT_SIZE_UNSPECIFIED;
 	}
 
@@ -86,22 +85,22 @@ FontEngine::FontEngine(Settings* main_settings, gui::IGUIEnvironment* env) :
 	updateSkin();
 
 	if (m_currentMode == FM_Standard) {
-		m_settings->registerChangedCallback("font_size", font_setting_changed);
-		m_settings->registerChangedCallback("font_path", font_setting_changed);
-		m_settings->registerChangedCallback("font_shadow", font_setting_changed);
-		m_settings->registerChangedCallback("font_shadow_alpha", font_setting_changed);
+		m_settings->registerChangedCallback("font_size", font_setting_changed, NULL);
+		m_settings->registerChangedCallback("font_path", font_setting_changed, NULL);
+		m_settings->registerChangedCallback("font_shadow", font_setting_changed, NULL);
+		m_settings->registerChangedCallback("font_shadow_alpha", font_setting_changed, NULL);
 	}
 	else if (m_currentMode == FM_Fallback) {
-		m_settings->registerChangedCallback("fallback_font_size", font_setting_changed);
-		m_settings->registerChangedCallback("fallback_font_path", font_setting_changed);
-		m_settings->registerChangedCallback("fallback_font_shadow", font_setting_changed);
-		m_settings->registerChangedCallback("fallback_font_shadow_alpha", font_setting_changed);
+		m_settings->registerChangedCallback("fallback_font_size", font_setting_changed, NULL);
+		m_settings->registerChangedCallback("fallback_font_path", font_setting_changed, NULL);
+		m_settings->registerChangedCallback("fallback_font_shadow", font_setting_changed, NULL);
+		m_settings->registerChangedCallback("fallback_font_shadow_alpha", font_setting_changed, NULL);
 	}
 
-	m_settings->registerChangedCallback("mono_font_path", font_setting_changed);
-	m_settings->registerChangedCallback("mono_font_size", font_setting_changed);
-	m_settings->registerChangedCallback("screen_dpi", font_setting_changed);
-	m_settings->registerChangedCallback("gui_scaling", font_setting_changed);
+	m_settings->registerChangedCallback("mono_font_path", font_setting_changed, NULL);
+	m_settings->registerChangedCallback("mono_font_size", font_setting_changed, NULL);
+	m_settings->registerChangedCallback("screen_dpi", font_setting_changed, NULL);
+	m_settings->registerChangedCallback("gui_scaling", font_setting_changed, NULL);
 }
 
 /******************************************************************************/
@@ -325,12 +324,6 @@ void FontEngine::initFont(unsigned int basesize, FontMode mode)
 
 		std::string font_path = g_settings->get(font_config_prefix + "font_path");
 
-		if (font_path.substr(font_path.length() -4) != ".ttf") {
-			errorstream << "FontEngine: \"" << font_path
-					<< "\" doesn't seem to be a ttf File." << std::endl;
-			return;
-		}
-
 		irr::gui::IGUIFont* font = gui::CGUITTFont::createTTFont(m_env,
 				font_path.c_str(), size, true, true, font_shadow,
 				font_shadow_alpha);
@@ -365,7 +358,7 @@ void FontEngine::initSimpleFont(unsigned int basesize, FontMode mode)
 		return;
 	}
 
-	if ((ending == ".xml") || ( ending == ".png")) {
+	if ((ending == ".xml") || (ending == ".png")) {
 		basename = font_path.substr(0,font_path.length()-4);
 	}
 

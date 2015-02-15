@@ -24,6 +24,26 @@ menudata = {}
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
+local function render_client_count(n)
+	n = n + 0
+	if n > 99 then
+		return '99+'
+	elseif n >= 0 then
+		return tostring(n)
+	else
+		return '?'
+	end
+end
+
+--------------------------------------------------------------------------------
+function image_column(tooltip, flagname)
+	return "image," ..
+		"tooltip=" .. core.formspec_escape(tooltip) .. "," ..
+		"0=" .. core.formspec_escape(defaulttexturedir .. "blank.png") .. "," ..
+		"1=" .. core.formspec_escape(defaulttexturedir .. "server_flags_" .. flagname .. ".png")
+end
+
+--------------------------------------------------------------------------------
 function render_favorite(spec,render_details)
 	local text = ""
 
@@ -49,40 +69,53 @@ function render_favorite(spec,render_details)
 	end
 
 	local details = ""
-	if spec.password == true then
-		details = details .. "*"
+
+	if spec.clients ~= nil and spec.clients_max ~= nil then
+		local clients_color = ''
+		local clients_percent = 100 * spec.clients / spec.clients_max
+
+		-- Choose a color depending on how many clients are connected
+		-- (relatively to clients_max)
+		if spec.clients == 0 then
+			clients_color = ''        -- 0 players: default/white
+		elseif spec.clients == spec.clients_max then
+			clients_color = '#dd5b5b' -- full server: red (darker)
+		elseif clients_percent <= 60 then
+			clients_color = '#a1e587' -- 0-60%: green
+		elseif clients_percent <= 90 then
+			clients_color = '#ffdc97' -- 60-90%: yellow
+		else
+			clients_color = '#ffba97' -- 90-100%: orange
+		end
+
+		details = details ..
+				clients_color .. ',' ..
+				render_client_count(spec.clients) .. ',' ..
+				'/,' ..
+				render_client_count(spec.clients_max) .. ','
 	else
-		details = details .. "_"
+		details = details .. ',?,/,?,'
 	end
 
 	if spec.creative then
-		details = details .. "C"
+		details = details .. "1,"
 	else
-		details = details .. "_"
+		details = details .. "0,"
 	end
 
 	if spec.damage then
-		details = details .. "D"
+		details = details .. "1,"
 	else
-		details = details .. "_"
+		details = details .. "0,"
 	end
 
 	if spec.pvp then
-		details = details .. "P"
+		details = details .. "1,"
 	else
-		details = details .. "_"
-	end
-	details = details .. " "
-
-	local playercount = ""
-
-	if spec.clients ~= nil and
-		spec.clients_max ~= nil then
-		playercount = string.format("%03d",spec.clients) .. "/" ..
-						string.format("%03d",spec.clients_max) .. " "
+		details = details .. "0,"
 	end
 
-	return playercount .. core.formspec_escape(details) ..  text
+	return details .. text
 end
 
 --------------------------------------------------------------------------------
@@ -162,8 +195,10 @@ function asyncOnlineFavourites()
 		end,
 		nil,
 		function(result)
-			menudata.favorites = result
-			core.event_handler("Refresh")
+			if core.setting_getbool("public_serverlist") then
+				menudata.favorites = result
+				core.event_handler("Refresh")
+			end
 		end
 		)
 end

@@ -91,6 +91,12 @@ u8 MapNode::getLight(enum LightBank bank, INodeDefManager *nodemgr) const
 	return MYMAX(f.light_source, light);
 }
 
+u8 MapNode::getLightNoChecks(enum LightBank bank, const ContentFeatures *f) const
+{
+	return MYMAX(f->light_source,
+	             bank == LIGHTBANK_DAY ? param1 & 0x0f : (param1 >> 4) & 0x0f);
+}
+
 bool MapNode::getLightBanks(u8 &lightday, u8 &lightnight, INodeDefManager *nodemgr) const
 {
 	// Select the brightest of [light source, propagated light]
@@ -116,7 +122,7 @@ u8 MapNode::getFaceDir(INodeDefManager *nodemgr) const
 {
 	const ContentFeatures &f = nodemgr->get(*this);
 	if(f.param_type_2 == CPT2_FACEDIR)
-		return getParam2() & 0x1F;
+		return (getParam2() & 0x1F) % 24;
 	return 0;
 }
 
@@ -152,7 +158,7 @@ void MapNode::rotateAlongYAxis(INodeDefManager *nodemgr, Rotation rot) {
 		u8 wmountface = (param2 & 7);
 		if (wmountface <= 1)
 			return;
-			
+
 		Rotation oldrot = wallmounted_to_rot[wmountface - 2];
 		param2 &= ~7;
 		param2 |= rot_to_wallmounted[(oldrot - rot) & 3];
@@ -469,7 +475,7 @@ u32 MapNode::serializedLength(u8 version)
 {
 	if(!ser_ver_supported(version))
 		throw VersionMismatchException("ERROR: MapNode format not supported");
-		
+
 	if(version == 0)
 		return 1;
 	else if(version <= 9)
@@ -501,13 +507,13 @@ void MapNode::serialize(u8 *dest, u8 version)
 {
 	if(!ser_ver_supported(version))
 		throw VersionMismatchException("ERROR: MapNode format not supported");
-	
+
 	// Can't do this anymore; we have 16-bit dynamically allocated node IDs
 	// in memory; conversion just won't work in this direction.
 	if(version < 24)
 		throw SerializationError("MapNode::serialize: serialization to "
 				"version < 24 not possible");
-		
+
 	writeU16(dest+0, param0);
 	writeU8(dest+2, param1);
 	writeU8(dest+3, param2);
@@ -516,7 +522,7 @@ void MapNode::deSerialize(u8 *source, u8 version)
 {
 	if(!ser_ver_supported(version))
 		throw VersionMismatchException("ERROR: MapNode format not supported");
-		
+
 	if(version <= 21)
 	{
 		deSerialize_pre22(source, version);
@@ -678,7 +684,7 @@ void MapNode::deSerialize_pre22(u8 *source, u8 version)
 			param2 &= 0x0f;
 		}
 	}
-	
+
 	// Convert special values from old version to new
 	if(version <= 19)
 	{

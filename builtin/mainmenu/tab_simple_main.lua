@@ -23,19 +23,34 @@ local function get_formspec(tabview, name, tabdata)
 
 	retval = retval ..
 		"label[8,0.5;".. fgettext("Name/Password") .. "]" ..
-		"field[0.25,3.25;5.5,0.5;te_address;;" ..core.setting_get("address") .."]" ..
-		"field[5.75,3.25;2.25,0.5;te_port;;" ..core.setting_get("remote_port") .."]" ..
+		"field[0.25,3.25;5.5,0.5;te_address;;" ..
+		core.formspec_escape(core.setting_get("address")) .."]" ..
+		"field[5.75,3.25;2.25,0.5;te_port;;" ..
+		core.formspec_escape(core.setting_get("remote_port")) .."]" ..
 		"checkbox[8,-0.25;cb_public_serverlist;".. fgettext("Public Serverlist") .. ";" ..
 		render_details .. "]"
 
 	retval = retval ..
 		"button[8,2.5;4,1.5;btn_mp_connect;".. fgettext("Connect") .. "]" ..
-		"field[8.75,1.5;3.5,0.5;te_name;;" ..core.setting_get("name") .."]" ..
+		"field[8.75,1.5;3.5,0.5;te_name;;" ..
+		core.formspec_escape(core.setting_get("name")) .."]" ..
 		"pwdfield[8.75,2.3;3.5,0.5;te_pwd;]"
-
-	--favourites
+		
+	if render_details then
+		retval = retval .. "tablecolumns[" ..
+			"color,span=3;" ..
+			"text,align=right;" ..                -- clients
+			"text,align=center,padding=0.25;" ..  -- "/"
+			"text,align=right,padding=0.25;" ..   -- clients_max
+			image_column(fgettext("Creative mode"), "creative") .. ",padding=1;" ..
+			image_column(fgettext("Damage enabled"), "damage") .. ",padding=0.25;" ..
+			image_column(fgettext("PvP enabled"), "pvp") .. ",padding=0.25;" ..
+			"text,padding=1]"                               -- name
+	else
+		retval = retval .. "tablecolumns[text]"
+	end
 	retval = retval ..
-		"textlist[-0.05,0.0;7.55,2.75;favourites;"
+		"table[-0.05,0;7.55,2.75;favourites;"
 
 	if #menudata.favorites > 0 then
 		retval = retval .. render_favorite(menudata.favorites[1],render_details)

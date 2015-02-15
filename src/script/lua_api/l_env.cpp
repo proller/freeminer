@@ -617,12 +617,20 @@ int ModApiEnvMod::l_get_perlin(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	int seeddiff = luaL_checkint(L, 1);
-	int octaves = luaL_checkint(L, 2);
-	float persistence = luaL_checknumber(L, 3);
-	float scale = luaL_checknumber(L, 4);
+	NoiseParams params;
 
-	LuaPerlinNoise *n = new LuaPerlinNoise(seeddiff + int(env->getServerMap().getSeed()), octaves, persistence, scale);
+	if (lua_istable(L, 1)) {
+		read_noiseparams(L, 1, &params);
+	} else {
+		params.seed    = luaL_checkint(L, 1);
+		params.octaves = luaL_checkint(L, 2);
+		params.persist = luaL_checknumber(L, 3);
+		params.spread  = v3f(1, 1, 1) * luaL_checknumber(L, 4);
+	}
+
+	params.seed += (int)env->getServerMap().getSeed();
+
+	LuaPerlinNoise *n = new LuaPerlinNoise(&params);
 	*(void **)(lua_newuserdata(L, sizeof(void *))) = n;
 	luaL_getmetatable(L, "PerlinNoise");
 	lua_setmetatable(L, -2);
@@ -635,13 +643,13 @@ int ModApiEnvMod::l_get_perlin_map(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	NoiseParams *np = read_noiseparams(L, 1);
-	if (!np)
+	NoiseParams np;
+	if (!read_noiseparams(L, 1, &np))
 		return 0;
 	v3s16 size = read_v3s16(L, 2);
 
 	int seed = (int)(env->getServerMap().getSeed());
-	LuaPerlinNoiseMap *n = new LuaPerlinNoiseMap(np, seed, size);
+	LuaPerlinNoiseMap *n = new LuaPerlinNoiseMap(&np, seed, size);
 	*(void **)(lua_newuserdata(L, sizeof(void *))) = n;
 	luaL_getmetatable(L, "PerlinNoiseMap");
 	lua_setmetatable(L, -2);
@@ -655,7 +663,9 @@ int ModApiEnvMod::l_get_voxel_manip(lua_State *L)
 	GET_ENV_PTR;
 
 	Map *map = &(env->getMap());
-	LuaVoxelManip *o = new LuaVoxelManip(map);
+	LuaVoxelManip *o = (lua_istable(L, 1) && lua_istable(L, 2)) ?
+		new LuaVoxelManip(map, read_v3s16(L, 1), read_v3s16(L, 2)) :
+		new LuaVoxelManip(map);
 
 	*(void **)(lua_newuserdata(L, sizeof(void *))) = o;
 	luaL_getmetatable(L, "VoxelManip");
@@ -674,7 +684,8 @@ int ModApiEnvMod::l_clear_objects(lua_State *L)
 }
 
 // line_of_sight(pos1, pos2, stepsize) -> true/false, pos
-int ModApiEnvMod::l_line_of_sight(lua_State *L) {
+int ModApiEnvMod::l_line_of_sight(lua_State *L)
+{
 	float stepsize = 1.0;
 
 	GET_ENV_PTR;
@@ -695,6 +706,37 @@ int ModApiEnvMod::l_line_of_sight(lua_State *L) {
 		push_v3s16(L, p);
 		return 2;
 	}
+	return 1;
+}
+
+// delete_area(p1, p2)
+// delete mapblocks in area p1..p2
+int ModApiEnvMod::l_delete_area(lua_State *L)
+{
+	GET_ENV_PTR;
+
+	v3s16 bpmin = getNodeBlockPos(read_v3s16(L, 1));
+	v3s16 bpmax = getNodeBlockPos(read_v3s16(L, 2));
+	sortBoxVerticies(bpmin, bpmax);
+
+	ServerMap &map = env->getServerMap();
+
+	MapEditEvent event;
+	event.type = MEET_OTHER;
+
+	bool success = true;
+	for (s16 z = bpmin.Z; z <= bpmax.Z; z++)
+	for (s16 y = bpmin.Y; y <= bpmax.Y; y++)
+	for (s16 x = bpmin.X; x <= bpmax.X; x++) {
+		v3s16 bp(x, y, z);
+		if (map.deleteBlock(bp))
+			event.modified_blocks.insert(bp);
+		else
+			success = false;
+	}
+
+	map.dispatchEvent(&event);
+	lua_pushboolean(L, success);
 	return 1;
 }
 
@@ -908,6 +950,7 @@ void ModApiEnvMod::Initialize(lua_State *L, int top)
 	API_FCT(get_gametime);
 	API_FCT(find_node_near);
 	API_FCT(find_nodes_in_area);
+	API_FCT(delete_area);
 	API_FCT(get_perlin);
 	API_FCT(get_perlin_map);
 	API_FCT(get_voxel_manip);

@@ -207,7 +207,7 @@ public:
 	//
 	std::atomic_ushort net_proto_version;
 
-	std::atomic_int m_nearest_unsent_nearest;
+	std::atomic_int m_nearest_unsent_reset;
 	s16 wanted_range;
 	s16 range_all;
 	s16 farmesh;
@@ -219,7 +219,6 @@ public:
 	RemoteClient(ServerEnvironment *env):
 		peer_id(PEER_ID_INEXISTENT),
 		serialization_version(SER_FMT_VER_INVALID),
-		wanted_range(9 * MAP_BLOCKSIZE),
 		m_env(env),
 		m_time_from_building(9999),
 		m_pending_serialization_version(SER_FMT_VER_INVALID),
@@ -235,8 +234,13 @@ public:
 	{
 		net_proto_version = 0;
 		m_nearest_unsent_d = 0;
-		m_nearest_unsent_nearest = 0;
+		m_nearest_unsent_reset = 0;
+
+		wanted_range = 9 * MAP_BLOCKSIZE;
+		range_all =0;
+		farmesh = 0;
 		fov = 72; // g_settings->getFloat("fov");
+		block_overflow = 0;
 	}
 	~RemoteClient()
 	{
@@ -351,6 +355,7 @@ public:
 private:
 
 	v3s16 m_last_center;
+	v3f   m_last_direction;
 	float m_nearest_unsent_reset_timer;
 
 	// CPU usage optimization

@@ -40,7 +40,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "genericobject.h"
 #include "settings.h"
 #include "profiler.h"
-#include "log.h"
+#include "log_types.h"
 #include "scripting_game.h"
 #include "nodedef.h"
 #include "itemdef.h"
@@ -67,7 +67,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/serialize.h"
 #include "util/thread.h"
 #include "defaultsettings.h"
-#include "circuit.h"
 //#include "stat.h"
 
 #include "msgpack.h"
@@ -193,7 +192,7 @@ public:
 
 		porting::setThreadName("Liquid");
 		porting::setThreadPriority(4);
-		int max_cycle_ms = 1000;
+		unsigned int max_cycle_ms = 1000;
 		while(!StopRequested()) {
 			try {
 				//shared_map<v3POS, MapBlock*> modified_blocks; //not used
@@ -295,19 +294,22 @@ void * ServerThread::Thread()
 	{
 		try{
 			//TimeTaker timer("AsyncRunStep() + Receive()");
-			auto time_now = porting::getTimeMs();
+			u32 time_now = porting::getTimeMs();
 			m_server->AsyncRunStep((time_now - time)/1000.0f);
 			time = time_now;
 
 			// Loop used only when 100% cpu load or on old slow hardware.
 			// usually only one packet recieved here
-			u32 end_ms = porting::getTimeMs() + u32(1000 * dedicated_server_step);
-			for (u16 i = 0; i < 1000; ++i)
-				if (!m_server->Receive() || porting::getTimeMs() > end_ms)
+			u32 end_ms = porting::getTimeMs() + u32(1000 * dedicated_server_step/2);
+			for (u16 i = 0; i < 1000; ++i) {
+				m_server->Receive();
+				if (porting::getTimeMs() > end_ms)
 					break;
+			}
 		}
 		catch(con::NoIncomingDataException &e)
 		{
+			//std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		}
 		catch(con::PeerNotFoundException &e)
 		{
@@ -374,7 +376,7 @@ Server::Server(
 	m_async_fatal_error(""),
 	m_env(NULL),
 	m_con(PROTOCOL_ID,
-			simple_singleplayer_mode ? MAX_PACKET_SIZE_SINGLEPLAYER : MAX_PACKET_SIZE,
+			MAX_PACKET_SIZE,
 			CONNECTION_TIMEOUT,
 			ipv6,
 			this),
@@ -383,7 +385,6 @@ Server::Server(
 	m_enable_rollback_recording(false),
 	m_emerge(NULL),
 	m_script(NULL),
-	m_circuit(NULL),
 	stat(path_world),
 	m_itemdef(createItemDefManager()),
 	m_nodedef(createNodeDefManager()),
@@ -399,7 +400,8 @@ Server::Server(
 	m_clients(&m_con),
 	m_shutdown_requested(false),
 	m_ignore_map_edit_events(false),
-	m_ignore_map_edit_events_peer_id(0)
+	m_ignore_map_edit_events_peer_id(0),
+	m_next_sound_id(0)
 
 {
 	m_liquid_transform_timer = 0.0;
@@ -515,6 +517,12 @@ Server::Server(
 	// Lock environment
 	//JMutexAutoLock envlock(m_env_mutex);
 
+	// Load mapgen params from Settings
+	m_emerge->loadMapgenParams();
+
+	// Create the Map (loads map_meta.txt, overriding configured mapgen params)
+	ServerMap *servermap = new ServerMap(path_world, this, m_emerge);
+
 	// Initialize scripting
 	infostream<<"Server: Initializing Lua"<<std::endl;
 
@@ -522,10 +530,8 @@ Server::Server(
 	
 	std::string scriptpath = getBuiltinLuaPath() + DIR_DELIM "init.lua";
 
-	if (!m_script->loadScript(scriptpath)) {
+	if (!m_script->loadScript(scriptpath))
 		throw ModError("Failed to load and run " + scriptpath);
-	}
-
 
 	// Print 'em
 	infostream<<"Server: Loading mods: ";
@@ -555,25 +561,20 @@ Server::Server(
 
 	// Apply item aliases in the node definition manager
 	m_nodedef->updateAliases(m_itemdef);
-	m_nodedef->updateTextures(this);
+
+	if (!simple_singleplayer_mode)
+		m_nodedef->updateTextures(this);
+
+	m_nodedef->setNodeRegistrationStatus(true);
 
 	// Perform pending node name resolutions
-	m_nodedef->getResolver()->resolveNodes();
-
-	// Load the mapgen params from global settings now after any
-	// initial overrides have been set by the mods
-	m_emerge->loadMapgenParams();
+	m_nodedef->runNodeResolverCallbacks();
 
 	// Initialize Environment
-	ServerMap *servermap = new ServerMap(path_world, this, m_emerge, m_circuit);
-	m_circuit = new Circuit(m_script, servermap, ndef(), path_world);
-	m_env = new ServerEnvironment(servermap, m_script, m_circuit, this, m_path_world);
+	m_env = new ServerEnvironment(servermap, m_script, this, m_path_world);
 	m_emerge->env = m_env;
 
 	m_clients.setEnv(m_env);
-
-	// Run some callbacks after the MG params have been set up but before activation
-	m_script->environment_OnMapgenInit(&m_emerge->params);
 
 	// Initialize mapgens
 	m_emerge->initMapgens();
@@ -594,6 +595,8 @@ Server::Server(
 	// Add some test ActiveBlockModifiers to environment
 	add_legacy_abms(m_env, m_nodedef);
 
+	m_env->m_abmhandler.init(m_env->m_abms); // uses result of add_legacy_abms and m_script->initializeEnvironment
+
 	m_liquid_transform_interval = g_settings->getFloat("liquid_update");
 	m_liquid_send_interval = g_settings->getFloat("liquid_send");
 }
@@ -603,7 +606,7 @@ Server::~Server()
 	infostream<<"Server destructing"<<std::endl;
 
 	if (!m_simple_singleplayer_mode && g_settings->getBool("server_announce"))
-		ServerList::sendAnnounce("delete");
+		ServerList::sendAnnounce("delete", m_bind_addr.getPort());
 
 	// Send shutdown message
 	SendChatMessage(PEER_ID_INEXISTENT, "*** Server shutting down");
@@ -650,7 +653,6 @@ Server::~Server()
 	delete m_itemdef;
 	delete m_nodedef;
 	delete m_craftdef;
-	delete m_circuit;
 
 	// Deinitialize scripting
 	infostream<<"Server: Deinitializing scripting"<<std::endl;
@@ -667,6 +669,9 @@ Server::~Server()
 void Server::start(Address bind_addr)
 {
 	DSTACK(__FUNCTION_NAME);
+
+	m_bind_addr = bind_addr;
+
 	infostream<<"Starting server on "
 			<< bind_addr.serializeString() <<"..."<<std::endl;
 
@@ -746,7 +751,6 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 
 	TimeTaker timer_step("Server step");
 	g_profiler->add("Server::AsyncRunStep (num)", 1);
-
 /*
 	float dtime;
 	{
@@ -910,6 +914,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 				g_settings->getBool("server_announce"))
 		{
 			ServerList::sendAnnounce(counter ? "update" : "start",
+					m_bind_addr.getPort(),
 					m_clients.getPlayerNames(),
 					m_uptime.get(),
 					m_env->getGameTime(),
@@ -971,7 +976,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 					client->m_known_objects, added_objects);
 
 			// Ignore if nothing happened
-			if(removed_objects.size() == 0 && added_objects.size() == 0)
+			if(removed_objects.empty() && added_objects.empty())
 			{
 				//infostream<<"active objects: none changed"<<std::endl;
 				continue;
@@ -1149,7 +1154,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 
 		// Single change sending is disabled if queue size is not small
 		bool disable_single_change_sending = false;
-		if(m_unsent_map_edit_queue.size() >= 4)
+		if(m_unsent_map_edit_queue.size() > 1)
 			disable_single_change_sending = true;
 
 		//int event_count = m_unsent_map_edit_queue.size();
@@ -1220,7 +1225,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 			/*
 				Set blocks not sent to far players
 			*/
-			if(far_players.size() > 0)
+			if(!far_players.empty())
 			{
 				// Convert list format to that wanted by SetBlocksNotSent
 				std::map<v3s16, MapBlock*> modified_blocks2;
@@ -1283,7 +1288,11 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 
 			// Update m_enable_rollback_recording here too
 			m_enable_rollback_recording =
-					g_settings->getBool("enable_rollback_recording");
+#if USE_SQLITE
+ 					g_settings->getBool("enable_rollback_recording");
+#else
+					0;
+#endif
 		}
 	}
 
@@ -1331,7 +1340,7 @@ int Server::AsyncRunMapStep(float dtime, bool async) {
 
 	u32 max_cycle_ms = async ? 2000 : 300;
 
-	const float map_timer_and_unload_dtime = 10.92;
+	static const float map_timer_and_unload_dtime = 10.92;
 	if(!maintenance_status && m_map_timer_and_unload_interval.step(dtime, map_timer_and_unload_dtime))
 	{
 		TimeTaker timer_step("Server step: Run Map's timers and unload unused data");
@@ -1384,24 +1393,6 @@ int Server::AsyncRunMapStep(float dtime, bool async) {
 			++ret;
 			goto no_send;
 		}
-
-		auto clients = m_clients.getClientList();
-		for (auto & client : clients)
-			if (client->m_nearest_unsent_nearest) {
-				client->m_nearest_unsent_d = 0;
-				client->m_nearest_unsent_nearest = 0;
-			}
-
-		//JMutexAutoLock lock(m_env_mutex);
-		//JMutexAutoLock lock2(m_con_mutex);
-
-/*
-		if(m_modified_blocks.size() > 0)
-		{
-			SetBlocksNotSent(m_modified_blocks);
-		}
-		m_modified_blocks.clear();
-*/
 	}
 	no_send:
 
@@ -1458,7 +1449,9 @@ u16 Server::Receive()
 	u32 datasize;
 	u16 received = 0;
 	try{
-		datasize = m_con.Receive(peer_id,data);
+		datasize = m_con.Receive(peer_id,data,10);
+		if (!datasize)
+			return 0;
 		ProcessData(*data, datasize, peer_id);
 		++received;
 	}
@@ -1654,9 +1647,9 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		packet[TOSERVER_INIT_FMT].convert(&client_max);
 		u8 our_max = SER_FMT_VER_HIGHEST_READ;
 		// Use the highest version supported by both
-		u8 deployed = std::min(client_max, our_max);
+		int deployed = std::min(client_max, our_max);
 		// If it's lower than the lowest supported, give up.
-		if(deployed < SER_FMT_VER_LOWEST)
+		if(deployed < SER_FMT_CLIENT_VER_LOWEST)
 			deployed = SER_FMT_VER_INVALID;
 
 		if(deployed == SER_FMT_VER_INVALID)
@@ -1880,10 +1873,17 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			Answer with a TOCLIENT_INIT
 		*/
 		{
-			MSGPACK_PACKET_INIT(TOCLIENT_INIT, 3);
+			MSGPACK_PACKET_INIT(TOCLIENT_INIT, 4);
 			PACK(TOCLIENT_INIT_DEPLOYED, deployed);
 			PACK(TOCLIENT_INIT_SEED, m_env->getServerMap().getSeed());
 			PACK(TOCLIENT_INIT_STEP, g_settings->getFloat("dedicated_server_step"));
+
+			//if (player) //todo : remake me
+			//	PACK(TOCLIENT_INIT_POS, player->getPosition());
+
+			Settings params;
+			m_emerge->saveParamsToSettings(&params);
+			PACK(TOCLIENT_INIT_MAP_PARAMS, params);
 
 			// Send as reliable
 			m_clients.send(peer_id, 0, buffer, true);
@@ -2741,7 +2741,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			}
 
 		} // action == 4
-		
+
 
 		/*
 			Catch invalid actions
@@ -2763,7 +2763,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 				continue;
 			ServerPlayingSound &psound = i->second;
 			psound.clients.erase(peer_id);
-			if(psound.clients.size() == 0)
+			if(psound.clients.empty())
 				m_playing_sounds.erase(i);
 		}
 	}
@@ -3541,7 +3541,7 @@ s32 Server::playSound(const SimpleSoundSpec &spec,
 			dst_clients.push_back(*i);
 		}
 	}
-	if(dst_clients.size() == 0)
+	if(dst_clients.empty())
 		return -1;
 
 	// Create the sound
@@ -3688,7 +3688,7 @@ void Server::SendBlockNoLock(u16 peer_id, MapBlock *block, u8 ver, u16 net_proto
 
 	g_profiler->add("Connection: blocks sent", 1);
 
-	MSGPACK_PACKET_INIT(TOCLIENT_BLOCKDATA, 5);
+	MSGPACK_PACKET_INIT(TOCLIENT_BLOCKDATA, 6);
 	PACK(TOCLIENT_BLOCKDATA_POS, block->getPos());
 
 	std::ostringstream os(std::ios_base::binary);
@@ -3698,6 +3698,8 @@ void Server::SendBlockNoLock(u16 peer_id, MapBlock *block, u8 ver, u16 net_proto
 	PACK(TOCLIENT_BLOCKDATA_HEAT, (s16)block->heat);
 	PACK(TOCLIENT_BLOCKDATA_HUMIDITY, (s16)block->humidity);
 	PACK(TOCLIENT_BLOCKDATA_STEP, (s8)1);
+	PACK(TOCLIENT_BLOCKDATA_CONTENT_ONLY, block->content_only);
+
 
 	//JMutexAutoLock lock(m_env_mutex);
 	/*
@@ -3797,6 +3799,7 @@ void Server::fillMediaCache()
 	}
 	paths.push_back(porting::path_user + DIR_DELIM + "textures" + DIR_DELIM + "server");
 
+	unsigned int size_total = 0, files_total = 0;
 	// Collect media file information from paths into cache
 	for(std::list<std::string>::iterator i = paths.begin();
 			i != paths.end(); i++)
@@ -3859,6 +3862,8 @@ void Server::fillMediaCache()
 						<<filepath<<"\""<<std::endl;
 				continue;
 			}
+			size_total += tmp_os.str().length();
+			++files_total;
 
 			SHA1 sha1;
 			sha1.addBytes(tmp_os.str().c_str(), tmp_os.str().length());
@@ -3873,6 +3878,7 @@ void Server::fillMediaCache()
 			verbosestream<<"Server: "<<sha1_hex<<" is "<<filename<<std::endl;
 		}
 	}
+	actionstream << "Serving " << files_total <<" files, " << size_total << " bytes" << std::endl;
 }
 
 struct SendableMediaAnnouncement
@@ -4048,6 +4054,7 @@ void Server::RespawnPlayer(u16 peer_id)
 			<<" respawns"<<std::endl;
 
 	playersao->setHP(PLAYER_MAX_HP);
+	playersao->setBreath(PLAYER_MAX_BREATH);
 
 	bool repositioned = m_script->on_respawnplayer(playersao);
 	if(!repositioned){
@@ -4088,7 +4095,7 @@ void Server::DeleteClient(u16 peer_id, ClientDeletionReason reason)
 		{
 			ServerPlayingSound &psound = i->second;
 			psound.clients.erase(peer_id);
-			if(psound.clients.size() == 0)
+			if(psound.clients.empty())
 				m_playing_sounds.erase(i++);
 			else
 				i++;
@@ -4337,7 +4344,7 @@ bool Server::showFormspec(const char *playername, const std::string &formspec, c
 u32 Server::hudAdd(Player *player, HudElement *form) {
 	if (!player)
 		return -1;
-	
+
 	u32 id = player->addHud(form);
 
 	SendHUDAdd(player->peer_id, id, form);
@@ -4353,7 +4360,7 @@ bool Server::hudRemove(Player *player, u32 id) {
 
 	if (!todel)
 		return false;
-	
+
 	delete todel;
 
 	SendHUDRemove(player->peer_id, id);
@@ -4374,9 +4381,9 @@ bool Server::hudSetFlags(Player *player, u32 flags, u32 mask) {
 
 	SendHUDSetFlags(player->peer_id, flags, mask);
 	player->hud_flags = flags;
-	
+
 	PlayerSAO* playersao = player->getPlayerSAO();
-	
+
 	if (playersao == NULL)
 		return false;
 
@@ -4749,7 +4756,7 @@ v3f findSpawnPos(ServerMap &map)
 		s32 air_count = 0;
 		for (s32 i = 0; i < 10; i++) {
 			v3s16 blockpos = getNodeBlockPos(nodepos);
-			map.emergeBlock(blockpos, true);
+			map.emergeBlock(blockpos, false);
 			content_t c = map.getNodeNoEx(nodepos).getContent();
 			if (c == CONTENT_AIR || c == CONTENT_IGNORE) {
 				air_count++;
@@ -4917,8 +4924,8 @@ void Server::maintenance_start() {
 	m_env->getServerMap().m_map_saving_enabled = false;
 	m_env->getServerMap().m_map_loading_enabled = false;
 	m_env->getServerMap().dbase->close();
-	m_env->m_key_value_storage->close();
-	m_env->m_players_storage->close();
+	m_env->m_key_value_storage.close();
+	m_env->m_players_storage.close();
 	stat.close();
 	actionstream<<"Server: Starting maintenance: bases closed now."<<std::endl;
 
@@ -4926,8 +4933,8 @@ void Server::maintenance_start() {
 
 void Server::maintenance_end() {
 	m_env->getServerMap().dbase->open();
-	m_env->m_key_value_storage->open();
-	m_env->m_players_storage->open();
+	m_env->m_key_value_storage.open();
+	m_env->m_players_storage.open();
 	stat.open();
 	m_env->getServerMap().m_map_saving_enabled = true;
 	m_env->getServerMap().m_map_loading_enabled = true;

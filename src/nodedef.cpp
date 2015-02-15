@@ -208,8 +208,7 @@ void ContentFeatures::reset()
 	liquid_alternative_source = "";
 	liquid_viscosity = 0;
 	liquid_renewable = true;
-	freeze = "";
-	melt = "";
+	liquid_range = LIQUID_LEVEL_MAX+1;
 	drowning = 0;
 	light_source = 0;
 	damage_per_second = 0;
@@ -223,6 +222,8 @@ void ContentFeatures::reset()
 	sound_dig = SimpleSoundSpec("__group");
 	sound_dug = SimpleSoundSpec();
 
+	freeze = "";
+	melt = "";
 	is_circuit_element = false;
 	is_wire = false;
 	is_wire_connector = false;
@@ -239,7 +240,7 @@ void ContentFeatures::reset()
 
 void ContentFeatures::msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const
 {
-	pk.pack_map(37);
+	pk.pack_map(38);
 	PACK(CONTENTFEATURES_NAME, name);
 	PACK(CONTENTFEATURES_GROUPS, groups);
 	PACK(CONTENTFEATURES_DRAWTYPE, (int)drawtype);
@@ -285,6 +286,7 @@ void ContentFeatures::msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const
 	PACK(CONTENTFEATURES_DROWNING, drowning);
 	PACK(CONTENTFEATURES_LEVELED, leveled);
 	PACK(CONTENTFEATURES_WAVING, waving);
+	PACK(CONTENTFEATURES_MESH, mesh);
 	PACK(CONTENTFEATURES_COLLISION_BOX, collision_box);
 }
 
@@ -353,6 +355,7 @@ void ContentFeatures::msgpack_unpack(msgpack::object o)
 	packet[CONTENTFEATURES_DROWNING].convert(&drowning);
 	packet[CONTENTFEATURES_LEVELED].convert(&leveled);
 	packet[CONTENTFEATURES_WAVING].convert(&waving);
+	packet[CONTENTFEATURES_MESH].convert(&mesh);
 	packet[CONTENTFEATURES_COLLISION_BOX].convert(&collision_box);
 }
 
@@ -380,7 +383,18 @@ public:
 	virtual void updateTextures(IGameDef *gamedef);
 	void msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const;
 	void msgpack_unpack(msgpack::object o);
-	virtual NodeResolver *getResolver();
+
+	inline virtual bool getNodeRegistrationStatus() const;
+	inline virtual void setNodeRegistrationStatus(bool completed);
+
+	virtual void pendNodeResolve(NodeResolveInfo *nri);
+	virtual void cancelNodeResolve(NodeResolver *resolver);
+	virtual void runNodeResolverCallbacks();
+
+	virtual bool getIdFromResolveInfo(NodeResolveInfo *nri,
+		const std::string &node_alt, content_t c_fallback, content_t &result);
+	virtual bool getIdsFromResolveInfo(NodeResolveInfo *nri,
+		std::vector<content_t> &result);
 
 private:
 	void addNameIdMapping(content_t i, std::string name);
@@ -410,13 +424,15 @@ private:
 	// Next possibly free id
 	content_t m_next_id;
 
-	// NodeResolver to queue pending node resolutions
-	NodeResolver m_resolver;
+	// List of node strings and node resolver callbacks to perform
+	std::list<NodeResolveInfo *> m_pending_node_lookups;
+
+	// True when all nodes have been registered
+	bool m_node_registration_complete;
 };
 
 
-CNodeDefManager::CNodeDefManager() :
-	m_resolver(this)
+CNodeDefManager::CNodeDefManager()
 {
 	clear();
 }
@@ -443,6 +459,14 @@ void CNodeDefManager::clear()
 	m_name_id_mapping_with_aliases.clear();
 	m_group_to_items.clear();
 	m_next_id = 0;
+
+	m_node_registration_complete = false;
+	for (std::list<NodeResolveInfo *>::iterator
+			it = m_pending_node_lookups.begin();
+			it != m_pending_node_lookups.end();
+			++it)
+		delete *it;
+	m_pending_node_lookups.clear();
 
 	u32 initial_length = 0;
 	initial_length = MYMAX(initial_length, CONTENT_UNKNOWN + 1);
@@ -865,7 +889,7 @@ void CNodeDefManager::updateTextures(IGameDef *gamedef)
 				recalculateBoundingBox(f->mesh_ptr[0]);
 				meshmanip->recalculateNormals(f->mesh_ptr[0], true, false);
 			}
-		} else if ((f->drawtype == NDT_NODEBOX) && 
+		} else if ((f->drawtype == NDT_NODEBOX) &&
 				((f->node_box.type == NODEBOX_REGULAR) ||
 				(f->node_box.type == NODEBOX_FIXED)) &&
 				(!f->node_box.fixed.empty())) {
@@ -897,7 +921,7 @@ void CNodeDefManager::updateTextures(IGameDef *gamedef)
 			}
 			rotateMeshBy6dFacedir(f->mesh_ptr[0], wm_to_6d[0]);
 			recalculateBoundingBox(f->mesh_ptr[0]);
-			meshmanip->recalculateNormals(f->mesh_ptr[0], true, false);			
+			meshmanip->recalculateNormals(f->mesh_ptr[0], true, false);
 		}
 		f->color_avg = tsrc->getTextureInfo(f->tiles[0].texture_id)->color; // TODO: make average
 		}
@@ -945,7 +969,10 @@ void CNodeDefManager::fillTileAttribs(ITextureSource *tsrc, TileSpec *tile,
 		tile->material_flags &= ~MATERIAL_FLAG_ANIMATION_VERTICAL_FRAMES;
 	} else {
 		std::ostringstream os(std::ios::binary);
+		tile->frames.resize(frame_count);
+
 		for (int i = 0; i < frame_count; i++) {
+
 			FrameSpec frame;
 
 			os.str("");
@@ -1024,173 +1051,133 @@ void CNodeDefManager::addNameIdMapping(content_t i, std::string name)
 }
 
 
-NodeResolver *CNodeDefManager::getResolver()
-{
-	return &m_resolver;
-}
-
-
 IWritableNodeDefManager *createNodeDefManager()
 {
 	return new CNodeDefManager();
 }
 
 
-/*
-	NodeResolver
-*/
-
-NodeResolver::NodeResolver(INodeDefManager *ndef)
+inline bool CNodeDefManager::getNodeRegistrationStatus() const
 {
-	m_ndef = ndef;
-	m_is_node_registration_complete = false;
+	return m_node_registration_complete;
 }
 
 
-NodeResolver::~NodeResolver()
+inline void CNodeDefManager::setNodeRegistrationStatus(bool completed)
 {
-	while (!m_pending_contents.empty()) {
-		NodeResolveInfo *nri = m_pending_contents.front();
-		m_pending_contents.pop_front();
+	m_node_registration_complete = completed;
+}
+
+
+void CNodeDefManager::pendNodeResolve(NodeResolveInfo *nri)
+{
+	nri->resolver->m_ndef = this;
+	if (m_node_registration_complete) {
+		nri->resolver->resolveNodeNames(nri);
+		nri->resolver->m_lookup_done = true;
+		delete nri;
+	} else {
+		m_pending_node_lookups.push_back(nri);
+	}
+}
+
+
+void CNodeDefManager::cancelNodeResolve(NodeResolver *resolver)
+{
+	for (std::list<NodeResolveInfo *>::iterator
+			it = m_pending_node_lookups.begin();
+			it != m_pending_node_lookups.end();
+			++it) {
+		NodeResolveInfo *nri = *it;
+		if (resolver == nri->resolver) {
+			it = m_pending_node_lookups.erase(it);
+			delete nri;
+		}
+	}
+}
+
+
+void CNodeDefManager::runNodeResolverCallbacks()
+{
+	while (!m_pending_node_lookups.empty()) {
+		NodeResolveInfo *nri = m_pending_node_lookups.front();
+		m_pending_node_lookups.pop_front();
+		nri->resolver->resolveNodeNames(nri);
+		nri->resolver->m_lookup_done = true;
 		delete nri;
 	}
 }
 
 
-int NodeResolver::addNode(std::string n_wanted, std::string n_alt,
-		content_t c_fallback, content_t *content)
+bool CNodeDefManager::getIdFromResolveInfo(NodeResolveInfo *nri,
+	const std::string &node_alt, content_t c_fallback, content_t &result)
 {
-	if (m_is_node_registration_complete) {
-		if (m_ndef->getId(n_wanted, *content))
-			return NR_STATUS_SUCCESS;
-
-		if (n_alt == "" || !m_ndef->getId(n_alt, *content)) {
-			*content = c_fallback;
-			return NR_STATUS_FAILURE;
-		}
-
-		return NR_STATUS_SUCCESS;
-	} else {
-		NodeResolveInfo *nfi = new NodeResolveInfo;
-		nfi->n_wanted   = n_wanted;
-		nfi->n_alt      = n_alt;
-		nfi->c_fallback = c_fallback;
-		nfi->output     = content;
-
-		m_pending_contents.push_back(nfi);
-
-		return NR_STATUS_PENDING;
+	if (nri->nodenames.empty()) {
+		result = c_fallback;
+		infostream << "Resolver empty nodename list" << std::endl;
+		return false;
 	}
+
+	content_t c;
+	std::string name = nri->nodenames.front();
+	nri->nodenames.pop_front();
+
+	bool success = getId(name, c);
+	if (!success && node_alt != "") {
+		name = node_alt;
+		success = getId(name, c);
+	}
+
+	if (!success) {
+		errorstream << "Resolver: Failed to resolve node name '" << name
+			<< "'." << std::endl;
+		c = c_fallback;
+	}
+
+	result = c;
+	return success;
 }
 
 
-int NodeResolver::addNodeList(const char *nodename,
-		std::vector<content_t> *content_vec)
+bool CNodeDefManager::getIdsFromResolveInfo(NodeResolveInfo *nri,
+	std::vector<content_t> &result)
 {
-	if (m_is_node_registration_complete) {
-		std::unordered_set<content_t> idset;
+	bool success = true;
 
-		m_ndef->getIds(nodename, idset);
-		for (auto it = idset.begin(); it != idset.end(); ++it)
-			content_vec->push_back(*it);
-
-		return idset.size() ? NR_STATUS_SUCCESS : NR_STATUS_FAILURE;
-	} else {
-		m_pending_content_vecs.push_back(
-			std::make_pair(std::string(nodename), content_vec));
-		return NR_STATUS_PENDING;
+	if (nri->nodelistinfo.empty()) {
+		errorstream << "Resolver: Empty nodelistinfo list" << std::endl;
+		return false;
 	}
-}
 
+	NodeListInfo listinfo = nri->nodelistinfo.front();
+	nri->nodelistinfo.pop_front();
 
-bool NodeResolver::cancelNode(content_t *content)
-{
-	bool found = false;
+	while (listinfo.length--) {
+		if (nri->nodenames.empty()) {
+			infostream << "Resolver: Empty nodename list" << std::endl;
+			return false;
+		}
 
-	std::list<NodeResolveInfo *>::iterator it = m_pending_contents.begin();
-	while (it != m_pending_contents.end()) {
-		NodeResolveInfo *nfi = *it;
-		if (nfi->output == content) {
-			it = m_pending_contents.erase(it);
-			delete nfi;
-			found = true;
+		content_t c;
+		std::string name = nri->nodenames.front();
+		nri->nodenames.pop_front();
+
+		if (name.substr(0,6) != "group:") {
+			if (getId(name, c)) {
+				result.push_back(c);
+			} else if (listinfo.all_required) {
+				errorstream << "Resolver: Failed to resolve node name '" << name
+					<< "'." << std::endl;
+				result.push_back(listinfo.c_fallback);
+				success = false;
+			}
+		} else {
+			std::unordered_set<content_t> cids;
+			getIds(name, cids);
+			for (auto it = cids.begin(); it != cids.end(); ++it)
+				result.push_back(*it);
 		}
 	}
 
-	return found;
-}
-
-
-int NodeResolver::cancelNodeList(std::vector<content_t> *content_vec)
-{
-	int num_canceled = 0;
-
-	std::list<std::pair<std::string, std::vector<content_t> *> >::iterator it;
-	it = m_pending_content_vecs.begin();
-	while (it != m_pending_content_vecs.end()) {
-		if (it->second == content_vec) {
-			it = m_pending_content_vecs.erase(it);
-			num_canceled++;
-		}
-	}
-
-	return num_canceled;
-}
-
-
-int NodeResolver::resolveNodes()
-{
-	int num_failed = 0;
-
-	//// Resolve pending single node name -> content ID mappings
-	while (!m_pending_contents.empty()) {
-		NodeResolveInfo *nri = m_pending_contents.front();		
-		m_pending_contents.pop_front();
-
-		bool success = true;
-		if (!m_ndef->getId(nri->n_wanted, *nri->output)) {
-			success = (nri->n_alt != "") ?
-				m_ndef->getId(nri->n_alt, *nri->output) : false;
-		}
-
-		if (!success) {
-			*nri->output = nri->c_fallback;
-			num_failed++;
-			errorstream << "NodeResolver::resolveNodes():  Failed to "
-				"resolve '" << nri->n_wanted;
-			if (nri->n_alt != "")
-				errorstream << "' and '" << nri->n_alt;
-			errorstream << "'" << std::endl;
-		}
-
-		delete nri;
-	}
-
-	//// Resolve pending node names and add to content_t vector
-	while (!m_pending_content_vecs.empty()) {
-		std::pair<std::string, std::vector<content_t> *> item =
-			m_pending_content_vecs.front();
-		m_pending_content_vecs.pop_front();
-
-		std::string &name = item.first;
-		std::vector<content_t> *output = item.second;
-		
-		std::unordered_set<content_t> idset;
-
-		m_ndef->getIds(name, idset);
-		for (auto it = idset.begin(); it != idset.end(); ++it)
-			output->push_back(*it);
-
-		if (idset.size() == 0) {
-			num_failed++;
-			errorstream << "NodeResolver::resolveNodes():  Failed to "
-				"resolve '" << name << "'" << std::endl;
-		}
-	}
-
-	//// Mark node registration as complete so future resolve
-	//// requests are satisfied immediately
-	m_is_node_registration_complete = true;
-
-	return num_failed;
+	return success;
 }

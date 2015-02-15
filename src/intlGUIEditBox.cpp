@@ -272,7 +272,7 @@ bool intlGUIEditBox::OnEvent(const SEvent& event)
 			break;
 		case EET_KEY_INPUT_EVENT:
         {
-#if (defined(linux) || defined(__linux) || defined(__FreeBSD__))
+#if (defined(linux) || defined(__linux) || defined(__FreeBSD__)) and IRRLICHT_VERSION_10000 < 10900
             // ################################################################
 			// ValkaTR:
             // This part is the difference from the original intlGUIEditBox
@@ -811,7 +811,7 @@ void intlGUIEditBox::draw()
 
 	FrameRect = AbsoluteRect;
 
-#if IRRLICHT_VERSION_10000  >= 10703
+#if IRRLICHT_VERSION_10000  > 10703
 	EGUI_DEFAULT_COLOR bgCol = EGDC_GRAY_EDITABLE;
 	if (isEnabled())
 		bgCol = focus ? EGDC_FOCUSED_EDITABLE : EGDC_EDITABLE;

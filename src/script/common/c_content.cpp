@@ -1060,19 +1060,7 @@ void luaentity_get(lua_State *L, u16 id)
 }
 
 /******************************************************************************/
-NoiseParams *read_noiseparams(lua_State *L, int index)
-{
-	NoiseParams *np = new NoiseParams;
-
-	if (!read_noiseparams_nc(L, index, np)) {
-		delete np;
-		np = NULL;
-	}
-
-	return np;
-}
-
-bool read_noiseparams_nc(lua_State *L, int index, NoiseParams *np)
+bool read_noiseparams(lua_State *L, int index, NoiseParams *np)
 {
 	if (index < 0)
 		index = lua_gettop(L) + 1 + index;
@@ -1080,116 +1068,21 @@ bool read_noiseparams_nc(lua_State *L, int index, NoiseParams *np)
 	if (!lua_istable(L, index))
 		return false;
 
-	np->offset  = getfloatfield_default(L, index, "offset",  0.0);
-	np->scale   = getfloatfield_default(L, index, "scale",   0.0);
-	np->persist = getfloatfield_default(L, index, "persist", 0.0);
-	np->seed    = getintfield_default(L,   index, "seed",    0);
-	np->octaves = getintfield_default(L,   index, "octaves", 0);
-	np->eased   = getboolfield_default(L,  index, "eased",   false);
+	np->offset     = getfloatfield_default(L, index, "offset",     0.0);
+	np->scale      = getfloatfield_default(L, index, "scale",      0.0);
+	np->persist    = getfloatfield_default(L, index, "persist",    0.0);
+	np->lacunarity = getfloatfield_default(L, index, "lacunarity", 2.0);
+	np->seed       = getintfield_default(L,   index, "seed",       0);
+	np->octaves    = getintfield_default(L,   index, "octaves",    0);
+
+	u32 flags = 0, flagmask = 0;
+	np->flags = getflagsfield(L, index, "flags", flagdesc_noiseparams,
+		&flags, &flagmask) ? flags : NOISE_FLAG_DEFAULTS;
 
 	lua_getfield(L, index, "spread");
 	np->spread  = read_v3f(L, -1);
 	lua_pop(L, 1);
 
-	return true;
-}
-
-/******************************************************************************/
-
-bool get_schematic(lua_State *L, int index, Schematic *schem,
-	INodeDefManager *ndef, std::map<std::string, std::string> &replace_names)
-{
-	if (index < 0)
-		index = lua_gettop(L) + 1 + index;
-
-	if (lua_istable(L, index)) {
-		return read_schematic(L, index, schem, ndef, replace_names);
-	} else if (lua_isstring(L, index)) {
-		NodeResolver *resolver = ndef->getResolver();
-		const char *filename = lua_tostring(L, index);
-		return schem->loadSchematicFromFile(filename, resolver, replace_names);
-	} else {
-		return false;
-	}
-}
-
-bool read_schematic(lua_State *L, int index, Schematic *schem,
-	INodeDefManager *ndef, std::map<std::string, std::string> &replace_names)
-{
-	//// Get schematic size
-	lua_getfield(L, index, "size");
-	v3s16 size = read_v3s16(L, -1);
-	lua_pop(L, 1);
-
-	//// Get schematic data
-	lua_getfield(L, index, "data");
-	luaL_checktype(L, -1, LUA_TTABLE);
-
-	int numnodes = size.X * size.Y * size.Z;
-	MapNode *schemdata = new MapNode[numnodes];
-	int i = 0;
-
-	lua_pushnil(L);
-	while (lua_next(L, -2)) {
-		if (i < numnodes) {
-			// same as readnode, except param1 default is MTSCHEM_PROB_CONST
-			lua_getfield(L, -1, "name");
-			std::string name = luaL_checkstring(L, -1);
-			lua_pop(L, 1);
-
-			u8 param1;
-			lua_getfield(L, -1, "param1");
-			param1 = !lua_isnil(L, -1) ? lua_tonumber(L, -1) : MTSCHEM_PROB_ALWAYS;
-			lua_pop(L, 1);
-
-			u8 param2;
-			lua_getfield(L, -1, "param2");
-			param2 = !lua_isnil(L, -1) ? lua_tonumber(L, -1) : 0;
-			lua_pop(L, 1);
-
-			std::map<std::string, std::string>::iterator it;
-			it = replace_names.find(name);
-			if (it != replace_names.end())
-				name = it->second;
-
-			schemdata[i] = MapNode(ndef, name, param1, param2);
-		}
-
-		i++;
-		lua_pop(L, 1);
-	}
-
-	if (i != numnodes) {
-		errorstream << "read_schematic: incorrect number of "
-			"nodes provided in raw schematic data (got " << i <<
-			", expected " << numnodes << ")." << std::endl;
-		return false;
-	}
-
-	//// Get Y-slice probability values (if present)
-	u8 *slice_probs = new u8[size.Y];
-	for (i = 0; i != size.Y; i++)
-		slice_probs[i] = MTSCHEM_PROB_ALWAYS;
-
-	lua_getfield(L, index, "yslice_prob");
-	if (lua_istable(L, -1)) {
-		lua_pushnil(L);
-		while (lua_next(L, -2)) {
-			if (getintfield(L, -1, "ypos", i) && i >= 0 && i < size.Y) {
-				slice_probs[i] = getintfield_default(L, -1,
-					"prob", MTSCHEM_PROB_ALWAYS);
-			}
-			lua_pop(L, 1);
-		}
-	}
-
-	// Here, we read the nodes directly from the INodeDefManager - there is no
-	// need for pending node resolutions so we'll mark this schematic as updated
-	schem->flags       = SCHEM_CIDS_UPDATED;
-
-	schem->size        = size;
-	schem->schemdata   = schemdata;
-	schem->slice_probs = slice_probs;
 	return true;
 }
 

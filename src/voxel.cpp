@@ -30,7 +30,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 /*
 	Debug stuff
 */
-u32 addarea_time = 0;
 u32 clearflag_time = 0;
 //u32 getwaterpressure_time = 0;
 //u32 spreadwaterpressure_time = 0;
@@ -47,10 +46,6 @@ VoxelManipulator::VoxelManipulator():
 VoxelManipulator::~VoxelManipulator()
 {
 	clear();
-	if(m_data)
-		delete[] m_data;
-	if(m_flags)
-		delete[] m_flags;
 }
 
 void VoxelManipulator::clear()
@@ -58,10 +53,10 @@ void VoxelManipulator::clear()
 	// Reset area to volume=0
 	m_area = VoxelArea();
 	if(m_data)
-		delete[] m_data;
+		delete m_data;
 	m_data = NULL;
 	if(m_flags)
-		delete[] m_flags;
+	delete[] m_flags;
 	m_flags = NULL;
 }
 
@@ -146,19 +141,19 @@ void VoxelManipulator::print(std::ostream &o, INodeDefManager *ndef,
 void VoxelManipulator::addArea(const VoxelArea &area)
 {
 	// Cancel if requested area has zero volume
-	if(area.getExtent() == v3s16(0,0,0))
+	if (area.hasEmptyExtent())
 		return;
 
 	// Cancel if m_area already contains the requested area
 	if(m_area.contains(area))
 		return;
 
-	TimeTaker timer("addArea", &addarea_time);
+	TimeTaker timer("addArea");
 
 	// Calculate new area
 	VoxelArea new_area;
 	// New area is the requested area if m_area has zero volume
-	if(m_area.getExtent() == v3s16(0,0,0))
+	if(m_area.hasEmptyExtent())
 	{
 		new_area = area;
 	}
@@ -180,7 +175,7 @@ void VoxelManipulator::addArea(const VoxelArea &area)
 	dstream<<", new_size="<<new_size;
 	dstream<<std::endl;*/
 
-	// Allocate and clear new data
+	// Allocate new data and clear flags
 	MapNode *new_data = reinterpret_cast<MapNode*>( ::operator new(new_size * sizeof(MapNode)));
 	memset(new_data, 0, new_size * sizeof(MapNode));
 	u8 *new_flags = new u8[new_size];
@@ -214,7 +209,7 @@ void VoxelManipulator::addArea(const VoxelArea &area)
 	m_flags = new_flags;
 
 	if(old_data)
-		delete[] old_data;
+		delete old_data;
 	if(old_flags)
 		delete[] old_flags;
 
@@ -420,7 +415,7 @@ void VoxelManipulator::unspreadLight(enum LightBank bank,
 		std::map<v3s16, u8> & from_nodes,
 		std::set<v3s16> & light_sources, INodeDefManager *nodemgr)
 {
-	if(from_nodes.size() == 0)
+	if(from_nodes.empty())
 		return;
 
 	for(std::map<v3s16, u8>::iterator j = from_nodes.begin();
@@ -646,7 +641,7 @@ void VoxelManipulator::spreadLight(enum LightBank bank,
 		v3s16(-1,0,0), // left
 	};
 
-	if(from_nodes.size() == 0)
+	if(from_nodes.empty())
 		return;
 
 	std::set<v3s16> lighted_nodes;
@@ -719,7 +714,7 @@ void VoxelManipulator::spreadLight(enum LightBank bank,
 			<<" for "<<from_nodes.size()<<" nodes"
 			<<std::endl;*/
 
-	if(lighted_nodes.size() > 0)
+	if(!lighted_nodes.empty())
 		spreadLight(bank, lighted_nodes, nodemgr);
 }
 #endif

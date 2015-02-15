@@ -34,9 +34,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 //#define DGEN_USE_TORCHES
 
-NoiseParams nparams_dungeon_rarity(0.0, 1.0, v3f(500.0, 500.0, 500.0), 0, 2, 0.8);
-NoiseParams nparams_dungeon_wetness(0.0, 1.0, v3f(40.0, 40.0, 40.0), 32474, 4, 1.1);
-NoiseParams nparams_dungeon_density(0.0, 1.0, v3f(2.5, 2.5, 2.5), 0, 2, 1.4);
+NoiseParams nparams_dungeon_rarity(0.0, 1.0, v3f(500.0, 500.0, 500.0), 0, 2, 0.8, 2.0);
+NoiseParams nparams_dungeon_wetness(0.0, 1.0, v3f(40.0, 40.0, 40.0), 32474, 4, 1.1, 2.0);
+NoiseParams nparams_dungeon_density(0.0, 1.0, v3f(2.5, 2.5, 2.5), 0, 2, 1.4, 2.0);
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -73,10 +73,7 @@ DungeonGen::DungeonGen(Mapgen *mapgen, DungeonParams *dparams) {
 
 void DungeonGen::generate(u32 bseed, v3s16 nmin, v3s16 nmax) {
 	//TimeTaker t("gen dungeons");
-	int approx_groundlevel = 10 + mg->water_level;
-
-	if ((nmin.Y + nmax.Y) / 2 >= approx_groundlevel ||
-		NoisePerlin3D(&dp.np_rarity, nmin.X, nmin.Y, nmin.Z, mg->seed) < 0.2)
+	if (NoisePerlin3D(&dp.np_rarity, nmin.X, nmin.Y, nmin.Z, mg->seed) < 0.2)
 		return;
 
 	this->blockseed = bseed;

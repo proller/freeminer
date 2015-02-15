@@ -34,9 +34,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "filesys.h"
 #include "convert_json.h"
 #include "serverlist.h"
+#include "emerge.h"
 #include "sound.h"
 #include "settings.h"
 #include "main.h" // for g_settings
+#include "log.h"
 #include "EDriverTypes.h"
 
 #include <IFileArchive.h>
@@ -604,6 +606,25 @@ int ModApiMainMenu::l_set_topleft_text(lua_State *L)
 }
 
 /******************************************************************************/
+int ModApiMainMenu::l_get_mapgen_names(lua_State *L)
+{
+	lua_newtable(L);
+
+	std::list<const char *> names;
+	EmergeManager::getMapgenNames(names);
+
+	int i = 1;
+	for (std::list<const char *>::const_iterator
+			it = names.begin(); it != names.end(); ++it) {
+		lua_pushstring(L, *it);
+		lua_rawseti(L, -2, i++);
+	}
+
+	return 1;
+}
+
+
+/******************************************************************************/
 int ModApiMainMenu::l_get_modpath(lua_State *L)
 {
 	std::string modpath
@@ -753,19 +774,19 @@ int ModApiMainMenu::l_extract_zip(lua_State *L)
 
 		unsigned int number_of_files = files_in_zip->getFileCount();
 
-		for (unsigned int i=0; i < number_of_files;  i++) {
+		for (unsigned int i=0; i < number_of_files; i++) {
 			std::string fullpath = destination;
 			fullpath += DIR_DELIM;
 			fullpath += files_in_zip->getFullFileName(i).c_str();
+			std::string fullpath_dir = fs::RemoveLastPathComponent(fullpath);
 
-			if (files_in_zip->isDirectory(i)) {
-				if (! fs::CreateAllDirs(fullpath) ) {
+			if (!files_in_zip->isDirectory(i)) {
+				if (!fs::PathExists(fullpath_dir) && !fs::CreateAllDirs(fullpath_dir)) {
 					fs->removeFileArchive(fs->getFileArchiveCount()-1);
 					lua_pushboolean(L,false);
 					return 1;
 				}
-			}
-			else {
+
 				io::IReadFile* toread = opened_zip->createAndOpenFile(i);
 
 				FILE *targetfile = fopen(fullpath.c_str(),"wb");
@@ -777,7 +798,7 @@ int ModApiMainMenu::l_extract_zip(lua_State *L)
 				}
 
 				char read_buffer[1024];
-				unsigned int total_read = 0;
+				long total_read = 0;
 
 				while (total_read < toread->getSize()) {
 
@@ -920,28 +941,21 @@ int ModApiMainMenu::l_download_file(lua_State *L)
 /******************************************************************************/
 int ModApiMainMenu::l_get_video_drivers(lua_State *L)
 {
-	static const char* drivernames[] = {
-		"NULL Driver",
-		"Software",
-		"Burningsvideo",
-		"Direct3D 8",
-		"Direct3D 9",
-		"OpenGL",
-		"OGLES1",
-		"OGLES2"
-	};
-	unsigned int index = 1;
-	lua_newtable(L);
-	int top = lua_gettop(L);
+	std::vector<irr::video::E_DRIVER_TYPE> drivers
+		= porting::getSupportedVideoDrivers();
 
-	for (unsigned int i = irr::video::EDT_SOFTWARE;
-			i < MYMIN(irr::video::EDT_COUNT, (sizeof(drivernames)/sizeof(drivernames[0])));
-			i++) {
-		if (irr::IrrlichtDevice::isDriverSupported((irr::video::E_DRIVER_TYPE) i)) {
-			lua_pushnumber(L,index++);
-			lua_pushstring(L,drivernames[i]);
-			lua_settable(L, top);
-		}
+	lua_newtable(L);
+	for (u32 i = 0; i != drivers.size(); i++) {
+		const char *name  = porting::getVideoDriverName(drivers[i]);
+		const char *fname = porting::getVideoDriverFriendlyName(drivers[i]);
+
+		lua_newtable(L);
+		lua_pushstring(L, name);
+		lua_setfield(L, -2, "name");
+		lua_pushstring(L, fname);
+		lua_setfield(L, -2, "friendly_name");
+
+		lua_rawseti(L, -2, i + 1);
 	}
 
 	return 1;
@@ -951,7 +965,7 @@ int ModApiMainMenu::l_get_video_drivers(lua_State *L)
 int ModApiMainMenu::l_gettext(lua_State *L)
 {
 	std::wstring wtext = wstrgettext((std::string) luaL_checkstring(L, 1));
-	lua_pushstring(L, wide_to_utf8(wtext).c_str());
+	lua_pushstring(L, wide_to_narrow(wtext).c_str());
 
 	return 1;
 }
@@ -1022,6 +1036,7 @@ void ModApiMainMenu::Initialize(lua_State *L, int top)
 	API_FCT(delete_favorite);
 	API_FCT(set_background);
 	API_FCT(set_topleft_text);
+	API_FCT(get_mapgen_names);
 	API_FCT(get_modpath);
 	API_FCT(get_gamepath);
 	API_FCT(get_texturepath);
@@ -1052,6 +1067,7 @@ void ModApiMainMenu::InitializeAsync(AsyncEngine& engine)
 	ASYNC_API_FCT(get_worlds);
 	ASYNC_API_FCT(get_games);
 	ASYNC_API_FCT(get_favorites);
+	ASYNC_API_FCT(get_mapgen_names);
 	ASYNC_API_FCT(get_modpath);
 	ASYNC_API_FCT(get_gamepath);
 	ASYNC_API_FCT(get_texturepath);

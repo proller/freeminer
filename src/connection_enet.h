@@ -178,6 +178,7 @@ enum ConnectionEventType{
 	CONNEVENT_PEER_ADDED,
 	CONNEVENT_PEER_REMOVED,
 	CONNEVENT_BIND_FAILED,
+	CONNEVENT_CONNECT_FAILED,
 };
 
 struct ConnectionEvent
@@ -188,7 +189,7 @@ struct ConnectionEvent
 	bool timeout;
 	Address address;
 
-	ConnectionEvent(): type(CONNEVENT_NONE) {}
+	ConnectionEvent(ConnectionEventType type_=CONNEVENT_NONE): type(type_) {}
 
 	std::string describe()
 	{
@@ -203,6 +204,8 @@ struct ConnectionEvent
 			return "CONNEVENT_PEER_REMOVED";
 		case CONNEVENT_BIND_FAILED:
 			return "CONNEVENT_BIND_FAILED";
+		case CONNEVENT_CONNECT_FAILED:
+			return "CONNEVENT_CONNECT_FAILED";
 		}
 		return "Invalid ConnectionEvent";
 	}
@@ -315,7 +318,7 @@ public:
 	void Connect(Address address);
 	bool Connected();
 	void Disconnect();
-	u32 Receive(u16 &peer_id, SharedBuffer<u8> &data);
+	u32 Receive(u16 &peer_id, SharedBuffer<u8> &data, int timeout = 1);
 	void SendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable);
 	void Send(u16 peer_id, u8 channelnum, SharedBuffer<u8> data, bool reliable);
 	void Send(u16 peer_id, u8 channelnum, const msgpack::sbuffer &buffer, bool reliable);
@@ -355,7 +358,8 @@ private:
 
 	// Backwards compatibility
 	PeerHandler *m_bc_peerhandler;
-	int m_bc_receive_timeout;
+	unsigned int m_last_recieved;
+	int m_last_recieved_warn;
 
 	void SetPeerID(u16 id){ m_peer_id = id; }
 	u32 GetProtocolID(){ return m_protocol_id; }

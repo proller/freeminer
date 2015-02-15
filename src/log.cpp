@@ -33,6 +33,15 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "config.h"
 #include "jthread/jmutexautolock.h"
 
+#ifdef __ANDROID__
+unsigned int android_log_level_mapping[] {
+		/* LMT_ERROR */   ANDROID_LOG_ERROR,
+		/* LMT_ACTION */  ANDROID_LOG_WARN,
+		/* LMT_INFO */    ANDROID_LOG_INFO,
+		/* LMT_VERBOSE */ ANDROID_LOG_VERBOSE
+	};
+#endif
+
 std::list<ILogOutput*> log_outputs[LMT_NUM_VALUES];
 std::map<threadid_t, std::string> log_threadnames;
 JMutex                            log_threadnamemutex;
@@ -62,6 +71,21 @@ void log_remove_output(ILogOutput *out)
 		if(it != log_outputs[i].end())
 			log_outputs[i].erase(it);
 	}
+}
+
+void log_set_lev_silence(enum LogMessageLevel lev, bool silence)
+{
+	log_threadnamemutex.Lock();
+
+	for (std::list<ILogOutput *>::iterator
+			it = log_outputs[lev].begin();
+			it != log_outputs[lev].end();
+			++it) {
+		ILogOutput *out = *it;
+		out->silence = silence;
+	}
+
+	log_threadnamemutex.Unlock();
 }
 
 void log_register_thread(const std::string &name)
@@ -111,6 +135,9 @@ void log_printline(enum LogMessageLevel lev, const std::string &text)
 	for(std::list<ILogOutput*>::iterator i = log_outputs[lev].begin();
 			i != log_outputs[lev].end(); i++){
 		ILogOutput *out = *i;
+		if (out->silence)
+			continue;
+
 		out->printLog(os.str());
 		out->printLog(os.str(), lev);
 		out->printLog(lev, text);
@@ -146,7 +173,7 @@ public:
 	{
 		log_printline(m_lev, m_buf);
 #ifdef __ANDROID__
-		__android_log_print(ANDROID_LOG_ERROR, PROJECT_NAME, "%s", m_buf.c_str());
+		__android_log_print(android_log_level_mapping[m_lev], PROJECT_NAME, "%s", m_buf.c_str());
 #endif
 	}
 

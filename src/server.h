@@ -357,6 +357,9 @@ public:
 			u8* ser_vers, u16* prot_vers, u8* major, u8* minor, u8* patch,
 			std::string* vers_string);
 
+	// Bind address
+	Address m_bind_addr;
+
 private:
 
 	friend class EmergeThread;
@@ -525,8 +528,6 @@ private:
 	// Scripting
 	// Envlock and conlock should be locked when using Lua
 	GameScripting *m_script;
-	
-	Circuit* m_circuit;
 public:
 	Stat stat;
 private:

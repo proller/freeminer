@@ -86,7 +86,7 @@ void NodeMetadataList::serialize(std::ostream &os) const
 		Version 0 is a placeholder for "nothing to see here; go away."
 	*/
 
-	if(m_data.size() == 0){
+	if(m_data.empty()){
 		writeU8(os, 0); // version
 		return;
 	}
@@ -112,10 +112,10 @@ void NodeMetadataList::serialize(std::ostream &os) const
 
 void NodeMetadataList::deSerialize(std::istream &is, IGameDef *gamedef)
 {
-	m_data.clear();
+	clear();
 
 	u8 version = readU8(is);
-	
+
 	if(version == 0){
 		// Nothing
 		return;

@@ -26,6 +26,15 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "debug.h"
 #include "irr_v3d.h"
+#include "util/string.h"
+
+#define PSEUDORANDOM_MAX 32767
+
+extern FlagDesc flagdesc_noiseparams[];
+
+float farscale(float scale, float z);
+float farscale(float scale, float x, float z);
+float farscale(float scale, float x, float y, float z);
 
 class PseudoRandom
 {
@@ -40,15 +49,15 @@ public:
 	{
 		m_next = seed;
 	}
-	// Returns 0...32767
+	// Returns 0...PSEUDORANDOM_MAX
 	int next()
 	{
 		m_next = m_next * 1103515245 + 12345;
-		return((unsigned)(m_next/65536) % 32768);
+		return((unsigned)(m_next/65536) % (PSEUDORANDOM_MAX + 1));
 	}
 	int range(int min, int max)
 	{
-		if(max-min > 32768/10)
+		if (max-min > (PSEUDORANDOM_MAX + 1) / 10)
 		{
 			//dstream<<"WARNING: PseudoRandom::range: max > 32767"<<std::endl;
 			assert(0);
@@ -64,6 +73,14 @@ private:
 	int m_next;
 };
 
+#define NOISE_FLAG_DEFAULTS    0x01
+#define NOISE_FLAG_EASED       0x02
+#define NOISE_FLAG_ABSVALUE    0x04
+
+//// TODO(hmmmm): implement these!
+#define NOISE_FLAG_POINTBUFFER 0x08
+#define NOISE_FLAG_SIMPLEX     0x10
+
 struct NoiseParams {
 	float offset;
 	float scale;
@@ -71,31 +88,47 @@ struct NoiseParams {
 	s32 seed;
 	u16 octaves;
 	float persist;
+	float lacunarity;
+	u32 flags;
 
 	float farscale;
 	float farspread;
 	float farpersist;
 
-	bool eased;
 
-	NoiseParams() {}
+	NoiseParams() {
+		offset     = 0.0f;
+		scale      = 1.0f;
+		spread     = v3f(250, 250, 250);
+		seed       = 12345;
+		octaves    = 3;
+		persist    = 0.6f;
+		lacunarity = 2.0f;
+		flags      = NOISE_FLAG_DEFAULTS;
 
-	NoiseParams(float offset_, float scale_, v3f spread_,
-		int seed_, int octaves_, float persist_, bool eased_=false,
-		float farscale_ = 1, float farspread_ = 1, float farpersist_ = 1)
+		farscale  = 1;
+		farspread = 1;
+		farpersist = 1;
+	}
+
+	NoiseParams(float offset_, float scale_, v3f spread_, s32 seed_,
+		u16 octaves_, float persist_, float lacunarity_,
+		u32 flags_=NOISE_FLAG_DEFAULTS,
+		float farscale_ = 1, float farspread_ = 1, float farpersist_ = 1
+		)
 	{
-		offset  = offset_;
-		scale   = scale_;
-		spread  = spread_;
-		seed    = seed_;
-		octaves = octaves_;
-		persist = persist_;
-		eased   = eased_;
+		offset     = offset_;
+		scale      = scale_;
+		spread     = spread_;
+		seed       = seed_;
+		octaves    = octaves_;
+		persist    = persist_;
+		lacunarity = lacunarity_;
+		flags      = flags_;
 
 		farscale  = farscale_;
 		farspread = farspread_;
 		farpersist = farpersist_;
-
 	}
 };
 
@@ -108,13 +141,14 @@ struct NoiseParams {
 
 class Noise {
 public:
-	NoiseParams *np;
+	NoiseParams np;
 	int seed;
 	int sx;
 	int sy;
 	int sz;
-	float *noisebuf;
-	float *buf;
+	float *noise_buf;
+	float *gradient_buf;
+	float *persist_buf;
 	float *result;
 
 	Noise(NoiseParams *np, int seed, int sx, int sy, int sz=1);
@@ -123,7 +157,6 @@ public:
 	void setSize(int sx, int sy, int sz=1);
 	void setSpreadFactor(v3f spread);
 	void setOctaves(int octaves);
-	void resizeNoiseBuf(bool is3d);
 
 	void gradientMap2D(
 		float x, float y,
@@ -132,25 +165,71 @@ public:
 	void gradientMap3D(
 		float x, float y, float z,
 		float step_x, float step_y, float step_z,
-		int seed, bool eased=false);
-	float *perlinMap2D(float x, float y);
-	float *perlinMap2DModulated(float x, float y, float *persist_map);
-	float *perlinMap3D(float x, float y, float z, bool eased=false);
-	void transformNoiseMap(float xx = 0, float yy = 0, float zz = 0);
+		int seed);
+
+	float *perlinMap2D(float x, float y, float *persistence_map=NULL);
+	float *perlinMap3D(float x, float y, float z, float *persistence_map=NULL);
+
+	inline float *perlinMap2D_PO(float x, float xoff, float y, float yoff,
+		float *persistence_map=NULL)
+	{
+		return perlinMap2D(
+			x + xoff * np.spread.X * farscale(np.farspread, x, y),
+			y + yoff * np.spread.Y * farscale(np.farspread, x, y),
+			persistence_map);
+	}
+
+	inline float *perlinMap3D_PO(float x, float xoff, float y, float yoff,
+		float z, float zoff, float *persistence_map=NULL)
+	{
+		return perlinMap3D(
+			x + xoff * np.spread.X * farscale(np.farspread, x, y, z),
+			y + yoff * np.spread.Y * farscale(np.farspread, x, y, z),
+			z + zoff * np.spread.Z * farscale(np.farspread, x, y, z),
+			persistence_map);
+	}
+
+private:
+	void allocBuffers();
+	void resizeNoiseBuf(bool is3d);
+	void updateResults(float g, float *gmap, float *persistence_map, size_t bufsize);
+
 };
+
+float NoisePerlin2D(NoiseParams *np, float x, float y, int seed);
+float NoisePerlin3D(NoiseParams *np, float x, float y, float z, int seed);
+
+inline float NoisePerlin2D_PO(NoiseParams *np, float x, float xoff,
+	float y, float yoff, int seed)
+{
+	return NoisePerlin2D(np,
+		x + xoff * np->spread.X,
+		y + yoff * np->spread.Y,
+		seed);
+}
+
+inline float NoisePerlin3D_PO(NoiseParams *np, float x, float xoff,
+	float y, float yoff, float z, float zoff, int seed)
+{
+	return NoisePerlin3D(np,
+		x + xoff * np->spread.X,
+		y + yoff * np->spread.Y,
+		z + zoff * np->spread.Z,
+		seed);
+}
 
 // Return value: -1 ... 1
 float noise2d(int x, int y, int seed);
 float noise3d(int x, int y, int z, int seed);
 
-float noise2d_gradient(float x, float y, int seed);
+float noise2d_gradient(float x, float y, int seed, bool eased=true);
 float noise3d_gradient(float x, float y, float z, int seed, bool eased=false);
 
 float noise2d_perlin(float x, float y, int seed,
-		int octaves, float persistence);
+		int octaves, float persistence, bool eased=true);
 
 float noise2d_perlin_abs(float x, float y, int seed,
-		int octaves, float persistence);
+		int octaves, float persistence, bool eased=true);
 
 float noise3d_perlin(float x, float y, float z, int seed,
 		int octaves, float persistence, bool eased=false);
@@ -158,68 +237,12 @@ float noise3d_perlin(float x, float y, float z, int seed,
 float noise3d_perlin_abs(float x, float y, float z, int seed,
 		int octaves, float persistence, bool eased=false);
 
-inline float easeCurve(float t) {
+inline float easeCurve(float t)
+{
 	return t * t * t * (t * (6.f * t - 15.f) + 10.f);
 }
 
 float contour(float v);
-
-#define NoisePerlin2D(np, x, y, s) \
-		((np)->offset + (np)->scale * noise2d_perlin( \
-		(float)(x) / (np)->spread.X, \
-		(float)(y) / (np)->spread.Y, \
-		(s) + (np)->seed, (np)->octaves, (np)->persist))
-
-#define NoisePerlin2DNoTxfm(np, x, y, s) \
-		(noise2d_perlin( \
-		(float)(x) / (np)->spread.X, \
-		(float)(y) / (np)->spread.Y, \
-		(s) + (np)->seed, (np)->octaves, (np)->persist))
-
-#define NoisePerlin2DPosOffset(np, x, xoff, y, yoff, s) \
-		((np)->offset + (np)->scale * noise2d_perlin( \
-		(float)(xoff) + (float)(x) / (np)->spread.X, \
-		(float)(yoff) + (float)(y) / (np)->spread.Y, \
-		(s) + (np)->seed, (np)->octaves, (np)->persist))
-
-#define NoisePerlin2DNoTxfmPosOffset(np, x, xoff, y, yoff, s) \
-		(noise2d_perlin( \
-		(float)(xoff) + (float)(x) / (np)->spread.X, \
-		(float)(yoff) + (float)(y) / (np)->spread.Y, \
-		(s) + (np)->seed, (np)->octaves, (np)->persist))
-
-#define NoisePerlin3D(np, x, y, z, s) ((np)->offset + (np)->scale * \
-		noise3d_perlin((float)(x) / (np)->spread.X, (float)(y) / (np)->spread.Y, \
-		(float)(z) / (np)->spread.Z, (s) + (np)->seed, (np)->octaves, (np)->persist))
-
-inline float linearInterpolation(float v0, float v1, float t);
-/* {
-    return v0 + (v1 - v0) * t;
-} */
-
-float biLinearInterpolation(float v00, float v10,
-							float v01, float v11,
-							float x, float y);
-
-float biLinearInterpolationNoEase(float x0y0, float x1y0,
-								  float x0y1, float x1y1,
-								  float x, float y);
-
-float triLinearInterpolation(
-		float v000, float v100, float v010, float v110,
-		float v001, float v101, float v011, float v111,
-		float x, float y, float z);
-
-
-float farscale(float scale, float z);
-float farscale(float scale, float x, float z);
-float farscale(float scale, float x, float y, float z);
-
-
-#define NoisePerlin3DEased(np, x, y, z, s) ((np)->offset + (np)->scale * \
-		noise3d_perlin((float)(x) / (np)->spread.X, (float)(y) / (np)->spread.Y, \
-		(float)(z) / (np)->spread.Z, (s) + (np)->seed, (np)->octaves, \
-		(np)->persist, true))
 
 #endif
 

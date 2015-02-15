@@ -62,7 +62,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #define UTEST(x, fmt, ...)\
 {\
 	if(!(x)){\
-		LOGLINEF(LMT_ERROR, "Test (%s) failed: " fmt, #x, ##__VA_ARGS__);\
+		dstream << "Test (" #x ") failed: " fmt << std::endl; \
 		test_failed = true;\
 	}\
 }
@@ -192,7 +192,7 @@ struct TestUtilities: public TestBase
 		str_replace(test_str, "there", "world");
 		UASSERT(test_str == "Hello world");
 		test_str = "ThisAisAaAtest";
-		str_replace_char(test_str, 'A', ' ');
+		str_replace(test_str, 'A', ' ');
 		UASSERT(test_str == "This is a test");
 		UASSERT(string_allowed("hello", "abcdefghijklmno") == true);
 		UASSERT(string_allowed("123", "abcdefghijklmno") == false);
@@ -276,8 +276,8 @@ struct TestPath: public TestBase
 				expected fs::PathStartsWith results
 				0 = returns false
 				1 = returns true
-				2 = returns false on windows, false elsewhere
-				3 = returns true on windows, true elsewhere
+				2 = returns false on windows, true elsewhere
+				3 = returns true on windows, false elsewhere
 				4 = returns true if and only if
 				    FILESYS_CASE_INSENSITIVE is true
 			*/
@@ -443,7 +443,7 @@ struct TestPath: public TestBase
 	"some multiline text\n"                   \
 	"     with leading whitespace!\n"         \
 	"\"\"\"\n"                                \
-	"np_terrain = 5, 40, (250, 250, 250), 12345, 5, 0.7\n" \
+	"np_terrain = 5, 40, (250, 250, 250), 12341, 5, 0.7, 2.4\n" \
 	"zoop = true"
 
 #define TEST_CONFIG_TEXT_AFTER                \
@@ -455,7 +455,6 @@ struct TestPath: public TestBase
 	"coord = (1, 2, 4.5)\n"                   \
 	"      # this is just a comment\n"        \
 	"this is an invalid line\n"               \
-	"asdf = sdfghj\n"                         \
 	"asdf = {\n"                              \
 	"	a   = 5\n"                            \
 	"	bb  = 2.5\n"                          \
@@ -470,11 +469,13 @@ struct TestPath: public TestBase
 	"     with leading whitespace!\n"         \
 	"\"\"\"\n"                                \
 	"np_terrain = {\n"                        \
+	"	flags = defaults\n"                   \
+	"	lacunarity = 2.4\n"                   \
 	"	octaves = 6\n"                        \
 	"	offset = 3.5\n"                       \
 	"	persistence = 0.7\n"                  \
 	"	scale = 40\n"                         \
-	"	seed = 12345\n"                       \
+	"	seed = 12341\n"                       \
 	"	spread = (250,250,250)\n"             \
 	"}\n"                                     \
 	"zoop = true\n"                           \
@@ -482,10 +483,6 @@ struct TestPath: public TestBase
 	"floaty_thing_2 = 1.2\n"                  \
 	"groupy_thing = {\n"                      \
 	"	animals = cute\n"                     \
-	"	animals = {\n"                        \
-	"		cat = meow\n"                     \
-	"		dog = woof\n"                     \
-	"	}\n"                                  \
 	"	num_apples = 4\n"                     \
 	"	num_oranges = 53\n"                   \
 	"}\n"
@@ -494,6 +491,7 @@ struct TestSettings: public TestBase
 {
 	void Run()
 	{
+		try {
 		Settings s;
 
 		// Test reading of settings
@@ -527,8 +525,6 @@ struct TestSettings: public TestBase
 		UASSERT(group->getS16("a") == 5);
 		UASSERT(fabs(group->getFloat("bb") - 2.5) < 0.001);
 
-		s.set("asdf", "sdfghj");
-
 		Settings *group3 = new Settings;
 		group3->set("cat", "meow");
 		group3->set("dog", "woof");
@@ -537,18 +533,24 @@ struct TestSettings: public TestBase
 		group2->setS16("num_apples", 4);
 		group2->setS16("num_oranges", 53);
 		group2->setGroup("animals", group3);
-		group2->set("animals", "cute");
+		group2->set("animals", "cute"); //destroys group 3
 		s.setGroup("groupy_thing", group2);
+
+		// Test set failure conditions
+		UASSERT(s.set("Zoop = Poop\nsome_other_setting", "false") == false);
+		UASSERT(s.set("sneaky", "\"\"\"\njabberwocky = false") == false);
+		UASSERT(s.set("hehe", "asdfasdf\n\"\"\"\nsomething = false") == false);
 
 		// Test multiline settings
 		UASSERT(group->get("ccc") == "testy\n   testa   ");
-		s.setGroup("asdf", NULL);
 
 		UASSERT(s.get("blarg") ==
 			"some multiline text\n"
 			"     with leading whitespace!");
 
 		// Test NoiseParams
+		UASSERT(s.getEntry("np_terrain").is_group == false);
+
 		NoiseParams np;
 		UASSERT(s.getNoiseParams("np_terrain", np) == true);
 		UASSERT(fabs(np.offset - 5) < 0.001);
@@ -556,13 +558,15 @@ struct TestSettings: public TestBase
 		UASSERT(fabs(np.spread.X - 250) < 0.001);
 		UASSERT(fabs(np.spread.Y - 250) < 0.001);
 		UASSERT(fabs(np.spread.Z - 250) < 0.001);
-		UASSERT(np.seed == 12345);
+		UASSERT(np.seed == 12341);
 		UASSERT(np.octaves == 5);
 		UASSERT(fabs(np.persist - 0.7) < 0.001);
 
 		np.offset  = 3.5;
 		np.octaves = 6;
 		s.setNoiseParams("np_terrain", np);
+
+		UASSERT(s.getEntry("np_terrain").is_group == true);
 
 		// Test writing
 		std::ostringstream os(std::ios_base::binary);
@@ -573,6 +577,9 @@ struct TestSettings: public TestBase
 		//printf(">>>> expected config:\n%s\n", TEST_CONFIG_TEXT_AFTER);
 		//printf(">>>> actual config:\n%s\n", os.str().c_str());
 		UASSERT(os.str() == TEST_CONFIG_TEXT_AFTER);
+		} catch (SettingNotFoundException &e) {
+			UASSERT(!"Setting not found!");
+		}
 	}
 };
 
@@ -831,9 +838,8 @@ struct TestMapNode: public TestBase
 {
 	void Run(INodeDefManager *nodedef)
 	{
-		MapNode n;
+		MapNode n(CONTENT_AIR);
 
-		// Default values
 		UASSERT(n.getContent() == CONTENT_AIR);
 		UASSERT(n.getLight(LIGHTBANK_DAY, nodedef) == 0);
 		UASSERT(n.getLight(LIGHTBANK_NIGHT, nodedef) == 0);
@@ -1754,6 +1760,8 @@ void run_tests()
 	IWritableNodeDefManager *ndef = createNodeDefManager();
 	define_some_nodes(idef, ndef);
 
+	log_set_lev_silence(LMT_ERROR, true);
+
 	infostream<<"run_tests() started"<<std::endl;
 	TEST(TestUtilities);
 	// TODO(xyz): figure out why this fails on MSVC
@@ -1770,6 +1778,8 @@ void run_tests()
 	//TEST(TestMapBlock);
 	//TEST(TestMapSector);
 	TEST(TestCollision);
+
+	log_set_lev_silence(LMT_ERROR, false);
 
 	delete idef;
 	delete ndef;

@@ -418,9 +418,11 @@ public:
 	// Remove stopped sounds
 	void maintain()
 	{
+/*
 		verbosestream<<"OpenALSoundManager::maintain(): "
 				<<m_sounds_playing.size()<<" playing sounds, "
 				<<m_buffers.size()<<" sound names loaded"<<std::endl;
+*/
 		std::set<int> del_list;
 		for(std::map<int, PlayingSound*>::iterator
 				i = m_sounds_playing.begin();
@@ -437,7 +439,7 @@ public:
 				}
 			}
 		}
-		if(del_list.size() != 0)
+		if(!del_list.empty())
 			verbosestream<<"OpenALSoundManager::maintain(): deleting "
 					<<del_list.size()<<" playing sounds"<<std::endl;
 		for(std::set<int>::iterator i = del_list.begin();

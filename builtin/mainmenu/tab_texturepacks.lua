@@ -31,11 +31,13 @@ local function render_texture_pack_list(list)
 	local retval = ""
 
 	for i, v in ipairs(list) do
-		if retval ~= "" then
-			retval = retval ..","
-		end
+		if v:sub(1,1) ~= "." then
+			if retval ~= "" then
+				retval = retval ..","
+			end
 
-		retval = retval .. core.formspec_escape(v)
+			retval = retval .. core.formspec_escape(v)
+		end
 	end
 
 	return retval
@@ -45,7 +47,6 @@ end
 local function get_formspec(tabview, name, tabdata)
 	
 	local retval = "label[4,-0.25;".. fgettext("Select texture pack:") .. "]"..
-			"vertlabel[0,-0.25;".. fgettext("TEXTURE PACKS") .. "]" ..
 			"textlist[4,0.25;7.5,5.0;TPs;"
 
 	local current_texture_path = core.setting_get("texture_path")
@@ -81,8 +82,8 @@ local function get_formspec(tabview, name, tabdata)
 	return	retval ..
 			render_texture_pack_list(list) ..
 			";" .. index .. "]" ..
-			"image[0.65,0.25;4.0,3.7;"..core.formspec_escape(screenfile or no_screenshot).."]"..
-			"textarea[1.0,3.25;3.7,1.5;;"..core.formspec_escape(infotext or "")..";]"
+			"image[0.25,0.25;4.0,3.7;"..core.formspec_escape(screenfile or no_screenshot).."]"..
+			"textarea[0.6,3.25;3.7,1.5;;"..core.formspec_escape(infotext or "")..";]"
 end
 
 --------------------------------------------------------------------------------
