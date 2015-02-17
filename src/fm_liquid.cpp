@@ -40,7 +40,6 @@ struct NodeNeighbor {
 	bool infinity;
 	int weight;
 	int drop; //drop by liquid
-	s16 pressure;
 };
 
 const v3POS liquid_flow_dirs[7] =
@@ -79,7 +78,7 @@ u32 Map::transformLiquidsReal(Server *m_server, unsigned int max_cycle_ms)
 	u32 initial_size = transforming_liquid_size();
 	u32 regenerated = 0;
 
-bool debug = 0;
+	//bool debug = 0;
 
 	u8 relax = g_settings->getS16("liquid_relax");
 	bool fast_flood = g_settings->getS16("liquid_fast_flood");
@@ -294,25 +293,27 @@ bool debug = 0;
 		s16 level_max = nodemgr->get(liquid_kind_flowing).getMaxLevel();
 		s16 level_max_compressed = nodemgr->get(liquid_kind_flowing).getMaxLevel(1);
 		s16 pressure = liquid_pressure ? ((ItemGroupList) nodemgr->get(liquid_kind).groups)["pressure"] : 0;
-		s16 total_was = total_level; //debug
+		//s16 total_was = total_level; //debug
 		//viscosity = nodemgr->get(liquid_kind).viscosity;
 
 		s16 level_avg = total_level / can_liquid;
 		if (!pressure && level_avg) {
 			level_avg = level_max;
 		}
-if (debug)
-infostream<<" go: "
-<<" total_level="<<(int)total_level
-<<" total_was="<<(int)total_was
-<<" level_max="<<(int)level_max
-<<" level_max_compressed="<<(int)level_max_compressed
-<<" level_avg="<<(int)level_avg
-<<" pressure="<<(int)pressure
-<<" can_liquid="<<(int)can_liquid
-<<" can_liquid_same_level="<<(int)can_liquid_same_level
-;
-//<<std::endl;
+
+/*
+		if (debug)
+			infostream<<" go: "
+				<<" total_level="<<(int)total_level
+				<<" total_was="<<(int)total_was
+				<<" level_max="<<(int)level_max
+				<<" level_max_compressed="<<(int)level_max_compressed
+				<<" level_avg="<<(int)level_avg
+				<<" pressure="<<(int)pressure
+				<<" can_liquid="<<(int)can_liquid
+				<<" can_liquid_same_level="<<(int)can_liquid_same_level
+			;
+*/
 
 		// fill bottom block
 		if (neighbors[D_BOTTOM].liquid) {
@@ -325,7 +326,6 @@ infostream<<" go: "
 		}
 
 		//relax up
-/*
 		if (	nodemgr->get(liquid_kind).liquid_renewable &&
 			relax &&
 			((p0.Y == water_level) || (fast_flood && p0.Y <= water_level)) &&
@@ -337,7 +337,6 @@ infostream<<" go: "
 			regenerated += level_max * can_liquid_same_level - total_level;
 			total_level = level_max * can_liquid_same_level;
 		}
-*/
 
 		// prevent lakes in air above unloaded blocks
 		if (	liquid_levels[D_TOP] == 0 &&
@@ -355,28 +354,12 @@ infostream<<" go: "
 			: total_level / can_liquid_same_level;
 		total_level -= want_level * can_liquid_same_level;
 
-if (debug)
-infostream
-<<";  want_level="<<(int)want_level
-<<" total_level2="<<(int)total_level
-;
-//<<std::endl;
-
-if (pressure)
-if (debug)
-infostream<<" press: ";
 		if (pressure && total_level > 0 && neighbors[D_BOTTOM].liquid) { // bottom pressure +1
 			++liquid_levels_want[D_BOTTOM];
 			--total_level;
-if (debug)
-infostream<<" bottom:"<<__LINE__<<" t="<<total_level;
 		}
 
-
-
-
 		//relax down
-/*
 		if (	nodemgr->get(liquid_kind).liquid_renewable &&
 			relax &&
 			p0.Y == water_level &&
@@ -389,7 +372,6 @@ infostream<<" bottom:"<<__LINE__<<" t="<<total_level;
 			can_liquid_same_level >= relax + 1) {
 			total_level = 0;
 		}
-*/
 
 		for (u16 ir = D_SELF; ir < D_TOP; ++ir) { // fill only same level
 			u16 ii = liquid_random_map[(loopcount+loop_rand+1)%4][ir];
@@ -410,7 +392,6 @@ infostream<<" bottom:"<<__LINE__<<" t="<<total_level;
 			}
 		}
 
-if (debug && total_level) infostream<<" total_level3="<<(int)total_level;
 		for (u16 ir = D_SELF; ir < D_TOP; ++ir) {
 			if (total_level < 1)
 				break;
@@ -422,7 +403,6 @@ if (debug && total_level) infostream<<" total_level3="<<(int)total_level;
 			}
 		}
 
-if (debug && total_level) infostream<<" total_level4="<<(int)total_level;
 		// fill top block if can
 		if (neighbors[D_TOP].liquid) {
 			//infostream<<"compressing to top was="<<liquid_levels_want[D_TOP]<<" add="<<total_level<<std::endl;
@@ -431,78 +411,51 @@ if (debug && total_level) infostream<<" total_level4="<<(int)total_level;
 			total_level -= liquid_levels_want[D_TOP];
 		}
 
-if (debug && total_level) infostream<<" total_level5="<<(int)total_level;
-
-	if (liquid_levels_want[D_TOP] && total_level) {
-		if (pressure && total_level > 0 && neighbors[D_BOTTOM].liquid) { // bottom pressure +2
-			++liquid_levels_want[D_BOTTOM];
-			--total_level;
-if (debug)
-infostream<<" bottom:"<<__LINE__<<" t="<<total_level;
-		}
-
-// bad ! !!
-if (pressure) // same pressure +1
-		for (u16 ir = D_SELF; ir < D_TOP; ++ir) {
-			if (total_level < 1)
-				break;
-			u16 ii = liquid_random_map[(loopcount+loop_rand+2)%4][ir];
-			if (neighbors[ii].liquid &&
-				liquid_levels_want[ii] < level_max_compressed) {
-				++liquid_levels_want[ii];
+		if (liquid_levels_want[D_TOP] && total_level && pressure) {
+			if (total_level > 0 && neighbors[D_BOTTOM].liquid) { // bottom pressure +2
+				++liquid_levels_want[D_BOTTOM];
 				--total_level;
-if (debug)
-infostream<<" self"<<ii<<":"<<__LINE__<<" t="<<total_level;
+			}
+
+			for (u16 ir = D_SELF; ir < D_TOP; ++ir) {
+				if (total_level < 1)
+					break;
+				u16 ii = liquid_random_map[(loopcount+loop_rand+2)%4][ir];
+				if (neighbors[ii].liquid &&
+					liquid_levels_want[ii] < level_max_compressed) {
+					++liquid_levels_want[ii];
+					--total_level;
+				}
 			}
 		}
 
-		//if (pressure && total_level >= can_liquid_same_level && want_level < level_max_compressed) { // same pressure +1
-		//	++want_level;
-		//	total_level -= can_liquid_same_level;
-		//}
+		if (total_level > 0 && neighbors[D_TOP].liquid && liquid_levels_want[D_TOP] < level_max_compressed) {
+			s16 add = (total_level > level_max_compressed - liquid_levels_want[D_TOP]) ? level_max_compressed - liquid_levels_want[D_TOP] : total_level;
+			liquid_levels_want[D_TOP] += add;
+			total_level -= add;
+		}
 
-	}
-
-if (debug && total_level)
-infostream<<" total_levelF="<<(int)total_level<<" topW="<<(int)liquid_levels_want[D_TOP];
-
-if (debug)
-infostream<<std::endl;
-
-			if (total_level > 0 && neighbors[D_TOP].liquid && liquid_levels_want[D_TOP] < level_max_compressed) {
-				s16 add = (total_level > level_max_compressed - liquid_levels_want[D_TOP]) ? level_max_compressed - liquid_levels_want[D_TOP] : total_level;
-if (debug)
-				infostream<<" compressing to top was="<<(int)liquid_levels_want[D_TOP]<<" add="<<(int)add;
-				liquid_levels_want[D_TOP]+=add;
-				total_level-=add;
-			}
 		if (total_level > 0 && liquid_levels_want[D_SELF] < level_max_compressed) { // very rare, compressed only
 			s16 add = (total_level > level_max_compressed - liquid_levels_want[D_SELF]) ? level_max_compressed - liquid_levels_want[D_SELF] : total_level;
-			infostream<<" compressing to self was="<<(int)liquid_levels_want[D_SELF]<<" add="<<(int)add
-			<<" andtop="<<(int)liquid_levels_want[D_TOP]
-			<<std::endl;
 			liquid_levels_want[D_SELF] += add;
-			total_level-=add;
+			total_level -= add;
 		}
 
-/* ENABLE
 		for (u16 ii = 0; ii < 7; ii++) // infinity and cave flood optimization
-			if (    neighbors[ii].infinity			||
+			if (    neighbors[ii].infinity		||
 				(liquid_levels_want[ii] >= 0	&&
-				 level_max > 1			&&
-				 fast_flood			&&
-				 p0.Y < water_level		&&
-				 initial_size >= 1000		&&
-				 ii != D_TOP			&&
-				 want_level >= level_max/4	&&
-				 can_liquid_same_level >= 5	&&
+				 level_max > 1					&&
+				 fast_flood						&&
+				 p0.Y < water_level				&&
+				 initial_size >= 1000			&&
+				 ii != D_TOP					&&
+				 want_level >= level_max/4		&&
+				 can_liquid_same_level >= 5		&&
 				 liquid_levels[D_TOP] >= level_max)) {
-infostream<<"infgen="<<level_max-liquid_levels_want[ii]<<std::endl;
 					liquid_levels_want[ii] = level_max;
 			}
-*/
 
-		// /*
+		/*
 		if (total_level != 0) //|| flowed != volume)
 			infostream <<" AFTER err level=" << (int)total_level
 			//<< " flowed="<<flowed<< " volume=" << volume
@@ -513,16 +466,15 @@ infostream<<"infgen="<<level_max-liquid_levels_want[ii]<<std::endl;
 			<< " bot=" << (int)liquid_levels_want[D_BOTTOM] 
 			<< " botwas=" << (int)liquid_levels[D_BOTTOM]
 			<<std::endl;
-		// */
+		*/
 
-		s16 flowed = 0; // for debug
+		//s16 flowed = 0; // for debug
 		for (u16 r = 0; r < 7; r++) {
 			u16 i = liquid_random_map[(loopcount+loop_rand+3)%4][r];
 			if (liquid_levels_want[i] < 0 || !neighbors[i].liquid)
 				continue;
 
-//if (debug)
-//			infostream <<" set=" <<i<< " " << PP(neighbors[i].pos) << " want="<<(int)liquid_levels_want[i] << " was=" <<(int) liquid_levels[i] << std::endl;
+			//if (debug) infostream <<" set=" <<i<< " " << PP(neighbors[i].pos) << " want="<<(int)liquid_levels_want[i] << " was=" <<(int) liquid_levels[i] << std::endl;
 			
 			/* disabled because brokes constant volume of lava
 			u8 viscosity = nodemgr->get(liquid_kind).liquid_viscosity;
@@ -551,7 +503,7 @@ infostream<<"infgen="<<level_max-liquid_levels_want[ii]<<std::endl;
 				}
 			}
 
-			flowed += liquid_levels_want[i];
+			//flowed += liquid_levels_want[i];
 			if (liquid_levels[i] == liquid_levels_want[i]) {
 				continue;
 			}
@@ -579,18 +531,19 @@ infostream<<"infgen="<<level_max-liquid_levels_want[ii]<<std::endl;
 				if(!nodemgr->get(neighbors[i].node).light_propagates || nodemgr->get(neighbors[i].node).light_source) // better to update always
 					lighting_modified_blocks.set_try(block->getPos(), block);
 			}
-			//must_reflow[neighbors[i].pos] = 1;
 			must_reflow.push_back(neighbors[i].pos);
 
 		}
 
+		/* debug
 		if (total_was!=flowed) {
-			infostream<<" volume changed!  flowed="<<flowed<<" total_was="<<total_was;
+			verbosestream<<" volume changed!  flowed="<<flowed<<" total_was="<<total_was;
 			for (u16 rr = 0; rr <= 6; rr++) {
 				infostream<<"  i=" <<rr<<",b"<<(int)liquid_levels[rr]<<",a"<<(int)liquid_levels_want[rr];
 			}
 			infostream<<std::endl;
 		}
+		*/
 		/* //for better relax  only same level
 		if (changed)  for (u16 ii = D_SELF + 1; ii < D_TOP; ++ii) {
 			if (!neighbors[ii].l) continue;
