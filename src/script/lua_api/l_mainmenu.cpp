@@ -38,6 +38,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "sound.h"
 #include "settings.h"
 #include "main.h" // for g_settings
+#include "log.h"
 #include "EDriverTypes.h"
 
 #include <IFileArchive.h>
@@ -773,19 +774,19 @@ int ModApiMainMenu::l_extract_zip(lua_State *L)
 
 		unsigned int number_of_files = files_in_zip->getFileCount();
 
-		for (unsigned int i=0; i < number_of_files;  i++) {
+		for (unsigned int i=0; i < number_of_files; i++) {
 			std::string fullpath = destination;
 			fullpath += DIR_DELIM;
 			fullpath += files_in_zip->getFullFileName(i).c_str();
+			std::string fullpath_dir = fs::RemoveLastPathComponent(fullpath);
 
-			if (files_in_zip->isDirectory(i)) {
-				if (! fs::CreateAllDirs(fullpath) ) {
+			if (!files_in_zip->isDirectory(i)) {
+				if (!fs::PathExists(fullpath_dir) && !fs::CreateAllDirs(fullpath_dir)) {
 					fs->removeFileArchive(fs->getFileArchiveCount()-1);
 					lua_pushboolean(L,false);
 					return 1;
 				}
-			}
-			else {
+
 				io::IReadFile* toread = opened_zip->createAndOpenFile(i);
 
 				FILE *targetfile = fopen(fullpath.c_str(),"wb");
@@ -797,7 +798,7 @@ int ModApiMainMenu::l_extract_zip(lua_State *L)
 				}
 
 				char read_buffer[1024];
-				unsigned int total_read = 0;
+				long total_read = 0;
 
 				while (total_read < toread->getSize()) {
 

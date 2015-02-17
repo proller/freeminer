@@ -754,6 +754,8 @@ int main(int argc, char *argv[])
 	}
 	atexit(enet_deinitialize);
 
+	debug_set_exception_handler();
+
 	log_add_output_maxlev(&main_stderr_log_out, LMT_ACTION);
 	log_add_output_all_levs(&main_dstream_no_stderr_log_out);
 
@@ -1678,9 +1680,8 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 	while (device->run() && !*kill && !g_gamecallback->shutdown_requested)
 	{
 		// Set the window caption
-		wchar_t *text = wgettext("Main Menu");
+		std::wstring text = wstrgettext("Main Menu");
 		device->setWindowCaption((std::wstring(L"Freeminer [") + text + L"]").c_str());
-		delete[] text;
 
 		try {	// This is used for catching disconnects
 
@@ -1793,6 +1794,16 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 	g_menuclouds->drop();
 	g_menucloudsmgr->drop();
 
+#ifdef _IRR_COMPILE_WITH_LEAK_HUNTER_
+	auto objects = LeakHunter::getReferenceCountedObjects();
+	infostream<<"irrlicht leaked objects="<<objects.size()<<std::endl;
+	for (unsigned int i = 0; i < objects.size(); ++i) {
+		if (!objects[i])
+			continue;
+		infostream<<i<<":" <<objects[i]<< " cnt="<<objects[i]->getReferenceCount()<<" desc="<<(objects[i]->getDebugName() ? objects[i]->getDebugName() : "")<<std::endl;
+	}
+#endif
+
 	return retval;
 }
 
@@ -1898,9 +1909,8 @@ bool ClientLauncher::launch_game(std::string *error_message,
 	}
 
 	if (menudata.name == "")
-		menudata.name = std::string("Guest") + itos(myrand_range(1000, 9999));
-	else
-		playername = menudata.name;
+		menudata.name = std::string("Guest") + itos(myrand_range(10000, 30000));
+	playername = menudata.name;
 
 	password = translatePassword(playername, (menudata.password));
 

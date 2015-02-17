@@ -224,9 +224,13 @@ ABMWithState::ABMWithState(ActiveBlockModifier *abm_, ServerEnvironment *senv):
 	if (!chance)
 		chance = 50;
 
+	// abm process may be very slow if > 1
 	neighbors_range = abm->getNeighborsRange();
+	int nr_max = g_settings->getS32("abm_neighbors_range_max");
 	if (!neighbors_range)
 		neighbors_range = 1;
+	else if (neighbors_range > nr_max)
+		neighbors_range = nr_max;
 
 	// Initialize timer to random value to spread processing
 	float itv = MYMAX(0.001, interval); // No less than 1ms
@@ -1207,6 +1211,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 
 	if (m_active_block_analyzed_last || m_analyze_blocks_interval.step(dtime, 1.0)) {
 		//if (!m_active_block_analyzed_last) infostream<<"Start ABM analyze cycle s="<<m_active_blocks.m_list.size()<<std::endl;
+		TimeTaker timer("env: block analyze and abm apply from " + itos(m_active_block_analyzed_last));
 
 		u32 n = 0, calls = 0, end_ms = porting::getTimeMs() + max_cycle_ms;
 		for(auto i = m_active_blocks.m_list.begin(); i != m_active_blocks.m_list.end(); ++i)
@@ -2909,6 +2914,8 @@ void ClientEnvironment::damageLocalPlayer(u8 damage, bool handle_hp)
 	assert(lplayer);
 
 	if(handle_hp){
+		if (lplayer->hp == 0) // Don't damage a dead player
+			return;
 		if(lplayer->hp > damage)
 			lplayer->hp -= damage;
 		else

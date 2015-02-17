@@ -31,9 +31,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "porting.h"
 #include "tile.h"
 #include "fontengine.h"
-#include <string>
-
+#include "log_types.h"
 #include "gettext.h"
+#include <string>
 
 #include "xCGUITTFont.h"
 
@@ -101,7 +101,7 @@ GUIChatConsole::GUIChatConsole(
 	{
 		core::dimension2d<u32> dim = m_font->getDimension(L"M");
 		m_fontsize = v2u32(dim.Width, dim.Height);
-		dstream << "Font size: " << m_fontsize.X << " " << m_fontsize.Y << std::endl;
+		m_font->grab();
 	}
 	m_fontsize.X = MYMAX(m_fontsize.X, 1);
 	m_fontsize.Y = MYMAX(m_fontsize.Y, 1);
@@ -111,7 +111,10 @@ GUIChatConsole::GUIChatConsole(
 }
 
 GUIChatConsole::~GUIChatConsole()
-{}
+{
+	if (m_font)
+		m_font->drop();
+}
 
 void GUIChatConsole::openConsole(float height, bool close_on_return)
 {
@@ -397,10 +400,10 @@ bool GUIChatConsole::getAndroidUIInput() {
 	if (porting::getInputDialogState() == 0) {
 		std::string text = porting::getInputDialogValue();
 		std::wstring wtext = narrow_to_wide(text);
-		//errorstream<<"GUIChatConsole::getAndroidUIInput() text=text "<<std::endl;
+		//errorstream<<"GUIChatConsole::getAndroidUIInput() text=["<<text<<"] "<<std::endl;
 		m_chat_backend->getPrompt().input(wtext);
 		std::wstring wrtext = m_chat_backend->getPrompt().submit();
-		m_client->typeChatMessage(wrtext);
+		m_client->typeChatMessage(wide_to_narrow(wrtext));
 
 		if (m_close_on_return) {
 			closeConsole();
@@ -447,7 +450,7 @@ bool GUIChatConsole::OnEvent(const SEvent& event)
 		}
 		else if(event.KeyInput.Key == KEY_RETURN)
 		{
-			std::wstring text = m_chat_backend->getPrompt().submit();
+			std::string text = wide_to_narrow(m_chat_backend->getPrompt().submit());
 			m_client->typeChatMessage(text);
 
 			if (m_close_on_return) {
@@ -590,7 +593,7 @@ bool GUIChatConsole::OnEvent(const SEvent& event)
 		}
 		else if(event.KeyInput.Char != 0 && !event.KeyInput.Control)
 		{
-			#if (defined(linux) || defined(__linux) || defined(__FreeBSD__))
+			#if (defined(linux) || defined(__linux) || defined(__FreeBSD__)) and IRRLICHT_VERSION_10000 < 10900
 				wchar_t wc = L'_';
 				mbtowc( &wc, (char *) &event.KeyInput.Char, sizeof(event.KeyInput.Char) );
 				m_chat_backend->getPrompt().input(wc);

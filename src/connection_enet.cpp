@@ -49,7 +49,6 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	m_enet_host(0),
 	m_peer_id(0),
 	m_bc_peerhandler(peerhandler),
-	m_bc_receive_timeout(1),
 	m_last_recieved(0),
 	m_last_recieved_warn(0)
 {
@@ -209,15 +208,15 @@ void Connection::receive()
 // host
 void Connection::serve(u16 port)
 {
-	ENetAddress *address = new ENetAddress;
+	ENetAddress address;
 #if defined(ENET_IPV6)
-	address->host = in6addr_any;
+	address.host = in6addr_any;
 #else
-	address->host = ENET_HOST_ANY;
+	address.host = ENET_HOST_ANY;
 #endif
-	address->port = port;
+	address.port = port;
 
-	m_enet_host = enet_host_create(address, g_settings->getU16("max_users"), CHANNEL_COUNT, 0, 0);
+	m_enet_host = enet_host_create(&address, g_settings->getU16("max_users"), CHANNEL_COUNT, 0, 0);
 	if (m_enet_host == NULL) {
 		ConnectionEvent ev(CONNEVENT_BIND_FAILED);
 		putEvent(ev);
@@ -238,24 +237,24 @@ void Connection::connect(Address addr)
 	}
 
 	m_enet_host = enet_host_create(NULL, 1, 0, 0, 0);
-	ENetAddress *address = new ENetAddress;
+	ENetAddress address;
 #if defined(ENET_IPV6)
 	if (!addr.isIPv6())
-		inet_pton (AF_INET6, ("::ffff:"+addr.serializeString()).c_str(), &address->host);
+		inet_pton (AF_INET6, ("::ffff:"+addr.serializeString()).c_str(), &address.host);
 	else
-		address->host = addr.getAddress6().sin6_addr;
+		address.host = addr.getAddress6().sin6_addr;
 #else
 	if (addr.isIPv6()) {
 		//throw ConnectionException("Cant connect to ipv6 address");
 		ConnectionEvent ev(CONNEVENT_CONNECT_FAILED);
 		putEvent(ev);
 	} else {
-		address->host = addr.getAddress().sin_addr.s_addr;
+		address.host = addr.getAddress().sin_addr.s_addr;
 	}
 #endif
 
-	address->port = addr.getPort();
-	ENetPeer *peer = enet_host_connect(m_enet_host, address, CHANNEL_COUNT, 0);
+	address.port = addr.getPort();
+	ENetPeer *peer = enet_host_connect(m_enet_host, &address, CHANNEL_COUNT, 0);
 	peer->data = new u16;
 	*((u16*)peer->data) = PEER_ID_SERVER;
 
@@ -407,16 +406,17 @@ void Connection::Disconnect()
 	putCommand(c);
 }
 
-u32 Connection::Receive(u16 &peer_id, SharedBuffer<u8> &data)
+u32 Connection::Receive(u16 &peer_id, SharedBuffer<u8> &data, int timeout)
 {
 	for(;;){
-		ConnectionEvent e = waitEvent(m_bc_receive_timeout);
+		ConnectionEvent e = waitEvent(timeout);
 		if(e.type != CONNEVENT_NONE)
 			dout_con<<getDesc()<<": Receive: got event: "
 					<<e.describe()<<std::endl;
 		switch(e.type){
 		case CONNEVENT_NONE:
-			throw NoIncomingDataException("No incoming data");
+			//throw NoIncomingDataException("No incoming data");
+			return 0;
 		case CONNEVENT_DATA_RECEIVED:
 			peer_id = e.peer_id;
 			data = SharedBuffer<u8>(e.data);
@@ -436,7 +436,8 @@ u32 Connection::Receive(u16 &peer_id, SharedBuffer<u8> &data)
 			throw ConnectionException("Failed to connect");
 		}
 	}
-	throw NoIncomingDataException("No incoming data");
+	return 0;
+	//throw NoIncomingDataException("No incoming data");
 }
 
 void Connection::SendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable)

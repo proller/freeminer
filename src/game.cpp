@@ -192,7 +192,7 @@ struct LocalFormspecHandler : public TextDest {
 			if ((fields.find("btn_send") != fields.end()) ||
 					(fields.find("quit") != fields.end())) {
 				if (fields.find("f_text") != fields.end()) {
-					m_client->typeChatMessage(narrow_to_wide(fields["f_text"]));
+					m_client->typeChatMessage(fields["f_text"]);
 				}
 
 				return;
@@ -870,7 +870,7 @@ public:
 		// Fog distance
 		float fog_distance = 10000 * BS;
 
-		if (g_settings->getBool("enable_fog") && !*m_force_fog_off)
+		if (m_fogEnabled && !*m_force_fog_off)
 			fog_distance = *m_fog_range;
 
 		services->setPixelShaderConstant("fogDistance", &fog_distance, 1);
@@ -1103,7 +1103,7 @@ static void show_deathscreen(GUIFormSpecMenu **cur_formspec,
 		std::string(FORMSPEC_VERSION_STRING) +
 		SIZE_TAG
 		"bgcolor[#320000b4;true]"
-		"label[4.85,1.35;You died.]"
+		"label[4.85,1.35;" + _("You died.") + "]"
 		"button_exit[4,3;3,0.5;btn_respawn;" + _("Respawn") + "]"
 		;
 
@@ -1189,7 +1189,7 @@ static void show_pause_menu(GUIFormSpecMenu **cur_formspec,
 	LocalFormspecHandler *txt_dst = new LocalFormspecHandler("MT_PAUSE_MENU");
 
 	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device,  fs_src, txt_dst, NULL);
-
+	(*cur_formspec)->setFocus("btn_continue");
 	(*cur_formspec)->doPause = true;
 }
 
@@ -1598,8 +1598,10 @@ protected:
 	// Misc
 	void limitFps(FpsControl *fps_timings, f32 *dtime);
 
-	void showOverlayMessage(const std::string &msg, float dtime, int percent,
+	void showOverlayMessage(const std::wstring &msg, float dtime, int percent,
 			bool draw_clouds = true);
+
+	void showOverlayMessage(const std::string &msg, float dtime, int percent, bool draw_clouds = true);
 
 private:
 	InputHandler *input;
@@ -1835,7 +1837,7 @@ void Game::run()
 	runData.update_draw_list_timer = 5;
 	flags.dedicated_server_step = g_settings->getFloat("dedicated_server_step");
 	flags.use_weather = g_settings->getBool("weather");
-	flags.no_output = device->getVideoDriver()->getDriverType() == video::EDT_NULL;
+	flags.no_output = g_settings->getBool("headless_optimize"); //device->getVideoDriver()->getDriverType() == video::EDT_NULL;
 	flags.connected = false;
 	flags.reconnect = false;
 
@@ -1909,7 +1911,7 @@ void Game::shutdown()
 		g_profiler->print(actionstream);
 	}
 
-	showOverlayMessage("Shutting down...", 0, 0, false);
+	showOverlayMessage(wstrgettext("Shutting down..."), 0, 0, false);
 
 	if (clouds)
 		clouds->drop();
@@ -1964,7 +1966,7 @@ bool Game::init(
 		u16 port,
 		const SubgameSpec &gamespec)
 {
-	showOverlayMessage("Loading...", 0, 0);
+	showOverlayMessage(wstrgettext("Loading..."), 0, 0);
 
 	texture_src = createTextureSource(device);
 	shader_src = createShaderSource(device);
@@ -2021,7 +2023,7 @@ bool Game::initSound()
 bool Game::createSingleplayerServer(const std::string map_dir,
 		const SubgameSpec &gamespec, u16 port, std::string *address)
 {
-	showOverlayMessage("Creating server...", 0, 5);
+	showOverlayMessage(wstrgettext("Creating server..."), 0, 5);
 
 	std::string bind_str = g_settings->get("bind_address");
 	Address bind_addr(0, 0, 0, 0, port);
@@ -2032,7 +2034,6 @@ bool Game::createSingleplayerServer(const std::string map_dir,
 
 	try {
 		bind_addr.Resolve(bind_str.c_str());
-		*address = bind_str;
 	} catch (ResolveError &e) {
 		infostream << "Resolving bind address \"" << bind_str
 			   << "\" failed: " << e.what()
@@ -2059,7 +2060,7 @@ bool Game::createClient(const std::string &playername,
 		const std::string &password, std::string *address, u16 port,
 		std::string *error_message)
 {
-	showOverlayMessage("Creating client...", 0, 10);
+	showOverlayMessage(wstrgettext("Creating client..."), 0, 10);
 
 	device->setWindowCaption(L"Freeminer [Connecting]");
 
@@ -2275,8 +2276,9 @@ bool Game::connectToServer(const std::string &playername,
 {
 	*connect_ok = false;	// Let's not be overly optimistic
 	*aborted = false;
+	bool local_server_mode = false;
 
-	showOverlayMessage("Resolving address...", 0, 15);
+	showOverlayMessage(wstrgettext("Resolving address..."), 0, 15);
 
 	Address connect_address(0, 0, 0, 0, port);
 
@@ -2290,6 +2292,7 @@ bool Game::connectToServer(const std::string &playername,
 			} else {
 				connect_address.setAddress(127, 0, 0, 1);
 			}
+			local_server_mode = true;
 		}
 	} catch (ResolveError &e) {
 		*error_message = std::string("Couldn't resolve address: ") + e.what();
@@ -2306,7 +2309,8 @@ bool Game::connectToServer(const std::string &playername,
 	}
 
 	client = new Client(device,
-			playername.c_str(), password, simple_singleplayer_mode,
+			playername.c_str(), password,
+			simple_singleplayer_mode,
 			*draw_control, texture_src, shader_src,
 			itemdef_manager, nodedef_manager, sound, eventmgr,
 			connect_address.isIPv6());
@@ -2322,7 +2326,8 @@ bool Game::connectToServer(const std::string &playername,
 
 	try {
 
-	client->connect(connect_address);
+	client->connect(connect_address, *address,
+		simple_singleplayer_mode || local_server_mode);
 
 	/*
 		Wait for server to accept connection
@@ -2365,7 +2370,7 @@ bool Game::connectToServer(const std::string &playername,
 			}
 
 			// Update status
-			showOverlayMessage("Connecting to server...", dtime, 20);
+			showOverlayMessage(wstrgettext("Connecting to server..."), dtime, 20);
 
 			if (porting::getTimeMs() > end_ms) {
 				//flags.reconnect = true;
@@ -2444,12 +2449,12 @@ bool Game::getServerContent(bool *aborted)
 		int progress = 25;
 
 		if (!client->itemdefReceived()) {
-			wchar_t *text = wgettext("Item definitions...");
+			const wchar_t *text = wgettext("Item definitions...");
 			progress = 25;
 			draw_load_screen(text, device, guienv, dtime, progress);
 			delete[] text;
 		} else if (!client->nodedefReceived()) {
-			wchar_t *text = wgettext("Node definitions...");
+			const wchar_t *text = wgettext("Node definitions...");
 			progress = 30;
 			draw_load_screen(text, device, guienv, dtime, progress);
 			delete[] text;
@@ -2472,7 +2477,7 @@ bool Game::getServerContent(bool *aborted)
 			}
 
 			progress = 30 + client->mediaReceiveProgress() * 35 + 0.5;
-			draw_load_screen(narrow_to_wide(message.str().c_str()), device,
+			draw_load_screen(narrow_to_wide(message.str()), device,
 					guienv, dtime, progress);
 		}
 
@@ -3546,10 +3551,13 @@ void Game::updateCamera(VolatileRunFlags *flags, u32 busy_time,
 	v3s16 old_camera_offset = camera->getOffset();
 
 	if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_CAMERA_MODE])) {
-		camera->toggleCameraMode();
 		GenericCAO *playercao = player->getCAO();
 
-		assert(playercao != NULL);
+		// If playercao not loaded, don't change camera
+		if (playercao == NULL)
+			return;
+
+		camera->toggleCameraMode();
 
 		playercao->setVisible(camera->getCameraMode() > CAMERA_MODE_FIRST);
 	}
@@ -4130,7 +4138,7 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 		Update clouds
 	*/
 	if (clouds) {
-		if (sky->getCloudsVisible()) {
+		if (sky->getCloudsVisible() && std::abs(clouds->m_cloud_y - player_position.Y)/BS < 3000) {
 			clouds->setVisible(true);
 			clouds->step(dtime);
 			clouds->update(v2f(player_position.X, player_position.Z),
@@ -4400,11 +4408,13 @@ void Game::updateGui(float *statustext_time, const RunStats &stats,
 */
 		guitext->setText(narrow_to_wide(os.str()).c_str());
 		guitext->setVisible(true);
+#if !defined(NDEBUG)
 	} else if (flags.show_hud || flags.show_chat) {
 		std::ostringstream os(std::ios_base::binary);
 		os << "Freeminer " << minetest_version_hash;
 		guitext->setText(narrow_to_wide(os.str()).c_str());
 		guitext->setVisible(true);
+#endif
 	} else {
 		guitext->setVisible(false);
 	}
@@ -4569,13 +4579,19 @@ inline void Game::limitFps(FpsControl *fps_timings, f32 *dtime)
 }
 
 
+void Game::showOverlayMessage(const std::wstring &msg, float dtime,
+		int percent, bool draw_clouds)
+{
+	draw_load_screen(msg, device, guienv, dtime, percent, draw_clouds);
+}
+
 void Game::showOverlayMessage(const std::string &msg, float dtime,
 		int percent, bool draw_clouds)
 {
-	wchar_t *text = wgettext(msg.c_str());
-	draw_load_screen(text, device, guienv, dtime, percent, draw_clouds);
-	delete[] text;
+	draw_load_screen(narrow_to_wide(msg), device, guienv, dtime, percent, draw_clouds);
 }
+
+
 
 
 /****************************************************************************

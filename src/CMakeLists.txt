@@ -75,20 +75,16 @@ endif()
 
 set(CMAKE_REQUIRED_FLAGS "")
 
-option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 1)
+if(MSVC)
+	option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 0)
+else()
+	option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 1)
+endif()
 
 if(ENABLE_THREADS)
 	set(ENABLE_THREADS 1)
 else()
 	set(ENABLE_THREADS 0)
-endif()
-
-option(ENABLE_UTF8 "Use utf8" 1)
-
-if(ENABLE_UTF8)
-	set(ENABLE_UTF8 1)
-else()
-	set(ENABLE_UTF8 0)
 endif()
 
 #
@@ -111,11 +107,11 @@ if(MSVC)
 	#set(CMAKE_EXE_LINKER_FLAGS_RELEASE "/LTCG /NODEFAULTLIB:\"libcmtd.lib\" /NODEFAULTLIB:\"libcmt.lib\"")
 	set(CMAKE_EXE_LINKER_FLAGS_RELEASE "/LTCG")
 
-	set(CMAKE_CXX_FLAGS_SEMIDEBUG "/MDd /Zi /Ob0 /O1 /RTC1 /Wall")
+	set(CMAKE_CXX_FLAGS_SEMIDEBUG "/MDd /Zi /Ob0 /O1 /RTC1")
 
 	# Debug build doesn't catch exceptions by itself
 	# Add some optimizations because otherwise it's VERY slow
-	set(CMAKE_CXX_FLAGS_DEBUG "/MDd /Zi /Ob0 /Od /RTC1 /Wall")
+	set(CMAKE_CXX_FLAGS_DEBUG "/MDd /Zi /Ob0 /Od /RTC1")
 
 	if (STATIC_BUILD)
 		set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /D _IRR_STATIC_LIB_ /D AL_LIBTYPE_STATIC /D CURL_STATICLIB")
@@ -150,7 +146,7 @@ else()
 
 
 	if(SANITIZE_ADDRESS)
-		set(OTHER_FLAGS "${OTHER_FLAGS} -fsanitize=address")
+		set(OTHER_FLAGS "${OTHER_FLAGS} -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 	endif()
 	if(SANITIZE_THREAD)
 		set(OTHER_FLAGS "${OTHER_FLAGS} -fsanitize=thread -fPIE")
@@ -158,6 +154,10 @@ else()
 			set(OTHER_FLAGS "${OTHER_FLAGS} -pie")
 		endif()
 	endif()
+	if(SANITIZE_MEMORY)
+		set(OTHER_FLAGS "${OTHER_FLAGS} -fsanitize=memory -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+	endif()
+
 
 	set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} ${OTHER_FLAGS}")
 	set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${OTHER_FLAGS}")
@@ -312,6 +312,7 @@ add_definitions ( -DUSE_CMAKE_CONFIG_H )
 if(WIN32)
 	# Windows
 	if(MSVC) # MSVC Specifics
+		set(PLATFORM_LIBS dbghelp.lib ${PLATFORM_LIBS})
 		# Surpress some useless warnings
 		add_definitions ( /D "_CRT_SECURE_NO_DEPRECATE" /W1 )
 	else() # Probably MinGW = GCC
@@ -891,7 +892,6 @@ if(BUILD_SERVER)
 			${CURL_LIBRARY}
 		)
 	endif(USE_CURL)
-
 	set_target_properties(${PROJECT_NAME}server PROPERTIES COMPILE_DEFINITIONS "SERVER")
 endif()
 

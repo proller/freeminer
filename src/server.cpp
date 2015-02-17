@@ -295,12 +295,12 @@ void * ServerThread::Thread()
 		try{
 			//TimeTaker timer("AsyncRunStep() + Receive()");
 			u32 time_now = porting::getTimeMs();
-			u32 end_ms = time_now + u32(1000 * dedicated_server_step);
 			m_server->AsyncRunStep((time_now - time)/1000.0f);
 			time = time_now;
 
 			// Loop used only when 100% cpu load or on old slow hardware.
 			// usually only one packet recieved here
+			u32 end_ms = porting::getTimeMs() + u32(1000 * dedicated_server_step/2);
 			for (u16 i = 0; i < 1000; ++i) {
 				m_server->Receive();
 				if (porting::getTimeMs() > end_ms)
@@ -309,6 +309,7 @@ void * ServerThread::Thread()
 		}
 		catch(con::NoIncomingDataException &e)
 		{
+			//std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		}
 		catch(con::PeerNotFoundException &e)
 		{
@@ -375,7 +376,7 @@ Server::Server(
 	m_async_fatal_error(""),
 	m_env(NULL),
 	m_con(PROTOCOL_ID,
-			simple_singleplayer_mode ? MAX_PACKET_SIZE_SINGLEPLAYER : MAX_PACKET_SIZE,
+			MAX_PACKET_SIZE,
 			CONNECTION_TIMEOUT,
 			ipv6,
 			this),
@@ -750,7 +751,6 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 
 	TimeTaker timer_step("Server step");
 	g_profiler->add("Server::AsyncRunStep (num)", 1);
-
 /*
 	float dtime;
 	{
@@ -1449,7 +1449,9 @@ u16 Server::Receive()
 	u32 datasize;
 	u16 received = 0;
 	try{
-		datasize = m_con.Receive(peer_id,data);
+		datasize = m_con.Receive(peer_id,data,10);
+		if (!datasize)
+			return 0;
 		ProcessData(*data, datasize, peer_id);
 		++received;
 	}
@@ -1647,7 +1649,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		// Use the highest version supported by both
 		int deployed = std::min(client_max, our_max);
 		// If it's lower than the lowest supported, give up.
-		if(deployed < SER_FMT_VER_LOWEST)
+		if(deployed < SER_FMT_CLIENT_VER_LOWEST)
 			deployed = SER_FMT_VER_INVALID;
 
 		if(deployed == SER_FMT_VER_INVALID)
@@ -4052,6 +4054,7 @@ void Server::RespawnPlayer(u16 peer_id)
 			<<" respawns"<<std::endl;
 
 	playersao->setHP(PLAYER_MAX_HP);
+	playersao->setBreath(PLAYER_MAX_BREATH);
 
 	bool repositioned = m_script->on_respawnplayer(playersao);
 	if(!repositioned){

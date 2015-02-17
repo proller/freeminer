@@ -78,9 +78,9 @@ LOCAL_CFLAGS := -D_IRR_ANDROID_PLATFORM_      \
 				$(GPROF_DEF)                  \
 				-DHAS_INET_PTON=1 -DHAS_INET_NTOP=1 -DHAS_GETHOSTBYNAME_R=1 -DHAS_FCNTL=1 -DHAS_POLL=1 -DHAS_MSGHDR_FLAGS=1 \
 				-DUSE_MANDELBULBER=1 \
+				-DCMAKE_HAVE_THREAD_LOCAL=1 \
 				-pipe -fstrict-aliasing
 
-#todo fix and enable: -DCMAKE_UTF8=1
 #too slow				-DCMAKE_THREADS=1 -DCMAKE_HAVE_FUTURE=1 -DCMAKE_HAVE_THREAD_LOCAL=1 \
 
 
@@ -121,6 +121,7 @@ LOCAL_C_INCLUDES :=                               \
 		deps/sqlite/
 
 LOCAL_SRC_FILES :=                                \
+		jni/src/util/utf8.cpp                     \
 		jni/src/gsmapper.cpp                      \
 		jni/src/guiTextInputMenu.cpp              \
 		jni/src/FMColoredString.cpp               \

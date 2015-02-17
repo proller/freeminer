@@ -1114,7 +1114,7 @@ bool CNodeDefManager::getIdFromResolveInfo(NodeResolveInfo *nri,
 {
 	if (nri->nodenames.empty()) {
 		result = c_fallback;
-		errorstream << "Resolver empty nodename list" << std::endl;
+		infostream << "Resolver empty nodename list" << std::endl;
 		return false;
 	}
 
@@ -1154,7 +1154,7 @@ bool CNodeDefManager::getIdsFromResolveInfo(NodeResolveInfo *nri,
 
 	while (listinfo.length--) {
 		if (nri->nodenames.empty()) {
-			errorstream << "Resolver: Empty nodename list" << std::endl;
+			infostream << "Resolver: Empty nodename list" << std::endl;
 			return false;
 		}
 
