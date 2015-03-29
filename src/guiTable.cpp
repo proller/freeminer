@@ -31,7 +31,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <IGUIScrollBar.h>
 #include "debug.h"
 #include "log.h"
-#include "tile.h"
+#include "client/tile.h"
 #include "gettime.h"
 #include "util/string.h"
 #include "util/numeric.h"
@@ -642,10 +642,11 @@ void GUITable::draw()
 	client_clip.UpperLeftCorner.Y += 1;
 	client_clip.UpperLeftCorner.X += 1;
 	client_clip.LowerRightCorner.Y -= 1;
-	client_clip.LowerRightCorner.X -=
-		m_scrollbar->isVisible() ?
-		skin->getSize(gui::EGDS_SCROLLBAR_SIZE) :
-		1;
+	client_clip.LowerRightCorner.X -= 1;
+	if (m_scrollbar->isVisible()) {
+		client_clip.LowerRightCorner.X =
+				m_scrollbar->getAbsolutePosition().UpperLeftCorner.X;
+	}
 	client_clip.clipAgainst(AbsoluteClippingRect);
 
 	// draw visible rows
@@ -932,7 +933,7 @@ s32 GUITable::allocString(const std::string &text)
 	std::map<std::string, s32>::iterator it = m_alloc_strings.find(text);
 	if (it == m_alloc_strings.end()) {
 		s32 id = m_strings.size();
-		std::wstring wtext = utf8_to_wide(text);
+		std::wstring wtext = narrow_to_wide(text);
 		m_strings.push_back(core::stringw(wtext.c_str()));
 		m_alloc_strings.insert(std::make_pair(text, id));
 		return id;

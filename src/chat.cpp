@@ -86,7 +86,7 @@ u32 ChatBuffer::getScrollback() const
 
 const ChatLine& ChatBuffer::getLine(u32 index) const
 {
-	assert(index < getLineCount());
+	assert(index < getLineCount());	// pre-condition
 	return m_unformatted[index];
 }
 
@@ -110,7 +110,8 @@ void ChatBuffer::deleteOldest(u32 count)
 		// keep m_formatted in sync
 		if (del_formatted < m_formatted.size())
 		{
-			assert(m_formatted[del_formatted].first);
+
+			sanity_check(m_formatted[del_formatted].first);
 			++del_formatted;
 			while (del_formatted < m_formatted.size() &&
 					!m_formatted[del_formatted].first)
@@ -511,9 +512,9 @@ void ChatPrompt::nickCompletion(const std::list<std::string>& names, bool backwa
 			i = names.begin();
 			i != names.end(); ++i)
 	{
-		if (str_starts_with(utf8_to_wide(*i), prefix, true))
+		if (str_starts_with(narrow_to_wide(*i), prefix, true))
 		{
-			std::wstring completion = utf8_to_wide(*i);
+			std::wstring completion = narrow_to_wide(*i);
 			if (prefix_start == 0)
 				completion += L":";
 			completions.push_back(completion);
@@ -779,5 +780,5 @@ void ChatBackend::scrollPageDown()
 
 void ChatBackend::scrollPageUp()
 {
-	m_console_buffer.scroll(-m_console_buffer.getRows());
+	m_console_buffer.scroll(-(s32)m_console_buffer.getRows());
 }

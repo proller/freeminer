@@ -26,15 +26,20 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "lua_api/l_base.h"
 
 class INodeDefManager;
-class NodeResolver;
+struct NodeResolveInfo;
 class DecoSimple;
 class DecoSchematic;
+class SchematicManager;
 
 class ModApiMapgen : public ModApiBase {
 private:
 	// get_mapgen_object(objectname)
 	// returns the requested object used during map generation
 	static int l_get_mapgen_object(lua_State *L);
+
+	// get_mapgen_params()
+	// returns the currently active map generation parameter set
+	static int l_get_mapgen_params(lua_State *L);
 
 	// set_mapgen_params(params)
 	// set mapgen parameters
@@ -55,11 +60,23 @@ private:
 	// register_ore({lots of stuff})
 	static int l_register_ore(lua_State *L);
 
+	// register_schematic({schematic}, replacements={})
+	static int l_register_schematic(lua_State *L);
+
 	// clear_registered_biomes()
 	static int l_clear_registered_biomes(lua_State *L);
 
 	// clear_registered_decorations()
 	static int l_clear_registered_decorations(lua_State *L);
+
+	// clear_registered_schematics()
+	static int l_clear_registered_schematics(lua_State *L);
+
+	// generate_ores(vm, p1, p2)
+	static int l_generate_ores(lua_State *L);
+
+	// generate_decorations(vm, p1, p2)
+	static int l_generate_decorations(lua_State *L);
 
 	// clear_registered_ores
 	static int l_clear_registered_ores(lua_State *L);
@@ -71,9 +88,9 @@ private:
 	static int l_place_schematic(lua_State *L);
 
 	static bool regDecoSimple(lua_State *L,
-			NodeResolver *resolver, DecoSimple *deco);
+			NodeResolveInfo *nri, DecoSimple *deco);
 	static bool regDecoSchematic(lua_State *L,
-			INodeDefManager *ndef, DecoSchematic *deco);
+		SchematicManager *schemmgr, DecoSchematic *deco);
 
 	static struct EnumString es_BiomeTerrainType[];
 	static struct EnumString es_DecorationType[];

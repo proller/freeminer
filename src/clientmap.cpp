@@ -76,9 +76,9 @@ ClientMap::ClientMap(
 	m_camera_direction(0,0,1),
 	m_camera_fov(M_PI)
 	,m_drawlist(&m_drawlist_1),
-	m_drawlist_current(0),
-	m_drawlist_last(0)
+	m_drawlist_current(0)
 {
+	m_drawlist_last = 0;
 	m_box = core::aabbox3d<f32>(-BS*1000000,-BS*1000000,-BS*1000000,
 			BS*1000000,BS*1000000,BS*1000000);
 
@@ -151,9 +151,9 @@ static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
 		if (cache)
 			occlude_cache[p] = is_transparent;
 		if(!is_transparent){
-			count++;
-			if(count >= needed_count)
+			if(count == needed_count)
 				return true;
+			count++;
 		}
 		step *= stepfac;
 	}
@@ -178,9 +178,8 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigne
 
 	m_camera_mutex.Lock();
 	v3f camera_position = m_camera_position;
-	v3f camera_direction = m_camera_direction;
 	f32 camera_fov = m_camera_fov;
-	v3s16 camera_offset = m_camera_offset;
+	//v3s16 camera_offset = m_camera_offset;
 	m_camera_mutex.Unlock();
 
 	// Use a higher fov to accomodate faster camera movements.
@@ -298,11 +297,7 @@ int hw_culling = 0;
 		}
 	}
 
-#if _MSC_VER
-	const int maxq = 100;
-#else
 	const int maxq = 1000;
-#endif
 
 			// No occlusion culling when free_move is on and camera is
 			// inside ground
@@ -564,12 +559,12 @@ if(visible)
 struct MeshBufList
 {
 	video::SMaterial m;
-	std::list<scene::IMeshBuffer*> bufs;
+	std::vector<scene::IMeshBuffer*> bufs;
 };
 
 struct MeshBufListList
 {
-	std::list<MeshBufList> lists;
+	std::vector<MeshBufList> lists;
 
 	void clear()
 	{
@@ -578,7 +573,7 @@ struct MeshBufListList
 
 	void add(scene::IMeshBuffer *buf)
 	{
-		for(std::list<MeshBufList>::iterator i = lists.begin();
+		for(std::vector<MeshBufList>::iterator i = lists.begin();
 				i != lists.end(); ++i){
 			MeshBufList &l = *i;
 			video::SMaterial &m = buf->getMaterial();
@@ -631,7 +626,6 @@ return;
 
 	m_camera_mutex.Lock();
 	v3f camera_position = m_camera_position;
-	v3f camera_direction = m_camera_direction;
 	f32 camera_fov = m_camera_fov;
 	m_camera_mutex.Unlock();
 
@@ -700,7 +694,7 @@ return;
 
 		float d = 0.0;
 		if(isBlockInSight(block->getPos(), camera_position,
-				camera_direction, camera_fov,
+				m_camera_direction, camera_fov,
 				100000*BS, &d) == false)
 		{
 			continue;
@@ -769,27 +763,22 @@ return;
 		}
 	}
 
-	std::list<MeshBufList> &lists = drawbufs.lists;
+	std::vector<MeshBufList> &lists = drawbufs.lists;
 
 if (0)
 	//int timecheck_counter = 0;
-	for(std::list<MeshBufList>::iterator i = lists.begin();
-			i != lists.end(); ++i)
-	{
+	for(std::vector<MeshBufList>::iterator i = lists.begin();
+			i != lists.end(); ++i) {
 #if 0
-		{
-			timecheck_counter++;
-			if(timecheck_counter > 50)
-			{
-				timecheck_counter = 0;
-				int time2 = time(0);
-				if(time2 > time1 + 4)
-				{
-					infostream<<"ClientMap::renderMap(): "
-						"Rendering takes ages, returning."
-						<<std::endl;
-					return;
-				}
+		timecheck_counter++;
+		if(timecheck_counter > 50) {
+			timecheck_counter = 0;
+			int time2 = time(0);
+			if(time2 > time1 + 4) {
+				infostream << "ClientMap::renderMap(): "
+					"Rendering takes ages, returning."
+					<< std::endl;
+				return;
 			}
 		}
 #endif
@@ -801,9 +790,8 @@ auto mesh = new irr::scene::SMesh();
 
 infostream<<"add to octree bufs="<<list.bufs.size()<<std::endl;
 auto smgr = getSceneManager();
-		for(std::list<scene::IMeshBuffer*>::iterator j = list.bufs.begin();
-				j != list.bufs.end(); ++j)
-		{
+		for(std::vector<scene::IMeshBuffer*>::iterator j = list.bufs.begin();
+				j != list.bufs.end(); ++j) {
 			scene::IMeshBuffer *buf = *j;
 //			driver->drawMeshBuffer(buf);
 			mesh->addMeshBuffer(buf);
@@ -813,52 +801,6 @@ auto smgr = getSceneManager();
 		//smgr->addOctreeSceneNode(mesh, 0, -1, 1024);
 		smgr->addOctreeSceneNode(mesh); //, 0, -1, 1024);
 
-#if 0
-		/*
-			Draw the faces of the block
-		*/
-		{
-			//JMutexAutoLock lock(block->mesh_mutex);
-
-			MapBlockMesh *mapBlockMesh = block->mesh;
-			assert(mapBlockMesh);
-
-			scene::SMesh *mesh = mapBlockMesh->getMesh();
-			assert(mesh);
-
-			u32 c = mesh->getMeshBufferCount();
-			bool stuff_actually_drawn = false;
-			for(u32 i=0; i<c; i++)
-			{
-				scene::IMeshBuffer *buf = mesh->getMeshBuffer(i);
-				const video::SMaterial& material = buf->getMaterial();
-				video::IMaterialRenderer* rnd =
-						driver->getMaterialRenderer(material.MaterialType);
-				bool transparent = (rnd && rnd->isTransparent());
-				// Render transparent on transparent pass and likewise.
-				if(transparent == is_transparent_pass)
-				{
-					if(buf->getVertexCount() == 0)
-						errorstream<<"Block ["<<analyze_block(block)
-								<<"] contains an empty meshbuf"<<std::endl;
-					/*
-						This *shouldn't* hurt too much because Irrlicht
-						doesn't change opengl textures if the old
-						material has the same texture.
-					*/
-					driver->setMaterial(buf->getMaterial());
-					driver->drawMeshBuffer(buf);
-					vertex_count += buf->getVertexCount();
-					meshbuffer_count++;
-					stuff_actually_drawn = true;
-				}
-			}
-			if(stuff_actually_drawn)
-				blocks_had_pass_meshbuf++;
-			else
-				blocks_without_stuff++;
-		}
-#endif
 	}
 	} // ScopeProfiler
 
@@ -1040,7 +982,6 @@ int ClientMap::getBackgroundBrightness(float max_d, u32 daylight_factor,
 			ret = decode_light(n.getLightBlend(daylight_factor, ndef));
 		} else {
 			ret = oldvalue;
-			//ret = blend_light(255, 0, daylight_factor);
 		}
 	} else {
 		/*float pre = (float)brightness_sum / (float)brightness_count;
@@ -1070,9 +1011,7 @@ void ClientMap::renderPostFx(CameraMode cam_mode)
 	v3f camera_position = m_camera_position;
 	m_camera_mutex.Unlock();
 
-	MapNode n = getNodeTry(floatToInt(camera_position, BS));
-	if (n.getContent() == CONTENT_IGNORE)
-		return; // may flicker
+	MapNode n = getNodeNoEx(floatToInt(camera_position, BS));
 
 	// - If the player is in a solid node, make everything black.
 	// - If the player is in liquid, draw a semi-transparent overlay.
@@ -1128,7 +1067,6 @@ void ClientMap::renderBlockBoundaries(const std::map<v3POS, MapBlock*> & blocks)
 				color.setGreen(128);
 			}
 
-			v3s16 bpos = i->first;
 			bound.MinEdge = intToFloat(i->first, BS)*blocksize
 				+ inset
 				- v3f(BS)*0.5

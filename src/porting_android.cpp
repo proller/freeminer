@@ -51,7 +51,7 @@ void android_main(android_app *app)
 		msg << "Exception handled by main: " << e.what();
 		const char* message = msg.str().c_str();
 		__android_log_print(ANDROID_LOG_ERROR, PROJECT_NAME, "%s", message);
-		errorstream << msg << std::endl;
+		errorstream << msg.str() << std::endl;
 		retval = -1;
 	}
 	catch(...) {
@@ -74,7 +74,7 @@ extern "C" {
 	JNIEXPORT void JNICALL Java_org_freeminer_MtNativeActivity_putMessageBoxResult(
 			JNIEnv * env, jclass thiz, jstring text)
 	{
-		errorstream << "Java_org_freeminer_MtNativeActivity_putMessageBoxResult got: "
+		errorstream << "Java_net_freeminer_MtNativeActivity_putMessageBoxResult got: "
 				<< std::string((const char*)env->GetStringChars(text,0))
 				<< std::endl;
 	}

@@ -161,9 +161,9 @@ private:
 	int m_drawlist_current;
 	std::vector<std::pair<v3POS, int>> draw_nearest;
 public:
-	u32 m_drawlist_last;
 	irr::scene::SMesh * smesh;
 	std::atomic_bool m_drawlist_work;
+	std::atomic_uint m_drawlist_last;
 	std::map<v3POS, MapBlock*> m_block_boundary;
 private:
 

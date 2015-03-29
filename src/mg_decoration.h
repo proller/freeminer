@@ -25,7 +25,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 struct NoiseParams;
 class Mapgen;
-class ManualMapVoxelManipulator;
+class MMVManip;
 class PseudoRandom;
 class Schematic;
 
@@ -35,10 +35,11 @@ enum DecorationType {
 	DECO_LSYSTEM
 };
 
-#define DECO_PLACE_CENTER_X 0x01
-#define DECO_PLACE_CENTER_Y 0x02
-#define DECO_PLACE_CENTER_Z 0x04
-#define DECO_USE_NOISE      0x08
+#define DECO_PLACE_CENTER_X  0x01
+#define DECO_PLACE_CENTER_Y  0x02
+#define DECO_PLACE_CENTER_Z  0x04
+#define DECO_USE_NOISE       0x08
+#define DECO_FORCE_PLACEMENT 0x10
 
 extern FlagDesc flagdesc_deco[];
 
@@ -58,7 +59,7 @@ struct CutoffData {
 };
 #endif
 
-class Decoration : public GenElement {
+class Decoration : public GenElement, public NodeResolver {
 public:
 	INodeDefManager *ndef;
 
@@ -66,6 +67,8 @@ public:
 	int mapseed;
 	std::vector<content_t> c_place_on;
 	s16 sidelen;
+	s16 y_min;
+	s16 y_max;
 	float fill_ratio;
 	NoiseParams np;
 
@@ -76,12 +79,13 @@ public:
 	Decoration();
 	virtual ~Decoration();
 
-	size_t placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax);
-	size_t placeCutoffs(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax);
+	virtual void resolveNodeNames(NodeResolveInfo *nri);
 
-	virtual size_t generate(Mapgen *mg, PseudoRandom *pr, s16 max_y, v3s16 p) = 0;
+	size_t placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax);
+	//size_t placeCutoffs(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax);
+
+	virtual size_t generate(MMVManip *vm, PseudoRandom *pr, v3s16 p) = 0;
 	virtual int getHeight() = 0;
-	virtual void dropResolverEntries(NodeResolver *resolver) {}
 };
 
 class DecoSimple : public Decoration {
@@ -92,12 +96,11 @@ public:
 	s16 deco_height_max;
 	s16 nspawnby;
 
-	~DecoSimple() {}
+	virtual void resolveNodeNames(NodeResolveInfo *nri);
 
-	bool canPlaceDecoration(ManualMapVoxelManipulator *vm, v3s16 p);
-	virtual size_t generate(Mapgen *mg, PseudoRandom *pr, s16 max_y, v3s16 p);
+	bool canPlaceDecoration(MMVManip *vm, v3s16 p);
+	virtual size_t generate(MMVManip *vm, PseudoRandom *pr, v3s16 p);
 	virtual int getHeight();
-	virtual void dropResolverEntries(NodeResolver *resolver);
 };
 
 class DecoSchematic : public Decoration {
@@ -106,9 +109,10 @@ public:
 	Schematic *schematic;
 	std::string filename;
 
-	~DecoSchematic() {}
+	DecoSchematic();
+	~DecoSchematic();
 
-	virtual size_t generate(Mapgen *mg, PseudoRandom *pr, s16 max_y, v3s16 p);
+	virtual size_t generate(MMVManip *vm, PseudoRandom *pr, v3s16 p);
 	virtual int getHeight();
 };
 
@@ -144,7 +148,7 @@ public:
 
 	void clear();
 
-	size_t placeAllDecos(Mapgen *mg, u32 seed, v3s16 nmin, v3s16 nmax);
+	size_t placeAllDecos(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax);
 };
 
 #endif

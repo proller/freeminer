@@ -27,6 +27,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "noise.h"
 
 #define AVERAGE_MUD_AMOUNT 4
+#define DESERT_STONE_BASE -32
 
 /////////////////// Mapgen V6 flags
 #define MGV6_JUNGLES    0x01
@@ -63,7 +64,7 @@ struct MapgenV6Params : public MapgenSpecificParams {
 	~MapgenV6Params() {}
 
 	void readParams(Settings *settings);
-	void writeParams(Settings *settings);
+	void writeParams(Settings *settings) const;
 };
 
 class MapgenV6 : public Mapgen {
@@ -73,7 +74,6 @@ public:
 	int ystride;
 	u32 spflags;
 
-	u32 blockseed;
 	v3s16 node_min;
 	v3s16 node_max;
 	v3s16 full_node_min;
@@ -120,7 +120,7 @@ public:
 	int getGroundLevelAtPoint(v2s16 p);
 
 	float baseTerrainLevel(float terrain_base, float terrain_higher,
-						   float steepness, float height_select);
+		float steepness, float height_select);
 	virtual float baseTerrainLevelFromNoise(v2s16 p);
 	virtual float baseTerrainLevelFromMap(v2s16 p);
 	virtual float baseTerrainLevelFromMap(int index);
@@ -145,19 +145,19 @@ public:
 	virtual int generateGround();
 	void addMud();
 	void flowMud(s16 &mudflow_minpos, s16 &mudflow_maxpos);
-	void addDirtGravelBlobs();
 	void growGrass();
 	void placeTreesAndJungleGrass();
 	virtual void generateCaves(int max_stone_y);
-	virtual void generateExperimental() {}
 };
 
 struct MapgenFactoryV6 : public MapgenFactory {
-	Mapgen *createMapgen(int mgid, MapgenParams *params, EmergeManager *emerge) {
+	Mapgen *createMapgen(int mgid, MapgenParams *params, EmergeManager *emerge)
+	{
 		return new MapgenV6(mgid, params, emerge);
 	};
 
-	MapgenSpecificParams *createMapgenParams() {
+	MapgenSpecificParams *createMapgenParams()
+	{
 		return new MapgenV6Params();
 	};
 };

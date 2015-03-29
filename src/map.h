@@ -42,6 +42,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <unordered_set>
 #include "config.h"
 
+class Settings;
 class Database;
 class ClientMap;
 class MapSector;
@@ -54,7 +55,6 @@ class EmergeManager;
 class ServerEnvironment;
 struct BlockMakeData;
 struct MapgenParams;
-class Circuit;
 class Server;
 
 
@@ -90,9 +90,9 @@ struct MapEditEvent
 
 	MapEditEvent():
 		type(MEET_OTHER),
+		n(CONTENT_AIR),
 		already_known_by_peer(0)
-	{
-	}
+	{ }
 
 	MapEditEvent * clone()
 	{
@@ -149,7 +149,7 @@ public:
 class Map /*: public NodeContainer*/
 {
 public:
-	Map(IGameDef *gamedef, Circuit* circuit = nullptr);
+	Map(IGameDef *gamedef);
 	virtual ~Map();
 
 	/*virtual u16 nodeContainerId() const
@@ -180,9 +180,10 @@ public:
 	// Returns NULL if not found
 	MapBlock * getBlockNoCreateNoEx(v3POS p, bool trylock = false, bool nocache = false);
 	MapBlockP getBlock(v3POS p, bool trylock = false, bool nocache = false);
+	void getBlockCacheFlush();
 
 	/* Server overrides */
-	virtual MapBlock * emergeBlock(v3s16 p, bool allow_generate=true)
+	virtual MapBlock * emergeBlock(v3s16 p, bool create_blank=true)
 	{ return getBlockNoCreateNoEx(p); }
 
 	// Returns InvalidPositionException if not found
@@ -263,27 +264,28 @@ public:
 	//bool updateChangedVisibleArea();
 
 	// Call these before and after saving of many blocks
-	virtual void beginSave() {return;};
-	virtual void endSave() {return;};
+	virtual void beginSave() { return; }
+	virtual void endSave() { return; }
 
-	virtual s32 save(ModifiedState save_level, bool breakable){assert(0); return 0;};
+	virtual s32 save(ModifiedState save_level, bool breakable){ FATAL_ERROR("FIXME"); return 0;};
 
-	// Server implements this.
-	// Client leaves it as no-op.
-	virtual bool saveBlock(MapBlock *block) { return false; };
+	// Server implements these.
+	// Client leaves them as no-op.
+	virtual bool saveBlock(MapBlock *block) { return false; }
+	virtual bool deleteBlock(v3s16 blockpos) { return false; }
 
 	/*
 		Updates usage timers and unloads unused blocks and sectors.
 		Saves modified blocks before unloading on MAPTYPE_SERVER.
 	*/
 	u32 timerUpdate(float uptime, float unload_timeout, unsigned int max_cycle_ms = 100,
-			std::list<v3s16> *unloaded_blocks=NULL);
+			std::vector<v3s16> *unloaded_blocks=NULL);
 
 	/*
 		Unloads all blocks with a zero refCount().
 		Saves modified blocks before unloading on MAPTYPE_SERVER.
 	*/
-	void unloadUnreferencedBlocks(std::list<v3s16> *unloaded_blocks=NULL);
+	void unloadUnreferencedBlocks(std::vector<v3s16> *unloaded_blocks=NULL);
 
 	// For debug printing. Prints "Map: ", "ServerMap: " or "ClientMap: "
 	virtual void PrintInfo(std::ostream &out);
@@ -343,7 +345,6 @@ public:
 		return basepos.Y -1;
 	}
 
-	Circuit* getCircuit();
 	INodeDefManager* getNodeDefManager();
 
 
@@ -353,16 +354,16 @@ public:
 	//MapBlock * getBlockNoCreateNoEx(v3s16 & p);
 	MapBlock * createBlankBlockNoInsert(v3s16 & p);
 	MapBlock * createBlankBlock(v3s16 & p);
-	void insertBlock(MapBlock *block);
+	bool insertBlock(MapBlock *block);
 	void deleteBlock(MapBlockP block);
 	std::map<MapBlockP, int> * m_blocks_delete;
 	std::map<MapBlockP, int> m_blocks_delete_1, m_blocks_delete_2;
 	//void getBlocks(std::list<MapBlock*> &dest);
 
-#if CMAKE_THREADS && !CMAKE_HAVE_THREAD_LOCAL
+#if ENABLE_THREADS && !HAVE_THREAD_LOCAL
 	try_shared_mutex m_block_cache_mutex;
 #endif
-#if !CMAKE_HAVE_THREAD_LOCAL
+#if !HAVE_THREAD_LOCAL
 	MapBlockP m_block_cache;
 	v3POS m_block_cache_p;
 #endif
@@ -382,7 +383,6 @@ private:
 	bool m_queue_size_timer_started;
 
 protected:
-	Circuit* m_circuit;
 	u32 m_blocks_update_last;
 	u32 m_blocks_save_last;
 
@@ -406,7 +406,7 @@ public:
 	/*
 		savedir: directory to which map data should be saved
 	*/
-	ServerMap(std::string savedir, IGameDef *gamedef, EmergeManager *emerge, Circuit* m_circuit);
+	ServerMap(std::string savedir, IGameDef *gamedef, EmergeManager *emerge);
 	~ServerMap();
 
 	s32 mapType() const
@@ -435,7 +435,7 @@ public:
 		- Create blank filled with CONTENT_IGNORE
 
 	*/
-	MapBlock * emergeBlock(v3s16 p, bool create_blank=true);
+	MapBlock *emergeBlock(v3s16 p, bool create_blank=true);
 
 	/*
 		Try to get a block.
@@ -461,6 +461,7 @@ public:
 	/*
 		Database functions
 	*/
+	static Database *createDatabase(const std::string &name, const std::string &savedir, Settings &conf);
 	// Verify we can read/write to the database
 	void verifyDatabase();
 
@@ -469,15 +470,17 @@ public:
 	void endSave();
 
 	s32 save(ModifiedState save_level, bool breakable = 0);
-	void listAllLoadableBlocks(std::list<v3s16> &dst);
-	void listAllLoadedBlocks(std::list<v3s16> &dst);
+	void listAllLoadableBlocks(std::vector<v3s16> &dst);
+	void listAllLoadedBlocks(std::vector<v3s16> &dst);
 	// Saves map seed and possibly other stuff
 	void saveMapMeta();
 	void loadMapMeta();
 
-	bool saveBlock(MapBlock *block, Database *db);
 	bool saveBlock(MapBlock *block);
+	static bool saveBlock(MapBlock *block, Database *db);
 	MapBlock* loadBlock(v3s16 p);
+
+	bool deleteBlock(v3s16 blockpos);
 
 	void updateVManip(v3s16 pos);
 
@@ -530,11 +533,11 @@ private:
 #define VMANIP_BLOCK_DATA_INEXIST     1
 #define VMANIP_BLOCK_CONTAINS_CIGNORE 2
 
-class ManualMapVoxelManipulator : public VoxelManipulator
+class MMVManip : public VoxelManipulator
 {
 public:
-	ManualMapVoxelManipulator(Map *map);
-	virtual ~ManualMapVoxelManipulator();
+	MMVManip(Map *map);
+	virtual ~MMVManip();
 
 	virtual void clear()
 	{
@@ -546,11 +549,11 @@ public:
 	{m_map = map;}
 
 	void initialEmerge(v3s16 blockpos_min, v3s16 blockpos_max,
-			bool load_if_inexistent = true);
+		bool load_if_inexistent = true);
 
 	// This is much faster with big chunks of generated data
 	void blitBackAll(std::map<v3s16, MapBlock*> * modified_blocks,
-			bool overwrite_generated = true);
+		bool overwrite_generated = true);
 
 	bool m_is_dirty;
 

@@ -47,16 +47,17 @@ void Mapgen_features::layers_init(EmergeManager *emerge, const Json::Value & par
 				continue;
 
 			auto layer = layer_data{ content, MapNode(content, layerj["param1"].asInt(), layerj["param2"].asInt()) };
-			layer.height_min = layerj.get("height_min", -MAP_GENERATION_LIMIT).asInt();
-			layer.height_max = layerj.get("height_max", +MAP_GENERATION_LIMIT).asInt();
+			layer.height_min = layerj.get("y_min", layerj.get("height_min", -MAP_GENERATION_LIMIT).asInt()).asInt();
+			layer.height_max = layerj.get("y_max", layerj.get("height_max", +MAP_GENERATION_LIMIT).asInt()).asInt();
 			layer.thickness  = layerj.get("thickness", layer_default_thickness).asInt() * layer_thickness_multiplier;
 
 			//layer.name = name; //dev
 			layers.emplace_back(layer);
 		}
-	if (layers.empty()) {
-		infostream << "layers empty, using only default:stone"<<std::endl;
-	}
+	if (layers.empty())
+		infostream << "layers empty, using only default:stone mg_params="<<paramsj<<std::endl;
+	else
+		verbosestream << "layers size=" << layers.size() << std::endl;
 }
 
 void Mapgen_features::layers_prepare(const v3POS & node_min, const v3POS & node_max) {
@@ -189,7 +190,7 @@ void MapgenIndevParams::readParams(Settings *settings) {
 	settings->getNoiseParamsFromGroup("mg_np_layers",         np_layers);
 }
 
-void MapgenIndevParams::writeParams(Settings *settings) {
+void MapgenIndevParams::writeParams(Settings *settings) const {
 	MapgenV6Params::writeParams(settings);
 
 	settings->setJson("mg_params", paramsj);
@@ -265,7 +266,6 @@ CaveIndev::CaveIndev(MapgenIndev *mg, PseudoRandom *ps, PseudoRandom *ps2,
 			min_tunnel_diameter = 5;
 			max_tunnel_diameter = ps->range(7, ps->range(8,24));
 		}
-		flooded_water = !ps->range(0, 2);
 	} else {
 		part_max_length_rs = ps->range(2,9);
 		tunnel_routepoints = ps->range(10, ps->range(15,30));
@@ -311,7 +311,7 @@ void MapgenIndev::float_islands_generate(int min_y) {
 }
 */
 
-int Mapgen_features::float_islands_generate(const v3POS & node_min, const v3POS & node_max, int min_y, ManualMapVoxelManipulator *vm) {
+int Mapgen_features::float_islands_generate(const v3POS & node_min, const v3POS & node_max, int min_y, MMVManip *vm) {
 	int generated = 0;
 	if (node_min.Y < min_y) return generated;
 	// originally from http://forum.minetest.net/viewtopic.php?id=4776
@@ -387,7 +387,7 @@ int MapgenIndev::generateGround() {
 		u32 i = vm->m_area.index(x, node_min.Y, z);
 
 		for (s16 y = node_min.Y; y <= node_max.Y; y++) {
-			if (vm->m_data[i].getContent() == CONTENT_IGNORE) {
+			if (!vm->m_data[i]) {
 
 				if (y <= surface_y) {
 					int index3 = (z - node_min.Z) * zstride +
@@ -397,6 +397,8 @@ int MapgenIndev::generateGround() {
 						n_desert_stone : layers_get(index3);
 				} else if (y <= water_level) {
 					vm->m_data[i] = (heat < 0 && y > heat/3) ? n_ice : n_water_source;
+					if (liquid_pressure && y <= 0)
+						vm->m_data[i].addLevel(m_emerge->ndef, water_level - y, 1);
 				} else {
 					vm->m_data[i] = n_air;
 				}

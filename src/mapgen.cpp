@@ -74,12 +74,14 @@ Mapgen::Mapgen()
 	id            = -1;
 	seed          = 0;
 	water_level   = 0;
+	liquid_pressure = 0;
 	flags         = 0;
 
 	vm          = NULL;
 	ndef        = NULL;
 	heightmap   = NULL;
 	biomemap    = NULL;
+
 }
 
 
@@ -90,6 +92,7 @@ Mapgen::Mapgen(int mapgenid, MapgenParams *params, EmergeManager *emerge) :
 	id            = mapgenid;
 	seed          = (int)params->seed;
 	water_level   = params->water_level;
+	liquid_pressure = params->liquid_pressure;
 	flags         = params->flags;
 	csize         = v3s16(1, 1, 1) * (params->chunksize * MAP_BLOCKSIZE);
 
@@ -102,6 +105,23 @@ Mapgen::Mapgen(int mapgenid, MapgenParams *params, EmergeManager *emerge) :
 
 Mapgen::~Mapgen()
 {
+}
+
+
+u32 Mapgen::getBlockSeed(v3s16 p, int seed)
+{
+	return (u32)seed   +
+		p.Z * 38134234 +
+		p.Y * 42123    +
+		p.X * 23;
+}
+
+
+u32 Mapgen::getBlockSeed2(v3s16 p, int seed)
+{
+	u32 n = 1619 * p.X + 31337 * p.Y + 52591 * p.Z + 1013 * seed;
+	n = (n >> 13) ^ n;
+	return (n * (n * n * 60493 + 19990303) + 1376312589);
 }
 
 
@@ -125,6 +145,7 @@ s16 Mapgen::findGroundLevelFull(v2s16 p2d)
 }
 
 
+// Returns -MAP_GENERATION_LIMIT if not found
 s16 Mapgen::findGroundLevel(v2s16 p2d, s16 ymin, s16 ymax)
 {
 	v3s16 em = vm->m_area.getExtent();
@@ -138,7 +159,7 @@ s16 Mapgen::findGroundLevel(v2s16 p2d, s16 ymin, s16 ymax)
 
 		vm->m_area.add_y(em, i, -1);
 	}
-	return y;
+	return (y >= ymin) ? y : -MAP_GENERATION_LIMIT;
 }
 
 
@@ -152,12 +173,6 @@ void Mapgen::updateHeightmap(v3s16 nmin, v3s16 nmax)
 	for (s16 z = nmin.Z; z <= nmax.Z; z++) {
 		for (s16 x = nmin.X; x <= nmax.X; x++, index++) {
 			s16 y = findGroundLevel(v2s16(x, z), nmin.Y, nmax.Y);
-
-			// if the values found are out of range, trust the old heightmap
-			if (y == nmax.Y && heightmap[index] > nmax.Y)
-				continue;
-			if (y == nmin.Y - 1 && heightmap[index] < nmin.Y)
-				continue;
 
 			heightmap[index] = y;
 		}
@@ -195,7 +210,7 @@ void Mapgen::updateLiquid(v3POS nmin, v3POS nmax)
 }
 
 
-void Mapgen::setLighting(v3s16 nmin, v3s16 nmax, u8 light)
+void Mapgen::setLighting(u8 light, v3s16 nmin, v3s16 nmax)
 {
 	ScopeProfiler sp(g_profiler, "EmergeThread: mapgen lighting update", SPT_AVG);
 	VoxelArea a(nmin, nmax);
@@ -234,16 +249,43 @@ void Mapgen::lightSpread(VoxelArea &a, v3s16 p, u8 light)
 }
 
 
-void Mapgen::calcLighting(v3s16 nmin, v3s16 nmax)
+void Mapgen::calcLighting(v3s16 nmin, v3s16 nmax, v3s16 full_nmin, v3s16 full_nmax)
 {
-	VoxelArea a(nmin, nmax);
-	bool block_is_underground = (water_level >= nmax.Y);
-
 	ScopeProfiler sp(g_profiler, "EmergeThread: mapgen lighting update", SPT_AVG);
 	//TimeTaker t("updateLighting");
 
-	// first, send vertical rays of sunshine downward
+	propagateSunlight(nmin, nmax);
+	spreadLight(full_nmin, full_nmax);
+
+	//printf("updateLighting: %dms\n", t.stop());
+}
+
+
+
+void Mapgen::calcLighting(v3s16 nmin, v3s16 nmax)
+{
+	ScopeProfiler sp(g_profiler, "EmergeThread: mapgen lighting update", SPT_AVG);
+	//TimeTaker t("updateLighting");
+
+	propagateSunlight(
+		nmin - v3s16(1, 1, 1) * MAP_BLOCKSIZE,
+		nmax + v3s16(1, 0, 1) * MAP_BLOCKSIZE);
+
+	spreadLight(
+		nmin - v3s16(1, 1, 1) * MAP_BLOCKSIZE,
+		nmax + v3s16(1, 1, 1) * MAP_BLOCKSIZE);
+
+	//printf("updateLighting: %dms\n", t.stop());
+}
+
+
+void Mapgen::propagateSunlight(v3s16 nmin, v3s16 nmax)
+{
+	//TimeTaker t("propagateSunlight");
+	VoxelArea a(nmin, nmax);
+	bool block_is_underground = (water_level >= nmax.Y);
 	v3s16 em = vm->m_area.getExtent();
+
 	for (int z = a.MinEdge.Z; z <= a.MaxEdge.Z; z++) {
 		for (int x = a.MinEdge.X; x <= a.MaxEdge.X; x++) {
 			// see if we can get a light value from the overtop
@@ -281,8 +323,16 @@ void Mapgen::calcLighting(v3s16 nmin, v3s16 nmax)
 			}
 		}
 	}
+	//printf("propagateSunlight: %dms\n", t.stop());
+}
 
-	// now spread the sunlight and light up any sources
+
+
+void Mapgen::spreadLight(v3s16 nmin, v3s16 nmax)
+{
+	//TimeTaker t("spreadLight");
+	VoxelArea a(nmin, nmax);
+
 	for (int z = a.MinEdge.Z; z <= a.MaxEdge.Z; z++) {
 		for (int y = a.MinEdge.Y; y <= a.MaxEdge.Y; y++) {
 			u32 i = vm->m_area.index(a.MinEdge.X, y, z);
@@ -298,19 +348,20 @@ void Mapgen::calcLighting(v3s16 nmin, v3s16 nmax)
 
 				u8 light = n.param1 & 0x0F;
 				if (light) {
-					lightSpread(a, v3s16(x,     y,     z + 1), light - 1);
-					lightSpread(a, v3s16(x,     y + 1, z    ), light - 1);
-					lightSpread(a, v3s16(x + 1, y,     z    ), light - 1);
-					lightSpread(a, v3s16(x,     y,     z - 1), light - 1);
-					lightSpread(a, v3s16(x,     y - 1, z    ), light - 1);
-					lightSpread(a, v3s16(x - 1, y,     z    ), light - 1);
+					lightSpread(a, v3s16(x,     y,     z + 1), light);
+					lightSpread(a, v3s16(x,     y + 1, z    ), light);
+					lightSpread(a, v3s16(x + 1, y,     z    ), light);
+					lightSpread(a, v3s16(x,     y,     z - 1), light);
+					lightSpread(a, v3s16(x,     y - 1, z    ), light);
+					lightSpread(a, v3s16(x - 1, y,     z    ), light);
 				}
 			}
 		}
 	}
 
-	//printf("updateLighting: %dms\n", t.stop());
+	//printf("spreadLight: %dms\n", t.stop());
 }
+
 
 
 void Mapgen::calcLightingOld(v3s16 nmin, v3s16 nmax)
@@ -341,6 +392,7 @@ void Mapgen::calcLightingOld(v3s16 nmin, v3s16 nmax)
 
 GenerateNotifier::GenerateNotifier()
 {
+	m_notify_on = 0;
 }
 
 
@@ -408,14 +460,16 @@ void GenerateNotifier::getEvents(
 
 GenElementManager::GenElementManager(IGameDef *gamedef)
 {
-	m_resolver = gamedef->getNodeDefManager()->getResolver();
+	m_ndef = gamedef->getNodeDefManager();
 }
 
 
 GenElementManager::~GenElementManager()
 {
+/*
 	for (size_t i = 0; i != m_elements.size(); i++)
 		delete m_elements[i];
+*/
 }
 
 
@@ -483,3 +537,45 @@ void GenElementManager::clear()
 {
 	m_elements.clear();
 }
+
+
+void MapgenParams::load(Settings &settings)
+{
+	std::string seed_str;
+	const char *seed_name = (&settings == g_settings) ? "fixed_map_seed" : "seed";
+
+	if (settings.getNoEx(seed_name, seed_str) && !seed_str.empty())
+		seed = read_seed(seed_str.c_str());
+	else
+		myrand_bytes(&seed, sizeof(seed));
+
+	settings.getNoEx("mg_name", mg_name);
+	settings.getS16NoEx("water_level", water_level);
+	settings.getS16NoEx("liquid_pressure", liquid_pressure);
+	settings.getS16NoEx("chunksize", chunksize);
+	settings.getFlagStrNoEx("mg_flags", flags, flagdesc_mapgen);
+	settings.getNoiseParams("mg_biome_np_heat", np_biome_heat);
+	settings.getNoiseParams("mg_biome_np_humidity", np_biome_humidity);
+
+	delete sparams;
+	sparams = EmergeManager::createMapgenParams(mg_name);
+	if (sparams)
+		sparams->readParams(&settings);
+}
+
+
+void MapgenParams::save(Settings &settings) const
+{
+	settings.set("mg_name", mg_name);
+	settings.setU64("seed", seed);
+	settings.setS16("water_level", water_level);
+	settings.setS16("liquid_pressure", liquid_pressure);
+	settings.setS16("chunksize", chunksize);
+	settings.setFlagStr("mg_flags", flags, flagdesc_mapgen, (u32)-1);
+	settings.setNoiseParams("mg_biome_np_heat", np_biome_heat);
+	settings.setNoiseParams("mg_biome_np_humidity", np_biome_humidity);
+
+	if (sparams)
+		sparams->writeParams(&settings);
+}
+

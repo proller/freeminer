@@ -40,10 +40,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 	#include <AL/alext.h>
 #endif
 #include <vorbis/vorbisfile.h>
+#include <assert.h>
 #include "log.h"
 #include "filesys.h"
 #include "util/numeric.h" // myrand()
-#include "debug.h" // assert()
 #include "porting.h"
 #include <map>
 #include <vector>
@@ -418,9 +418,11 @@ public:
 	// Remove stopped sounds
 	void maintain()
 	{
+/*
 		verbosestream<<"OpenALSoundManager::maintain(): "
 				<<m_sounds_playing.size()<<" playing sounds, "
 				<<m_buffers.size()<<" sound names loaded"<<std::endl;
+*/
 		std::set<int> del_list;
 		for(std::map<int, PlayingSound*>::iterator
 				i = m_sounds_playing.begin();

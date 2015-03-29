@@ -29,11 +29,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mapgen.h" // for MapgenParams
 #include "map.h"
 
-#define MGPARAMS_SET_MGNAME      1
-#define MGPARAMS_SET_SEED        2
-#define MGPARAMS_SET_WATER_LEVEL 4
-#define MGPARAMS_SET_FLAGS       8
-
 #define BLOCK_EMERGE_ALLOWGEN (1<<0)
 
 #define EMERGE_DBG_OUT(x) \
@@ -53,7 +48,7 @@ class DecorationManager;
 class SchematicManager;
 
 struct BlockMakeData {
-	ManualMapVoxelManipulator *vmanip;
+	MMVManip *vmanip;
 	u64 seed;
 	v3s16 blockpos_min;
 	v3s16 blockpos_max;
@@ -79,7 +74,6 @@ public:
 	ServerEnvironment *env;
 
 	INodeDefManager *ndef;
-	std::map<std::string, MapgenFactory *> mglist;
 
 	std::vector<Mapgen *> mapgen;
 	std::vector<EmergeThread *> emergethread;
@@ -112,24 +106,20 @@ public:
 	~EmergeManager();
 
 	void loadMapgenParams();
+	static MapgenSpecificParams *createMapgenParams(const std::string &mgname);
 	void initMapgens();
 	Mapgen *getCurrentMapgen();
-	Mapgen *createMapgen(std::string mgname, int mgid,
+	Mapgen *createMapgen(const std::string &mgname, int mgid,
 		MapgenParams *mgparams);
-	MapgenSpecificParams *createMapgenParams(std::string mgname);
+	static void getMapgenNames(std::list<const char *> &mgnames);
 	void startThreads();
 	void stopThreads();
 	bool enqueueBlockEmerge(u16 peer_id, v3s16 p, bool allow_generate);
-
-	void registerMapgen(std::string name, MapgenFactory *mgfactory);
-	void loadParamsFromSettings(Settings *settings);
-	void saveParamsToSettings(Settings *settings);
 
 	//mapgen helper methods
 	Biome *getBiomeAtPoint(v3s16 p);
 	int getGroundLevelAtPoint(v2s16 p);
 	bool isBlockUnderground(v3s16 blockpos);
-	u32 getBlockSeed(v3s16 p);
 };
 
 #endif

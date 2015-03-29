@@ -26,7 +26,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "nodedef.h"
 #include "mesh.h"
 #include "mapblock_mesh.h"
-#include "tile.h"
+#include "client/tile.h"
 #include "log.h"
 #include "util/numeric.h"
 #include <map>
@@ -173,7 +173,7 @@ public:
 		if (it == m_extrusion_meshes.end()) {
 			// no viable resolution found; use largest one
 			it = m_extrusion_meshes.find(MAX_EXTRUSION_MESH_RESOLUTION);
-			assert(it != m_extrusion_meshes.end());
+			sanity_check(it != m_extrusion_meshes.end());
 		}
 
 		scene::IMesh *mesh = it->second;
@@ -234,7 +234,7 @@ WieldMeshSceneNode::WieldMeshSceneNode(
 
 WieldMeshSceneNode::~WieldMeshSceneNode()
 {
-	assert(g_extrusion_mesh_cache);
+	sanity_check(g_extrusion_mesh_cache);
 	if (g_extrusion_mesh_cache->drop())
 		g_extrusion_mesh_cache = NULL;
 }
@@ -295,24 +295,31 @@ void WieldMeshSceneNode::setExtruded(const std::string &imagename,
 #if (IRRLICHT_VERSION_MAJOR >= 1 && IRRLICHT_VERSION_MINOR >= 8) || IRRLICHT_VERSION_MAJOR >= 2
 	material.setFlag(video::EMF_USE_MIP_MAPS, false);
 #endif
-	if (m_enable_shaders) 
+
+#if 0
+//// TODO(RealBadAngel): Reactivate when shader is added for wield items
+	if (m_enable_shaders)
 		material.setTexture(2, tsrc->getTexture("disable_img.png"));
+#endif
 }
 
 void WieldMeshSceneNode::setItem(const ItemStack &item, IGameDef *gamedef)
 {
 	ITextureSource *tsrc = gamedef->getTextureSource();
 	IItemDefManager *idef = gamedef->getItemDefManager();
-	IShaderSource *shdrsrc = gamedef->getShaderSource();
+	//IShaderSource *shdrsrc = gamedef->getShaderSource();
 	INodeDefManager *ndef = gamedef->getNodeDefManager();
 	const ItemDefinition &def = item.getDefinition(idef);
 	const ContentFeatures &f = ndef->get(def.name);
 	content_t id = ndef->getId(def.name);
 
+#if 0
+//// TODO(RealBadAngel): Reactivate when shader is added for wield items
 	if (m_enable_shaders) {
 		u32 shader_id = shdrsrc->getShader("nodes_shader", TILE_MATERIAL_BASIC, NDT_NORMAL);
 		m_material_type = shdrsrc->getShaderInfo(shader_id).material;
 	}
+#endif
 
 	// If wield_image is defined, it overrides everything else
 	if (def.wield_image != "") {
@@ -338,7 +345,9 @@ void WieldMeshSceneNode::setItem(const ItemStack &item, IGameDef *gamedef)
 		} else {
 			Map map(gamedef);
 			MapDrawControl map_draw_control;
-			MeshMakeData mesh_make_data(gamedef, map, map_draw_control);
+			//// TODO: Change false in the following constructor args to
+			//// appropriate value when shader is added for wield items (if applicable)
+			MeshMakeData mesh_make_data(gamedef, false, map, map_draw_control);
 			MapNode mesh_make_node(id, 255, 0);
 			mesh_make_data.fillSingleNode(&mesh_make_node);
 			MapBlockMesh mapblock_mesh(&mesh_make_data, v3s16(0, 0, 0));
@@ -346,7 +355,7 @@ void WieldMeshSceneNode::setItem(const ItemStack &item, IGameDef *gamedef)
 			translateMesh(m_meshnode->getMesh(), v3f(-BS, -BS, -BS));
 			m_meshnode->setScale(
 					def.wield_scale * WIELD_SCALE_FACTOR
-					/ (BS * f.visual_scale));	
+					/ (BS * f.visual_scale));
 		}
 		for (u32 i = 0; i < m_meshnode->getMaterialCount(); ++i) {
 			assert(i < 6);
@@ -362,6 +371,8 @@ void WieldMeshSceneNode::setItem(const ItemStack &item, IGameDef *gamedef)
 				material.setTexture(0, f.tiles[i].texture);
 			}
 			material.MaterialType = m_material_type;
+#if 0
+//// TODO(RealBadAngel): Reactivate when shader is added for wield items
 			if (m_enable_shaders) {
 				if (f.tiles[i].normal_texture) {
 					if (animated) {
@@ -375,6 +386,7 @@ void WieldMeshSceneNode::setItem(const ItemStack &item, IGameDef *gamedef)
 					material.setTexture(2, tsrc->getTexture("disable_img.png"));
 				}
 			}
+#endif
 		}
 		return;
 	}
@@ -406,22 +418,20 @@ void WieldMeshSceneNode::changeToMesh(scene::IMesh *mesh)
 		m_meshnode->setVisible(false);
 		m_meshnode->setMesh(dummymesh);
 		dummymesh->drop();  // m_meshnode grabbed it
-	}
-
-	if (mesh) {
-	if (m_lighting) {
-		m_meshnode->setMesh(mesh);
 	} else {
-		/*
-			Lighting is disabled, this means the caller can (and probably will)
-			call setColor later. We therefore need to clone the mesh so that
-			setColor will only modify this scene node's mesh, not others'.
-		*/
-		scene::IMeshManipulator *meshmanip = SceneManager->getMeshManipulator();
-		scene::IMesh *new_mesh = meshmanip->createMeshCopy(mesh);
-		m_meshnode->setMesh(new_mesh);
-		new_mesh->drop();  // m_meshnode grabbed it
-	}
+		if (m_lighting) {
+			m_meshnode->setMesh(mesh);
+		} else {
+			/*
+				Lighting is disabled, this means the caller can (and probably will)
+				call setColor later. We therefore need to clone the mesh so that
+				setColor will only modify this scene node's mesh, not others'.
+			*/
+			scene::IMeshManipulator *meshmanip = SceneManager->getMeshManipulator();
+			scene::IMesh *new_mesh = meshmanip->createMeshCopy(mesh);
+			m_meshnode->setMesh(new_mesh);
+			new_mesh->drop();  // m_meshnode grabbed it
+		}
 	}
 
 	m_meshnode->setMaterialFlag(video::EMF_LIGHTING, m_lighting);

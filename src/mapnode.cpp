@@ -74,7 +74,23 @@ void MapNode::setLight(enum LightBank bank, u8 a_light, INodeDefManager *nodemgr
 		param1 |= (a_light & 0x0f)<<4;
 	}
 	else
-		assert(0);
+		assert("Invalid light bank" == NULL);
+}
+
+bool MapNode::isLightDayNightEq(INodeDefManager *nodemgr) const
+{
+	const ContentFeatures &f = nodemgr->get(*this);
+	bool isEqual;
+
+	if (f.param_type == CPT_LIGHT) {
+		u8 day   = MYMAX(f.light_source, param1 & 0x0f);
+		u8 night = MYMAX(f.light_source, (param1 >> 4) & 0x0f);
+		isEqual = day == night;
+	} else {
+		isEqual = true;
+	}
+
+	return isEqual;
 }
 
 u8 MapNode::getLight(enum LightBank bank, INodeDefManager *nodemgr) const
@@ -91,7 +107,7 @@ u8 MapNode::getLight(enum LightBank bank, INodeDefManager *nodemgr) const
 	return MYMAX(f.light_source, light);
 }
 
-u8 MapNode::getLightNoChecks(enum LightBank bank, const ContentFeatures *f)
+u8 MapNode::getLightNoChecks(enum LightBank bank, const ContentFeatures *f) const
 {
 	return MYMAX(f->light_source,
 	             bank == LIGHTBANK_DAY ? param1 & 0x0f : (param1 >> 4) & 0x0f);
@@ -122,7 +138,7 @@ u8 MapNode::getFaceDir(INodeDefManager *nodemgr) const
 {
 	const ContentFeatures &f = nodemgr->get(*this);
 	if(f.param_type_2 == CPT2_FACEDIR)
-		return getParam2() & 0x1F;
+		return (getParam2() & 0x1F) % 24;
 	return 0;
 }
 
@@ -158,7 +174,7 @@ void MapNode::rotateAlongYAxis(INodeDefManager *nodemgr, Rotation rot) {
 		u8 wmountface = (param2 & 7);
 		if (wmountface <= 1)
 			return;
-			
+
 		Rotation oldrot = wallmounted_to_rot[wmountface - 2];
 		param2 &= ~7;
 		param2 |= rot_to_wallmounted[(oldrot - rot) & 3];
@@ -351,7 +367,7 @@ static std::vector<aabb3f> transformNodeBox(const MapNode &n,
 		const ContentFeatures &f = nodemgr->get(n);
 		float top = BS/2;
 		if (f.param_type_2 == CPT2_LEVELED || f.param_type_2 == CPT2_FLOWINGLIQUID)
-			top = -BS/2 + BS*((float)1/f.getMaxLevel()) * n.getLevel(nodemgr);
+			top = -BS/2 + BS*((float)1/f.getMaxLevel()) * std::min(n.getLevel(nodemgr), f.getMaxLevel());
 
 		boxes.push_back(aabb3f(-BS/2,-BS/2,-BS/2,BS/2,top,BS/2));
 	}
@@ -389,6 +405,8 @@ u8 MapNode::getLevel(INodeDefManager *nodemgr) const
 	const ContentFeatures &f = nodemgr->get(*this);
 	if (f.param_type_2 == CPT2_LEVELED) {
 		u8 level = getParam2() & LEVELED_MASK;
+		if (f.liquid_type == LIQUID_SOURCE)
+			level += f.getMaxLevel();
 		if(level)
 			return level;
 	} 
@@ -408,11 +426,13 @@ u8 MapNode::getLevel(INodeDefManager *nodemgr) const
 	return 0;
 }
 
-u8 MapNode::setLevel(INodeDefManager *nodemgr, s8 level, bool compress)
+u16 MapNode::setLevel(INodeDefManager *nodemgr, s16 level, bool compress)
 {
-	u8 rest = 0;
+	//debug: auto level_orig = level;
+	s16 rest = 0;
 	if (level < 1) {
 		setContent(CONTENT_AIR);
+		setParam2(0);
 		return 0;
 	}
 	const ContentFeatures &f = nodemgr->get(*this);
@@ -422,13 +442,17 @@ u8 MapNode::setLevel(INodeDefManager *nodemgr, s8 level, bool compress)
 			level = f.getMaxLevel(compress);
 		}
 		if (level >= f.getMaxLevel()) {
-			if (!f.liquid_alternative_source.empty())
+			if(f.liquid_type == LIQUID_SOURCE) {
+				level -= f.getMaxLevel();
+			} else if (!f.liquid_alternative_source.empty()) {
 				setContent(nodemgr->getId(f.liquid_alternative_source));
+				level -= f.getMaxLevel();
+			}
 		} else if (!f.liquid_alternative_flowing.empty()) {
 			setContent(nodemgr->getId(f.liquid_alternative_flowing));
 		}
 		setParam2(level & LEVELED_MASK);
-		//debug: if(getLevel(nodemgr)!=level) errorstream<<"AFTERSET not match want="<<level<< " res="<< getLevel(nodemgr) <<std::endl;
+		//debug: if(getLevel(nodemgr)!=level_orig) errorstream<<"AFTERSET not match want="<<(int)level_orig<<" compress="<<compress<< " res="<< (int)getLevel(nodemgr) << " setted="<<(int)level<< " rest="<<(int)rest<<" name="<<f.name<< " max="<< (int)f.getMaxLevel()<< " maxC="<< (int)f.getMaxLevel(compress)<<std::endl;
 	} else if (f.param_type_2 == CPT2_FLOWINGLIQUID
 		|| f.liquid_type == LIQUID_FLOWING
 		|| f.liquid_type == LIQUID_SOURCE) {
@@ -443,10 +467,11 @@ u8 MapNode::setLevel(INodeDefManager *nodemgr, s8 level, bool compress)
 	return rest;
 }
 
-u8 MapNode::addLevel(INodeDefManager *nodemgr, s8 add, bool compress)
+u16 MapNode::addLevel(INodeDefManager *nodemgr, s16 add, bool compress)
 {
-	s8 level = getLevel(nodemgr);
-	if (add == 0) level = 1;
+	s16 level = getLevel(nodemgr);
+	if (add == 0)
+		level = 1;
 	level += add;
 	return setLevel(nodemgr, level, compress);
 }
@@ -475,7 +500,7 @@ u32 MapNode::serializedLength(u8 version)
 {
 	if(!ser_ver_supported(version))
 		throw VersionMismatchException("ERROR: MapNode format not supported");
-		
+
 	if(version == 0)
 		return 1;
 	else if(version <= 9)
@@ -507,13 +532,13 @@ void MapNode::serialize(u8 *dest, u8 version)
 {
 	if(!ser_ver_supported(version))
 		throw VersionMismatchException("ERROR: MapNode format not supported");
-	
+
 	// Can't do this anymore; we have 16-bit dynamically allocated node IDs
 	// in memory; conversion just won't work in this direction.
 	if(version < 24)
 		throw SerializationError("MapNode::serialize: serialization to "
 				"version < 24 not possible");
-		
+
 	writeU16(dest+0, param0);
 	writeU8(dest+2, param1);
 	writeU8(dest+3, param2);
@@ -522,7 +547,7 @@ void MapNode::deSerialize(u8 *source, u8 version)
 {
 	if(!ser_ver_supported(version))
 		throw VersionMismatchException("ERROR: MapNode format not supported");
-		
+
 	if(version <= 21)
 	{
 		deSerialize_pre22(source, version);
@@ -550,8 +575,8 @@ void MapNode::serializeBulk(std::ostream &os, int version,
 	if(!ser_ver_supported(version))
 		throw VersionMismatchException("ERROR: MapNode format not supported");
 
-	assert(content_width == 2);
-	assert(params_width == 2);
+	sanity_check(content_width == 2);
+	sanity_check(params_width == 2);
 
 	// Can't do this anymore; we have 16-bit dynamically allocated node IDs
 	// in memory; conversion just won't work in this direction.
@@ -597,9 +622,10 @@ void MapNode::deSerializeBulk(std::istream &is, int version,
 	if(!ser_ver_supported(version))
 		throw VersionMismatchException("ERROR: MapNode format not supported");
 
-	assert(version >= 22);
-	assert(content_width == 1 || content_width == 2);
-	assert(params_width == 2);
+	if (version < 22
+			|| (content_width != 1 && content_width != 2)
+			|| params_width != 2)
+		FATAL_ERROR("Deserialize bulk node data error");
 
 	// Uncompress or read data
 	u32 len = nodecount * (content_width + params_width);
@@ -684,7 +710,7 @@ void MapNode::deSerialize_pre22(u8 *source, u8 version)
 			param2 &= 0x0f;
 		}
 	}
-	
+
 	// Convert special values from old version to new
 	if(version <= 19)
 	{

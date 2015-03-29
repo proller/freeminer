@@ -30,14 +30,13 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/numeric.h" // For IntervalLimiter
 #include "util/serialize.h"
 #include "util/mathconstants.h"
-#include "tile.h"
+#include "client/tile.h"
 #include "environment.h"
 #include "collision.h"
 #include "settings.h"
 #include "serialization.h" // For decompressZlib
 #include "gamedef.h"
 #include "clientobject.h"
-#include "content_object.h"
 #include "mesh.h"
 #include "itemdef.h"
 #include "tool.h"
@@ -148,7 +147,7 @@ public:
 	TestCAO(IGameDef *gamedef, ClientEnvironment *env);
 	virtual ~TestCAO();
 	
-	u8 getType() const
+	ActiveObjectType getType() const
 	{
 		return ACTIVEOBJECT_TYPE_TEST;
 	}
@@ -233,6 +232,7 @@ void TestCAO::removeFromScene(bool permanent)
 		return;
 
 	m_node->remove();
+	m_node->drop();
 	m_node = NULL;
 }
 
@@ -292,7 +292,7 @@ public:
 	ItemCAO(IGameDef *gamedef, ClientEnvironment *env);
 	virtual ~ItemCAO();
 	
-	u8 getType() const
+	ActiveObjectType getType() const
 	{
 		return ACTIVEOBJECT_TYPE_ITEM;
 	}
@@ -409,6 +409,7 @@ void ItemCAO::removeFromScene(bool permanent)
 		return;
 
 	m_node->remove();
+	m_node->drop();
 	m_node = NULL;
 }
 
@@ -558,7 +559,7 @@ GenericCAO::GenericCAO(IGameDef *gamedef, ClientEnvironment *env):
 		m_wield_meshnode(NULL),
 		m_spritenode(NULL),
 		m_textnode(NULL),
-		shadownode(NULL),
+		m_shadownode(nullptr),
 		m_position(v3f(0,10*BS,0)),
 		m_velocity(v3f(0,0,0)),
 		m_acceleration(v3f(0,0,0)),
@@ -772,6 +773,10 @@ void GenericCAO::removeFromScene(bool permanent)
 		}
 	}
 
+	if (m_shadownode) {
+		m_shadownode = nullptr;
+	}
+
 	if(m_meshnode)
 	{
 		m_meshnode->remove();
@@ -951,8 +956,7 @@ void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 			m_wield_meshnode = new WieldMeshSceneNode(
 					smgr->getRootSceneNode(), smgr, -1);
 			m_wield_meshnode->setItem(item, m_gamedef);
-			m_wield_meshnode->grab();
-			
+
 			m_wield_meshnode->setScale(v3f(m_prop.visual_size.X/2,
 					m_prop.visual_size.Y/2,
 					m_prop.visual_size.X/2));
@@ -969,8 +973,8 @@ void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 	if (node && m_is_player && !m_is_local_player) {
 		// Add a text node for showing the name
 		gui::IGUIEnvironment* gui = irr->getGUIEnvironment();
-		std::wstring wname = utf8_to_wide(m_name);
-		m_textnode = smgr->addTextSceneNode(gui->getBuiltInFont(),
+		std::wstring wname = narrow_to_wide(m_name);
+		m_textnode = smgr->addTextSceneNode(gui->getSkin()->getFont(),
 				wname.c_str(), video::SColor(255,255,255,255), node);
 		m_textnode->grab();
 		m_textnode->setPosition(v3f(0, BS*1.1, 0));
@@ -984,11 +988,11 @@ void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 #if (IRRLICHT_VERSION_MAJOR >= 1 && IRRLICHT_VERSION_MINOR >= 8) || IRRLICHT_VERSION_MAJOR >= 2
 	if (g_settings->getBool("shadows")) {
 		if (m_wield_meshnode && m_wield_meshnode->m_meshnode)
-			shadownode = m_wield_meshnode->m_meshnode->addShadowVolumeSceneNode();
+			m_shadownode = m_wield_meshnode->m_meshnode->addShadowVolumeSceneNode();
 		if(m_animated_meshnode)
-			shadownode = m_animated_meshnode->addShadowVolumeSceneNode();
+			m_shadownode = m_animated_meshnode->addShadowVolumeSceneNode();
 		else if(m_meshnode)
-			shadownode = m_meshnode->addShadowVolumeSceneNode();
+			m_shadownode = m_meshnode->addShadowVolumeSceneNode();
 	}
 #endif
 }
@@ -1250,10 +1254,10 @@ void GenericCAO::step(float dtime, ClientEnvironment *env)
 		updateNodePos();
 	}
 
-	if (shadownode && !(rand()%50)) {
+	if (m_shadownode && !(rand()%50)) {
 		auto n = m_env->getMap().getNodeTry(floatToInt(getPosition(), BS));
 		if (n.getContent() != CONTENT_IGNORE)
-			shadownode->setVisible(n.getLight(LIGHTBANK_DAY, env->getGameDef()->ndef()) >= LIGHT_SUN);
+			m_shadownode->setVisible(n.getLight(LIGHTBANK_DAY, env->getGameDef()->ndef()) >= LIGHT_SUN);
 	}
 
 }
@@ -1744,10 +1748,12 @@ void GenericCAO::processMessage(const std::string &data)
 	}
 }
 	
+/* \pre punchitem != NULL
+ */
 bool GenericCAO::directReportPunch(v3f dir, const ItemStack *punchitem,
 		float time_from_last_punch)
 {
-	assert(punchitem);
+	assert(punchitem);	// pre-condition
 	const ToolCapabilities *toolcap =
 			&punchitem->getToolCapabilities(m_gamedef->idef());
 	PunchDamageResult result = getPunchDamage(

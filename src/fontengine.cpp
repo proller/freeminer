@@ -34,7 +34,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 FontEngine* g_fontengine = NULL;
 
 /** callback to be used on change of font size setting */
-static void font_setting_changed(const std::string) {
+static void font_setting_changed(const std::string, void *userdata) {
 	g_fontengine->readSettings();
 }
 
@@ -53,9 +53,9 @@ FontEngine::FontEngine(Settings* main_settings, gui::IGUIEnvironment* env) :
 		m_default_size[i] = (FontMode) FONT_SIZE_UNSPECIFIED;
 	}
 
-	assert(m_settings != NULL);
-	assert(m_env != NULL);
-	assert(m_env->getSkin() != NULL);
+	assert(m_settings != NULL); // pre-condition
+	assert(m_env != NULL); // pre-condition
+	assert(m_env->getSkin() != NULL); // pre-condition
 
 	m_currentMode = FM_Simple;
 
@@ -85,22 +85,22 @@ FontEngine::FontEngine(Settings* main_settings, gui::IGUIEnvironment* env) :
 	updateSkin();
 
 	if (m_currentMode == FM_Standard) {
-		m_settings->registerChangedCallback("font_size", font_setting_changed);
-		m_settings->registerChangedCallback("font_path", font_setting_changed);
-		m_settings->registerChangedCallback("font_shadow", font_setting_changed);
-		m_settings->registerChangedCallback("font_shadow_alpha", font_setting_changed);
+		m_settings->registerChangedCallback("font_size", font_setting_changed, NULL);
+		m_settings->registerChangedCallback("font_path", font_setting_changed, NULL);
+		m_settings->registerChangedCallback("font_shadow", font_setting_changed, NULL);
+		m_settings->registerChangedCallback("font_shadow_alpha", font_setting_changed, NULL);
 	}
 	else if (m_currentMode == FM_Fallback) {
-		m_settings->registerChangedCallback("fallback_font_size", font_setting_changed);
-		m_settings->registerChangedCallback("fallback_font_path", font_setting_changed);
-		m_settings->registerChangedCallback("fallback_font_shadow", font_setting_changed);
-		m_settings->registerChangedCallback("fallback_font_shadow_alpha", font_setting_changed);
+		m_settings->registerChangedCallback("fallback_font_size", font_setting_changed, NULL);
+		m_settings->registerChangedCallback("fallback_font_path", font_setting_changed, NULL);
+		m_settings->registerChangedCallback("fallback_font_shadow", font_setting_changed, NULL);
+		m_settings->registerChangedCallback("fallback_font_shadow_alpha", font_setting_changed, NULL);
 	}
 
-	m_settings->registerChangedCallback("mono_font_path", font_setting_changed);
-	m_settings->registerChangedCallback("mono_font_size", font_setting_changed);
-	m_settings->registerChangedCallback("screen_dpi", font_setting_changed);
-	m_settings->registerChangedCallback("gui_scaling", font_setting_changed);
+	m_settings->registerChangedCallback("mono_font_path", font_setting_changed, NULL);
+	m_settings->registerChangedCallback("mono_font_size", font_setting_changed, NULL);
+	m_settings->registerChangedCallback("screen_dpi", font_setting_changed, NULL);
+	m_settings->registerChangedCallback("gui_scaling", font_setting_changed, NULL);
 }
 
 /******************************************************************************/
@@ -166,7 +166,7 @@ unsigned int FontEngine::getTextHeight(unsigned int font_size, FontMode mode)
 	if (font == NULL) {
 		font = m_env->getSkin()->getFont();
 	}
-	assert(font != NULL);
+	FATAL_ERROR_IF(font == NULL, "Could not get skin font");
 
 	return font->getDimension(L"Some unimportant example String").Height;
 }
@@ -181,7 +181,7 @@ unsigned int FontEngine::getTextWidth(const std::wstring& text,
 	if (font == NULL) {
 		font = m_env->getSkin()->getFont();
 	}
-	assert(font != NULL);
+	FATAL_ERROR_IF(font == NULL, "Could not get font");
 
 	return font->getDimension(text.c_str()).Width;
 }
@@ -196,7 +196,7 @@ unsigned int FontEngine::getLineHeight(unsigned int font_size, FontMode mode)
 	if (font == NULL) {
 		font = m_env->getSkin()->getFont();
 	}
-	assert(font != NULL);
+	FATAL_ERROR_IF(font == NULL, "Could not get font");
 
 	return font->getDimension(L"Some unimportant example String").Height
 			+ font->getKerningHeight();
@@ -245,7 +245,7 @@ void FontEngine::updateSkin()
 
 	// If we did fail to create a font our own make irrlicht find a default one
 	font = m_env->getSkin()->getFont();
-	assert(font);
+	FATAL_ERROR_IF(font == NULL, "Could not create/get font");
 
 	u32 text_height = font->getDimension(L"Hello, world!").Height;
 	infostream << "text_height=" << text_height << std::endl;
@@ -324,12 +324,6 @@ void FontEngine::initFont(unsigned int basesize, FontMode mode)
 
 		std::string font_path = g_settings->get(font_config_prefix + "font_path");
 
-		if (font_path.substr(font_path.length() -4) != ".ttf") {
-			errorstream << "FontEngine: \"" << font_path
-					<< "\" doesn't seem to be a ttf File." << std::endl;
-			return;
-		}
-
 		irr::gui::IGUIFont* font = gui::CGUITTFont::createTTFont(m_env,
 				font_path.c_str(), size, true, true, font_shadow,
 				font_shadow_alpha);
@@ -347,7 +341,7 @@ void FontEngine::initFont(unsigned int basesize, FontMode mode)
 /** initialize a font without freetype */
 void FontEngine::initSimpleFont(unsigned int basesize, FontMode mode)
 {
-	assert((mode == FM_Simple) || (mode == FM_SimpleMono));
+	assert(mode == FM_Simple || mode == FM_SimpleMono); // pre-condition
 
 	std::string font_path = "";
 	if (mode == FM_Simple) {
@@ -364,7 +358,7 @@ void FontEngine::initSimpleFont(unsigned int basesize, FontMode mode)
 		return;
 	}
 
-	if ((ending == ".xml") || ( ending == ".png")) {
+	if ((ending == ".xml") || (ending == ".png")) {
 		basename = font_path.substr(0,font_path.length()-4);
 	}
 

@@ -16,7 +16,7 @@ endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := curl
-LOCAL_SRC_FILES := deps/curl-7.39.0/lib/.libs/libcurl.a
+LOCAL_SRC_FILES := deps/curl/lib/.libs/libcurl.a
 include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -41,13 +41,23 @@ include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := ssl
-LOCAL_SRC_FILES := deps/openssl-android/libs/$(TARGET_LIBDIR)/libssl.so
-include $(PREBUILT_SHARED_LIBRARY)
+LOCAL_SRC_FILES := deps/openssl/libssl.a
+include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := crypto
-LOCAL_SRC_FILES := deps/openssl-android/libs/$(TARGET_LIBDIR)/libcrypto.so
-include $(PREBUILT_SHARED_LIBRARY)
+LOCAL_SRC_FILES := deps/openssl/libcrypto.a
+include $(PREBUILT_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := iconv
+LOCAL_SRC_FILES := deps/libiconv/lib/.libs/libiconv.a
+include $(PREBUILT_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := msgpack
+LOCAL_SRC_FILES := deps/msgpack/libmsgpack.a
+include $(PREBUILT_STATIC_LIBRARY)
 
 
 include $(CLEAR_VARS)
@@ -66,8 +76,13 @@ LOCAL_CFLAGS := -D_IRR_ANDROID_PLATFORM_      \
 				-DUSE_FREETYPE=1              \
 				-DUSE_LEVELDB=$(HAVE_LEVELDB) \
 				$(GPROF_DEF)                  \
-				-std=c++0x                    \
+				-DHAS_INET_PTON=1 -DHAS_INET_NTOP=1 -DHAS_GETHOSTBYNAME_R=1 -DHAS_FCNTL=1 -DHAS_POLL=1 -DHAS_MSGHDR_FLAGS=1 \
+				-DUSE_MANDELBULBER=1 \
+				-DHAVE_THREAD_LOCAL=1 \
 				-pipe -fstrict-aliasing
+
+#too slow fmtodo				-DENABLE_THREADS=1 -DHAVE_FUTURE=1 -DHAVE_THREAD_LOCAL=1 \
+
 
 ifndef NDEBUG
 LOCAL_CFLAGS += -g -D_DEBUG -O0 -fno-omit-frame-pointer
@@ -88,6 +103,10 @@ LOCAL_CFLAGS += -fno-stack-protector
 endif
 
 LOCAL_C_INCLUDES :=                               \
+		jni/src/enet/include                      \
+		deps/msgpack/include                      \
+		deps/libiconv/include                     \
+		deps/msgpack/src                          \
 		jni/src jni/src/sqlite                    \
 		jni/src/script                            \
 		jni/src/lua/src                           \
@@ -95,23 +114,26 @@ LOCAL_C_INCLUDES :=                               \
 		jni/src/cguittfont                        \
 		deps/irrlicht/include                     \
 		deps/freetype2-android/include            \
-		deps/curl-7.39.0/include                  \
+		deps/curl/include                         \
 		deps/openal-soft/jni/OpenAL/include       \
 		deps/libvorbis-libogg-android/jni/include \
 		deps/leveldb/include                      \
+		deps/sqlite/
 
 LOCAL_SRC_FILES :=                                \
+		jni/src/util/utf8.cpp                     \
 		jni/src/gsmapper.cpp                      \
 		jni/src/guiTextInputMenu.cpp              \
 		jni/src/FMColoredString.cpp               \
 		jni/src/FMStaticText.cpp                  \
 		jni/src/fmbitset.cpp                      \
+		jni/src/fm_liquid.cpp                     \
+		jni/src/fm_map.cpp                        \
 		jni/src/intlGUIEditBox.cpp                \
 		jni/src/key_value_storage.cpp             \
 		jni/src/log_types.cpp                     \
 		jni/src/profiler.cpp                      \
 		jni/src/ban.cpp                           \
-		jni/src/base64.cpp                        \
 		jni/src/camera.cpp                        \
 		jni/src/cavegen.cpp                       \
 		jni/src/chat.cpp                          \
@@ -122,7 +144,6 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/clientobject.cpp                  \
 		jni/src/clouds.cpp                        \
 		jni/src/collision.cpp                     \
-		jni/src/connection.cpp                    \
 		jni/src/content_abm.cpp                   \
 		jni/src/content_cao.cpp                   \
 		jni/src/content_cso.cpp                   \
@@ -201,7 +222,6 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/server.cpp                        \
 		jni/src/serverlist.cpp                    \
 		jni/src/serverobject.cpp                  \
-		jni/src/sha1.cpp                          \
 		jni/src/shader.cpp                        \
 		jni/src/sky.cpp                           \
 		jni/src/socket.cpp                        \
@@ -210,16 +230,17 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/staticobject.cpp                  \
 		jni/src/subgame.cpp                       \
 		jni/src/test.cpp                          \
-		jni/src/tile.cpp                          \
 		jni/src/tool.cpp                          \
 		jni/src/treegen.cpp                       \
 		jni/src/version.cpp                       \
 		jni/src/voxel.cpp                         \
 		jni/src/voxelalgorithms.cpp               \
+		jni/src/util/base64.cpp                   \
 		jni/src/util/directiontables.cpp          \
 		jni/src/util/numeric.cpp                  \
 		jni/src/util/pointedthing.cpp             \
 		jni/src/util/serialize.cpp                \
+		jni/src/util/sha1.cpp                     \
 		jni/src/util/string.cpp                   \
 		jni/src/util/timetaker.cpp                \
 		jni/src/touchscreengui.cpp                \
@@ -231,7 +252,18 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/stat.cpp               \
 		jni/src/database-leveldb.cpp              \
 		jni/src/settings.cpp                      \
-		jni/src/wieldmesh.cpp
+		jni/src/wieldmesh.cpp                     \
+		jni/src/client/clientlauncher.cpp         \
+		jni/src/client/tile.cpp
+
+# Network
+LOCAL_SRC_FILES +=                                \
+		jni/src/network/connection.cpp            \
+		jni/src/network/networkpacket.cpp         \
+		jni/src/network/clientopcodes.cpp         \
+		jni/src/network/clientpackethandler.cpp   \
+		jni/src/network/serveropcodes.cpp         \
+		jni/src/network/serverpackethandler.cpp   \
 
 # lua api
 LOCAL_SRC_FILES +=                                \
@@ -309,7 +341,7 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/lua/src/print.c
 
 # sqlite
-LOCAL_SRC_FILES += jni/src/sqlite/sqlite3.c
+LOCAL_SRC_FILES += deps/sqlite/sqlite3.c
 
 # jthread
 LOCAL_SRC_FILES +=                                \
@@ -319,8 +351,22 @@ LOCAL_SRC_FILES +=                                \
 # json
 LOCAL_SRC_FILES += jni/src/json/jsoncpp.cpp
 
-LOCAL_SHARED_LIBRARIES := openal ogg vorbis ssl crypto
-LOCAL_STATIC_LIBRARIES := Irrlicht freetype curl android_native_app_glue $(PROFILER_LIBS)
+LOCAL_SHARED_LIBRARIES := openal ogg vorbis
+LOCAL_STATIC_LIBRARIES := Irrlicht freetype curl ssl crypto android_native_app_glue $(PROFILER_LIBS)
+
+
+LOCAL_SRC_FILES += \
+		jni/src/enet/callbacks.c                 \
+		jni/src/enet/compress.c                  \
+		jni/src/enet/host.c                      \
+		jni/src/enet/list.c                      \
+		jni/src/enet/packet.c                    \
+		jni/src/enet/peer.c                      \
+		jni/src/enet/protocol.c                  \
+		jni/src/enet/unix.c
+
+LOCAL_STATIC_LIBRARIES += iconv msgpack
+
 
 ifeq ($(HAVE_LEVELDB), 1)
 	LOCAL_STATIC_LIBRARIES += LevelDB
