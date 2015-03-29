@@ -31,7 +31,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "inventorymanager.h"
 #include "modalMenu.h"
 #include "guiTable.h"
-#include "clientserver.h"
+#include "network/networkprotocol.h"
 
 class IGameDef;
 class InventoryManager;
@@ -213,8 +213,8 @@ public:
 			ISimpleTextureSource *tsrc,
 			IFormSource* fs_src,
 			TextDest* txt_dst,
-			Client* client
-			);
+			Client* client,
+			bool remap_dbl_click = true);
 
 	~GUIFormSpecMenu();
 
@@ -358,7 +358,7 @@ private:
 	IFormSource      *m_form_src;
 	TextDest         *m_text_dst;
 	unsigned int      m_formspec_version;
-	std::string      m_focused_element;
+	std::string       m_focused_element;
 
 	typedef struct {
 		bool explicit_size;
@@ -438,6 +438,14 @@ private:
 	v2s32 m_down_pos;
 	std::string m_JavaDialogFieldName;
 #endif
+
+	/* If true, remap a double-click (or double-tap) action to ESC. This is so
+	 * that, for example, Android users can double-tap to close a formspec.
+	*
+	 * This value can (currently) only be set by the class constructor
+	 * and the default value for the setting is true.
+	 */
+	bool m_remap_dbl_click;
 
 };
 

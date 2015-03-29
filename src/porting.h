@@ -62,6 +62,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 	#include <windows.h>
 
 	#define sleep_ms(x) Sleep(x)
+
+	#define MAX_PACKET_SIZE_SINGLEPLAYER 1400
 #else
 	#include <unistd.h>
 	#include <stdint.h> //for uintptr_t
@@ -92,6 +94,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 	#define THREAD_PRIORITY_NORMAL       2
 	#define THREAD_PRIORITY_ABOVE_NORMAL 3
 	#define THREAD_PRIORITY_HIGHEST      4
+
+	#define MAX_PACKET_SIZE_SINGLEPLAYER 8192
 #endif
 
 #ifdef _MSC_VER
@@ -395,6 +399,7 @@ float getDisplayDensity();
 v2u32 getDisplaySize();
 v2u32 getWindowSize();
 
+std::vector<core::vector3d<u32> > getSupportedVideoModes();
 std::vector<irr::video::E_DRIVER_TYPE> getSupportedVideoDrivers();
 const char *getVideoDriverName(irr::video::E_DRIVER_TYPE type);
 const char *getVideoDriverFriendlyName(irr::video::E_DRIVER_TYPE type);
