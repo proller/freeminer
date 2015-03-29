@@ -24,7 +24,7 @@
 #include "gsmapper.h"
 #include "map.h"
 #include "nodedef.h"
-#include "tile.h"
+#include "client/tile.h"
 #include "util/numeric.h"
 #include "util/string.h"
 #include <math.h>
@@ -55,6 +55,8 @@ gsMapper::gsMapper(IrrlichtDevice *device, Client *client):
 
 	d_tsrc = d_client->getTextureSource();
 	d_player = d_client->getEnv().getLocalPlayer();
+
+	d_posx = d_posy = d_width = d_height = d_scale = d_alpha = 0;
 }
 
 gsMapper::~gsMapper()
@@ -253,7 +255,7 @@ void gsMapper::drawMap(v3s16 position)
 				{
 					if (b)
 					{
-						MapNode n = map.getNodeNoEx(p);
+						MapNode n = map.getNodeTry(p);
 						p.Y--;
 						if (n.param0 != CONTENT_IGNORE && n.param0 != CONTENT_AIR)
 						{
@@ -275,7 +277,7 @@ void gsMapper::drawMap(v3s16 position)
 			// not "above" = use the radar for mapping
 			} else {
 				p.Y = position.Y + 1;
-				MapNode n = map.getNodeNoEx(p);
+				MapNode n = map.getNodeTry(p);
 				bool w = (n.param0 != CONTENT_IGNORE && n.param0 != CONTENT_AIR);
 
 				int count = 0;
@@ -285,7 +287,7 @@ void gsMapper::drawMap(v3s16 position)
 					if (w)		// wall = scan up for air
 					{
 						p.Y++;
-						n = map.getNodeNoEx(p);
+						n = map.getNodeTry(p);
 						if (n.param0 == CONTENT_AIR)
 							b = false;
 						else
@@ -293,7 +295,7 @@ void gsMapper::drawMap(v3s16 position)
 
 					} else {	// not wall = scan down for non-air
 						p.Y--;
-						n = map.getNodeNoEx(p);
+						n = map.getNodeTry(p);
 						if (n.param0 != CONTENT_IGNORE && n.param0 != CONTENT_AIR)
 						{
 							id = n.param0;

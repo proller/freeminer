@@ -36,8 +36,6 @@ extern "C" {
 #include "common/c_types.h"
 #include "common/c_internal.h"
 
-#define SCRIPTAPI_LOCK_DEBUG
-
 class Server;
 class Environment;
 class GUIEngine;
@@ -81,15 +79,12 @@ protected:
 	GUIEngine* getGuiEngine() { return m_guiengine; }
 	void setGuiEngine(GUIEngine* guiengine) { m_guiengine = guiengine; }
 
-	void objectrefGetOrCreate(ServerActiveObject *cobj);
-	void objectrefGet(u16 id);
+	void objectrefGetOrCreate(lua_State *L, ServerActiveObject *cobj);
+	void objectrefGet(lua_State *L, u16 id);
 
-	JMutex          m_luastackmutex;
+	std::recursive_mutex m_luastackmutex;
 	// Stack index of Lua error handler
 	int             m_errorhandler;
-#ifdef SCRIPTAPI_LOCK_DEBUG
-	bool            m_locked;
-#endif
 
 private:
 	lua_State*      m_luastack;

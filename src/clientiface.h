@@ -28,11 +28,15 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "serialization.h"             // for SER_FMT_VER_INVALID
 #include "jthread/jmutex.h"
 #include "util/lock.h"
+#include "util/unordered_map_hash.h"
+#include "network/networkpacket.h"
 
 #include <list>
 #include <vector>
 #include <map>
 #include <set>
+
+#include "msgpack.h"
 
 class MapBlock;
 class ServerEnvironment;
@@ -202,24 +206,24 @@ public:
 	// The serialization version to use with the client
 	u8 serialization_version;
 	//
-	u16 net_proto_version;
+	std::atomic_ushort net_proto_version;
 
-	s16 m_nearest_unsent_nearest;
-	s16 wanted_range;
-	
+	std::atomic_int m_nearest_unsent_reset;
+	std::atomic_int wanted_range;
+	std::atomic_int range_all;
+	std::atomic_int farmesh;
+	float fov;
+	bool block_overflow;
+
 	ServerEnvironment *m_env;
 
 	RemoteClient(ServerEnvironment *env):
 		peer_id(PEER_ID_INEXISTENT),
 		serialization_version(SER_FMT_VER_INVALID),
-		net_proto_version(0),
-		m_nearest_unsent_nearest(0),
-		wanted_range(9 * MAP_BLOCKSIZE),
 		m_env(env),
 		m_time_from_building(9999),
 		m_pending_serialization_version(SER_FMT_VER_INVALID),
 		m_state(CS_Created),
-		m_nearest_unsent_d(0),
 		m_nearest_unsent_reset_timer(0.0),
 		m_nothing_to_send_pause_timer(0.0),
 		m_name(""),
@@ -227,8 +231,18 @@ public:
 		m_version_minor(0),
 		m_version_patch(0),
 		m_full_version("unknown"),
+		m_supported_compressions(0),
 		m_connection_time(getTime(PRECISION_SECONDS))
 	{
+		net_proto_version = 0;
+		m_nearest_unsent_d = 0;
+		m_nearest_unsent_reset = 0;
+
+		wanted_range = 9 * MAP_BLOCKSIZE;
+		range_all = 0;
+		farmesh = 0;
+		fov = 72; // g_settings->getFloat("fov");
+		block_overflow = 0;
 	}
 	~RemoteClient()
 	{
@@ -282,7 +296,7 @@ public:
 		List of active objects that the client knows of.
 		Value is dummy.
 	*/
-	std::set<u16> m_known_objects;
+	maybe_shared_unordered_map<u16, bool> m_known_objects;
 
 	ClientState getState()
 		{ return m_state; }
@@ -299,6 +313,9 @@ public:
 	/* set expected serialization version */
 	void setPendingSerializationVersion(u8 version)
 		{ m_pending_serialization_version = version; }
+
+	void setSupportedCompressionModes(u8 byteFlag)
+		{ m_supported_compressions = byteFlag; }
 
 	void confirmSerializationVersion()
 		{ serialization_version = m_pending_serialization_version; }
@@ -336,13 +353,14 @@ private:
 		Key is position, value is dummy.
 		No MapBlock* is stored here because the blocks can get deleted.
 	*/
-	std::map<v3s16, unsigned int> m_blocks_sent;
+	shared_unordered_map<v3POS, unsigned int, v3POSHash, v3POSEqual> m_blocks_sent;
 
 public:
-	s16 m_nearest_unsent_d;
+	std::atomic_int m_nearest_unsent_d;
 private:
 
 	v3s16 m_last_center;
+	v3f   m_last_direction;
 	float m_nearest_unsent_reset_timer;
 
 	// CPU usage optimization
@@ -362,6 +380,8 @@ private:
 
 	std::string m_full_version;
 
+	u8 m_supported_compressions;
+
 	/*
 		time this client was created
 	 */
@@ -380,22 +400,31 @@ public:
 	void step(float dtime);
 
 	/* get list of active client id's */
-	std::list<u16> getClientIDs(ClientState min_state=CS_Active);
+	std::vector<u16> getClientIDs(ClientState min_state=CS_Active);
 
 	/* get list of client player names */
 	std::vector<std::string> getPlayerNames();
 
 	/* send message to client */
-	void send(u16 peer_id, u8 channelnum, SharedBuffer<u8> data, bool reliable);
+	void send(u16 peer_id, u8 channelnum, NetworkPacket* pkt, bool reliable);
+
+	/* send message to client */
+	void send(u16 peer_id, u8 channelnum, const msgpack::sbuffer &data, bool reliable);
+
+	void send(u16 peer_id, u8 channelnum, SharedBuffer<u8> data, bool reliable); //todo: delete
 
 	/* send to all clients */
 	void sendToAll(u16 channelnum, SharedBuffer<u8> data, bool reliable);
+	void sendToAll(u16 channelnum, msgpack::sbuffer const &buffer, bool reliable);
+	void sendToAll(u16 channelnum, NetworkPacket* pkt, bool reliable);
 
 	/* delete a client */
 	void DeleteClient(u16 peer_id);
 
 	/* create client */
 	void CreateClient(u16 peer_id);
+
+	std::shared_ptr<RemoteClient> getClient(u16 peer_id,  ClientState state_min=CS_Active);
 
 	/* get a client by peer_id */
 	RemoteClient* getClientNoEx(u16 peer_id,  ClientState state_min=CS_Active);
@@ -418,22 +447,34 @@ public:
 	/* event to update client state */
 	void event(u16 peer_id, ClientStateEvent event);
 
-	/* set environment */
-	void setEnv(ServerEnvironment* env)
-	{ assert(m_env == 0); m_env = env; }
+	/* Set environment. Do not call this function if environment is already set */
+	void setEnv(ServerEnvironment *env)
+	{
+		assert(m_env == NULL); // pre-condition
+		m_env = env;
+	}
 
 	static std::string state2Name(ClientState state);
 
 protected:
-	//TODO find way to avoid this functions
+	//mt compat
 	void Lock()
-		{ m_clients_mutex.Lock(); }
+		{  }
 	void Unlock()
-		{ m_clients_mutex.Unlock(); }
+		{  }
+
 
 public:
-	shared_map<u16, RemoteClient*>& getClientList()
-		{ return m_clients; }
+	std::vector<std::shared_ptr<RemoteClient>> getClientList() {
+		std::vector<std::shared_ptr<RemoteClient>> clients;
+		auto lock = m_clients.lock_shared_rec();
+		for(auto & ir : m_clients) {
+			auto c = ir.second;
+			if (c)
+				clients.emplace_back(c);
+		}
+		return clients;
+	}
 
 private:
 	/* update internal player list */
@@ -441,17 +482,16 @@ private:
 
 	// Connection
 	con::Connection* m_con;
-	JMutex m_clients_mutex;
 	// Connected clients (behind the con mutex)
-	shared_map<u16, RemoteClient*> m_clients;
+	shared_map<u16, std::shared_ptr<RemoteClient>> m_clients;
 	std::vector<std::string> m_clients_names; //for announcing masterserver
 
 	// Environment
 	ServerEnvironment *m_env;
-	JMutex m_env_mutex;
+	//JMutex m_env_mutex;
 
 	float m_print_info_timer;
-	
+
 	static const char *statenames[];
 };
 

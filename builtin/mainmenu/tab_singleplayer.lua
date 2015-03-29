@@ -35,6 +35,7 @@ local function singleplayer_refresh_gamebar()
 			for j=1,#gamemgr.games,1 do
 				if ("game_btnbar_" .. gamemgr.games[j].id == key) then
 					mm_texture.update("singleplayer", gamemgr.games[j])
+					core.set_topleft_text(gamemgr.games[j].name)
 					core.setting_set("menu_last_game",gamemgr.games[j].id)
 					menudata.worldlist:set_filtercriteria(gamemgr.games[j].id)
 					return true
@@ -52,6 +53,7 @@ local function singleplayer_refresh_gamebar()
 		
 		local image = nil
 		local text = nil
+		local tooltip = core.formspec_escape(gamemgr.games[i].name)
 		
 		if gamemgr.games[i].menuicon_path ~= nil and
 			gamemgr.games[i].menuicon_path ~= "" then
@@ -68,7 +70,7 @@ local function singleplayer_refresh_gamebar()
 				text = text .. "\n" .. part3
 			end
 		end
-		btnbar:add_button(btn_name, text, image)
+		btnbar:add_button(btn_name, text, image, tooltip)
 	end
 end
 
@@ -85,10 +87,9 @@ local function get_formspec(tabview, name, tabdata)
 			"button[9.2,4.15;2.55,0.5;world_configure;".. fgettext("Configure") .. "]" ..
 			"button[8.5,4.95;3.25,0.5;play;".. fgettext("Play") .. "]" ..
 			"label[4,-0.25;".. fgettext("Select World:") .. "]"..
-			"vertlabel[0,-0.25;".. fgettext("SINGLE PLAYER") .. "]" ..
-			"checkbox[0.5,0.25;cb_creative_mode;".. fgettext("Creative Mode") .. ";" ..
+			"checkbox[0.25,0.25;cb_creative_mode;".. fgettext("Creative Mode") .. ";" ..
 			dump(core.setting_getbool("creative_mode")) .. "]"..
-			"checkbox[0.5,0.7;cb_enable_damage;".. fgettext("Enable Damage") .. ";" ..
+			"checkbox[0.25,0.7;cb_enable_damage;".. fgettext("Enable Damage") .. ";" ..
 			dump(core.setting_getbool("enable_damage")) .. "]"..
 			"textlist[4,0.25;7.5,3.7;sp_worlds;" ..
 			menu_render_worldlist() ..
@@ -105,13 +106,39 @@ local function main_button_handler(this, fields, name, tabdata)
 	if fields["sp_worlds"] ~= nil then
 		local event = core.explode_textlist_event(fields["sp_worlds"])
 
+		local selected = core.get_textlist_index("sp_worlds")
+		if selected ~= nil then
+			local filename = menudata.worldlist:get_list()[selected].path
+			local worldconfig = modmgr.get_worldconfig(filename)
+			filename = filename .. DIR_DELIM .. "world.mt"
+
+			if worldconfig.creative_mode ~= nil then
+				core.setting_set("creative_mode", worldconfig.creative_mode)
+			else
+				local worldfile = Settings(filename)
+				worldfile:set("creative_mode", core.setting_get("creative_mode"))
+				if not worldfile:write() then
+					core.log("error", "Failed to write world config file")
+				end
+			end
+			if worldconfig.enable_damage ~= nil then
+				core.setting_set("enable_damage", worldconfig.enable_damage)
+			else
+				local worldfile = Settings(filename)
+				worldfile:set("enable_damage", core.setting_get("enable_damage"))
+				if not worldfile:write() then
+					core.log("error", "Failed to write world config file")
+				end
+			end
+		end
+
 		if event.type == "DCL" then
 			world_doubleclick = true
 		end
 
-		if event.type == "CHG" then
+		if event.type == "CHG" and selected ~= nil then
 			core.setting_set("mainmenu_last_selected_world",
-				menudata.worldlist:get_raw_index(core.get_textlist_index("sp_worlds")))
+				menudata.worldlist:get_raw_index(selected))
 			return true
 		end
 	end
@@ -122,11 +149,29 @@ local function main_button_handler(this, fields, name, tabdata)
 
 	if fields["cb_creative_mode"] then
 		core.setting_set("creative_mode", fields["cb_creative_mode"])
+		local selected = core.get_textlist_index("sp_worlds")
+		local filename = menudata.worldlist:get_list()[selected].path ..
+				DIR_DELIM .. "world.mt"
+
+		local worldfile = Settings(filename)
+		worldfile:set("creative_mode", fields["cb_creative_mode"])
+		if not worldfile:write() then
+			core.log("error", "Failed to write world config file")
+		end
 		return true
 	end
 
 	if fields["cb_enable_damage"] then
 		core.setting_set("enable_damage", fields["cb_enable_damage"])
+		local selected = core.get_textlist_index("sp_worlds")
+		local filename = menudata.worldlist:get_list()[selected].path ..
+				DIR_DELIM .. "world.mt"
+
+		local worldfile = Settings(filename)
+		worldfile:set("enable_damage", fields["cb_enable_damage"])
+		if not worldfile:write() then
+			core.log("error", "Failed to write world config file")
+		end
 		return true
 	end
 

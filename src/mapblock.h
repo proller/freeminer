@@ -42,6 +42,8 @@ class IGameDef;
 class MapBlockMesh;
 class VoxelManipulator;
 class Circuit;
+class ServerEnvironment;
+struct ActiveABM;
 
 #define BLOCK_TIMESTAMP_UNDEFINED 0xffffffff
 
@@ -102,12 +104,22 @@ public:
 };
 #endif
 
+struct abm_trigger_one {
+	ActiveABM * abm;
+	v3POS pos;
+	content_t content;
+	u32 active_object_count;
+	u32 active_object_count_wider;
+	v3POS neighbor_pos;
+	bool activate;
+};
+
 /*
 	MapBlock itself
 */
 
 class MapBlock /*: public NodeContainer*/
-: public locker
+: public maybe_locker
 {
 public:
 	MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy=false);
@@ -127,16 +139,16 @@ public:
 	{
 		auto lock = lock_unique_rec();
 		if(data != NULL)
-			delete[] data;
+			delete data;
 		u32 l = MAP_BLOCKSIZE * MAP_BLOCKSIZE * MAP_BLOCKSIZE;
-		data = new MapNode[l];
+		data = reinterpret_cast<MapNode*>( ::operator new(l * sizeof(MapNode)));
+		if (!CONTENT_IGNORE)
+			memset(data, 0, l * sizeof(MapNode));
+		else
 		for(u32 i=0; i<l; i++){
-			//data[i] = MapNode();
 			data[i] = MapNode(CONTENT_IGNORE);
 		}
-/*
-		raiseModified(MOD_STATE_WRITE_NEEDED, "reallocate");
-*/
+
 	}
 
 	/*
@@ -145,26 +157,17 @@ public:
 
 	bool isDummy()
 	{
-		return (data == NULL);
+		return false;
+		//auto lock = lock_shared_rec();
+		//return (data == NULL);
 	}
 	void unDummify()
 	{
-		assert(isDummy());
 		reallocate();
 	}
 	
 	// m_modified methods
-	void raiseModified(u32 mod)
-	{
-		if(mod >= MOD_STATE_WRITE_NEEDED && m_timestamp != BLOCK_TIMESTAMP_UNDEFINED) {
-			m_changed_timestamp = m_timestamp;
-		}
-		if(mod > m_modified){
-			m_modified = mod;
-			if(m_modified >= MOD_STATE_WRITE_AT_UNLOAD)
-				m_disk_timestamp = m_timestamp;
-		}
-	}
+	void raiseModified(u32 mod);
 	void raiseModified(u32 mod, const std::string &reason)
 	{
 		raiseModified(mod);
@@ -193,6 +196,32 @@ public:
 		}
 #endif
 	}
+	void raiseModified(u32 mod, const char *reason)
+	{
+		raiseModified(mod);
+#ifdef WTFdebug
+		if (mod > m_modified){
+			m_modified = mod;
+			m_modified_reason = reason;
+			m_modified_reason_too_long = false;
+
+			if (m_modified >= MOD_STATE_WRITE_AT_UNLOAD){
+				m_disk_timestamp = m_timestamp;
+			}
+		}
+		else if (mod == m_modified){
+			if (!m_modified_reason_too_long){
+				if (m_modified_reason.size() < 40)
+					m_modified_reason += ", " + std::string(reason);
+				else{
+					m_modified_reason += "...";
+					m_modified_reason_too_long = true;
+				}
+			}
+		}
+#endif
+	}
+
 	u32 getModified()
 	{
 		return m_modified;
@@ -229,12 +258,12 @@ public:
 
 	void setLightingExpired(bool expired)
 	{
-		if(expired != m_lighting_expired){
+//		if(expired != m_lighting_expired){
 			m_lighting_expired = expired;
 /*
 			raiseModified(MOD_STATE_WRITE_NEEDED, "setLightingExpired");
 */
-		}
+//		}
 	}
 	bool getLightingExpired()
 	{
@@ -257,8 +286,8 @@ public:
 
 	bool isValid()
 	{
-		if(m_lighting_expired)
-			return false;
+		//if(m_lighting_expired)
+		//	return false;
 		if(data == NULL)
 			return false;
 		return true;
@@ -290,21 +319,33 @@ public:
 		Regular MapNode get-setters
 	*/
 	
+	bool isValidPosition(s16 x, s16 y, s16 z)
+	{
+		return data != NULL
+				&& x >= 0 && x < MAP_BLOCKSIZE
+				&& y >= 0 && y < MAP_BLOCKSIZE
+				&& z >= 0 && z < MAP_BLOCKSIZE;
+	}
+
 	bool isValidPosition(v3s16 p)
 	{
-		if(data == NULL)
-			return false;
-		return (p.X >= 0 && p.X < MAP_BLOCKSIZE
-				&& p.Y >= 0 && p.Y < MAP_BLOCKSIZE
-				&& p.Z >= 0 && p.Z < MAP_BLOCKSIZE);
+		return isValidPosition(p.X, p.Y, p.Z);
+	}
+
+	MapNode getNode(v3POS p, bool *valid_position)
+	{
+		*valid_position = isValidPosition(p.X, p.Y, p.Z);
+
+		if (!*valid_position)
+			return MapNode(CONTENT_IGNORE);
+
+		auto lock = lock_shared_rec();
+		return data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X];
 	}
 
 	MapNode getNode(v3s16 p)
 	{
-		auto n = getNodeNoEx(p);
-		if (n.getContent() == CONTENT_IGNORE)
-			throw InvalidPositionException();
-		return n;
+		return getNodeNoEx(p);
 	}
 
 	MapNode getNodeTry(v3s16 p)
@@ -312,71 +353,47 @@ public:
 		auto lock = try_lock_shared_rec();
 		if (!lock->owns_lock())
 			return MapNode(CONTENT_IGNORE);
-		return getNodeNoEx(p);
+		return getNodeNoLock(p);
 	}
 
-	MapNode getNodeNoLock(v3s16 p)
+	MapNode getNodeNoLock(v3POS p)
 	{
 		if (!data)
 			return MapNode(CONTENT_IGNORE);
 		return data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X];
 	}
 
-	MapNode getNodeNoEx(v3s16 p)
-	{
-		auto lock = lock_shared_rec();
-		return getNodeNoLock(p);
-	}
+	MapNode getNodeNoEx(v3POS p);
 
-	void setNode(v3s16 p, MapNode & n)
-	{
-		if(data == NULL)
-			throw InvalidPositionException();
-		if(p.X < 0 || p.X >= MAP_BLOCKSIZE) throw InvalidPositionException();
-		if(p.Y < 0 || p.Y >= MAP_BLOCKSIZE) throw InvalidPositionException();
-		if(p.Z < 0 || p.Z >= MAP_BLOCKSIZE) throw InvalidPositionException();
-		auto lock = lock_unique_rec();
-		data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X] = n;
-		raiseModified(MOD_STATE_WRITE_NEEDED/*, "setNode"*/);
-	}
+	void setNode(v3s16 p, MapNode & n);
 
 	/*
 		Non-checking variants of the above
 	*/
 
-	MapNode getNodeNoCheck(s16 x, s16 y, s16 z)
+	MapNode getNodeNoCheck(s16 x, s16 y, s16 z, bool *valid_position)
 	{
-		if(data == NULL)
-			throw InvalidPositionException();
+		*valid_position = data != NULL;
+		if(!valid_position)
+			return MapNode(CONTENT_IGNORE);
+
 		auto lock = lock_shared_rec();
 		return data[z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + y*MAP_BLOCKSIZE + x];
 	}
 	
-	MapNode getNodeNoCheck(v3s16 p)
+	MapNode getNodeNoCheck(v3s16 p, bool *valid_position)
 	{
-		return getNodeNoCheck(p.X, p.Y, p.Z);
+		return getNodeNoCheck(p.X, p.Y, p.Z, valid_position);
 	}
 	
-	void setNodeNoCheck(s16 x, s16 y, s16 z, MapNode & n)
-	{
-		if(data == NULL)
-			throw InvalidPositionException();
-		auto lock = lock_unique_rec();
-		data[z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + y*MAP_BLOCKSIZE + x] = n;
-		raiseModified(MOD_STATE_WRITE_NEEDED/*, "setNodeNoCheck"*/);
-	}
-	
-	void setNodeNoCheck(v3s16 p, MapNode & n)
-	{
-		setNodeNoCheck(p.X, p.Y, p.Z, n);
-	}
+	void setNodeNoCheck(v3s16 p, MapNode & n);
 
 	/*
 		These functions consult the parent container if the position
 		is not valid on this MapBlock.
 	*/
 	bool isValidPositionParent(v3s16 p);
-	MapNode getNodeParent(v3s16 p);
+	MapNode getNodeParent(v3s16 p, bool *is_valid_position = NULL);
 
 	void drawbox(s16 x0, s16 y0, s16 z0, s16 w, s16 h, s16 d, MapNode node)
 	{
@@ -455,10 +472,12 @@ public:
 	*/
 	void resetUsageTimer()
 	{
+		auto lock = lock_unique_rec();
 		m_usage_timer = 0;
 	}
-	u32 getUsageTimer()
+	float getUsageTimer()
 	{
+		auto lock = lock_shared_rec();
 		return m_usage_timer;
 	}
 	void incrementUsageTimer(float dtime);
@@ -505,20 +524,22 @@ public:
 	
 	// These don't write or read version by itself
 	// Set disk to true for on-disk format, false for over-the-network format
+	// Precondition: version >= SER_FMT_CLIENT_VER_LOWEST
 	void serialize(std::ostream &os, u8 version, bool disk);
 	// If disk == true: In addition to doing other things, will add
 	// unknown blocks from id-name mapping to wndef
-	void deSerialize(std::istream &is, u8 version, bool disk);
+	bool deSerialize(std::istream &is, u8 version, bool disk);
 
 	void serializeNetworkSpecific(std::ostream &os, u16 net_proto_version);
 	void deSerializeNetworkSpecific(std::istream &is);
-	
+
 	void pushElementsToCircuit(Circuit* circuit);
 
 #ifndef SERVER // Only on client
-	MapBlockMesh* getMesh(int step = 1);
-	void setMesh(MapBlockMesh* rmesh);
-	void delMesh();
+	typedef std::shared_ptr<MapBlockMesh> mesh_type;
+
+	MapBlock::mesh_type getMesh(int step = 1);
+	void setMesh(MapBlock::mesh_type & rmesh);
 #endif
 
 private:
@@ -535,10 +556,10 @@ private:
 	MapNode & getNodeRef(s16 x, s16 y, s16 z)
 	{
 		if(data == NULL)
-			throw InvalidPositionException();
-		if(x < 0 || x >= MAP_BLOCKSIZE) throw InvalidPositionException();
-		if(y < 0 || y >= MAP_BLOCKSIZE) throw InvalidPositionException();
-		if(z < 0 || z >= MAP_BLOCKSIZE) throw InvalidPositionException();
+			throw InvalidPositionException("getNodeRef data=NULL");
+		if(x < 0 || x >= MAP_BLOCKSIZE) throw InvalidPositionException("getNodeRef x out of size");
+		if(y < 0 || y >= MAP_BLOCKSIZE) throw InvalidPositionException("getNodeRef y out of size");
+		if(z < 0 || z >= MAP_BLOCKSIZE) throw InvalidPositionException("getNodeRef z out of size");
 		return data[z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + y*MAP_BLOCKSIZE + x];
 	}
 	MapNode & getNodeRef(v3s16 &p)
@@ -552,7 +573,8 @@ public:
 	*/
 
 #ifndef SERVER // Only on client
-	std::vector<MapBlockMesh *> mesh;
+	std::vector<MapBlock::mesh_type> mesh;
+	mesh_type mesh_old;
 #endif
 	
 	NodeMetadataList m_node_metadata;
@@ -567,6 +589,36 @@ public:
 
 	// Last really changed time (need send to client)
 	std::atomic_uint m_changed_timestamp;
+	u32 m_next_analyze_timestamp;
+	typedef std::list<abm_trigger_one> abm_triggers_type;
+	std::unique_ptr<abm_triggers_type> abm_triggers;
+	std::mutex abm_triggers_mutex;
+	void abmTriggersRun(ServerEnvironment * m_env, u32 time, bool activate = false);
+	u32 m_abm_timestamp;
+
+	u32 getActualTimestamp() {
+		u32 block_timestamp = 0;
+		if (m_changed_timestamp && m_changed_timestamp != BLOCK_TIMESTAMP_UNDEFINED) {
+			block_timestamp = m_changed_timestamp;
+		} else if (m_disk_timestamp && m_disk_timestamp != BLOCK_TIMESTAMP_UNDEFINED) {
+			block_timestamp = m_disk_timestamp;
+		}
+		return block_timestamp;
+	}
+
+	// Set to content type of a node if the block consists solely of nodes of one type, otherwise set to CONTENT_IGNORE
+	content_t content_only;
+	content_t analyzeContent() {
+		auto lock = lock_shared_rec();
+		content_only = data[0].param0;
+		for (int i = 1; i<MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; ++i) {
+			if (data[i].param0 != content_only) {
+				content_only = CONTENT_IGNORE;
+				break;
+			}
+		}
+		return content_only;
+	}
 
 private:
 	/*
@@ -615,11 +667,11 @@ private:
 		If this is false, lighting is exactly right.
 		If this is true, lighting might be wrong or right.
 	*/
-	bool m_lighting_expired;
+	std::atomic_bool m_lighting_expired;
 	
 	// Whether day and night lighting differs
 	bool m_day_night_differs;
-	bool m_day_night_differs_expired;
+	std::atomic_bool m_day_night_differs_expired;
 
 	bool m_generated;
 	
@@ -627,7 +679,7 @@ private:
 		When block is removed from active blocks, this is set to gametime.
 		Value BLOCK_TIMESTAMP_UNDEFINED=0xffffffff means there is no timestamp.
 	*/
-	u32 m_timestamp;
+	std::atomic_uint m_timestamp;
 	// The on-disk (or to-be on-disk) timestamp value
 	u32 m_disk_timestamp;
 
@@ -641,8 +693,10 @@ private:
 		Reference count; currently used for determining if this block is in
 		the list of blocks to be drawn.
 	*/
-	int m_refcount;
+	std::atomic_int m_refcount;
 };
+
+typedef std::vector<MapBlock*> MapBlockVect;
 
 inline bool blockpos_over_limit(v3s16 p)
 {
@@ -666,10 +720,23 @@ inline v3s16 getNodeBlockPos(const v3s16 &p)
 */
 }
 
+inline void getNodeBlockPosWithOffset(const v3s16 &p, v3s16 &block, v3s16 &offset)
+{
+	getContainerPosWithOffset(p, MAP_BLOCKSIZE, block, offset);
+}
+
+inline void getNodeSectorPosWithOffset(const v2s16 &p, v2s16 &block, v2s16 &offset)
+{
+	getContainerPosWithOffset(p, MAP_BLOCKSIZE, block, offset);
+}
+
 /*
 	Get a quick string to describe what a block actually contains
 */
 std::string analyze_block(MapBlock *block);
+
+//typedef std::shared_ptr<MapBlock> MapBlockP;
+typedef MapBlock * MapBlockP;
 
 #endif
 

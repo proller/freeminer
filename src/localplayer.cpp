@@ -32,12 +32,14 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "map.h"
 #include "util/numeric.h"
 
+#include "log_types.h"
+
 /*
 	LocalPlayer
 */
 
-LocalPlayer::LocalPlayer(IGameDef *gamedef):
-	Player(gamedef),
+LocalPlayer::LocalPlayer(IGameDef *gamedef, const char *name):
+	Player(gamedef, name),
 	parent(0),
 	isAttached(false),
 	overridePosition(v3f(0,0,0)),
@@ -51,6 +53,7 @@ LocalPlayer::LocalPlayer(IGameDef *gamedef):
 	last_animation(NO_ANIM),
 	hotbar_image(""),
 	hotbar_selected_image(""),
+	light_color(255,255,255,255),
 	m_sneak_node(32767,32767,32767),
 	m_sneak_node_exists(false),
 	m_old_node_below(32767,32767,32767),
@@ -70,14 +73,14 @@ LocalPlayer::~LocalPlayer()
 }
 
 void LocalPlayer::move(f32 dtime, Environment *env, f32 pos_max_d,
-		std::list<CollisionInfo> *collision_info)
+		std::vector<CollisionInfo> *collision_info)
 {
 	Map *map = &env->getMap();
 	INodeDefManager *nodemgr = m_gamedef->ndef();
 
 	v3f position = getPosition();
 
-	v3f old_speed = m_speed;
+	//v3f old_speed = m_speed;
 
 	// Copy parent position if local player is attached
 	if(isAttached)
@@ -103,40 +106,58 @@ void LocalPlayer::move(f32 dtime, Environment *env, f32 pos_max_d,
 	/*
 		Collision detection
 	*/
-	
+
+	bool is_valid_position;
+	MapNode node;
+	v3s16 pp;
+
 	/*
 		Check if player is in liquid (the oscillating value)
 	*/
-	try{
-		// If in liquid, the threshold of coming out is at higher y
+
+	// If in liquid, the threshold of coming out is at higher y
+	if (in_liquid)
+	{
 		// If not in liquid, the threshold of going in is at lower y
-		v3s16 pp = floatToInt(position + v3f(0,BS*(in_liquid ? 0.1 : 0.5),0), BS);
-		auto n = map->getNode(pp);
-		auto f = nodemgr->get(n.getContent());
-		in_liquid = f.isLiquid();
-		liquid_viscosity = f.liquid_viscosity;
-		if (f.param_type_2 == CPT2_LEVELED) {
-			auto level = n.getLevel(nodemgr);
-			auto maxlevel = n.getMaxLevel(nodemgr);
-			if (level && maxlevel)
-				liquid_viscosity /= maxlevel / level;
+		pp = floatToInt(position + v3f(0,BS*(in_liquid ? 0.1 : 0.5),0), BS);
+		node = map->getNodeNoEx(pp, &is_valid_position);
+		if (is_valid_position) {
+			auto f = nodemgr->get(node.getContent());
+			in_liquid = f.isLiquid();
+			liquid_viscosity = f.liquid_viscosity;
+			if (f.param_type_2 == CPT2_LEVELED) {
+				float level = node.getLevel(nodemgr);
+				float maxlevel = node.getMaxLevel(nodemgr);
+				if (level && maxlevel && level < maxlevel)
+					liquid_viscosity /= maxlevel / level;
+			}
+		} else {
+			in_liquid = false;
 		}
 
 	}
-	catch(InvalidPositionException &e)
+	// If not in liquid, the threshold of going in is at lower y
+	else
 	{
-		in_liquid = false;
+		pp = floatToInt(position + v3f(0,BS*0.5,0), BS);
+		node = map->getNodeNoEx(pp, &is_valid_position);
+		if (is_valid_position) {
+			in_liquid = nodemgr->get(node.getContent()).isLiquid();
+			liquid_viscosity = nodemgr->get(node.getContent()).liquid_viscosity;
+		} else {
+			in_liquid = false;
+		}
 	}
+
 
 	/*
 		Check if player is in liquid (the stable value)
 	*/
-	try{
-		v3s16 pp = floatToInt(position + v3f(0,0,0), BS);
-		in_liquid_stable = nodemgr->get(map->getNode(pp).getContent()).isLiquid();
-	}
-	catch(InvalidPositionException &e)
-	{
+	pp = floatToInt(position + v3f(0,0,0), BS);
+	node = map->getNodeNoEx(pp, &is_valid_position);
+	if (is_valid_position) {
+		in_liquid_stable = nodemgr->get(node.getContent()).isLiquid();
+	} else {
 		in_liquid_stable = false;
 	}
 
@@ -144,16 +165,24 @@ void LocalPlayer::move(f32 dtime, Environment *env, f32 pos_max_d,
 	        Check if player is climbing
 	*/
 
-	try {
-		v3s16 pp = floatToInt(position + v3f(0,0.5*BS,0), BS);
-		v3s16 pp2 = floatToInt(position + v3f(0,-0.2*BS,0), BS);
-		is_climbing = ((nodemgr->get(map->getNode(pp).getContent()).climbable ||
-		nodemgr->get(map->getNode(pp2).getContent()).climbable) && !free_move);
-	}
-	catch(InvalidPositionException &e)
-	{
+
+	pp = floatToInt(position + v3f(0,0.5*BS,0), BS);
+	v3s16 pp2 = floatToInt(position + v3f(0,-0.2*BS,0), BS);
+	node = map->getNodeNoEx(pp, &is_valid_position);
+	bool is_valid_position2;
+	MapNode node2 = map->getNodeNoEx(pp2, &is_valid_position2);
+
+	if (!(is_valid_position && is_valid_position2)) {
 		is_climbing = false;
+	} else {
+		bool can_climbing = (nodemgr->get(node.getContent()).climbable
+				|| nodemgr->get(node2.getContent()).climbable) && !free_move;
+		if (m_speed.Y >= -PLAYER_FALL_TOLERANCE_SPEED)
+			is_climbing = can_climbing;
+		else if (can_climbing)
+			m_speed.Y += 0.3*BS;
 	}
+
 
 	/*
 		Collision uncertainty radius
@@ -161,10 +190,10 @@ void LocalPlayer::move(f32 dtime, Environment *env, f32 pos_max_d,
 	*/
 	//f32 d = pos_max_d * 1.1;
 	// A fairly large value in here makes moving smoother
-	f32 d = 0.15*BS;
+	//f32 d = 0.15*BS;
 
 	// This should always apply, otherwise there are glitches
-	assert(d > pos_max_d);
+	//sanity_check(d > pos_max_d);
 
 	// Maximum distance over border for sneaking
 	f32 sneak_max = BS*0.4;
@@ -181,21 +210,31 @@ void LocalPlayer::move(f32 dtime, Environment *env, f32 pos_max_d,
 		v3f lwn_f = intToFloat(m_sneak_node, BS);
 		position.X = rangelim(position.X, lwn_f.X-maxd, lwn_f.X+maxd);
 		position.Z = rangelim(position.Z, lwn_f.Z-maxd, lwn_f.Z+maxd);
-		
+
 		if(!is_climbing)
 		{
 			f32 min_y = lwn_f.Y + 0.5*BS;
-			if(position.Y < min_y)
+			if(position.Y < min_y && m_speed.Y >= -PLAYER_FALL_TOLERANCE_SPEED)
 			{
 				position.Y = min_y;
 
 				if(m_speed.Y < 0)
 					m_speed.Y = 0;
 			}
+
+			if (m_speed.Y < -PLAYER_FALL_TOLERANCE_SPEED) {
+				m_speed.Y += 0.3*BS;
+			}
+
 		}
 	}
 
+	// this shouldn't be hardcoded but transmitted from server
 	float player_stepheight = touching_ground ? (BS*0.6) : (BS*0.2);
+
+	if (g_settings->getBool("autojump")) {
+		player_stepheight += (0.5 * BS);
+	}
 
 	v3f accel_f = v3f(0,0,0);
 
@@ -211,7 +250,7 @@ void LocalPlayer::move(f32 dtime, Environment *env, f32 pos_max_d,
 	*/
 	bool touching_ground_was = touching_ground;
 	touching_ground = result.touching_ground;
-    
+
     //bool standing_on_unloaded = result.standing_on_unloaded;
 
 	/*
@@ -262,33 +301,31 @@ void LocalPlayer::move(f32 dtime, Environment *env, f32 pos_max_d,
 			f32 max_axis_distance_f = MYMAX(
 					fabs(player_p2df.X-node_p2df.X),
 					fabs(player_p2df.Y-node_p2df.Y));
-					
+
 			if(distance_f > min_distance_f ||
 					max_axis_distance_f > 0.5*BS + sneak_max + 0.1*BS)
 				continue;
 
-			try{
-				// The node to be sneaked on has to be walkable
-				if(nodemgr->get(map->getNode(p)).walkable == false)
-					continue;
-				// And the node above it has to be nonwalkable
-				if(nodemgr->get(map->getNode(p+v3s16(0,1,0))).walkable == true) {
-					continue;
-				}
-				if (!physics_override_sneak_glitch) {
-					if (nodemgr->get(map->getNode(p+v3s16(0,2,0))).walkable)
-						continue;
-				}
-			}
-			catch(InvalidPositionException &e)
-			{
+
+			// The node to be sneaked on has to be walkable
+			node = map->getNodeNoEx(p, &is_valid_position);
+			if (!is_valid_position || nodemgr->get(node).walkable == false)
 				continue;
+			// And the node above it has to be nonwalkable
+			node = map->getNodeNoEx(p + v3s16(0,1,0), &is_valid_position);
+			if (!is_valid_position || nodemgr->get(node).walkable) {
+				continue;
+			}
+			if (!physics_override_sneak_glitch) {
+				node =map->getNodeNoEx(p + v3s16(0,2,0), &is_valid_position);
+				if (!is_valid_position || nodemgr->get(node).walkable)
+					continue;
 			}
 
 			min_distance_f = distance_f;
 			new_sneak_node = p;
 		}
-		
+
 		bool sneak_node_found = (min_distance_f < 100000.0*BS*0.9);
 
 		m_sneak_node = new_sneak_node;
@@ -301,20 +338,19 @@ void LocalPlayer::move(f32 dtime, Environment *env, f32 pos_max_d,
 		if(sneak_node_found && control.sneak)
 			touching_ground = true;
 	}
-	
+
 	/*
 		Set new position
 	*/
 	setPosition(position);
-	
+
 	/*
 		Report collisions
 	*/
 	bool bouncy_jump = false;
 	// Dont report if flying
-	if(collision_info && !(g_settings->getBool("free_move") && fly_allowed))
-	{
-		for(size_t i=0; i<result.collisions.size(); i++){
+	if(collision_info && !(g_settings->getBool("free_move") && fly_allowed)) {
+		for(size_t i=0; i<result.collisions.size(); i++) {
 			const CollisionInfo &info = result.collisions[i];
 			collision_info->push_back(info);
 			if(info.new_speed.Y - info.old_speed.Y > 0.1*BS &&
@@ -354,7 +390,7 @@ void LocalPlayer::move(f32 dtime, Environment *env, f32 pos_max_d,
 	*/
 	m_old_node_below = floatToInt(position - v3f(0,BS/2,0), BS);
 	m_old_node_below_type = nodemgr->get(map->getNodeNoEx(m_old_node_below)).name;
-	
+
 	/*
 		Check properties of the node on which the player is standing
 	*/
@@ -376,13 +412,17 @@ bool LocalPlayer::canPlaceNode(const v3s16& p, const MapNode& n)
 		g_settings->getBool("noclip");
 	// Dont place node when player would be inside new node
 	// NOTE: This is to be eventually implemented by a mod as client-side Lua
-	if (m_gamedef->ndef()->get(n).walkable && !noclip) {
+
+	if (m_gamedef->ndef()->get(n).walkable && !noclip && !g_settings->getBool("enable_build_where_you_stand")) {
 		auto nodeboxes = n.getNodeBoxes(m_gamedef->ndef());
 		aabb3f player_box = m_collisionbox;
 		v3f position(getPosition());
 		v3f node_pos(p.X, p.Y, p.Z);
-		player_box.MinEdge *= 0.999f;
-		player_box.MaxEdge *= 0.999f;
+		v3f center = player_box.getCenter();
+		v3f min_edge = (player_box.MinEdge - center) * 0.999f;
+		v3f max_edge = (player_box.MaxEdge - center) * 0.999f;
+		player_box.MinEdge = center + min_edge;
+		player_box.MaxEdge = center + max_edge;
 		player_box.MinEdge += position;
 		player_box.MaxEdge += position;
 		for(auto box : nodeboxes) {
@@ -413,10 +453,10 @@ void LocalPlayer::applyControl(float dtime, ClientEnvironment *env)
 
 	v3f move_direction = v3f(0,0,1);
 	move_direction.rotateXZBy(getYaw());
-	
+
 	v3f speedH = v3f(0,0,0); // Horizontal (X, Z)
 	v3f speedV = v3f(0,0,0); // Vertical (Y)
-	
+
 	bool fly_allowed = m_gamedef->checkLocalPrivilege("fly");
 	bool fast_allowed = m_gamedef->checkLocalPrivilege("fast");
 
@@ -428,7 +468,7 @@ void LocalPlayer::applyControl(float dtime, ClientEnvironment *env)
 	bool fast_pressed = false;
 	// Whether superspeed mode is used or not
 	superspeed = false;
-	
+
 	if(g_settings->getBool("always_fly_fast") && free_move && fast_move)
 		superspeed = true;
 
@@ -438,7 +478,7 @@ void LocalPlayer::applyControl(float dtime, ClientEnvironment *env)
 		// If free movement and fast movement, always move fast
 		if(free_move && fast_move)
 			superspeed = true;
-		
+
 		// Auxiliary button 1 (E)
 		if(control.aux1)
 		{
@@ -563,7 +603,7 @@ void LocalPlayer::applyControl(float dtime, ClientEnvironment *env)
 			{
 				speedJ.Y = movement_speed_jump * physics_override_jump;
 				setSpeed(speedJ);
-				
+
 				MtEvent *e = new SimpleTriggerEvent("PlayerJump");
 				m_gamedef->event()->put(e);
 			}
@@ -644,4 +684,3 @@ v3s16 LocalPlayer::getStandingNodePos()
 		return m_sneak_node;
 	return floatToInt(getPosition() - v3f(0, BS, 0), BS);
 }
-

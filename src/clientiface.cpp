@@ -23,55 +23,66 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <sstream>
 
 #include "clientiface.h"
+#include "util/numeric.h"
+#include "util/mathconstants.h"
 #include "player.h"
 #include "settings.h"
 #include "mapblock.h"
-#include "connection.h"
+#include "network/connection.h"
 #include "environment.h"
 #include "map.h"
 #include "emerge.h"
 #include "serverobject.h"              // TODO this is used for cleanup of only
+#include "main.h"                      // for g_settings
 
 #include "util/numeric.h"
 #include "util/mathconstants.h"
-
 #include "profiler.h"
-#include "main.h"                      // for g_settings
-
 #include "log_types.h"
+#include "gamedef.h"
+
 
 //VERY BAD COPYPASTE FROM clientmap.cpp!
 static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
-		float start_off, float end_off, u32 needed_count, INodeDefManager *nodemgr)
+		float start_off, float end_off, u32 needed_count, INodeDefManager *nodemgr,
+		std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> & occlude_cache)
 {
-	float d0 = (float)BS * p0.getDistanceFrom(p1);
+	float d0 = (float)1 * p0.getDistanceFrom(p1);
 	v3s16 u0 = p1 - p0;
-	v3f uf = v3f(u0.X, u0.Y, u0.Z) * BS;
+	v3f uf = v3f(u0.X, u0.Y, u0.Z);
 	uf.normalize();
-	v3f p0f = v3f(p0.X, p0.Y, p0.Z) * BS;
+	v3f p0f = v3f(p0.X, p0.Y, p0.Z);
 	u32 count = 0;
 	for(float s=start_off; s<d0+end_off; s+=step){
 		v3f pf = p0f + uf * s;
-		v3s16 p = floatToInt(pf, BS);
-		MapNode n = map->getNodeNoEx(p);
-		if (n.getContent() == CONTENT_IGNORE) // ONE DIFFERENCE FROM clientmap.cpp
-			return true; //false;
+		v3s16 p = floatToInt(pf, 1);
 		bool is_transparent = false;
+		bool cache = true;
+		if (occlude_cache.count(p)) {
+			cache = false;
+			is_transparent = occlude_cache[p];
+		} else {
+		MapNode n = map->getNodeTry(p);
+		if (!n) {
+			return true; // ONE DIFFERENCE FROM clientmap.cpp
+		}
 		const ContentFeatures &f = nodemgr->get(n);
 		if(f.solidness == 0)
 			is_transparent = (f.visual_solidness != 2);
 		else
 			is_transparent = (f.solidness != 2);
+		}
+		if (cache)
+			occlude_cache[p] = is_transparent;
 		if(!is_transparent){
-			count++;
-			if(count >= needed_count)
+			if(count == needed_count)
 				return true;
+			count++;
 		}
 		step *= stepfac;
 	}
 	return false;
 }
-
 
 const char *ClientInterface::statenames[] = {
 	"Invalid",
@@ -94,14 +105,10 @@ std::string ClientInterface::state2Name(ClientState state)
 void RemoteClient::ResendBlockIfOnWire(v3s16 p)
 {
 	// if this block is on wire, mark it for sending again as soon as possible
-/*
-	if (m_blocks_sending.find(p) != m_blocks_sending.end()) {
-		SetBlockNotSent(p);
-	}
-*/
+	SetBlockNotSent(p);
 }
 
-int RemoteClient::GetNextBlocks(
+int RemoteClient::GetNextBlocks (
 		ServerEnvironment *env,
 		EmergeManager * emerge,
 		float dtime,
@@ -113,6 +120,14 @@ int RemoteClient::GetNextBlocks(
 	// Increment timers
 	m_nothing_to_send_pause_timer -= dtime;
 	m_nearest_unsent_reset_timer += dtime;
+	m_time_from_building += dtime;
+
+	if (m_nearest_unsent_reset) {
+		m_nearest_unsent_reset = 0;
+		m_nearest_unsent_reset_timer = 999;
+		m_nothing_to_send_pause_timer = 0;
+		m_time_from_building = 999;
+	}
 
 	if(m_nothing_to_send_pause_timer >= 0)
 		return 0;
@@ -132,7 +147,7 @@ int RemoteClient::GetNextBlocks(
 	// Predict to next block
 	v3f playerpos_predicted = playerpos + playerspeeddir*MAP_BLOCKSIZE*BS;
 
-	v3s16 center_nodepos = floatToInt(playerpos_predicted, BS);
+	v3s16 center_nodepos = floatToInt(playerpos_predicted, BS);floatToInt(playerpos_predicted, BS);
 
 	v3s16 center = getNodeBlockPos(center_nodepos);
 
@@ -142,8 +157,7 @@ int RemoteClient::GetNextBlocks(
 	camera_dir.rotateYZBy(player->getPitch());
 	camera_dir.rotateXZBy(player->getYaw());
 
-	/*infostream<<"camera_dir=("<<camera_dir.X<<","<<camera_dir.Y<<","
-			<<camera_dir.Z<<")"<<std::endl;*/
+	//infostream<<"camera_dir=("<<camera_dir<<")"<< " camera_pos="<<camera_pos<<std::endl;
 
 	/*
 		Get the starting value of the block finder radius.
@@ -151,8 +165,13 @@ int RemoteClient::GetNextBlocks(
 
 	if(m_last_center != center)
 	{
-		m_nearest_unsent_d = 0;
 		m_last_center = center;
+		m_nearest_unsent_reset_timer = 999;
+	}
+
+	if (m_last_direction.getDistanceFrom(camera_dir)>0.4) { // 1 = 90deg
+		m_last_direction = camera_dir;
+		m_nearest_unsent_reset_timer = 999;
 	}
 
 	/*infostream<<"m_nearest_unsent_reset_timer="
@@ -163,7 +182,7 @@ int RemoteClient::GetNextBlocks(
 	{
 		m_nearest_unsent_reset_timer = 0;
 		m_nearest_unsent_d = 0;
-		m_nearest_unsent_nearest = 0;
+		m_nearest_unsent_reset = 0;
 		//infostream<<"Resetting m_nearest_unsent_d for "<<peer_id<<std::endl;
 	}
 
@@ -181,12 +200,16 @@ int RemoteClient::GetNextBlocks(
 
 		Decrease send rate if player is building stuff.
 	*/
-	m_time_from_building += dtime;
 	if(m_time_from_building < g_settings->getFloat(
 				"full_block_send_enable_min_time_from_building"))
 	{
+		/*
 		max_simul_sends_usually
 			= LIMITED_MAX_SIMULTANEOUS_BLOCK_SENDS;
+		*/
+		if(d_start<=1)
+			d_start=2;
+		m_nearest_unsent_reset_timer = 999; //magical number more than ^ other number 120 - need to reset d on next iteration
 	}
 
 	/*
@@ -215,7 +238,7 @@ int RemoteClient::GetNextBlocks(
 	s16 d_max_gen = g_settings->getS16("max_block_generate_distance");
 
 	// Don't loop very much at a time
-	s16 max_d_increment_at_time = 5;
+	s16 max_d_increment_at_time = 10;
 	if(d_max > d_start + max_d_increment_at_time)
 		d_max = d_start + max_d_increment_at_time;
 	/*if(d_max_gen > d_start+2)
@@ -226,31 +249,34 @@ int RemoteClient::GetNextBlocks(
 	s32 nearest_emerged_d = -1;
 	s32 nearest_emergefull_d = -1;
 	s32 nearest_sent_d = -1;
-	bool queue_is_full = false;
+	//bool queue_is_full = false;
 
 	f32 speed_in_blocks = (playerspeed/(MAP_BLOCKSIZE*BS)).getLength();
 
+
 	int blocks_occlusion_culled = 0;
+	bool occlusion_culling_enabled = true;
+	auto cam_pos_nodes = floatToInt(playerpos, BS);
+
+	auto nodemgr = env->getGameDef()->getNodeDefManager();
+	MapNode n = env->getMap().getNodeTry(cam_pos_nodes);
+	if(n && nodemgr->get(n).solidness == 2)
+		occlusion_culling_enabled = false;
+
+	std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> occlude_cache;
+
+
 	s16 d;
-	for(d = d_start; d <= d_max; d++)
-	{
+	for(d = d_start; d <= d_max; d++) {
 		/*errorstream<<"checking d="<<d<<" for "
 				<<server->getPlayerName(peer_id)<<std::endl;*/
 		//infostream<<"RemoteClient::SendBlocks(): d="<<d<<" d_start="<<d_start<<" d_max="<<d_max<<" d_max_gen="<<d_max_gen<<std::endl;
 
-		/*
-			If m_nearest_unsent_d was changed by the EmergeThread
-			(it can change it to 0 through SetBlockNotSent),
-			update our d to it.
-			Else update m_nearest_unsent_d
-		*/
-		/*if(m_nearest_unsent_d != last_nearest_unsent_d)
-		{
-			d = m_nearest_unsent_d;
-			last_nearest_unsent_d = m_nearest_unsent_d;
-		}*/
+		std::vector<v3POS> list;
+		if (d > 2 && d == d_start && m_nearest_unsent_reset_timer != 999) { // oops, again magic number from up ^
+			list.push_back(v3POS(0,0,0));
+		}
 
-		std::list<v3s16> list;
 		bool can_skip = d > 1;
 		// Fast fall/move optimize. speed_in_blocks now limited to 6.4
 		if (speed_in_blocks>0.8 && d <= 2) {
@@ -260,17 +286,17 @@ int RemoteClient::GetNextBlocks(
 					list.push_back(floatToInt(playerspeeddir*addn, 1));
 			} else if (d == 1) {
 				for(s16 addn = 0; addn < (speed_in_blocks+1)*1.5; ++addn) {
-					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3s16( 0,  0,  1)); // back
-					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3s16( -1, 0,  0)); // left
-					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3s16( 1,  0,  0)); // right
-					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3s16( 0,  0, -1)); // front
+					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3POS( 0,  0,  1)); // back
+					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3POS( -1, 0,  0)); // left
+					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3POS( 1,  0,  0)); // right
+					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3POS( 0,  0, -1)); // front
 				}
 			} else if (d == 2) {
 				for(s16 addn = 0; addn < (speed_in_blocks+1)*1.5; ++addn) {
-					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3s16( -1, 0,  1)); // back left
-					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3s16( 1,  0,  1)); // left right
-					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3s16( -1, 0, -1)); // right left
-					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3s16( 1,  0, -1)); // front right
+					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3POS( -1, 0,  1)); // back left
+					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3POS( 1,  0,  1)); // left right
+					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3POS( -1, 0, -1)); // right left
+					list.push_back(floatToInt(playerspeeddir*addn, 1) + v3POS( 1,  0, -1)); // front right
 				}
 			}
 		} else {
@@ -278,13 +304,13 @@ int RemoteClient::GetNextBlocks(
 			Get the border/face dot coordinates of a "d-radiused"
 			box
 		*/
-			getFacePositions(list, d);
+			list = FacePositionCache::getFacePositions(d);
 		}
 
-		std::list<v3s16>::iterator li;
-		for(li=list.begin(); li!=list.end(); ++li)
+
+		for(auto li=list.begin(); li!=list.end(); ++li)
 		{
-			v3s16 p = *li + center;
+			v3POS p = *li + center;
 
 			/*
 				Send throttling
@@ -304,7 +330,7 @@ int RemoteClient::GetNextBlocks(
 			// Don't select too many blocks for sending
 			if(num_blocks_selected+num_blocks_sending >= max_simul_dynamic)
 			{
-				queue_is_full = true;
+				//queue_is_full = true;
 				goto queue_full_break;
 			}
 
@@ -342,7 +368,7 @@ int RemoteClient::GetNextBlocks(
 				FOV setting. The default of 72 degrees is fine.
 			*/
 
-			float camera_fov = (80.0*M_PI/180) * 4./3.;
+			float camera_fov = ((fov+5)*M_PI/180) * 4./3.;
 			if(can_skip && isBlockInSight(p, camera_pos, camera_dir, camera_fov, 10000*BS) == false)
 			{
 				continue;
@@ -351,10 +377,13 @@ int RemoteClient::GetNextBlocks(
 			/*
 				Don't send already sent blocks
 			*/
+			unsigned int block_sent = 0;
 			{
-				if(m_blocks_sent.find(p) != m_blocks_sent.end() && m_blocks_sent[p] > 0 && m_blocks_sent[p] + (d <= 2 ? 1 : d*d*d) > m_uptime) {
-					continue;
-				}
+				auto lock = m_blocks_sent.lock_shared_rec();
+				block_sent = m_blocks_sent.find(p) != m_blocks_sent.end() ? m_blocks_sent.get(p) : 0;
+			}
+			if(block_sent > 0 && ((block_overflow && d>1) || block_sent + (d <= 2 ? 1 : d*d*d) > m_uptime)) {
+				continue;
 			}
 
 			/*
@@ -367,68 +396,53 @@ int RemoteClient::GetNextBlocks(
 			if(block != NULL)
 			{
 
-				if (m_blocks_sent[p] > 0 && m_blocks_sent[p] >= block->m_changed_timestamp) {
+				if (d > 3 && block->content_only == CONTENT_AIR) {
+					continue;
+				}
+
+				if (block_sent > 0 && block_sent >= block->m_changed_timestamp) {
 					continue;
 				}
 
 		{
-			/*
-				Occlusion culling
-			*/
-			auto cpn = p;
-			auto cam_pos_nodes = center_nodepos;
-			auto nodemgr = env->getGameDef()->getNodeDefManager();
+			//Occlusion culling
+			auto cpn = p*MAP_BLOCKSIZE;
 
 			// No occlusion culling when free_move is on and camera is
 			// inside ground
-			bool occlusion_culling_enabled = true;
-			if (d <= 2)
-				occlusion_culling_enabled = false;
-				
-// /*
-//			if(g_settings->getBool("free_move")){
-//			if (occlusion_culling_enabled) {
-				MapNode n = env->getMap().getNodeNoEx(cam_pos_nodes);
-				if(n.getContent() == CONTENT_IGNORE ||
-						nodemgr->get(n).solidness == 2)
-					occlusion_culling_enabled = false;
-//			}
-// */
+			cpn += v3POS(MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2);
 
-			cpn += v3s16(MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2, MAP_BLOCKSIZE/2);
-
-			float step = BS*1;
-			float stepfac = 1.1;
-			float startoff = BS*1;
-			float endoff = -BS*MAP_BLOCKSIZE*1.42*1.42;
-			v3s16 spn = cam_pos_nodes + v3s16(0,0,0);
+			float step = 1;
+			float stepfac = 1.3;
+			float startoff = 5;
+			float endoff = -MAP_BLOCKSIZE;
+			v3POS spn = cam_pos_nodes + v3POS(0,0,0);
 			s16 bs2 = MAP_BLOCKSIZE/2 + 1;
 			u32 needed_count = 1;
-//infostream<<" occparams "<<" p="<<cam_pos_nodes<<" en="<<occlusion_culling_enabled<<" d="<<d<<" pnod="<<n<<" solid="<<(int)nodemgr->get(n).solidness<<std::endl;
 			//VERY BAD COPYPASTE FROM clientmap.cpp!
-			if(
+			if( d >= 1 &&
 				occlusion_culling_enabled &&
-				isOccluded(&env->getMap(), spn, cpn + v3s16(0,0,0),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
-				isOccluded(&env->getMap(), spn, cpn + v3s16(bs2,bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
-				isOccluded(&env->getMap(), spn, cpn + v3s16(bs2,bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
-				isOccluded(&env->getMap(), spn, cpn + v3s16(bs2,-bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
-				isOccluded(&env->getMap(), spn, cpn + v3s16(bs2,-bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
-				isOccluded(&env->getMap(), spn, cpn + v3s16(-bs2,bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
-				isOccluded(&env->getMap(), spn, cpn + v3s16(-bs2,bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
-				isOccluded(&env->getMap(), spn, cpn + v3s16(-bs2,-bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr) &&
-				isOccluded(&env->getMap(), spn, cpn + v3s16(-bs2,-bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr)
+				isOccluded(&env->getMap(), spn, cpn + v3POS(0,0,0),
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
+				isOccluded(&env->getMap(), spn, cpn + v3POS(bs2,bs2,bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
+				isOccluded(&env->getMap(), spn, cpn + v3POS(bs2,bs2,-bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
+				isOccluded(&env->getMap(), spn, cpn + v3POS(bs2,-bs2,bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
+				isOccluded(&env->getMap(), spn, cpn + v3POS(bs2,-bs2,-bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
+				isOccluded(&env->getMap(), spn, cpn + v3POS(-bs2,bs2,bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
+				isOccluded(&env->getMap(), spn, cpn + v3POS(-bs2,bs2,-bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
+				isOccluded(&env->getMap(), spn, cpn + v3POS(-bs2,-bs2,bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
+				isOccluded(&env->getMap(), spn, cpn + v3POS(-bs2,-bs2,-bs2),
+					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache)
 			)
 			{
-//infostream<<" occlusion player="<<cam_pos_nodes<<" d="<<d<<" block="<<cpn<<" total="<<blocks_occlusion_culled<<"/"<<num_blocks_selected<<std::endl;
+				//infostream<<" occlusion player="<<cam_pos_nodes<<" d="<<d<<" block="<<cpn<<" total="<<blocks_occlusion_culled<<"/"<<num_blocks_selected<<std::endl;
 				blocks_occlusion_culled++;
 				continue;
 			}
@@ -437,16 +451,11 @@ int RemoteClient::GetNextBlocks(
 				// Reset usage timer, this block will be of use in the future.
 				block->resetUsageTimer();
 
-				// Block is dummy if data doesn't exist.
-				// It means it has been not found from disk and not generated
-				if(block->isDummy())
-				{
-					surely_not_found_on_disk = true;
-				}
+				//todo: fixme
+				//if (block->getLightingExpired() && (block_sent /*|| d>=1*/)) {
+				//	continue;
+				//}
 
-				if (block->getLightingExpired()) {
-					continue;
-				}
 				// Block is valid if lighting is up-to-date and data exists
 				if(block->isValid() == false)
 				{
@@ -520,9 +529,9 @@ int RemoteClient::GetNextBlocks(
 	}
 queue_full_break:
 
-	//infostream<<"Stopped at "<<d<<" d_start="<<d_start<< " d_max="<<d_max<<" nearest_emerged_d="<<nearest_emerged_d<<" nearest_emergefull_d="<<nearest_emergefull_d<< " new_nearest_unsent_d="<<new_nearest_unsent_d<< " sel="<<num_blocks_selected<< "+"<<num_blocks_sending <<std::endl;
+	//infostream<<"Stopped at "<<d<<" d_start="<<d_start<< " d_max="<<d_max<<" nearest_emerged_d="<<nearest_emerged_d<<" nearest_emergefull_d="<<nearest_emergefull_d<< " new_nearest_unsent_d="<<new_nearest_unsent_d<< " sel="<<num_blocks_selected<< "+"<<num_blocks_sending << " culled=" << blocks_occlusion_culled <<" cEN="<<occlusion_culling_enabled<<std::endl;
 	num_blocks_selected += num_blocks_sending;
-	if(!num_blocks_selected && d_start == d) {
+	if(!num_blocks_selected && d_start <= d) {
 		//new_nearest_unsent_d = 0;
 		m_nothing_to_send_pause_timer = 1.0;
 	}
@@ -537,7 +546,7 @@ queue_full_break:
 	} else {
 		if(d > full_d_max){
 			new_nearest_unsent_d = 0;
-			m_nothing_to_send_pause_timer = 2.0;
+			m_nothing_to_send_pause_timer = 1.0;
 		} else {
 			if(nearest_sent_d != -1)
 				new_nearest_unsent_d = nearest_sent_d;
@@ -553,27 +562,20 @@ queue_full_break:
 
 void RemoteClient::SentBlock(v3s16 p, double time)
 {
-	m_blocks_sent[p] = time;
+	m_blocks_sent.set(p, time);
 }
 
 void RemoteClient::SetBlockNotSent(v3s16 p)
 {
-	++m_nearest_unsent_nearest;
+	++m_nearest_unsent_reset;
 }
 
 void RemoteClient::SetBlocksNotSent(std::map<v3s16, MapBlock*> &blocks)
 {
-	for(std::map<v3s16, MapBlock*>::iterator
-			i = blocks.begin();
-			i != blocks.end(); ++i)
-	{
-		v3s16 p = i->first;
-		SetBlockNotSent(p);
-	}
+	SetBlockNotSent(v3POS());
 }
 
 void RemoteClient::SetBlockDeleted(v3s16 p) {
-	SetBlockNotSent(p);
 	m_blocks_sent.erase(p);
 }
 
@@ -701,29 +703,14 @@ ClientInterface::ClientInterface(con::Connection* con)
 }
 ClientInterface::~ClientInterface()
 {
-	/*
-		Delete clients
-	*/
-	{
-		JMutexAutoLock clientslock(m_clients_mutex);
-
-		for(std::map<u16, RemoteClient*>::iterator
-			i = m_clients.begin();
-			i != m_clients.end(); ++i)
-		{
-
-			// Delete client
-			delete i->second;
-		}
-	}
 }
 
-std::list<u16> ClientInterface::getClientIDs(ClientState min_state)
+std::vector<u16> ClientInterface::getClientIDs(ClientState min_state)
 {
-	std::list<u16> reply;
-	JMutexAutoLock clientslock(m_clients_mutex);
+	std::vector<u16> reply;
+	auto lock = m_clients.lock_shared_rec();
 
-	for(std::map<u16, RemoteClient*>::iterator
+	for(auto
 		i = m_clients.begin();
 		i != m_clients.end(); ++i)
 	{
@@ -742,7 +729,7 @@ std::vector<std::string> ClientInterface::getPlayerNames()
 
 void ClientInterface::step(float dtime)
 {
-	g_profiler->add("Server: Clients:", m_clients.size());
+	g_profiler->add("Server: Clients", m_clients.size());
 	m_print_info_timer += dtime;
 	if(m_print_info_timer >= 30.0)
 	{
@@ -755,47 +742,86 @@ void ClientInterface::UpdatePlayerList()
 {
 	if (m_env != NULL)
 		{
-		std::list<u16> clients = getClientIDs();
+		std::vector<u16> clients = getClientIDs();
 		m_clients_names.clear();
 
 
-		if(clients.size() != 0)
+		if(!clients.empty())
 			infostream<<"Players ["<<clients.size()<<"]:"<<std::endl;
-		for(std::list<u16>::iterator
+
+		for(auto
 			i = clients.begin();
-			i != clients.end(); ++i)
-		{
+			i != clients.end(); ++i) {
 			Player *player = m_env->getPlayer(*i);
-			if(player==NULL)
+
+			if (player == NULL)
 				continue;
-			infostream<<"* "<<player->getName()<<"\t";
+
+			infostream << "* " << player->getName() << "\t";
 
 			{
-				JMutexAutoLock clientslock(m_clients_mutex);
+				//JMutexAutoLock clientslock(m_clients_mutex);
 				RemoteClient* client = lockedGetClientNoEx(*i);
 				if(client != NULL)
 					client->PrintInfo(infostream);
 			}
+
 			m_clients_names.push_back(player->getName());
 		}
 	}
 }
 
+
+
+#if !MINETEST_PROTO
 void ClientInterface::send(u16 peer_id,u8 channelnum,
 		SharedBuffer<u8> data, bool reliable)
 {
 	m_con->Send(peer_id, channelnum, data, reliable);
 }
 
-void ClientInterface::sendToAll(u16 channelnum,
-		SharedBuffer<u8> data, bool reliable)
+void ClientInterface::send(u16 peer_id,u8 channelnum,
+		const msgpack::sbuffer &buffer, bool reliable)
 {
-	JMutexAutoLock clientslock(m_clients_mutex);
-	for(std::map<u16, RemoteClient*>::iterator
+	SharedBuffer<u8> data((unsigned char*)buffer.data(), buffer.size());
+	send(peer_id, channelnum, data, reliable);
+}
+#endif
+
+#if MINETEST_PROTO
+void ClientInterface::send(u16 peer_id, u8 channelnum,
+		NetworkPacket* pkt, bool reliable)
+{
+	m_con->Send(peer_id, channelnum, pkt, reliable);
+}
+
+void ClientInterface::sendToAll(u16 channelnum,
+		NetworkPacket* pkt, bool reliable)
+{
+	auto lock = m_clients.lock_shared_rec();
+	for(auto
 		i = m_clients.begin();
 		i != m_clients.end(); ++i)
 	{
-		RemoteClient *client = i->second;
+		RemoteClient *client = i->second.get();
+
+		if (client->net_proto_version != 0) {
+			m_con->Send(client->peer_id, channelnum, pkt, reliable);
+		}
+	}
+}
+
+#else
+
+void ClientInterface::sendToAll(u16 channelnum,
+		SharedBuffer<u8> data, bool reliable)
+{
+	auto lock = m_clients.lock_shared_rec();
+	for(auto
+		i = m_clients.begin();
+		i != m_clients.end(); ++i)
+	{
+		RemoteClient *client = i->second.get();
 
 		if (client->net_proto_version != 0)
 		{
@@ -804,11 +830,24 @@ void ClientInterface::sendToAll(u16 channelnum,
 	}
 }
 
+void ClientInterface::sendToAll(u16 channelnum,
+		const msgpack::sbuffer &buffer, bool reliable)
+{
+	SharedBuffer<u8> data((unsigned char*)buffer.data(), buffer.size());
+	sendToAll(channelnum, data, reliable);
+}
+#endif
+
+//TODO: return here shared_ptr
 RemoteClient* ClientInterface::getClientNoEx(u16 peer_id, ClientState state_min)
 {
-	JMutexAutoLock clientslock(m_clients_mutex);
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
+	auto client = getClient(peer_id, state_min);
+	return client.get();
+}
+
+std::shared_ptr<RemoteClient> ClientInterface::getClient(u16 peer_id, ClientState state_min) {
+	auto lock = m_clients.lock_shared_rec();
+	auto n = m_clients.find(peer_id);
 	// The client may not exist; clients are immediately removed if their
 	// access is denied, and this event occurs later then.
 	if(n == m_clients.end())
@@ -822,24 +861,13 @@ RemoteClient* ClientInterface::getClientNoEx(u16 peer_id, ClientState state_min)
 
 RemoteClient* ClientInterface::lockedGetClientNoEx(u16 peer_id, ClientState state_min)
 {
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
-	// The client may not exist; clients are immediately removed if their
-	// access is denied, and this event occurs later then.
-	if(n == m_clients.end())
-		return NULL;
-
-	if (n->second->getState() >= state_min)
-		return n->second;
-	else
-		return NULL;
+	return getClientNoEx(peer_id, state_min);
 }
 
 ClientState ClientInterface::getClientState(u16 peer_id)
 {
-	JMutexAutoLock clientslock(m_clients_mutex);
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
+	auto lock = m_clients.lock_shared_rec();
+	auto n = m_clients.find(peer_id);
 	// The client may not exist; clients are immediately removed if their
 	// access is denied, and this event occurs later then.
 	if(n == m_clients.end())
@@ -850,80 +878,65 @@ ClientState ClientInterface::getClientState(u16 peer_id)
 
 void ClientInterface::setPlayerName(u16 peer_id,std::string name)
 {
-	JMutexAutoLock clientslock(m_clients_mutex);
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
-	// The client may not exist; clients are immediately removed if their
-	// access is denied, and this event occurs later then.
-	if(n != m_clients.end())
-		n->second->setName(name);
+	auto client = getClient(peer_id, CS_Invalid);
+	if(!client)
+		return;
+
+	client->setName(name);
 }
 
 void ClientInterface::DeleteClient(u16 peer_id)
 {
-	JMutexAutoLock conlock(m_clients_mutex);
-
-	// Error check
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
-	// The client may not exist; clients are immediately removed if their
-	// access is denied, and this event occurs later then.
-	if(n == m_clients.end())
+	auto client = getClient(peer_id, CS_Invalid);
+	if(!client)
 		return;
 
 	/*
 		Mark objects to be not known by the client
 	*/
 	//TODO this should be done by client destructor!!!
-	RemoteClient *client = n->second;
 	// Handle objects
-	for(std::set<u16>::iterator
+	{
+	auto lock = client->m_known_objects.lock_unique_rec();
+	for(auto
 			i = client->m_known_objects.begin();
 			i != client->m_known_objects.end(); ++i)
 	{
 		// Get object
-		u16 id = *i;
+		u16 id = i->first;
 		ServerActiveObject* obj = m_env->getActiveObject(id);
 
 		if(obj && obj->m_known_by_count > 0)
 			obj->m_known_by_count--;
 	}
+	}
 
 	// Delete client
-	delete m_clients.get(peer_id);
+	//delete m_clients.get(peer_id);
 	m_clients.erase(peer_id);
 }
 
 void ClientInterface::CreateClient(u16 peer_id)
 {
-	JMutexAutoLock conlock(m_clients_mutex);
-
-	// Error check
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
-	// The client shouldn't already exist
-	if(n != m_clients.end()) return;
+	{
+		auto client = getClient(peer_id, CS_Invalid);
+		if(client)
+			return;
+	}
 
 	// Create client
-	RemoteClient *client = new RemoteClient(m_env);
+	auto client = std::shared_ptr<RemoteClient>(new RemoteClient(m_env));
 	client->peer_id = peer_id;
 	m_clients.set(client->peer_id, client);
 }
 
 void ClientInterface::event(u16 peer_id, ClientStateEvent event)
 {
-	{
-		JMutexAutoLock clientlock(m_clients_mutex);
+	auto client = getClient(peer_id, CS_Invalid);
+	if(!client)
+		return;
 
-		// Error check
-		std::map<u16, RemoteClient*>::iterator n;
-		n = m_clients.find(peer_id);
-
-		// No client to deliver event
-		if (n == m_clients.end())
-			return;
-		n->second->notifyEvent(event);
-	}
+	client->notifyEvent(event);
 
 	if ((event == CSE_SetClientReady) ||
 		(event == CSE_Disconnect)     ||
@@ -935,30 +948,18 @@ void ClientInterface::event(u16 peer_id, ClientStateEvent event)
 
 u16 ClientInterface::getProtocolVersion(u16 peer_id)
 {
-	JMutexAutoLock conlock(m_clients_mutex);
-
-	// Error check
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
-
-	// No client to get version
-	if (n == m_clients.end())
+	auto client = getClient(peer_id, CS_Invalid);
+	if(!client)
 		return 0;
 
-	return n->second->net_proto_version;
+	return client->net_proto_version;
 }
 
 void ClientInterface::setClientVersion(u16 peer_id, u8 major, u8 minor, u8 patch, std::string full)
 {
-	JMutexAutoLock conlock(m_clients_mutex);
-
-	// Error check
-	std::map<u16, RemoteClient*>::iterator n;
-	n = m_clients.find(peer_id);
-
-	// No client to set versions
-	if (n == m_clients.end())
+	auto client = getClient(peer_id, CS_Invalid);
+	if(!client)
 		return;
 
-	n->second->setVersionInfo(major,minor,patch,full);
+	client->setVersionInfo(major,minor,patch,full);
 }

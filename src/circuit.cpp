@@ -24,16 +24,17 @@
 #include "scripting_game.h"
 #include "map.h"
 #include "serialization.h"
-#include "main.h"
 #include "settings.h"
 #include "log.h"
 #include "key_value_storage.h"
+#include "filesys.h"
 
 #include <map>
 #include <iomanip>
 #include <cassert>
 #include <string>
 #include <sstream>
+#include <fstream>
 
 #define PP(x) ((x).X)<<" "<<((x).Y)<<" "<<((x).Z)<<" "
 
@@ -46,11 +47,12 @@ Circuit::Circuit(GameScripting* script, Map* map, INodeDefManager* ndef, std::st
 	m_ndef(ndef),
 	m_min_update_delay(0.2f),
 	m_since_last_update(0.0f),
+	m_min_save_delay(60.0f),
+	m_since_last_save(0.0f),
 	m_max_id(0),
 	m_max_virtual_id(1),
-	m_savedir(savedir)
- {
-		load();
+	m_savedir(savedir) {
+	load();
 }
 
 Circuit::~Circuit() {
@@ -65,8 +67,18 @@ Circuit::~Circuit() {
 	m_virtual_database = nullptr;
 }
 
+void Circuit::open() {
+	m_database->open();
+	m_virtual_database->open();
+}
+
+void Circuit::close() {
+	m_database->close();
+	m_virtual_database->close();
+}
+
 void Circuit::addBlock(MapBlock* block) {
-	// v3s16 pos;
+	// v3POS pos;
 	// for(pos.X = 0; pos.X < 16; ++pos.X)
 	// {
 	// 	for(pos.Y = 0; pos.Y < 16; ++pos.Y)
@@ -85,7 +97,7 @@ void Circuit::addBlock(MapBlock* block) {
 	// }
 }
 
-void Circuit::addNode(v3s16 pos) {
+void Circuit::addNode(v3POS pos) {
 	MapNode n = m_map->getNodeNoEx(pos);
 	const ContentFeatures& node_f = m_ndef->get(n);
 	if(node_f.is_wire || node_f.is_wire_connector) {
@@ -97,7 +109,7 @@ void Circuit::addNode(v3s16 pos) {
 	}
 }
 
-void Circuit::removeNode(v3s16 pos, const MapNode& n_old) {
+void Circuit::removeNode(v3POS pos, const MapNode& n_old) {
 	if(m_ndef->get(n_old).is_wire || m_ndef->get(n_old).is_wire_connector) {
 		removeWire(pos);
 	}
@@ -106,7 +118,7 @@ void Circuit::removeNode(v3s16 pos, const MapNode& n_old) {
 	}
 }
 
-void Circuit::swapNode(v3s16 pos, const MapNode& n_old, const MapNode& n_new) {
+void Circuit::swapNode(v3POS pos, const MapNode& n_old, const MapNode& n_new) {
 	const ContentFeatures& n_old_f = m_ndef->get(n_old);
 	const ContentFeatures& n_new_f = m_ndef->get(n_new);
 	if(n_new_f.is_circuit_element) {
@@ -130,7 +142,7 @@ void Circuit::swapNode(v3s16 pos, const MapNode& n_old, const MapNode& n_new) {
 	}
 }
 
-void Circuit::addElement(v3s16 pos) {
+void Circuit::addElement(v3POS pos) {
 	auto lock = m_elements_mutex.lock_unique_rec();
 
 	bool already_existed[6];
@@ -140,7 +152,7 @@ void Circuit::addElement(v3s16 pos) {
 	MapNode node = m_map->getNodeNoEx(pos);
 
 	auto current_element_iterator = m_elements.insert(m_elements.begin(),
-	     CircuitElement(pos, m_max_id++, m_ndef->get(node).circuit_element_delay));
+	                                CircuitElement(pos, m_max_id++, m_ndef->get(node).circuit_element_delay));
 	m_pos_to_iterator[pos] = current_element_iterator;
 
 	// For each face add all other connected faces.
@@ -195,7 +207,7 @@ void Circuit::addElement(v3s16 pos) {
 
 }
 
-void Circuit::removeElement(v3s16 pos) {
+void Circuit::removeElement(v3POS pos) {
 	auto lock = m_elements_mutex.lock_unique_rec();
 
 	std::vector <std::list <CircuitElementVirtual>::iterator> virtual_elements_for_update;
@@ -225,7 +237,7 @@ void Circuit::removeElement(v3s16 pos) {
 	m_pos_to_iterator.erase(pos);
 }
 
-void Circuit::addWire(v3s16 pos) {
+void Circuit::addWire(v3POS pos) {
 	auto lock = m_elements_mutex.lock_unique_rec();
 
 	// This is used for converting elements of current_face_connected to their ids in all_connected.
@@ -291,7 +303,7 @@ void Circuit::addWire(v3s16 pos) {
 			for(auto i = all_connected.begin(); i != all_connected.end(); ++i) {
 				if(!(i->first->getFace(i->second).is_connected)) {
 					auto it = element_with_virtual.list_pointer->insert(
-						element_with_virtual.list_pointer->begin(), CircuitElementVirtualContainer());
+					              element_with_virtual.list_pointer->begin(), CircuitElementVirtualContainer());
 					it->element_pointer = i->first;
 					it->shift = i->second;
 					i->first->connectFace(i->second, it, element_with_virtual.list_pointer);
@@ -305,7 +317,7 @@ void Circuit::addWire(v3s16 pos) {
 	}
 }
 
-void Circuit::removeWire(v3s16 pos) {
+void Circuit::removeWire(v3POS pos) {
 	auto lock = m_elements_mutex.lock_unique_rec();
 
 	std::vector <std::pair <std::list <CircuitElement>::iterator, u8> > current_face_connected;
@@ -352,11 +364,11 @@ void Circuit::removeWire(v3s16 pos) {
 
 				if(current_face_connected.size() > 1) {
 					auto new_virtual_element = m_virtual_elements.insert(
-						m_virtual_elements.begin(), CircuitElementVirtual(m_max_virtual_id++));
+					                               m_virtual_elements.begin(), CircuitElementVirtual(m_max_virtual_id++));
 
 					for(u32 j = 0; j < current_face_connected.size(); ++j) {
 						auto new_container = new_virtual_element->insert(
-						            new_virtual_element->begin(), CircuitElementVirtualContainer());
+						                         new_virtual_element->begin(), CircuitElementVirtualContainer());
 						new_container->element_pointer = current_face_connected[j].first;
 						new_container->shift = current_face_connected[j].second;
 						current_face_connected[j].first->connectFace(current_face_connected[j].second,
@@ -402,10 +414,17 @@ void Circuit::update(float dtime) {
 	} else {
 		m_since_last_update += dtime;
 	}
+
+	if(m_since_last_save > m_min_save_delay) {
+		save();
+		m_since_last_save = 0.0f;
+	} else {
+		m_since_last_save += dtime;
+	}
 }
 
 
-void Circuit::swapElement(const MapNode& n_old, const MapNode& n_new, v3s16 pos) {
+void Circuit::swapElement(const MapNode& n_old, const MapNode& n_new, v3POS pos) {
 	auto lock = m_elements_mutex.lock_unique_rec();
 
 	const ContentFeatures& n_old_features = m_ndef->get(n_old);

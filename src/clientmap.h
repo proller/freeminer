@@ -27,6 +27,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "map.h"
 #include "camera.h"
 #include <set>
+#include <unordered_set>
+#include <vector>
 #include <map>
 #include "util/lock.h"
 
@@ -56,6 +58,9 @@ struct MapDrawControl
 	float fps_wanted;
 	float drawtime_avg;
 	float camera_fov_blocks;
+
+	float fov;
+	bool block_overflow;
 };
 
 class Client;
@@ -122,7 +127,7 @@ public:
 		return m_box;
 	}
 	
-	void updateDrawList(float dtime);
+	void updateDrawList(video::IVideoDriver* driver, float dtime, unsigned int max_cycle_ms = 0);
 	void renderMap(video::IVideoDriver* driver, s32 pass);
 
 	int getBackgroundBrightness(float max_d, u32 daylight_factor,
@@ -131,7 +136,7 @@ public:
 	void renderPostFx(CameraMode cam_mode);
 
 	// For debugging the status and position of MapBlocks
-	void renderBlockBoundaries(std::map<v3s16, MapBlock*> blocks);
+	void renderBlockBoundaries(const std::map<v3POS, MapBlock*> & blocks);
 
 	// For debug printing
 	virtual void PrintInfo(std::ostream &out);
@@ -151,14 +156,19 @@ private:
 	v3s16 m_camera_offset;
 	JMutex m_camera_mutex;
 
-	shared_unordered_map<v3s16, MapBlock*, v3s16Hash, v3s16Equal> * m_drawlist;
-	shared_unordered_map<v3s16, MapBlock*, v3s16Hash, v3s16Equal> m_drawlist_0;
-	shared_unordered_map<v3s16, MapBlock*, v3s16Hash, v3s16Equal> m_drawlist_1;
+	std::atomic<shared_unordered_map<v3POS, MapBlockP, v3POSHash, v3POSEqual> *> m_drawlist;
+	shared_unordered_map<v3POS, MapBlockP, v3POSHash, v3POSEqual> m_drawlist_0;
+	shared_unordered_map<v3POS, MapBlockP, v3POSHash, v3POSEqual> m_drawlist_1;
 	int m_drawlist_current;
+	std::vector<std::pair<v3POS, int>> draw_nearest;
 public:
-	u32 m_drawlist_last;
+	std::atomic_uint m_drawlist_last;
+	std::map<v3POS, MapBlock*> m_block_boundary;
 private:
 
+	bool m_cache_trilinear_filter;
+	bool m_cache_bilinear_filter;
+	bool m_cache_anistropic_filter;
 };
 
 #endif

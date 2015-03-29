@@ -22,7 +22,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "itemdef.h"
-
 #include "gamedef.h"
 #include "nodedef.h"
 #include "tool.h"
@@ -30,9 +29,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef SERVER
 #include "mapblock_mesh.h"
 #include "mesh.h"
-#include "tile.h"
+#include "wieldmesh.h"
 #include "clientmap.h"
 #include "mapblock.h"
+#include "client/tile.h"
 #endif
 #include "log.h"
 #include "main.h" // g_settings
@@ -220,9 +220,67 @@ void ItemDefinition::deSerialize(std::istream &is)
 	}catch(SerializationError &e) {};
 }
 
+void ItemDefinition::msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const
+{
+	pk.pack_map(tool_capabilities ? 15 : 14);
+	PACK(ITEMDEF_TYPE, (int)type);
+	PACK(ITEMDEF_NAME, name);
+	PACK(ITEMDEF_DESCRIPTION, description);
+	PACK(ITEMDEF_INVENTORY_IMAGE, inventory_image);
+	PACK(ITEMDEF_WIELD_IMAGE, wield_image);
+	PACK(ITEMDEF_WIELD_SCALE, wield_scale);
+	PACK(ITEMDEF_STACK_MAX, stack_max);
+	PACK(ITEMDEF_USABLE, usable);
+	PACK(ITEMDEF_LIQUIDS_POINTABLE, liquids_pointable);
+
+	if(tool_capabilities)
+		PACK(ITEMDEF_TOOL_CAPABILITIES, *tool_capabilities);
+
+	PACK(ITEMDEF_GROUPS, groups);
+	PACK(ITEMDEF_NODE_PLACEMENT_PREDICTION, node_placement_prediction);
+	PACK(ITEMDEF_SOUND_PLACE_NAME, sound_place.name);
+	PACK(ITEMDEF_SOUND_PLACE_GAIN, sound_place.gain);
+	PACK(ITEMDEF_RANGE, range);
+}
+
+void ItemDefinition::msgpack_unpack(msgpack::object o)
+{
+	// Reset everything
+	reset();
+
+	MsgpackPacket packet = o.as<MsgpackPacket>();
+	int type_tmp;
+	packet[ITEMDEF_TYPE].convert(&type_tmp);
+	type = (ItemType)type_tmp;
+	packet[ITEMDEF_NAME].convert(&name);
+	packet[ITEMDEF_DESCRIPTION].convert(&description);
+	packet[ITEMDEF_INVENTORY_IMAGE].convert(&inventory_image);
+	packet[ITEMDEF_WIELD_IMAGE].convert(&wield_image);
+	packet[ITEMDEF_WIELD_SCALE].convert(&wield_scale);
+	packet[ITEMDEF_STACK_MAX].convert(&stack_max);
+	packet[ITEMDEF_USABLE].convert(&usable);
+	packet[ITEMDEF_LIQUIDS_POINTABLE].convert(&liquids_pointable);
+
+	if (packet.find(ITEMDEF_TOOL_CAPABILITIES) != packet.end()) {
+		tool_capabilities = new ToolCapabilities;
+		packet[ITEMDEF_TOOL_CAPABILITIES].convert(tool_capabilities);
+	}
+
+	packet[ITEMDEF_GROUPS].convert(&groups);
+	packet[ITEMDEF_NODE_PLACEMENT_PREDICTION].convert(&node_placement_prediction);
+	packet[ITEMDEF_SOUND_PLACE_NAME].convert(&sound_place.name);
+	packet[ITEMDEF_SOUND_PLACE_GAIN].convert(&sound_place.gain);
+	packet[ITEMDEF_RANGE].convert(&range);
+}
+
 /*
 	CItemDefManager
 */
+
+enum {
+	ITEMDEFMANAGER_ITEMDEFS,
+	ITEMDEFMANAGER_ALIASES
+};
 
 // SUGG: Support chains of aliases?
 
@@ -253,8 +311,8 @@ public:
 	virtual ~CItemDefManager()
 	{
 #ifndef SERVER
-		const std::list<ClientCached*> &values = m_clientcached.getValues();
-		for(std::list<ClientCached*>::const_iterator
+		const std::vector<ClientCached*> &values = m_clientcached.getValues();
+		for(std::vector<ClientCached*>::const_iterator
 				i = values.begin(); i != values.end(); ++i)
 		{
 			ClientCached *cc = *i;
@@ -325,7 +383,7 @@ public:
 				<<name<<"\""<<std::endl;
 
 		// This is not thread-safe
-		assert(get_current_thread_id() == m_main_thread);
+		sanity_check(get_current_thread_id() == m_main_thread);
 
 		// Skip if already in cache
 		ClientCached *cc = NULL;
@@ -335,114 +393,97 @@ public:
 
 		ITextureSource *tsrc = gamedef->getTextureSource();
 		INodeDefManager *nodedef = gamedef->getNodeDefManager();
-		IrrlichtDevice *device = tsrc->getDevice();
-		video::IVideoDriver *driver = device->getVideoDriver();
-		const ItemDefinition *def = &get(name);
+		const ItemDefinition &def = get(name);
 
 		// Create new ClientCached
 		cc = new ClientCached();
 
-		bool need_node_mesh = false;
-
 		// Create an inventory texture
 		cc->inventory_texture = NULL;
-		if(def->inventory_image != "")
-		{
-			cc->inventory_texture = tsrc->getTexture(def->inventory_image);
-		}
-		else if(def->type == ITEM_NODE)
-		{
-			need_node_mesh = true;
-		}
+		if(def.inventory_image != "")
+			cc->inventory_texture = tsrc->getTexture(def.inventory_image);
 
-		// Create a wield mesh
-		assert(cc->wield_mesh == NULL);
-		if(def->type == ITEM_NODE && def->wield_image == "")
-		{
-			need_node_mesh = true;
-		}
-		else if(def->wield_image != "" || def->inventory_image != "")
-		{
-			// Extrude the wield image into a mesh
-
-			std::string imagename;
-			if(def->wield_image != "")
-				imagename = def->wield_image;
-			else
-				imagename = def->inventory_image;
-
-			cc->wield_mesh = createExtrudedMesh(
-					tsrc->getTexture(imagename),
-					driver,
-					def->wield_scale * v3f(40.0, 40.0, 4.0));
-			if(cc->wield_mesh == NULL)
-			{
-				infostream<<"ItemDefManager: WARNING: "
-					<<"updateTexturesAndMeshes(): "
-					<<"Unable to create extruded mesh for item "
-					<<def->name<<std::endl;
-			}
-		}
-
-		if(need_node_mesh)
-		{
-			/*
-				Get node properties
-			*/
-			content_t id = nodedef->getId(def->name);
+		// Additional processing for nodes:
+		// - Create a wield mesh if WieldMeshSceneNode can't render
+		//   the node on its own.
+		// - If inventory_texture isn't set yet, create one using
+		//   render-to-texture.
+		if (def.type == ITEM_NODE) {
+			// Get node properties
+			content_t id = nodedef->getId(name);
 			const ContentFeatures &f = nodedef->get(id);
 
-			u8 param1 = 0;
-			if(f.param_type == CPT_LIGHT)
-				param1 = 0xee;
+			bool need_rtt_mesh = cc->inventory_texture == NULL;
 
-			/*
-				Make a mesh from the node
-			*/
-			bool reenable_shaders = false;
-			if(g_settings->getBool("enable_shaders")){
-				reenable_shaders = true;
-				g_settings->setBool("enable_shaders",false);
-			}
-			Map map(gamedef);
-			MapDrawControl map_draw_control;
-			MeshMakeData mesh_make_data(gamedef, map, map_draw_control);
-			v3s16 p0(0, 0, 0);
-			auto block = map.createBlankBlockNoInsert(p0);
-			auto air_node = MapNode(CONTENT_AIR, LIGHT_MAX);
-			for(s16 z0=0; z0<=2; ++z0)
-			for(s16 y0=0; y0<=2; ++y0)
-			for(s16 x0=0; x0<=2; ++x0) {
-				v3s16 p(x0,y0,z0);
-				block->setNode(p, air_node);
-			}
-			MapNode mesh_make_node(id, param1, 0);
-			mesh_make_data.fillSingleNode(&mesh_make_node);
-			block->setNode(v3s16(1,1,1), mesh_make_node);
-			map.insertBlock(block);
-			MapBlockMesh mapblock_mesh(&mesh_make_data, v3s16(0, 0, 0));
-			scene::IMesh *node_mesh = mapblock_mesh.getMesh();
-			assert(node_mesh);
-			video::SColor c(255, 255, 255, 255);
-			setMeshColor(node_mesh, c);
+			// Keep this in sync with WieldMeshSceneNode::setItem()
+			bool need_wield_mesh =
+				!(f.mesh_ptr[0] ||
+				  f.drawtype == NDT_NORMAL ||
+				  f.drawtype == NDT_ALLFACES ||
+				  f.drawtype == NDT_AIRLIKE);
 
-			/*
-				Scale and translate the mesh so it's a unit cube
-				centered on the origin
-			*/
-			scaleMesh(node_mesh, v3f(1.0/BS, 1.0/BS, 1.0/BS));
-			translateMesh(node_mesh, v3f(-1.0, -1.0, -1.0));
+			scene::IMesh *node_mesh = NULL;
+
+			if (need_rtt_mesh || need_wield_mesh) {
+				u8 param1 = 0;
+				if (f.param_type == CPT_LIGHT)
+					param1 = 0xee;
+
+				/*
+					Make a mesh from the node
+				*/
+				Map map(gamedef);
+				MapDrawControl map_draw_control;
+				MeshMakeData mesh_make_data(gamedef, false, map, map_draw_control);
+				v3POS p0(30456, 12432, -19999); // better to use MAP_BLOCKSIZE+1 but need to remove some checks
+				v3POS bp = getNodeBlockPos(p0);
+				auto block = map.createBlankBlockNoInsert(bp);
+				auto air_node = MapNode(CONTENT_AIR, LIGHT_MAX);
+				for(s16 z0=0; z0<=2; ++z0)
+				for(s16 y0=0; y0<=2; ++y0)
+				for(s16 x0=0; x0<=2; ++x0) {
+					v3s16 p(x0,y0,z0);
+					block->setNode(p, air_node);
+				}
+				u8 param2 = 0;
+				if (f.param_type_2 == CPT2_WALLMOUNTED)
+					param2 = 1;
+				MapNode mesh_make_node(id, param1, param2);
+				mesh_make_data.fillSingleNode(&mesh_make_node, bp);
+				block->setNode(v3s16(1,1,1), mesh_make_node);
+				map.insertBlock(block);
+				MapBlockMesh mapblock_mesh(&mesh_make_data, bp*MAP_BLOCKSIZE);
+
+/* MT
+				MeshMakeData mesh_make_data(gamedef, false);
+				u8 param2 = 0;
+				if (f.param_type_2 == CPT2_WALLMOUNTED)
+					param2 = 1;
+				MapNode mesh_make_node(id, param1, param2);
+				mesh_make_data.fillSingleNode(&mesh_make_node);
+				MapBlockMesh mapblock_mesh(&mesh_make_data, v3s16(0, 0, 0));
+*/
+
+				node_mesh = mapblock_mesh.getMesh();
+				node_mesh->grab();
+				video::SColor c(255, 255, 255, 255);
+				setMeshColor(node_mesh, c);
+
+				// scale and translate the mesh so it's a
+				// unit cube centered on the origin
+				scaleMesh(node_mesh, v3f(1.0/BS, 1.0/BS, 1.0/BS));
+				translateMesh(node_mesh, v3f(-1.0, -1.0, -1.0));
+			}
 
 			/*
 				Draw node mesh into a render target texture
 			*/
-			if(cc->inventory_texture == NULL)
-			{
+			if (need_rtt_mesh) {
 				TextureFromMeshParams params;
 				params.mesh = node_mesh;
 				params.dim.set(64, 64);
 				params.rtt_texture_name = "INVENTORY_"
-					+ def->name + "_RTT";
+					+ def.name + "_RTT";
 				params.delete_texture_on_shutdown = true;
 				params.camera_position.set(0, 1.0, -1.5);
 				params.camera_position.rotateXZBy(45);
@@ -464,8 +505,7 @@ public:
 					tsrc->generateTextureFromMesh(params);
 
 				// render-to-target didn't work
-				if(cc->inventory_texture == NULL)
-				{
+				if (cc->inventory_texture == NULL) {
 					cc->inventory_texture =
 						tsrc->getTexture(f.tiledef[0].name);
 				}
@@ -474,19 +514,16 @@ public:
 			/*
 				Use the node mesh as the wield mesh
 			*/
+			if (need_wield_mesh) {
+				cc->wield_mesh = node_mesh;
+				cc->wield_mesh->grab();
 
-			// Scale to proper wield mesh proportions
-			scaleMesh(node_mesh, v3f(30.0, 30.0, 30.0)
-					* def->wield_scale);
+				// no way reference count can be smaller than 2 in this place!
+				assert(cc->wield_mesh->getReferenceCount() >= 2);
+			}
 
-			cc->wield_mesh = node_mesh;
-			cc->wield_mesh->grab();
-
-			//no way reference count can be smaller than 2 in this place!
-			assert(cc->wield_mesh->getReferenceCount() >= 2);
-
-			if (reenable_shaders)
-				g_settings->setBool("enable_shaders",true);
+			if (node_mesh)
+				node_mesh->drop();
 		}
 
 		// Put in cache
@@ -594,7 +631,7 @@ public:
 		verbosestream<<"ItemDefManager: registering \""<<def.name<<"\""<<std::endl;
 		// Ensure that the "" item (the hand) always has ToolCapabilities
 		if(def.name == "")
-			assert(def.tool_capabilities != NULL);
+			FATAL_ERROR_IF(!def.tool_capabilities, "Hand does not have ToolCapabilities");
 
 		if(m_item_definitions.count(def.name) == 0)
 			m_item_definitions[def.name] = new ItemDefinition(def);
@@ -665,6 +702,29 @@ public:
 			std::string convert_to = deSerializeString(is);
 			registerAlias(name, convert_to);
 		}
+	}
+	void msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const {
+		pk.pack_map(2);
+		pk.pack((int)ITEMDEFMANAGER_ITEMDEFS);
+		pk.pack_map(m_item_definitions.size());
+		for (std::map<std::string, ItemDefinition*>::const_iterator i = m_item_definitions.begin();
+				i != m_item_definitions.end(); ++i) {
+			pk.pack(i->first);
+			pk.pack(*(i->second));
+		}
+		PACK(ITEMDEFMANAGER_ALIASES, m_aliases);
+	}
+	void msgpack_unpack(msgpack::object o) {
+		clear();
+		MsgpackPacket packet = o.as<MsgpackPacket>();
+
+		std::map<std::string, ItemDefinition> itemdefs_tmp;
+		packet[ITEMDEFMANAGER_ITEMDEFS].convert(&itemdefs_tmp);
+		for (std::map<std::string, ItemDefinition>::iterator i = itemdefs_tmp.begin();
+				i != itemdefs_tmp.end(); ++i) {
+			registerItem(i->second);
+		}
+		packet[ITEMDEFMANAGER_ALIASES].convert(&m_aliases);
 	}
 	void processQueue(IGameDef *gamedef)
 	{

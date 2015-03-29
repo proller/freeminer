@@ -40,7 +40,7 @@ int ModApiServer::l_request_shutdown(lua_State *L)
 int ModApiServer::l_get_server_status(lua_State *L)
 {
 	NO_MAP_LOCK_REQUIRED;
-	lua_pushstring(L, wide_to_narrow(getServer(L)->getStatusString()).c_str());
+	lua_pushstring(L, getServer(L)->getStatusString().c_str());
 	return 1;
 }
 
@@ -52,7 +52,7 @@ int ModApiServer::l_chat_send_all(lua_State *L)
 	// Get server from registry
 	Server *server = getServer(L);
 	// Send
-	server->notifyPlayers(narrow_to_wide(text));
+	server->notifyPlayers(text);
 	return 0;
 }
 
@@ -66,7 +66,7 @@ int ModApiServer::l_chat_send_player(lua_State *L)
 	// Get server from registry
 	Server *server = getServer(L);
 	// Send
-	server->notifyPlayer(name, narrow_to_wide(text));
+	server->notifyPlayer(name, text);
 	return 0;
 }
 
@@ -309,7 +309,7 @@ int ModApiServer::l_kick_player(lua_State *L)
 		lua_pushboolean(L, false); // No such player
 		return 1;
 	}
-	getServer(L)->DenyAccess(player->peer_id, narrow_to_wide(message));
+	getServer(L)->DenyAccess(player->peer_id, message);
 	lua_pushboolean(L, true);
 	return 1;
 }
@@ -370,33 +370,18 @@ int ModApiServer::l_get_modnames(lua_State *L)
 	NO_MAP_LOCK_REQUIRED;
 
 	// Get a list of mods
-	std::list<std::string> mods_unsorted, mods_sorted;
-	getServer(L)->getModNames(mods_unsorted);
+	std::vector<std::string> modlist;
+	getServer(L)->getModNames(modlist);
 
 	// Take unsorted items from mods_unsorted and sort them into
 	// mods_sorted; not great performance but the number of mods on a
 	// server will likely be small.
-	for(std::list<std::string>::iterator i = mods_unsorted.begin();
-			i != mods_unsorted.end(); ++i) {
-		bool added = false;
-		for(std::list<std::string>::iterator x = mods_sorted.begin();
-				x != mods_sorted.end(); ++x) {
-			// I doubt anybody using Minetest will be using
-			// anything not ASCII based :)
-			if(i->compare(*x) <= 0) {
-				mods_sorted.insert(x, *i);
-				added = true;
-				break;
-			}
-		}
-		if(!added)
-			mods_sorted.push_back(*i);
-	}
+	std::sort(modlist.begin(), modlist.end());
 
 	// Package them up for Lua
-	lua_createtable(L, mods_sorted.size(), 0);
-	std::list<std::string>::iterator iter = mods_sorted.begin();
-	for (u16 i = 0; iter != mods_sorted.end(); iter++) {
+	lua_createtable(L, modlist.size(), 0);
+	std::vector<std::string>::iterator iter = modlist.begin();
+	for (u16 i = 0; iter != modlist.end(); iter++) {
 		lua_pushstring(L, iter->c_str());
 		lua_rawseti(L, -2, ++i);
 	}

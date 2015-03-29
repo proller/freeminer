@@ -30,7 +30,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <list>
 #include <bitset>
 #include "mapnode.h"
-#include "tile.h"
+#include "client/tile.h"
 #ifndef SERVER
 #include "shader.h"
 #endif
@@ -40,6 +40,49 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "fmbitset.h"
 #include <unordered_set>
 
+
+#include "msgpack.h"
+
+enum {
+	CONTENTFEATURES_NAME,
+	CONTENTFEATURES_GROUPS,
+	CONTENTFEATURES_DRAWTYPE,
+	CONTENTFEATURES_VISUAL_SCALE,
+	CONTENTFEATURES_TILEDEF,
+	CONTENTFEATURES_TILEDEF_SPECIAL,
+	CONTENTFEATURES_ALPHA,
+	CONTENTFEATURES_POST_EFFECT_COLOR,
+	CONTENTFEATURES_PARAM_TYPE,
+	CONTENTFEATURES_PARAM_TYPE_2,
+	CONTENTFEATURES_IS_GROUND_CONTENT,
+	CONTENTFEATURES_LIGHT_PROPAGATES,
+	CONTENTFEATURES_SUNLIGHT_PROPAGATES,
+	CONTENTFEATURES_WALKABLE,
+	CONTENTFEATURES_POINTABLE,
+	CONTENTFEATURES_DIGGABLE,
+	CONTENTFEATURES_CLIMBABLE,
+	CONTENTFEATURES_BUILDABLE_TO,
+	CONTENTFEATURES_LIQUID_TYPE,
+	CONTENTFEATURES_LIQUID_ALTERNATIVE_FLOWING,
+	CONTENTFEATURES_LIQUID_ALTERNATIVE_SOURCE,
+	CONTENTFEATURES_LIQUID_VISCOSITY,
+	CONTENTFEATURES_LIQUID_RENEWABLE,
+	CONTENTFEATURES_LIGHT_SOURCE,
+	CONTENTFEATURES_DAMAGE_PER_SECOND,
+	CONTENTFEATURES_NODE_BOX,
+	CONTENTFEATURES_SELECTION_BOX,
+	CONTENTFEATURES_LEGACY_FACEDIR_SIMPLE,
+	CONTENTFEATURES_LEGACY_WALLMOUNTED,
+	CONTENTFEATURES_SOUND_FOOTSTEP,
+	CONTENTFEATURES_SOUND_DIG,
+	CONTENTFEATURES_SOUND_DUG,
+	CONTENTFEATURES_RIGHTCLICKABLE,
+	CONTENTFEATURES_DROWNING,
+	CONTENTFEATURES_LEVELED,
+	CONTENTFEATURES_WAVING,
+	CONTENTFEATURES_MESH,
+	CONTENTFEATURES_COLLISION_BOX
+};
 
 class IItemDefManager;
 class ITextureSource;
@@ -65,7 +108,7 @@ enum ContentParamType2
 	CPT2_FACEDIR,
 	// Direction for signs, torches and such
 	CPT2_WALLMOUNTED,
-	// Block level like FLOWINGLIQUID
+	// Block level like FLOWINGLIQUID (also for snow)
 	CPT2_LEVELED,
 };
 
@@ -82,6 +125,15 @@ enum NodeBoxType
 	NODEBOX_FIXED, // Static separately defined box(es)
 	NODEBOX_WALLMOUNTED, // Box for wall mounted nodes; (top, bottom, side)
 	NODEBOX_LEVELED, // Same as fixed, but with dynamic height from param2. for snow, ...
+};
+
+// _S_ is serialized, added to make sure collisions with NodeBoxType never happen
+enum {
+	NODEBOX_S_TYPE,
+	NODEBOX_S_FIXED,
+	NODEBOX_S_WALL_TOP,
+	NODEBOX_S_WALL_BOTTOM,
+	NODEBOX_S_WALL_SIDE
 };
 
 struct NodeBox
@@ -101,6 +153,9 @@ struct NodeBox
 	void reset();
 	void serialize(std::ostream &os, u16 protocol_version) const;
 	void deSerialize(std::istream &is);
+
+	void msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const;
+	void msgpack_unpack(msgpack::object o);
 };
 
 struct MapNode;
@@ -109,6 +164,14 @@ class NodeMetadata;
 /*
 	Stand-alone definition of a TileSpec (basically a server-side TileSpec)
 */
+enum {
+	TILEDEF_NAME,
+	TILEDEF_ANIMATION_TYPE,
+	TILEDEF_ANIMATION_ASPECT_W,
+	TILEDEF_ANIMATION_ASPECT_H,
+	TILEDEF_ANIMATION_LENGTH,
+	TILEDEF_BACKFACE_CULLING
+};
 enum TileAnimationType{
 	TAT_NONE=0,
 	TAT_VERTICAL_FRAMES=1,
@@ -136,6 +199,9 @@ struct TileDef
 
 	void serialize(std::ostream &os, u16 protocol_version) const;
 	void deSerialize(std::istream &is);
+
+	void msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const;
+	void msgpack_unpack(msgpack::object o);
 };
 
 enum NodeDrawType
@@ -156,9 +222,13 @@ enum NodeDrawType
 	NDT_GLASSLIKE_FRAMED, // Glass-like, draw connected frames and all all
 	                      // visible faces
 						  // uses 2 textures, one for frames, second for faces
+	NDT_FIRELIKE, // Draw faces slightly rotated and only on connecting nodes,
+	NDT_GLASSLIKE_FRAMED_OPTIONAL,	// enabled -> connected, disabled -> Glass-like
+									// uses 2 textures, one for frames, second for faces
+	NDT_MESH, // Uses static meshes
 };
 
-#define CF_SPECIAL_COUNT 2
+#define CF_SPECIAL_COUNT 6
 
 struct ContentFeatures
 {
@@ -167,7 +237,7 @@ struct ContentFeatures
 	*/
 #ifndef SERVER
 	// 0     1     2     3     4     5
-	// up    down  right left  back  front 
+	// up    down  right left  back  front
 	TileSpec tiles[6];
 	// Special tiles
 	// - Currently used for flowing liquids
@@ -196,6 +266,10 @@ struct ContentFeatures
 
 	// Visual definition
 	enum NodeDrawType drawtype;
+	std::string mesh;
+#ifndef SERVER
+	scene::IMesh *mesh_ptr[24];
+#endif
 	float visual_scale; // Misc. scale parameter
 	TileDef tiledef[6];
 	TileDef tiledef_special[CF_SPECIAL_COUNT]; // eg. flowing liquid
@@ -242,12 +316,14 @@ struct ContentFeatures
 	std::string freeze;
 	std::string melt;
 	// Number of flowing liquids surrounding source
+	u8 liquid_range;
 	u8 drowning;
 	// Amount of light the node emits
 	u8 light_source;
 	u32 damage_per_second;
 	NodeBox node_box;
 	NodeBox selection_box;
+	NodeBox collision_box;
 	// Used for waving leaves/plants
 	u8 waving;
 	// Compatibility with old maps
@@ -271,14 +347,16 @@ struct ContentFeatures
 	/*
 		Methods
 	*/
-	
+
 	ContentFeatures();
 	~ContentFeatures();
 	void reset();
+
 	void serialize(std::ostream &os, u16 protocol_version);
 	void deSerialize(std::istream &is);
-	void serializeOld(std::ostream &os, u16 protocol_version);
-	void deSerializeOld(std::istream &is, int version);
+
+	void msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const;
+	void msgpack_unpack(msgpack::object o);
 
 	/*
 		Some handy methods
@@ -291,15 +369,49 @@ struct ContentFeatures
 		return (liquid_alternative_flowing == f.liquid_alternative_flowing);
 	}
 	u8 getMaxLevel(bool compress = 0) const{
-		if(param_type_2 == CPT2_LEVELED && liquid_type == LIQUID_FLOWING && leveled)
-			return(compress ? LEVELED_MAX : leveled);
+		//if(param_type_2 == CPT2_LEVELED /* && liquid_type == LIQUID_FLOWING*/ && leveled)
+		//	return(compress ? LEVELED_MAX : leveled);
 		if(leveled || param_type_2 == CPT2_LEVELED)
-			return LEVELED_MAX;
+			return compress ? LEVELED_MAX : leveled ? leveled : LEVELED_MAX;
 		if(param_type_2 == CPT2_FLOWINGLIQUID || liquid_type == LIQUID_FLOWING) //remove liquid_type
 			return LIQUID_LEVEL_SOURCE;
 		return 0;
 	}
 
+};
+
+class NodeResolver;
+class INodeDefManager;
+
+struct NodeListInfo {
+	NodeListInfo(u32 len)
+	{
+		length       = len;
+		all_required = false;
+		c_fallback   = CONTENT_IGNORE;
+	}
+
+	NodeListInfo(u32 len, content_t fallback)
+	{
+		length       = len;
+		all_required = true;
+		c_fallback   = fallback;
+	}
+
+	u32 length;
+	bool all_required;
+	content_t c_fallback;
+};
+
+struct NodeResolveInfo {
+	NodeResolveInfo(NodeResolver *nr)
+	{
+		resolver = nr;
+	}
+
+	std::list<std::string> nodenames;
+	std::list<NodeListInfo> nodelistinfo;
+	NodeResolver *resolver;
 };
 
 class INodeDefManager
@@ -317,8 +429,23 @@ public:
 			const=0;
 	virtual void getIds(const std::string &name, FMBitset &result) const=0;
 	virtual const ContentFeatures& get(const std::string &name) const=0;
-	
+
 	virtual void serialize(std::ostream &os, u16 protocol_version)=0;
+
+	virtual void msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const=0;
+	virtual void msgpack_unpack(msgpack::object o)=0;
+
+	virtual bool getNodeRegistrationStatus() const=0;
+	virtual void setNodeRegistrationStatus(bool completed)=0;
+
+	virtual void pendNodeResolve(NodeResolveInfo *nri)=0;
+	virtual void cancelNodeResolve(NodeResolver *resolver)=0;
+	virtual void runNodeResolverCallbacks()=0;
+
+	virtual bool getIdFromResolveInfo(NodeResolveInfo *nri,
+		const std::string &node_alt, content_t c_fallback, content_t &result)=0;
+	virtual bool getIdsFromResolveInfo(NodeResolveInfo *nri,
+		std::vector<content_t> &result)=0;
 };
 
 class IWritableNodeDefManager : public INodeDefManager
@@ -355,14 +482,51 @@ public:
 	/*
 		Update tile textures to latest return values of TextueSource.
 	*/
-	virtual void updateTextures(ITextureSource *tsrc,
-		IShaderSource *shdsrc)=0;
+	virtual void updateTextures(IGameDef *gamedef,
+	/*argument: */void (*progress_callback)(void *progress_args, u32 progress, u32 max_progress) = nullptr,
+	/*argument: */void *progress_callback_args = nullptr)=0;
 
 	virtual void serialize(std::ostream &os, u16 protocol_version)=0;
 	virtual void deSerialize(std::istream &is)=0;
+
+	virtual void msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const=0;
+	virtual void msgpack_unpack(msgpack::object o)=0;
+
+	virtual bool getNodeRegistrationStatus() const=0;
+	virtual void setNodeRegistrationStatus(bool completed)=0;
+
+	virtual void pendNodeResolve(NodeResolveInfo *nri)=0;
+	virtual void cancelNodeResolve(NodeResolver *resolver)=0;
+	virtual void runNodeResolverCallbacks()=0;
+
+	virtual bool getIdFromResolveInfo(NodeResolveInfo *nri,
+		const std::string &node_alt, content_t c_fallback, content_t &result)=0;
+	virtual bool getIdsFromResolveInfo(NodeResolveInfo *nri,
+		std::vector<content_t> &result)=0;
 };
 
-IWritableNodeDefManager* createNodeDefManager();
+IWritableNodeDefManager *createNodeDefManager();
+
+class NodeResolver {
+public:
+	NodeResolver()
+	{
+		m_lookup_done = false;
+		m_ndef = NULL;
+	}
+
+	virtual ~NodeResolver()
+	{
+		if (!m_lookup_done && m_ndef)
+			m_ndef->cancelNodeResolve(this);
+	}
+
+	virtual void resolveNodeNames(NodeResolveInfo *nri) = 0;
+
+	bool m_lookup_done;
+	INodeDefManager *m_ndef;
+};
+
 
 #endif
 

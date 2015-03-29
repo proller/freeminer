@@ -25,7 +25,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "exceptions.h"
 #include "settings.h"
 #include "log.h"
-#include "hex.h"
+#include "debug.h"
+#include "util/hex.h"
 
 class UnknownKeycode : public BaseException
 {
@@ -173,6 +174,9 @@ irr::EKEY_CODE keyname_to_keycode(const char *name)
 	CHECKKEY(KEY_COMMA)
 	CHECKKEY(KEY_MINUS)
 	CHECKKEY(KEY_PERIOD)
+#if IRRLICHT_VERSION_10000  >= 10703
+	CHECKKEY(KEY_OEM_3)
+#endif
 	CHECKKEY(KEY_ATTN)
 	CHECKKEY(KEY_CRSEL)
 	CHECKKEY(KEY_EXSEL)
@@ -213,7 +217,7 @@ static const char *KeyNames[] =
 		"-", "-", "-", "-", "-", "KEY_LSHIFT", "KEY_RSHIFT", "KEY_LCONTROL",
 		"KEY_RCONTROL", "KEY_LMENU", "KEY_RMENU", "-", "-", "-", "-", "-",
 		"-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-",
-		"-", "-", "KEY_PLUS", "KEY_COMMA", "KEY_MINUS", "KEY_PERIOD", "-", "-", "-", "-", "-",
+		"-", "-", "KEY_PLUS", "KEY_COMMA", "KEY_MINUS", "KEY_PERIOD", "-", "KEY_OEM_3", "-", "-", "-",
 		"-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-",
 		"-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-",
 		"-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-",
@@ -243,7 +247,7 @@ static const char *KeyNamesLang[] =
 			"-", "-", "-", "-", "-", "-", "-", N_("Left Shift"), N_("Right Shift"),
 			N_("Left Control"), N_("Right Control"), N_("Left Menu"), N_("Right Menu"), "-", "-",
 			"-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-",
-			"-", "-", "-", "-", "-", N_("Plus"), N_("Comma"), N_("Minus"), N_("Period"), "-", "-",
+			"-", "-", "-", "-", "-", N_("Plus"), N_("Comma"), N_("Minus"), N_("Period"), "-", N_("Tilde"),
 			"-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-",
 			"-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-",
 			"-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-",
@@ -265,7 +269,8 @@ KeyPress::KeyPress(const char *name)
 			m_name = name;
 			if (strlen(name) > 8 && strncmp(name, "KEY_KEY_", 8) == 0) {
 				int chars_read = mbtowc(&Char, name + 8, 1);
-				assert (chars_read == 1 && "unexpected multibyte character");
+
+				FATAL_ERROR_IF(chars_read != 1, "Unexpected multibyte character");
 			} else
 				Char = L'\0';
 			return;
@@ -277,7 +282,8 @@ KeyPress::KeyPress(const char *name)
 		try {
 			Key = keyname_to_keycode(m_name.c_str());
 			int chars_read = mbtowc(&Char, name, 1);
-			assert (chars_read == 1 && "unexpected multibyte character");
+
+			FATAL_ERROR_IF(chars_read != 1, "Unexpected multibyte character");
 			return;
 		} catch (UnknownKeycode &e) {};
 	}
@@ -287,7 +293,7 @@ KeyPress::KeyPress(const char *name)
 	Key = irr::KEY_KEY_CODES_COUNT;
 
 	int mbtowc_ret = mbtowc(&Char, name, 1);
-	assert (mbtowc_ret == 1 && "unexpected multibyte character");
+	FATAL_ERROR_IF(mbtowc_ret != 1, "Unexpected multibyte character");
 	m_name = name[0];
 }
 

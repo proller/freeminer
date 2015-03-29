@@ -37,14 +37,14 @@ enum LocalPlayerAnimations {NO_ANIM, WALK_ANIM, DIG_ANIM, WD_ANIM};  // no local
 class LocalPlayer : public Player
 {
 public:
-	LocalPlayer(IGameDef *gamedef);
+	LocalPlayer(IGameDef *gamedef, const char *name);
 	virtual ~LocalPlayer();
 
 	bool isLocal() const
 	{
 		return true;
 	}
-	
+
 	ClientActiveObject *parent;
 
 	bool isAttached;
@@ -53,7 +53,7 @@ public:
 	
 	void move(f32 dtime, Environment *env, f32 pos_max_d);
 	void move(f32 dtime, Environment *env, f32 pos_max_d,
-			std::list<CollisionInfo> *collision_info);
+			std::vector<CollisionInfo> *collision_info);
 	bool canPlaceNode(const v3s16& p, const MapNode& node);
 
 	void applyControl(float dtime, ClientEnvironment *env);
@@ -77,12 +77,14 @@ public:
 	std::string hotbar_image;
 	std::string hotbar_selected_image;
 
+	video::SColor light_color;
+
 	GenericCAO* getCAO() const {
 		return m_cao;
 	}
 
 	void setCAO(GenericCAO* toset) {
-		assert( m_cao == NULL );
+		assert( m_cao == NULL ); // Pre-condition
 		m_cao = toset;
 	}
 

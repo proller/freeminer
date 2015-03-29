@@ -23,33 +23,33 @@ local function get_formspec(tabview, name, tabdata)
 				)
 
 	local retval =
-		"button[4,4.15;2.6,0.5;world_delete;".. fgettext("Delete") .. "]" ..
-		"button[6.5,4.15;2.8,0.5;world_create;".. fgettext("New") .. "]" ..
-		"button[9.2,4.15;2.55,0.5;world_configure;".. fgettext("Configure") .. "]" ..
-		"button[8.5,4.9;3.25,0.5;start_server;".. fgettext("Start Game") .. "]" ..
-		"label[4,-0.25;".. fgettext("Select World:") .. "]"..
-		"vertlabel[0,-0.25;".. fgettext("START SERVER") .. "]" ..
-		"checkbox[0.5,0.25;cb_creative_mode;".. fgettext("Creative Mode") .. ";" ..
-		dump(core.setting_getbool("creative_mode")) .. "]"..
-		"checkbox[0.5,0.7;cb_enable_damage;".. fgettext("Enable Damage") .. ";" ..
-		dump(core.setting_getbool("enable_damage")) .. "]"..
-		"checkbox[0.5,1.15;cb_server_announce;".. fgettext("Public") .. ";" ..
-		dump(core.setting_getbool("server_announce")) .. "]"..
-		"field[0.8,3.2;3.5,0.5;te_playername;".. fgettext("Name") .. ";" ..
-		core.setting_get("name") .. "]" ..
-		"pwdfield[0.8,4.2;3.5,0.5;te_passwd;".. fgettext("Password") .. "]"
-		
+		"button[4,4.15;2.6,0.5;world_delete;" .. fgettext("Delete") .. "]" ..
+		"button[6.5,4.15;2.8,0.5;world_create;" .. fgettext("New") .. "]" ..
+		"button[9.2,4.15;2.55,0.5;world_configure;" .. fgettext("Configure") .. "]" ..
+		"button[8.5,4.95;3.25,0.5;start_server;" .. fgettext("Start Game") .. "]" ..
+		"label[4,-0.25;" .. fgettext("Select World:") .. "]" ..
+		"checkbox[0.25,0.25;cb_creative_mode;" .. fgettext("Creative Mode") .. ";" ..
+		dump(core.setting_getbool("creative_mode")) .. "]" ..
+		"checkbox[0.25,0.7;cb_enable_damage;" .. fgettext("Enable Damage") .. ";" ..
+		dump(core.setting_getbool("enable_damage")) .. "]" ..
+		"checkbox[0.25,1.15;cb_server_announce;" .. fgettext("Public") .. ";" ..
+		dump(core.setting_getbool("server_announce")) .. "]" ..
+		"label[0.25,2.2;" .. fgettext("Name/Password") .. "]" ..
+		"field[0.55,3.2;3.5,0.5;te_playername;;" ..
+		core.formspec_escape(core.setting_get("name")) .. "]" ..
+		"pwdfield[0.55,4;3.5,0.5;te_passwd;]"
+
 	local bind_addr = core.setting_get("bind_address")
 	if bind_addr ~= nil and bind_addr ~= "" then
 		retval = retval ..
-			"field[0.8,5.2;2.25,0.5;te_serveraddr;".. fgettext("Bind Address") .. ";" ..
-			core.setting_get("bind_address") .."]" ..
-			"field[3.05,5.2;1.25,0.5;te_serverport;".. fgettext("Port") .. ";" ..
-			core.setting_get("port") .."]"
+			"field[0.55,5.2;2.25,0.5;te_serveraddr;" .. fgettext("Bind Address") .. ";" ..
+			core.formspec_escape(core.setting_get("bind_address")) .. "]" ..
+			"field[2.8,5.2;1.25,0.5;te_serverport;" .. fgettext("Port") .. ";" ..
+			core.formspec_escape(core.setting_get("port")) .. "]"
 	else
 		retval = retval ..
-			"field[0.8,5.2;3.5,0.5;te_serverport;".. fgettext("Server Port") .. ";" ..
-			core.setting_get("port") .."]"
+			"field[0.55,5.2;3.5,0.5;te_serverport;" .. fgettext("Server Port") .. ";" ..
+			core.formspec_escape(core.setting_get("port")) .. "]"
 	end
 	
 	retval = retval ..
@@ -68,6 +68,32 @@ local function main_button_handler(this, fields, name, tabdata)
 	if fields["srv_worlds"] ~= nil then
 		local event = core.explode_textlist_event(fields["srv_worlds"])
 
+		local selected = core.get_textlist_index("srv_worlds")
+		if selected ~= nil then
+			local filename = menudata.worldlist:get_list()[selected].path
+			local worldconfig = modmgr.get_worldconfig(filename)
+			filename = filename .. DIR_DELIM .. "world.mt"
+
+			if worldconfig.creative_mode ~= nil then
+				core.setting_set("creative_mode", worldconfig.creative_mode)
+			else
+				local worldfile = Settings(filename)
+				worldfile:set("creative_mode", core.setting_get("creative_mode"))
+				if not worldfile:write() then
+					core.log("error", "Failed to write world config file")
+				end
+			end
+			if worldconfig.enable_damage ~= nil then
+				core.setting_set("enable_damage", worldconfig.enable_damage)
+			else
+				local worldfile = Settings(filename)
+				worldfile:set("enable_damage", core.setting_get("enable_damage"))
+				if not worldfile:write() then
+					core.log("error", "Failed to write world config file")
+				end
+			end
+		end
+
 		if event.type == "DCL" then
 			world_doubleclick = true
 		end
@@ -84,11 +110,29 @@ local function main_button_handler(this, fields, name, tabdata)
 
 	if fields["cb_creative_mode"] then
 		core.setting_set("creative_mode", fields["cb_creative_mode"])
+		local selected = core.get_textlist_index("srv_worlds")
+		local filename = menudata.worldlist:get_list()[selected].path ..
+				DIR_DELIM .. "world.mt"
+
+		local worldfile = Settings(filename)
+		worldfile:set("creative_mode", fields["cb_creative_mode"])
+		if not worldfile:write() then
+			core.log("error", "Failed to write world config file")
+		end
 		return true
 	end
 
 	if fields["cb_enable_damage"] then
 		core.setting_set("enable_damage", fields["cb_enable_damage"])
+		local selected = core.get_textlist_index("srv_worlds")
+		local filename = menudata.worldlist:get_list()[selected].path ..
+				DIR_DELIM .. "world.mt"
+
+		local worldfile = Settings(filename)
+		worldfile:set("enable_damage", fields["cb_enable_damage"])
+		if not worldfile:write() then
+			core.log("error", "Failed to write world config file")
+		end
 		return true
 	end
 

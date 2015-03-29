@@ -25,7 +25,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <map>
 #include "irrlichttypes_extrabloated.h"
-#include "content_object.h"
 #include "clientobject.h"
 #include "object_properties.h"
 #include "itemgroup.h"
@@ -73,8 +72,10 @@ private:
 	core::aabbox3d<f32> m_selection_box;
 	scene::IMeshSceneNode *m_meshnode;
 	scene::IAnimatedMeshSceneNode *m_animated_meshnode;
+	WieldMeshSceneNode *m_wield_meshnode;
 	scene::IBillboardSceneNode *m_spritenode;
 	scene::ITextSceneNode* m_textnode;
+	scene::IShadowVolumeSceneNode* m_shadownode;
 	v3f m_position;
 	v3f m_velocity;
 	v3f m_acceleration;
@@ -117,7 +118,7 @@ public:
 		return new GenericCAO(gamedef, env);
 	}
 
-	inline u8 getType() const
+	inline ActiveObjectType getType() const
 	{
 		return ACTIVEOBJECT_TYPE_GENERIC;
 	}
@@ -134,9 +135,13 @@ public:
 
 	v3f getPosition();
 
+	scene::ISceneNode *getSceneNode();
+
 	scene::IMeshSceneNode *getMeshSceneNode();
 
 	scene::IAnimatedMeshSceneNode *getAnimatedMeshSceneNode();
+
+	WieldMeshSceneNode *getWieldMeshSceneNode();
 
 	scene::IBillboardSceneNode *getSpriteSceneNode();
 

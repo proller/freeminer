@@ -21,6 +21,37 @@ function basic_dump(o)
 	end
 end
 
+local keywords = {
+	["and"] = true,
+	["break"] = true,
+	["do"] = true,
+	["else"] = true,
+	["elseif"] = true,
+	["end"] = true,
+	["false"] = true,
+	["for"] = true,
+	["function"] = true,
+	["goto"] = true,  -- Lua 5.2
+	["if"] = true,
+	["in"] = true,
+	["local"] = true,
+	["nil"] = true,
+	["not"] = true,
+	["or"] = true,
+	["repeat"] = true,
+	["return"] = true,
+	["then"] = true,
+	["true"] = true,
+	["until"] = true,
+	["while"] = true,
+}
+local function is_valid_identifier(str)
+	if not str:find("^[a-zA-Z_][a-zA-Z0-9_]*$") or keywords[str] then
+		return false
+	end
+	return true
+end
+
 --------------------------------------------------------------------------------
 -- Dumps values in a line-per-value format.
 -- For example, {test = {"Testing..."}} becomes:
@@ -70,41 +101,85 @@ function dump2(o, name, dumped)
 end
 
 --------------------------------------------------------------------------------
--- This dumps values in a one-line format, like serialize().
--- For example, {test = {"Testing..."}} becomes {["test"] = {[1] = "Testing..."}}
+-- This dumps values in a one-statement format.
+-- For example, {test = {"Testing..."}} becomes:
+-- [[{
+-- 	test = {
+-- 		"Testing..."
+-- 	}
+-- }]]
 -- This supports tables as keys, but not circular references.
 -- It performs poorly with multiple references as it writes out the full
 -- table each time.
--- The dumped argument is internal-only.
+-- The indent field specifies a indentation string, it defaults to a tab.
+-- Use the empty string to disable indentation.
+-- The dumped and level arguments are internal-only.
 
-function dump(o, dumped)
-	-- Same as "dumped" in dump2.  The difference is that here it can only
-	-- contain boolean (and nil) values since multiple references aren't
-	-- handled properly.
-	dumped = dumped or {}
-	if type(o) == "table" then
-		if dumped[o] then
-			return "<circular reference>"
-		end
-		dumped[o] = true
-		local t = {}
-		for k, v in pairs(o) do
-			k = dump(k, dumped)
-			v = dump(v, dumped)
-			table.insert(t, string.format("[%s] = %s", k, v))
-		end
-		return string.format("{%s}", table.concat(t, ", "))
-	else
+function dump(o, indent, nested, level)
+	if type(o) ~= "table" then
 		return basic_dump(o)
 	end
+	-- Contains table -> true/nil of currently nested tables
+	nested = nested or {}
+	if nested[o] then
+		return "<circular reference>"
+	end
+	nested[o] = true
+	indent = indent or "\t"
+	level = level or 1
+	local t = {}
+	local dumped_indexes = {}
+	for i, v in ipairs(o) do
+		table.insert(t, dump(v, indent, nested, level + 1))
+		dumped_indexes[i] = true
+	end
+	for k, v in pairs(o) do
+		if not dumped_indexes[k] then
+			if type(k) ~= "string" or not is_valid_identifier(k) then
+				k = "["..dump(k, indent, nested, level + 1).."]"
+			end
+			v = dump(v, indent, nested, level + 1)
+			table.insert(t, k.." = "..v)
+		end
+	end
+	nested[o] = nil
+	if indent ~= "" then
+		local indent_str = "\n"..string.rep(indent, level)
+		local end_indent_str = "\n"..string.rep(indent, level - 1)
+		return string.format("{%s%s%s}",
+				indent_str,
+				table.concat(t, ","..indent_str),
+				end_indent_str)
+	end
+	return "{"..table.concat(t, ", ").."}"
 end
 
 --------------------------------------------------------------------------------
-function string:split(sep)
-	local sep, fields = sep or ",", {}
-	local pattern = string.format("([^%s]+)", sep)
-	self:gsub(pattern, function(c) fields[#fields+1] = c end)
-	return fields
+-- Localize functions to avoid table lookups (better performance).
+local table_insert = table.insert
+local str_sub, str_find = string.sub, string.find
+function string.split(str, delim, include_empty, max_splits, sep_is_pattern)
+	delim = delim or ","
+	max_splits = max_splits or -1
+	local items = {}
+	local pos, len, seplen = 1, #str, #delim
+	local plain = not sep_is_pattern
+	max_splits = max_splits + 1
+	repeat
+		local np, npe = str_find(str, delim, pos, plain)
+		np, npe = (np or (len+1)), (npe or (len+1))
+		if (not np) or (max_splits == 1) then
+			np = len + 1
+			npe = np
+		end
+		local s = str_sub(str, pos, np - 1)
+		if include_empty or (s ~= "") then
+			max_splits = max_splits - 1
+			table_insert(items, s)
+		end
+		pos = npe + 1
+	until (max_splits == 0) or (pos > (len + 1))
+	return items
 end
 
 --------------------------------------------------------------------------------
@@ -135,6 +210,17 @@ function math.hypot(x, y)
 	if x == 0 then return 0 end
 	t = t / x
 	return x * math.sqrt(1 + t * t)
+end
+
+--------------------------------------------------------------------------------
+function math.sign(x, tolerance)
+	tolerance = tolerance or 0
+	if x > tolerance then
+		return 1
+	elseif x < -tolerance then
+		return -1
+	end
+	return 0
 end
 
 --------------------------------------------------------------------------------
@@ -485,7 +571,8 @@ function core.explode_table_event(evt)
 			local t = parts[1]:trim()
 			local r = tonumber(parts[2]:trim())
 			local c = tonumber(parts[3]:trim())
-			if type(r) == "number" and type(c) == "number" and t ~= "INV" then
+			if type(r) == "number" and type(c) == "number"
+					and t ~= "INV" then
 				return {type=t, row=r, column=c}
 			end
 		end
@@ -519,10 +606,58 @@ function core.explode_scrollbar_event(evt)
 end
 
 --------------------------------------------------------------------------------
-function core.pos_to_string(pos)
-	return "(" .. pos.x .. "," .. pos.y .. "," .. pos.z .. ")"
+function core.pos_to_string(pos, decimal_places)
+	local x = pos.x
+	local y = pos.y
+	local z = pos.z
+	if decimal_places ~= nil then
+		x = string.format("%." .. decimal_places .. "f", x)
+		y = string.format("%." .. decimal_places .. "f", y)
+		z = string.format("%." .. decimal_places .. "f", z)
+	end
+	return "(" .. x .. "," .. y .. "," .. z .. ")"
 end
 
+--------------------------------------------------------------------------------
+function core.string_to_pos(value)
+	if value == nil then
+		return nil
+	end
+
+	local p = {}
+	p.x, p.y, p.z = string.match(value, "^([%d.-]+)[, ] *([%d.-]+)[, ] *([%d.-]+)$")
+	if p.x and p.y and p.z then
+		p.x = tonumber(p.x)
+		p.y = tonumber(p.y)
+		p.z = tonumber(p.z)
+		return p
+	end
+	local p = {}
+	p.x, p.y, p.z = string.match(value, "^%( *([%d.-]+)[, ] *([%d.-]+)[, ] *([%d.-]+) *%)$")
+	if p.x and p.y and p.z then
+		p.x = tonumber(p.x)
+		p.y = tonumber(p.y)
+		p.z = tonumber(p.z)
+		return p
+	end
+	return nil
+end
+
+assert(core.string_to_pos("10.0, 5, -2").x == 10)
+assert(core.string_to_pos("( 10.0, 5, -2)").z == -2)
+assert(core.string_to_pos("asd, 5, -2)") == nil)
+
+--------------------------------------------------------------------------------
+function table.copy(t, seen)
+	local n = {}
+	seen = seen or {}
+	seen[t] = n
+	for k, v in pairs(t) do
+		n[(type(k) == "table" and (seen[k] or table.copy(k, seen))) or k] =
+			(type(v) == "table" and (seen[v] or table.copy(v, seen))) or v
+	end
+	return n
+end
 --------------------------------------------------------------------------------
 -- mainmenu only functions
 --------------------------------------------------------------------------------
@@ -537,26 +672,36 @@ if INIT == "mainmenu" then
 		return nil
 	end
 
-	function fgettext(text, ...)
+	function fgettext_ne(text, ...)
 		text = core.gettext(text)
 		local arg = {n=select('#', ...), ...}
 		if arg.n >= 1 then
 			-- Insert positional parameters ($1, $2, ...)
-			result = ''
-			pos = 1
+			local result = ''
+			local pos = 1
 			while pos <= text:len() do
-				newpos = text:find('[$]', pos)
+				local newpos = text:find('[$]', pos)
 				if newpos == nil then
 					result = result .. text:sub(pos)
 					pos = text:len() + 1
 				else
-					paramindex = tonumber(text:sub(newpos+1, newpos+1))
-					result = result .. text:sub(pos, newpos-1) .. tostring(arg[paramindex])
+					local paramindex =
+						tonumber(text:sub(newpos+1, newpos+1))
+					result = result .. text:sub(pos, newpos-1)
+						.. tostring(arg[paramindex])
 					pos = newpos + 2
 				end
 			end
 			text = result
 		end
-		return core.formspec_escape(text)
+		return text
+	end
+
+	function fgettext(text, ...)
+		return core.formspec_escape(fgettext_ne(text, ...))
+	end
+
+	function fgettext(text, ...)
+		return core.formspec_escape(fgettext_ne(text, ...))
 	end
 end

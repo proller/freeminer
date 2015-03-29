@@ -25,13 +25,15 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "common/c_converter.h"
 #include "common/c_content.h"
 #include "cpp_api/s_async.h"
+#include "serialization.h"
+#include "json/json.h"
 #include "debug.h"
 #include "porting.h"
 #include "log.h"
 #include "tool.h"
+#include "filesys.h"
 #include "settings.h"
 #include "main.h"  //required for g_settings, g_settings_path
-#include "json/json.h"
 
 // debug(...)
 // Writes a line to dstream
@@ -136,6 +138,32 @@ int ModApiUtil::l_setting_getbool(lua_State *L)
 		bool value = g_settings->getBool(name);
 		lua_pushboolean(L, value);
 	} catch(SettingNotFoundException &e){
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+// setting_setjson(name, value)
+int ModApiUtil::l_setting_setjson(lua_State *L)
+{
+	NO_MAP_LOCK_REQUIRED;
+	const char *name = luaL_checkstring(L, 1);
+	Json::Value root;
+	read_json_value(L, root, 2);
+	g_settings->setJson(name, root);
+	return 0;
+}
+
+// setting_getjson(name[, nullvalue])
+int ModApiUtil::l_setting_getjson(lua_State *L)
+{
+	NO_MAP_LOCK_REQUIRED;
+	const char *name = luaL_checkstring(L, 1);
+	Json::Value root = g_settings->getJson(name);
+	lua_pushnil(L);
+	auto nullindex = lua_gettop(L);
+	if (!push_json_value(L, root, nullindex)) {
+		errorstream << "Failed to parse json data: \"" << root << "\"" << std::endl;
 		lua_pushnil(L);
 	}
 	return 1;
@@ -257,8 +285,7 @@ int ModApiUtil::l_get_password_hash(lua_State *L)
 	NO_MAP_LOCK_REQUIRED;
 	std::string name = luaL_checkstring(L, 1);
 	std::string raw_password = luaL_checkstring(L, 2);
-	std::string hash = translatePassword(name,
-			narrow_to_wide(raw_password));
+	std::string hash = translatePassword(name, raw_password);
 	lua_pushstring(L, hash.c_str());
 	return 1;
 }
@@ -286,6 +313,40 @@ int ModApiUtil::l_get_builtin_path(lua_State *L)
 	return 1;
 }
 
+// compress(data, method, level)
+int ModApiUtil::l_compress(lua_State *L)
+{
+	size_t size;
+	const char *data = luaL_checklstring(L, 1, &size);
+
+	int level = -1;
+	if (!lua_isnone(L, 3) && !lua_isnil(L, 3))
+		level = luaL_checknumber(L, 3);
+
+	std::ostringstream os;
+	compressZlib(std::string(data, size), os, level);
+
+	std::string out = os.str();
+
+	lua_pushlstring(L, out.data(), out.size());
+	return 1;
+}
+
+// decompress(data, method)
+int ModApiUtil::l_decompress(lua_State *L)
+{
+	size_t size;
+	const char * data = luaL_checklstring(L, 1, &size);
+
+	std::istringstream is(std::string(data, size));
+	std::ostringstream os;
+	decompressZlib(is, os);
+
+	std::string out = os.str();
+
+	lua_pushlstring(L, out.data(), out.size());
+	return 1;
+}
 
 void ModApiUtil::Initialize(lua_State *L, int top)
 {
@@ -296,6 +357,8 @@ void ModApiUtil::Initialize(lua_State *L, int top)
 	API_FCT(setting_get);
 	API_FCT(setting_setbool);
 	API_FCT(setting_getbool);
+	API_FCT(setting_setjson);
+	API_FCT(setting_getjson);
 	API_FCT(setting_save);
 
 	API_FCT(parse_json);
@@ -309,6 +372,9 @@ void ModApiUtil::Initialize(lua_State *L, int top)
 	API_FCT(is_yes);
 
 	API_FCT(get_builtin_path);
+
+	API_FCT(compress);
+	API_FCT(decompress);
 }
 
 void ModApiUtil::InitializeAsync(AsyncEngine& engine)
@@ -328,5 +394,8 @@ void ModApiUtil::InitializeAsync(AsyncEngine& engine)
 	ASYNC_API_FCT(is_yes);
 
 	ASYNC_API_FCT(get_builtin_path);
+
+	ASYNC_API_FCT(compress);
+	ASYNC_API_FCT(decompress);
 }
 

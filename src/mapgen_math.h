@@ -1,6 +1,5 @@
 /*
 mapgen_math.h
-Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 */
 
 /*
@@ -48,7 +47,7 @@ struct MapgenMathParams : public MapgenV7Params {
 #endif
 
 	void readParams(Settings *settings);
-	void writeParams(Settings *settings);
+	void writeParams(Settings *settings) const;
 };
 
 class MapgenMath : public MapgenV7 {
@@ -58,21 +57,25 @@ public:
 	MapgenMath(int mapgenid, MapgenParams *mg_params, EmergeManager *emerge);
 	~MapgenMath();
 
-	int generateTerrain();
-	int getGroundLevelAtPoint(v2s16 p);
+	virtual void calculateNoise();
+	virtual int generateTerrain();
+	int getGroundLevelAtPoint(v2POS p);
 
 	bool internal;
 	bool invert;
 	bool invert_yz;
+	bool invert_xy;
 	double size;
-	double scale;
+	v3f scale;
 	v3f center;
 	int iterations;
 	double distance;
+	double result_max;
 
-	MapNode n_air, n_water_source, n_stone;
+	MapNode n_air, n_water, n_stone;
 
 	double (*func)(double, double, double, double, int);
+	MapNode layers_get(float value, float max);
 };
 
 struct MapgenFactoryMath : public MapgenFactory {

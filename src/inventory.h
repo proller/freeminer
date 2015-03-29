@@ -23,12 +23,13 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef INVENTORY_HEADER
 #define INVENTORY_HEADER
 
-#include <iostream>
-#include <string>
-#include <vector>
-#include "irrlichttypes.h"
 #include "debug.h"
 #include "itemdef.h"
+#include "irrlichttypes.h"
+#include <istream>
+#include <ostream>
+#include <string>
+#include <vector>
 
 struct ToolCapabilities;
 
@@ -42,8 +43,9 @@ struct ItemStack
 
 	// Serialization
 	void serialize(std::ostream &os) const;
-	void deSerialize(std::istream &is, IItemDefManager *itemdef);
-	void deSerialize(const std::string &s, IItemDefManager *itemdef);
+	// Deserialization.  Pass itemdef unless you don't want aliases resolved.
+	void deSerialize(std::istream &is, IItemDefManager *itemdef = NULL);
+	void deSerialize(const std::string &s, IItemDefManager *itemdef = NULL);
 
 	// Returns the string used for inventory
 	std::string getItemString() const;
@@ -72,7 +74,7 @@ struct ItemStack
 
 	void remove(u16 n)
 	{
-		assert(count >= n);
+		assert(count >= n); // Pre-condition
 		count -= n;
 		if(count == 0)
 			clear(); // reset name, wear and metadata too
@@ -282,18 +284,30 @@ public:
 	// A shorthand for adding items. Returns leftover item (possibly empty).
 	ItemStack addItem(const std::string &listname, const ItemStack &newitem)
 	{
+		m_dirty = true;
 		InventoryList *list = getList(listname);
 		if(list == NULL)
 			return newitem;
 		return list->addItem(newitem);
 	}
-	
+
+	bool checkModified() const
+	{
+		return m_dirty;
+	}
+
+	void setModified(const bool x)
+	{
+		m_dirty = x;
+	}
+
 private:
 	// -1 if not found
 	const s32 getListIndex(const std::string &name) const;
 
 	std::vector<InventoryList*> m_lists;
 	IItemDefManager *m_itemdef;
+	bool m_dirty;
 };
 
 #endif

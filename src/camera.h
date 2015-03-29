@@ -26,7 +26,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "irrlichttypes_extrabloated.h"
 #include "inventory.h"
 #include "mesh.h"
-#include "tile.h"
+#include "client/tile.h"
 #include "util/numeric.h"
 #include <ICameraSceneNode.h>
 
@@ -35,6 +35,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 class LocalPlayer;
 struct MapDrawControl;
 class IGameDef;
+class WieldMeshSceneNode;
 
 enum CameraMode {CAMERA_MODE_FIRST, CAMERA_MODE_THIRD, CAMERA_MODE_THIRD_FRONT};
 
@@ -112,7 +113,7 @@ public:
 	}
 
 	// Checks if the constructor was able to create the scene nodes
-	bool successfullyCreated(std::wstring& error_message);
+	bool successfullyCreated(std::string &error_message);
 
 	// Step the camera: updates the viewing range and view bobbing.
 	void step(f32 dtime);
@@ -130,7 +131,7 @@ public:
 	void setDigging(s32 button);
 
 	// Replace the wielded item mesh
-	void wield(const ItemStack &item, u16 playeritem);
+	void wield(const ItemStack &item);
 
 	// Draw the wielded tool.
 	// This has to happen *after* the main scene is drawn.
@@ -160,9 +161,12 @@ private:
 	scene::ICameraSceneNode* m_cameranode;
 
 	scene::ISceneManager* m_wieldmgr;
-	scene::IMeshSceneNode* m_wieldnode;
+
 	u8 m_wieldlight;
 	u8 m_wieldlight_add;
+
+	WieldMeshSceneNode* m_wieldnode;
+	scene::ILightSceneNode* m_wieldlightnode;
 
 	// draw control
 	MapDrawControl& m_draw_control;
@@ -207,16 +211,17 @@ private:
 	// If 1, right-click digging animation
 	s32 m_digging_button;
 
-	//dummymesh for camera
-	irr::scene::IAnimatedMesh* m_dummymesh;
-
 	// Animation when changing wielded item
 	f32 m_wield_change_timer;
-	scene::IMesh *m_wield_mesh_next;
-	u16 m_previous_playeritem;
-	std::string m_previous_itemname;
+	ItemStack m_wield_item_next;
 
 	CameraMode m_camera_mode;
+
+	f32 m_cache_fall_bobbing_amount;
+	f32 m_cache_view_bobbing_amount;
+	f32 m_cache_wanted_fps;
+	f32 m_cache_fov;
+	bool m_cache_view_bobbing;
 };
 
 #endif

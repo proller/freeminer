@@ -28,13 +28,14 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "filesys.h"
 #include "log.h"
 #include "mods.h"
+#include "porting.h"
 #include "util/string.h"
 
 
 extern "C" {
 #include "lualib.h"
 #if USE_LUAJIT
-	#include "luajit.h"
+	#include <luajit.h>
 #endif
 }
 
@@ -69,12 +70,8 @@ public:
 
 ScriptApiBase::ScriptApiBase()
 {
-	#ifdef SCRIPTAPI_LOCK_DEBUG
-	m_locked = false;
-	#endif
-
 	m_luastack = luaL_newstate();
-	assert(m_luastack);
+	FATAL_ERROR_IF(!m_luastack, "luaL_newstate() failed");
 
 	luaL_openlibs(m_luastack);
 
@@ -101,6 +98,9 @@ ScriptApiBase::ScriptApiBase()
 	lua_pushstring(m_luastack, DIR_DELIM);
 	lua_setglobal(m_luastack, "DIR_DELIM");
 
+	lua_pushstring(m_luastack, porting::getPlatformName());
+	lua_setglobal(m_luastack, "PLATFORM");
+
 	m_server = NULL;
 	m_environment = NULL;
 	m_guiengine = NULL;
@@ -119,7 +119,7 @@ bool ScriptApiBase::loadMod(const std::string &scriptpath,
 	if (!string_allowed(modname, MODNAME_ALLOWED_CHARS)) {
 		errorstream<<"Error loading mod \""<<modname
 				<<"\": modname does not follow naming conventions: "
-				<<"Only chararacters [a-z0-9_] are allowed."<<std::endl;
+				<<"Only chararacters [a-z0-9_-] are allowed."<<std::endl;
 		return false;
 	}
 
@@ -241,22 +241,18 @@ void ScriptApiBase::removeObjectReference(ServerActiveObject *cobj)
 }
 
 // Creates a new anonymous reference if cobj=NULL or id=0
-void ScriptApiBase::objectrefGetOrCreate(
+void ScriptApiBase::objectrefGetOrCreate(lua_State *L,
 		ServerActiveObject *cobj)
 {
-	lua_State *L = getStack();
-
 	if(cobj == NULL || cobj->getId() == 0){
 		ObjectRef::create(L, cobj);
 	} else {
-		objectrefGet(cobj->getId());
+		objectrefGet(L, cobj->getId());
 	}
 }
 
-void ScriptApiBase::objectrefGet(u16 id)
+void ScriptApiBase::objectrefGet(lua_State *L, u16 id)
 {
-	lua_State *L = getStack();
-
 	// Get core.object_refs[i]
 	lua_getglobal(L, "core");
 	lua_getfield(L, -1, "object_refs");
@@ -266,3 +262,4 @@ void ScriptApiBase::objectrefGet(u16 id)
 	lua_remove(L, -2); // object_refs
 	lua_remove(L, -2); // core
 }
+

@@ -24,7 +24,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #define MAPBLOCK_MESH_HEADER
 
 #include "irrlichttypes_extrabloated.h"
-#include "tile.h"
+#include "client/tile.h"
 #include "voxel.h"
 #include <map>
 
@@ -39,8 +39,8 @@ class Map;
 	Mesh making stuff
 */
 #define FARMESH_STEP_MAX 5
-int getFarmeshStep(MapDrawControl& draw_control, const v3s16 & player_pos, const v3s16 & block_pos);
 bool getFarmeshGrid(v3s16 blockpos, int step);
+int getFarmeshStep(MapDrawControl& draw_control, const v3POS & player_pos, const v3POS & block_pos);
 
 class MapBlock;
 
@@ -53,34 +53,50 @@ struct MeshMakeData
 #endif
 	v3s16 m_blockpos;
 	v3s16 m_crack_pos_relative;
+	v3s16 m_highlighted_pos_relative;
 	bool m_smooth_lighting;
+	bool m_show_hud;
+	video::SColor m_highlight_mesh_color;
+
 	IGameDef *m_gamedef;
+
+	bool m_use_shaders;
+
 	int step;
 	int range;
+	bool no_draw;
 	unsigned int timestamp;
+	MapBlock * block;
 	Map & map;
 	MapDrawControl& draw_control;
 	bool debug;
+	bool filled;
 
-	MeshMakeData(IGameDef *gamedef, Map & map_, MapDrawControl& draw_control_);
+	MeshMakeData(IGameDef *gamedef, bool use_shaders, Map & map_, MapDrawControl& draw_control_);
 	~MeshMakeData();
 
 	/*
 		Copy central data directly from block, and other data from
 		parent of block.
 	*/
-	void fill(MapBlock *block);
+	void fill(MapBlock *block_);
+	bool fill_data();
 
 	/*
 		Set up with only a single node at (1,1,1)
 	*/
-	void fillSingleNode(MapNode *node);
+	void fillSingleNode(MapNode *node, v3POS blockpos = v3POS(0,0,0));
 
 	/*
 		Set the (node) position of a crack
 	*/
 	void setCrack(int crack_level, v3s16 crack_pos);
 
+	/*
+		Set the highlighted node position
+	*/
+
+	void setHighlighted(v3s16 highlighted_pos, bool show_hud);
 	/*
 		Enable or disable smooth lighting
 	*/
@@ -129,7 +145,7 @@ public:
 			m_animation_force_timer--;
 	}
 	
-	void updateCameraOffset(v3s16 camera_offset);
+	bool updateCameraOffset(v3s16 camera_offset);
 
 
 	u32 getUsageTimer()
@@ -148,12 +164,18 @@ public:
 	bool clearHardwareBuffer;
 
 	int step;
+	bool no_draw;
 	unsigned int timestamp;
 
 private:
 	scene::SMesh *m_mesh;
 	IGameDef *m_gamedef;
 
+	bool m_enable_shaders;
+	bool m_enable_highlighting;
+
+	video::SColor m_highlight_mesh_color;
+	
 	// Must animate() be called before rendering?
 	bool m_has_animation;
 	int m_animation_force_timer;
@@ -163,6 +185,7 @@ private:
 	int m_last_crack;
 	// Maps mesh buffer (i.e. material) indices to base texture names
 	std::map<u32, std::string> m_crack_materials;
+	std::list<u32> m_highlighted_materials;
 
 	// Animation info: texture animationi
 	// Maps meshbuffers to TileSpecs
@@ -201,6 +224,10 @@ struct MeshCollector
 	void append(const TileSpec &material,
 			const video::S3DVertex *vertices, u32 numVertices,
 			const u16 *indices, u32 numIndices);
+	void append(const TileSpec &material,
+			const video::S3DVertex *vertices, u32 numVertices,
+			const u16 *indices, u32 numIndices,
+			v3f pos, video::SColor c);
 };
 
 // This encodes
@@ -217,6 +244,11 @@ inline video::SColor MapBlock_LightColor(u8 alpha, u16 light, u8 light_source=0)
 u16 getInteriorLight(MapNode n, s32 increment, INodeDefManager *ndef);
 u16 getFaceLight(MapNode n, MapNode n2, v3s16 face_dir, INodeDefManager *ndef);
 u16 getSmoothLight(v3s16 p, v3s16 corner, MeshMakeData *data);
+
+// Converts from day + night color values (0..255)
+// and a given daynight_ratio to the final SColor shown on screen.
+void finalColorBlend(video::SColor& result,
+		u8 day, u8 night, u32 daynight_ratio);
 
 // Retrieves the TileSpec of a face of a node
 // Adds MATERIAL_FLAG_CRACK if the node is cracked

@@ -21,7 +21,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "mods.h"
-#include "main.h"
+#include <fstream>
 #include "filesys.h"
 #include "strfnd.h"
 #include "log.h"
@@ -50,6 +50,11 @@ static bool parseDependsLine(std::istream &is,
 void parseModContents(ModSpec &spec)
 {
 	// NOTE: this function works in mutual recursion with getModsInPath
+	Settings info;
+	info.readConfigFile((spec.path+DIR_DELIM+"mod.conf").c_str());
+
+	if (info.exists("name"))
+		spec.name = info.get("name");
 
 	spec.depends.clear();
 	spec.optdepends.clear();
@@ -243,7 +248,7 @@ void ModConfiguration::addMods(std::vector<ModSpec> new_mods)
 		for(std::vector<ModSpec>::const_iterator it = new_mods.begin();
 				it != new_mods.end(); ++it){
 			const ModSpec &mod = *it;
-			if(mod.part_of_modpack != want_from_modpack)
+			if(mod.part_of_modpack != (bool)want_from_modpack)
 				continue;
 			if(existing_mods.count(mod.name) == 0){
 				// GOOD CASE: completely new mod.
@@ -342,19 +347,14 @@ Json::Value getModstoreUrl(std::string url)
 
 	bool special_http_header = true;
 
-	try{
+	try {
 		special_http_header = g_settings->getBool("modstore_disable_special_http_header");
-	}
-	catch(SettingNotFoundException &e) {
-	}
+	} catch (SettingNotFoundException) {}
 
 	if (special_http_header) {
 		extra_headers.push_back("Accept: application/vnd.minetest.mmdb-v1+json");
-		return fetchJsonValue(url, &extra_headers);
 	}
-	else {
-		return fetchJsonValue(url, NULL);
-	}
+	return fetchJsonValue(url, special_http_header ? &extra_headers : NULL);
 }
 
 #endif

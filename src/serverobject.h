@@ -28,6 +28,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "inventorymanager.h"
 #include "itemgroup.h"
 #include "util/container.h"
+#include "util/lock.h"
 
 /*
 
@@ -52,6 +53,7 @@ struct ToolCapabilities;
 struct ObjectProperties;
 
 class ServerActiveObject : public ActiveObject
+, public locker
 {
 public:
 	/*
@@ -61,7 +63,7 @@ public:
 	ServerActiveObject(ServerEnvironment *env, v3f pos);
 	virtual ~ServerActiveObject();
 
-	virtual u8 getSendType() const
+	virtual ActiveObjectType getSendType() const
 	{ return getType(); }
 
 	// Called after id has been set and has been inserted in environment
@@ -72,20 +74,23 @@ public:
 	// environment
 	virtual bool environmentDeletes() const
 	{ return true; }
-
-	virtual bool unlimitedTransferDistance() const
-	{ return false; }
 	
 	// Create a certain type of ServerActiveObject
-	static ServerActiveObject* create(u8 type,
+	static ServerActiveObject* create(ActiveObjectType type,
 			ServerEnvironment *env, u16 id, v3f pos,
 			const std::string &data);
 	
 	/*
 		Some simple getters/setters
 	*/
-	v3f getBasePosition(){ return m_base_position; }
-	void setBasePosition(v3f pos){ m_base_position = pos; }
+	v3f getBasePosition() {
+		std::lock_guard<std::mutex> lock(m_base_position_mutex);
+		return m_base_position;
+	}
+	void setBasePosition(v3f pos) {
+		std::lock_guard<std::mutex> lock(m_base_position_mutex);
+		m_base_position = pos;
+	}
 	ServerEnvironment* getEnv(){ return m_env; }
 	
 	/*
@@ -100,8 +105,6 @@ public:
 	// If object has moved less than this and data has not changed,
 	// saving to disk may be omitted
 	virtual float getMinimumSavedMovement();
-	
-	virtual bool isPeaceful(){return true;}
 
 	virtual std::string getDescription(){return "SAO";}
 	
@@ -211,7 +214,7 @@ public:
 		m_known_by_count is true, object is deleted from the active object
 		list.
 	*/
-	bool m_pending_deactivation;
+	std::atomic_bool m_pending_deactivation;
 	
 	/*
 		Whether the object's static data has been stored to a block
@@ -226,7 +229,7 @@ public:
 	/*
 		Queue of messages to be sent to the client
 	*/
-	Queue<ActiveObjectMessage> m_messages_out;
+	Queue<ActiveObjectMessage> & m_messages_out;
 	float m_uptime_last;
 	
 protected:
@@ -238,6 +241,7 @@ protected:
 
 	ServerEnvironment *m_env;
 	v3f m_base_position;
+	std::mutex m_base_position_mutex;
 
 private:
 	// Used for creating objects based on type

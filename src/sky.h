@@ -30,12 +30,26 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #define SKY_MATERIAL_COUNT 5
 #define SKY_STAR_COUNT 200
 
+class ITextureSource;
+class Map;
+class Player;
+class INodeDefManager;
+
+enum class SKY_ROTATE {
+	SUN,
+	MOON,
+	STAR,
+	SUNLIGHT,
+	MOONLIGHT
+};
+
 // Skybox, rendered with zbuffer turned off, before all other nodes.
 class Sky : public scene::ISceneNode
 {
 public:
 	//! constructor
-	Sky(scene::ISceneNode* parent, scene::ISceneManager* mgr, s32 id);
+	Sky(scene::ISceneNode* parent, scene::ISceneManager* mgr, s32 id,
+			ITextureSource *tsrc);
 
 	virtual void OnRegisterSceneNode();
 
@@ -82,7 +96,8 @@ private:
 	{
 		if (!m_sunlight_seen)
 			return 0;
-		float x; m_time_of_day >= 0.5 ? x = (1 - m_time_of_day) * 2 : x = m_time_of_day * 2;
+		float x = m_time_of_day >= 0.5 ? (1 - m_time_of_day) * 2 : m_time_of_day * 2;
+
 		if (x <= 0.3)
 			return 0;
 		if (x <= 0.4) // when the sun and moon are aligned
@@ -134,6 +149,13 @@ private:
 	video::ITexture* m_moon_texture;
 	video::ITexture* m_sun_tonemap;
 	video::ITexture* m_moon_tonemap;
+
+public:
+	irr::scene::ILightSceneNode * sun_moon_light;
+	v3POS camera_offset;
+	void sky_rotate(const scene::ICameraSceneNode* camera, SKY_ROTATE type, float wicked_time_of_day, v3f & Pos);
+private:
+
 };
 
 #endif

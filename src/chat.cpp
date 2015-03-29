@@ -86,7 +86,7 @@ u32 ChatBuffer::getScrollback() const
 
 const ChatLine& ChatBuffer::getLine(u32 index) const
 {
-	assert(index < getLineCount());
+	assert(index < getLineCount());	// pre-condition
 	return m_unformatted[index];
 }
 
@@ -110,7 +110,8 @@ void ChatBuffer::deleteOldest(u32 count)
 		// keep m_formatted in sync
 		if (del_formatted < m_formatted.size())
 		{
-			assert(m_formatted[del_formatted].first);
+
+			sanity_check(m_formatted[del_formatted].first);
 			++del_formatted;
 			while (del_formatted < m_formatted.size() &&
 					!m_formatted[del_formatted].first)
@@ -154,7 +155,7 @@ void ChatBuffer::reformat(u32 cols, u32 rows)
 	}
 	else if (cols != m_cols || rows != m_rows)
 	{
-		// TODO: Avoid reformatting ALL lines (even inivisble ones)
+		// TODO: Avoid reformatting ALL lines (even invisible ones)
 		// each time the console size changes.
 
 		// Find out the scroll position in *unformatted* lines
@@ -335,7 +336,7 @@ u32 ChatBuffer::formatChatLine(const ChatLine& line, u32 cols,
 			while (frag_length < remaining_in_input &&
 					frag_length < remaining_in_output)
 			{
-				if (isspace(line_text.getString()[in_pos + frag_length]))
+				if (std::isspace(line_text.getString()[in_pos + frag_length]))
 					space_pos = frag_length;
 				++frag_length;
 			}
@@ -407,6 +408,15 @@ void ChatPrompt::input(wchar_t ch)
 {
 	m_line.insert(m_cursor, 1, ch);
 	m_cursor++;
+	clampView();
+	m_nick_completion_start = 0;
+	m_nick_completion_end = 0;
+}
+
+void ChatPrompt::input(const std::wstring &str)
+{
+	m_line.insert(m_cursor, str);
+	m_cursor += str.size();
 	clampView();
 	m_nick_completion_start = 0;
 	m_nick_completion_end = 0;
@@ -487,9 +497,9 @@ void ChatPrompt::nickCompletion(const std::list<std::string>& names, bool backwa
 	{
 		// no previous nick completion is active
 		prefix_start = prefix_end = m_cursor;
-		while (prefix_start > 0 && !isspace(m_line[prefix_start-1]))
+		while (prefix_start > 0 && !std::isspace(m_line[prefix_start-1]))
 			--prefix_start;
-		while (prefix_end < m_line.size() && !isspace(m_line[prefix_end]))
+		while (prefix_end < m_line.size() && !std::isspace(m_line[prefix_end]))
 			++prefix_end;
 		if (prefix_start == prefix_end)
 			return;
@@ -518,7 +528,7 @@ void ChatPrompt::nickCompletion(const std::list<std::string>& names, bool backwa
 	u32 replacement_index = 0;
 	if (!initial)
 	{
-		while (word_end < m_line.size() && !isspace(m_line[word_end]))
+		while (word_end < m_line.size() && !std::isspace(m_line[word_end]))
 			++word_end;
 		std::wstring word = m_line.substr(prefix_start, word_end - prefix_start);
 
@@ -537,7 +547,7 @@ void ChatPrompt::nickCompletion(const std::list<std::string>& names, bool backwa
 		}
 	}
 	std::wstring replacement = completions[replacement_index] + L" ";
-	if (word_end < m_line.size() && isspace(word_end))
+	if (word_end < m_line.size() && std::isspace(word_end))
 		++word_end;
 
 	// replace existing word with replacement word,
@@ -594,19 +604,19 @@ void ChatPrompt::cursorOperation(CursorOp op, CursorOpDir dir, CursorOpScope sco
 		if (increment > 0)
 		{
 			// skip one word to the right
-			while (new_cursor < length && isspace(m_line[new_cursor]))
+			while (new_cursor < length && std::isspace(m_line[new_cursor]))
 				new_cursor++;
-			while (new_cursor < length && !isspace(m_line[new_cursor]))
+			while (new_cursor < length && !std::isspace(m_line[new_cursor]))
 				new_cursor++;
-			while (new_cursor < length && isspace(m_line[new_cursor]))
+			while (new_cursor < length && std::isspace(m_line[new_cursor]))
 				new_cursor++;
 		}
 		else
 		{
 			// skip one word to the left
-			while (new_cursor >= 1 && isspace(m_line[new_cursor - 1]))
+			while (new_cursor >= 1 && std::isspace(m_line[new_cursor - 1]))
 				new_cursor--;
-			while (new_cursor >= 1 && !isspace(m_line[new_cursor - 1]))
+			while (new_cursor >= 1 && !std::isspace(m_line[new_cursor - 1]))
 				new_cursor--;
 		}
 	}
@@ -770,5 +780,5 @@ void ChatBackend::scrollPageDown()
 
 void ChatBackend::scrollPageUp()
 {
-	m_console_buffer.scroll(-m_console_buffer.getRows());
+	m_console_buffer.scroll(-(s32)m_console_buffer.getRows());
 }

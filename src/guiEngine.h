@@ -30,7 +30,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "modalMenu.h"
 #include "guiFormSpecMenu.h"
 #include "sound.h"
-#include "tile.h"
+#include "client/tile.h"
 
 /******************************************************************************/
 /* Typedefs and macros                                                        */
@@ -190,6 +190,9 @@ private:
 
 	/** handler to limit frame rate within main menu */
 	void limitFrameRate();
+
+	/** update size of topleftext element */
+	void updateTopLeftTextSize();
 
 	/** device to draw at */
 	irr::IrrlichtDevice*     m_device;

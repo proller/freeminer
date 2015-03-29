@@ -23,7 +23,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef SERVER_HEADER
 #define SERVER_HEADER
 
-#include "connection.h"
+#include "network/connection.h"
 #include "irr_v3d.h"
 #include "map.h"
 #include "hud.h"
@@ -32,16 +32,17 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mods.h"
 #include "inventorymanager.h"
 #include "subgame.h"
-#include "rollback_interface.h" // Needed for rollbackRevertActions()
 #include "util/numeric.h"
 #include "util/thread.h"
 #include "environment.h"
 #include "clientiface.h"
+#include "network/networkpacket.h"
 #include <string>
 #include <list>
 #include <map>
 #include <vector>
 #include "util/lock.h"
+#include "stat.h"
 
 #define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
@@ -54,14 +55,19 @@ class Inventory;
 class Player;
 class PlayerSAO;
 class IRollbackManager;
+struct RollbackAction;
 class EmergeManager;
 class GameScripting;
 class ServerEnvironment;
 struct SimpleSoundSpec;
 class Circuit;
+class Stat;
 class ServerThread;
 class MapThread;
 class SendBlocksThread;
+class LiquidThread;
+class EnvThread;
+class AbmThread;
 
 enum ClientDeletionReason {
 	CDR_LEAVE,
@@ -191,11 +197,45 @@ public:
 	// Actual processing is done in an another thread.
 	void step(float dtime);
 	// This is run by ServerThread and does the actual processing
-	void AsyncRunStep(bool initial_step=false);
-	int AsyncRunMapStep(bool async=true);
+	void AsyncRunStep(float dtime, bool initial_step=false);
+	int AsyncRunMapStep(float dtime, bool async=true);
+	int save(float dtime, bool breakable = false);
 	u16 Receive();
 	PlayerSAO* StageTwoClientInit(u16 peer_id);
+
+	/*
+	 * Command Handlers
+	 */
+
+	void handleCommand(NetworkPacket* pkt);
+
+	void handleCommand_Null(NetworkPacket* pkt) {};
+	void handleCommand_Deprecated(NetworkPacket* pkt);
+	void handleCommand_Init(NetworkPacket* pkt);
+	void handleCommand_Auth(NetworkPacket* pkt);
+	void handleCommand_Init_Legacy(NetworkPacket* pkt);
+	void handleCommand_Init2(NetworkPacket* pkt);
+	void handleCommand_RequestMedia(NetworkPacket* pkt);
+	void handleCommand_ReceivedMedia(NetworkPacket* pkt);
+	void handleCommand_ClientReady(NetworkPacket* pkt);
+	void handleCommand_GotBlocks(NetworkPacket* pkt);
+	void handleCommand_PlayerPos(NetworkPacket* pkt);
+	void handleCommand_DeletedBlocks(NetworkPacket* pkt);
+	void handleCommand_InventoryAction(NetworkPacket* pkt);
+	void handleCommand_ChatMessage(NetworkPacket* pkt);
+	void handleCommand_Damage(NetworkPacket* pkt);
+	void handleCommand_Breath(NetworkPacket* pkt);
+	void handleCommand_Password(NetworkPacket* pkt);
+	void handleCommand_PlayerItem(NetworkPacket* pkt);
+	void handleCommand_Respawn(NetworkPacket* pkt);
+	void handleCommand_Interact(NetworkPacket* pkt);
+	void handleCommand_RemovedSounds(NetworkPacket* pkt);
+	void handleCommand_NodeMetaFields(NetworkPacket* pkt);
+	void handleCommand_InventoryFields(NetworkPacket* pkt);
+
 	void ProcessData(u8 *data, u32 datasize, u16 peer_id);
+
+	void Send(NetworkPacket* pkt);
 
 	// Environment must be locked when called
 	void setTimeOfDay(u32 time);
@@ -211,10 +251,10 @@ public:
 		Shall be called with the environment and the connection locked.
 	*/
 	Inventory* getInventory(const InventoryLocation &loc);
-	void setInventoryModified(const InventoryLocation &loc);
+	void setInventoryModified(const InventoryLocation &loc, bool playerSend = true);
 
 	// Connection must be locked when called
-	std::wstring getStatusString();
+	std::string getStatusString();
 
 	// read shutdown state
 	inline bool getShutdownRequested()
@@ -239,8 +279,9 @@ public:
 	void unsetIpBanned(const std::string &ip_or_name);
 	std::string getBanDescription(const std::string &ip_or_name);
 
-	void notifyPlayer(const char *name, const std::wstring &msg);
-	void notifyPlayers(const std::wstring &msg);
+	// Envlock and conlock should be locked when calling this
+	void notifyPlayer(const char *name, const std::string &msg);
+	void notifyPlayers(const std::string &msg);
 	void spawnParticle(const char *playername,
 		v3f pos, v3f velocity, v3f acceleration,
 		float expirationtime, float size,
@@ -272,13 +313,9 @@ public:
 
 	// Creates or resets inventory
 	Inventory* createDetachedInventory(const std::string &name);
-	void deleteDetachedInventory(const std::string &name);
 
 	// Envlock and conlock should be locked when using scriptapi
 	GameScripting *getScriptIface(){ return m_script; }
-
-	// Envlock should be locked when using the rollback manager
-	IRollbackManager *getRollbackManager(){ return m_rollback; }
 
 	//TODO: determine what (if anything) should be locked to access EmergeManager
 	EmergeManager *getEmergeManager(){ return m_emerge; }
@@ -298,14 +335,16 @@ public:
 	virtual u16 allocateUnknownNodeId(const std::string &name);
 	virtual ISoundManager* getSoundManager();
 	virtual MtEventManager* getEventManager();
-	virtual IRollbackReportSink* getRollbackReportSink();
+	virtual scene::ISceneManager* getSceneManager();
+	virtual IRollbackManager *getRollbackManager() { return m_enable_rollback_recording ? m_rollback : nullptr; }
+
 
 	IWritableItemDefManager* getWritableItemDefManager();
 	IWritableNodeDefManager* getWritableNodeDefManager();
 	IWritableCraftDefManager* getWritableCraftDefManager();
 
 	const ModSpec* getModSpec(const std::string &modname);
-	void getModNames(std::list<std::string> &modlist);
+	void getModNames(std::vector<std::string> &modlist);
 	std::string getBuiltinLuaPath();
 	inline std::string getWorldPath()
 			{ return m_path_world; }
@@ -319,7 +358,7 @@ public:
 	bool showFormspec(const char *name, const std::string &formspec, const std::string &formname);
 	Map & getMap() { return m_env->getMap(); }
 	ServerEnvironment & getEnv() { return *m_env; }
-	
+
 	u32 hudAdd(Player *player, HudElement *element);
 	bool hudRemove(Player *player, u32 id);
 	bool hudChange(Player *player, u32 id, HudElementStat stat, void *value);
@@ -330,25 +369,41 @@ public:
 
 	inline Address getPeerAddress(u16 peer_id)
 			{ return m_con.GetPeerAddress(peer_id); }
-			
+
 	bool setLocalPlayerAnimations(Player *player, v2s32 animation_frames[4], f32 frame_speed);
 	bool setPlayerEyeOffset(Player *player, v3f first, v3f third);
 
 	bool setSky(Player *player, const video::SColor &bgcolor,
 			const std::string &type, const std::vector<std::string> &params);
-	
+
 	bool overrideDayNightRatio(Player *player, bool do_override,
 			float brightness);
 
-	/* con::PeerHandler implementation. */
-	void peerAdded(con::Peer *peer);
-	void deletingPeer(con::Peer *peer, bool timeout);
+	// con::PeerHandler implementation.
+	// These queue stuff to be processed by handlePeerChanges().
+	// As of now, these create and remove clients and players.
+	void peerAdded(u16 peer_id);
+	void deletingPeer(u16 peer_id, bool timeout);
 
-	void DenyAccess(u16 peer_id, const std::wstring &reason);
+	void DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::wstring &custom_reason=NULL);
+
+	//fmtodo: remove:
+	void DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason);
+	void DenyAccess(u16 peer_id, const std::string &reason);
+	void DenyAccess_Legacy(u16 peer_id, const std::wstring &reason);
+
 	bool getClientConInfo(u16 peer_id, con::rtt_stat_type type,float* retval);
 	bool getClientInfo(u16 peer_id,ClientState* state, u32* uptime,
 			u8* ser_vers, u16* prot_vers, u8* major, u8* minor, u8* patch,
 			std::string* vers_string);
+
+	void SendPlayerHPOrDie(u16 peer_id, bool die) { die ? DiePlayer(peer_id) : SendPlayerHP(peer_id); }
+	void SendPlayerBreath(u16 peer_id);
+	void SendInventory(PlayerSAO* playerSAO);
+	void SendMovePlayer(u16 peer_id);
+
+	// Bind address
+	Address m_bind_addr;
 
 private:
 
@@ -358,7 +413,8 @@ private:
 	void SendMovement(u16 peer_id);
 	void SendHP(u16 peer_id, u8 hp);
 	void SendBreath(u16 peer_id, u16 breath);
-	void SendAccessDenied(u16 peer_id,const std::wstring &reason);
+	void SendAccessDenied(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason);
+	void SendAccessDenied_Legacy(u16 peer_id, const std::string &reason);
 	void SendDeathscreen(u16 peer_id,bool set_camera_point_target, v3f camera_point_target);
 	void SendItemDef(u16 peer_id,IItemDefManager *itemdef, u16 protocol_version);
 	void SendNodeDef(u16 peer_id,INodeDefManager *nodedef, u16 protocol_version);
@@ -366,13 +422,12 @@ private:
 	/* mark blocks not sent for all clients */
 	void SetBlocksNotSent(std::map<v3s16, MapBlock *>& block);
 
-	// Envlock and conlock should be locked when calling these
-	void SendInventory(u16 peer_id);
+	void SendChatMessage(u16 peer_id, const std::string &message);
 	void SendChatMessage(u16 peer_id, const std::wstring &message);
+
 	void SendTimeOfDay(u16 peer_id, u16 time, f32 time_speed);
 	void SendPlayerHP(u16 peer_id);
-	void SendPlayerBreath(u16 peer_id);
-	void SendMovePlayer(u16 peer_id);
+
 	void SendLocalPlayerAnimations(u16 peer_id, v2s32 animation_frames[4], f32 animation_speed);
 	void SendEyeOffset(u16 peer_id, v3f first, v3f third);
 	void SendPlayerPrivileges(u16 peer_id);
@@ -386,7 +441,7 @@ private:
 	void SendSetSky(u16 peer_id, const video::SColor &bgcolor,
 			const std::string &type, const std::vector<std::string> &params);
 	void SendOverrideDayNightRatio(u16 peer_id, bool do_override, float ratio);
-	
+
 	/*
 		Send a node removal/addition event to all clients except ignore_id.
 		Additionally, if far_players!=NULL, players further away than
@@ -394,14 +449,14 @@ private:
 	*/
 	// Envlock and conlock should be locked when calling these
 	void sendRemoveNode(v3s16 p, u16 ignore_id=0,
-			std::list<u16> *far_players=NULL, float far_d_nodes=100);
+			std::vector<u16> *far_players=NULL, float far_d_nodes=100);
 	void sendAddNode(v3s16 p, MapNode n, u16 ignore_id=0,
-			std::list<u16> *far_players=NULL, float far_d_nodes=100,
+			std::vector<u16> *far_players=NULL, float far_d_nodes=100,
 			bool remove_metadata=true);
 	void setBlockNotSent(v3s16 p);
 
 	// Environment and Connection must be locked when called
-	void SendBlockNoLock(u16 peer_id, MapBlock *block, u8 ver, u16 net_proto_version, bool reliable = 1);
+	void SendBlockNoLock(u16 peer_id, MapBlock *block, u8 ver, u16 net_proto_version);
 
 	// Sends blocks to clients (locks env and con on its own)
 public:
@@ -411,7 +466,7 @@ private:
 	void fillMediaCache();
 	void sendMediaAnnouncement(u16 peer_id);
 	void sendRequestedMedia(u16 peer_id,
-			const std::list<std::string> &tosend);
+			const std::vector<std::string> &tosend);
 
 	void sendDetachedInventory(const std::string &name, u16 peer_id);
 	void sendDetachedInventories(u16 peer_id);
@@ -433,14 +488,25 @@ private:
 		float expirationtime, float size,
 		bool collisiondetection, bool vertical, std::string texture);
 
+	u32 SendActiveObjectRemoveAdd(u16 peer_id, const std::string &datas);
+//mt compat:
+	void SendActiveObjectMessages(u16 peer_id, const std::string &datas, bool reliable = true);
+	void SendActiveObjectMessages(u16 peer_id, const ActiveObjectMessages &datas, bool reliable = true);
+
 	/*
 		Something random
 	*/
 
 	void DiePlayer(u16 peer_id);
 	void RespawnPlayer(u16 peer_id);
+
+	enum ClientDeletionReason {
+		CDR_LEAVE,
+		CDR_TIMEOUT,
+		CDR_DENY
+	};
 	void DeleteClient(u16 peer_id, ClientDeletionReason reason);
-	void UpdateCrafting(u16 peer_id);
+	void UpdateCrafting(Player *player);
 
 	// When called, connection mutex should be locked
 	RemoteClient* getClient(u16 peer_id,ClientState state_min=CS_Active);
@@ -492,7 +558,7 @@ private:
 	ServerEnvironment *m_env;
 
 public:
-	JMutex m_env_mutex;
+	//JMutex m_env_mutex;
 private:
 
 	// server connection
@@ -503,17 +569,19 @@ private:
 
 	// Rollback manager (behind m_env_mutex)
 	IRollbackManager *m_rollback;
-	bool m_rollback_sink_enabled;
 	bool m_enable_rollback_recording; // Updated once in a while
 
+public:
 	// Emerge manager
 	EmergeManager *m_emerge;
+private:
 
 	// Scripting
 	// Envlock and conlock should be locked when using Lua
 	GameScripting *m_script;
-	
-	Circuit* m_circuit;
+public:
+	Stat stat;
+private:
 
 	// Item definition manager
 	IWritableItemDefManager *m_itemdef;
@@ -549,6 +617,9 @@ private:
 
 	MapThread *m_map_thread;
 	SendBlocksThread *m_sendblocks;
+	LiquidThread *m_liquid;
+	EnvThread *m_envthread;
+	AbmThread *m_abmthread;
 
 	/*
 		Time related stuff
@@ -557,6 +628,7 @@ private:
 	// Timer for sending time of day over network
 	float m_time_of_day_send_timer;
 	// Uptime of server in seconds
+public:
 	MutexedVariable<double> m_uptime;
 
 public:
@@ -576,9 +648,6 @@ private:
 	/*
 		Random stuff
 	*/
-
-	// Mod parent directory paths
-	std::list<std::string> m_modspaths;
 
 	bool m_shutdown_requested;
 
@@ -636,10 +705,16 @@ private:
 	*/
 	std::vector<u32> m_particlespawner_ids;
 
+	// freeminer:
 public:
-	shared_map<v3s16, MapBlock*> m_modified_blocks;
-	shared_map<v3s16, MapBlock*> m_lighting_modified_blocks;
-	bool more_threads;
+	//shared_map<v3POS, MapBlock*> m_modified_blocks;
+	//shared_map<v3POS, MapBlock*> m_lighting_modified_blocks;
+	bool m_more_threads;
+	void deleteDetachedInventory(const std::string &name);
+	void maintenance_start();
+	void maintenance_end();
+	int maintenance_status;
+
 
 private:
 };

@@ -17,6 +17,7 @@ dofile(gamepath.."deprecated.lua")
 dofile(gamepath.."misc.lua")
 dofile(gamepath.."privileges.lua")
 dofile(gamepath.."auth.lua")
+dofile(gamepath.."stat.lua")
 dofile(gamepath.."chatcommands.lua")
 dofile(gamepath.."static_spawn.lua")
 dofile(gamepath.."detached_inventory.lua")
@@ -26,3 +27,6 @@ dofile(gamepath.."voxelarea.lua")
 dofile(gamepath.."forceloading.lua")
 dofile(gamepath.."statbars.lua")
 
+if core.setting_getbool("mod_debugging") then
+	dofile(gamepath.."mod_debugging.lua")
+end

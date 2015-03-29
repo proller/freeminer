@@ -230,6 +230,26 @@ std::vector<aabb3f> read_aabb3f_vector(lua_State *L, int index, f32 scale)
 	return boxes;
 }
 
+bool read_stringlist(lua_State *L, int index, std::vector<const char *> &result)
+{
+	if (index < 0)
+		index = lua_gettop(L) + 1 + index;
+
+	if (lua_istable(L, index)) {
+		lua_pushnil(L);
+		while (lua_next(L, index)) {
+			if (lua_isstring(L, -1))
+				result.push_back(lua_tostring(L, -1));
+			lua_pop(L, 1);
+		}
+	} else if (lua_isstring(L, index)) {
+		result.push_back(lua_tostring(L, index));
+	} else {
+		return false;
+	}
+	return true;
+}
+
 /*
 	Table field getters
 */
@@ -286,6 +306,17 @@ bool getboolfield(lua_State *L, int table,
 		result = lua_toboolean(L, -1);
 		got = true;
 	}
+	lua_pop(L, 1);
+	return got;
+}
+
+bool getstringlistfield(lua_State *L, int table, const char *fieldname,
+		std::vector<const char *> &result)
+{
+	lua_getfield(L, table, fieldname);
+
+	bool got = read_stringlist(L, -1, result);
+
 	lua_pop(L, 1);
 	return got;
 }
@@ -358,4 +389,42 @@ void setboolfield(lua_State *L, int table,
 	lua_setfield(L, table, fieldname);
 }
 
+
+
+
+
+
+v2s16 read_v2POS(lua_State *L, int index) {
+	v2POS p;
+	luaL_checktype(L, index, LUA_TTABLE);
+	lua_getfield(L, index, "x");
+	p.X = lua_tonumber(L, -1);
+	lua_pop(L, 1);
+	lua_getfield(L, index, "y");
+	p.Y = lua_tonumber(L, -1);
+	lua_pop(L, 1);
+	return p;
+}
+
+void push_v3POS(lua_State *L, v3POS p) {
+	lua_newtable(L);
+	lua_pushnumber(L, p.X);
+	lua_setfield(L, -2, "x");
+	lua_pushnumber(L, p.Y);
+	lua_setfield(L, -2, "y");
+	lua_pushnumber(L, p.Z);
+	lua_setfield(L, -2, "z");
+}
+
+v3POS read_v3POS(lua_State *L, int index) {
+	// Correct rounding at <0
+	v3f pf = read_v3f(L, index);
+	return floatToInt(pf, 1.0);
+}
+
+v3POS check_v3POS(lua_State *L, int index) {
+	// Correct rounding at <0
+	v3f pf = check_v3f(L, index);
+	return floatToInt(pf, 1.0);
+}
 

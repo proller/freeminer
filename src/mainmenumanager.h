@@ -34,9 +34,12 @@ class IGameCallback
 {
 public:
 	virtual void exitToOS() = 0;
+	virtual void keyConfig() = 0;
 	virtual void disconnect() = 0;
 	virtual void changePassword() = 0;
 	virtual void changeVolume() = 0;
+
+	virtual void signalKeyConfigChange() = 0;
 };
 
 extern gui::IGUIEnvironment* guienv;
@@ -56,7 +59,7 @@ public:
 			assert(*i != menu);
 		}
 
-		if(m_stack.size() != 0)
+		if(!m_stack.empty())
 			m_stack.back()->setVisible(false);
 		m_stack.push_back(menu);
 	}
@@ -84,14 +87,14 @@ public:
 		assert(*i == menu);
 		m_stack.erase(i);*/
 		
-		if(m_stack.size() != 0)
+		if(!m_stack.empty())
 			m_stack.back()->setVisible(true);
 	}
 
 	// Returns true to prevent further processing
 	virtual bool preprocessEvent(const SEvent& event)
 	{
-		if(m_stack.size() != 0)
+		if(!m_stack.empty())
 			return m_stack.back()->preprocessEvent(event);
 		else
 			return false;
@@ -127,7 +130,9 @@ public:
 		disconnect_requested(false),
 		changepassword_requested(false),
 		changevolume_requested(false),
+		keyconfig_requested(false),
 		shutdown_requested(false),
+		keyconfig_changed(false),
 		device(a_device)
 	{
 	}
@@ -154,11 +159,26 @@ public:
 	{
 		changevolume_requested = true;
 	}
+
+	virtual void keyConfig()
+	{
+		keyconfig_requested = true;
+	}
+
+	virtual void signalKeyConfigChange()
+	{
+		keyconfig_changed = true;
+	}
+
 	
 	bool disconnect_requested;
 	bool changepassword_requested;
 	bool changevolume_requested;
+	bool keyconfig_requested;
 	bool shutdown_requested;
+
+	bool keyconfig_changed;
+
 	IrrlichtDevice *device;
 };
 

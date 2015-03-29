@@ -120,12 +120,6 @@ public:
 		BaseException("KeyValueStorageException: " + s) {}
 };
 
-// Only used on Windows (SEH)
-class FatalSystemException : public BaseException {
-public:
-	FatalSystemException(const std::string &s): BaseException(s) {}
-};
-
 class ClientStateError : public BaseException {
 public:
 	ClientStateError(std::string s): BaseException(s) {}
@@ -134,6 +128,18 @@ public:
 /*
 	Some "old-style" interrupts:
 */
+
+class InvalidNoiseParamsException : public BaseException {
+public:
+	InvalidNoiseParamsException():
+		BaseException("One or more noise parameters were invalid or require "
+			"too much memory")
+	{}
+
+	InvalidNoiseParamsException(const std::string &s):
+		BaseException(s)
+	{}
+};
 
 class InvalidPositionException : public BaseException
 {

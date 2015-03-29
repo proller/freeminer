@@ -77,8 +77,8 @@ our %config = (
     time_alive   => 650,
     source_check => 1,
     ping_timeout => 3,
-    ping         => 1,
-    mineping     => 1,
+    ping         => 0, # todo
+    mineping     => 0, # not implemented for enet
     pingable     => 1,
     trusted      => [qw( 176.9.122.10 )],       #masterserver self ip - if server on same ip with masterserver doesnt announced
     #blacklist => [], # [qw(2.3.4.5 4.5.6.7 8.9.0.1), '1.2.3.4', qr/^10\.20\.30\./, ], # list, or quoted, ips, or regex
@@ -241,7 +241,7 @@ sub request (;$) {
             $param->{clients_top} = $old->{clients_top} if $old->{clients_top} > $param->{clients};
             $param->{clients_top} ||= $param->{clients} || 0;
             # params reported once on start, must be same as src/serverlist.cpp:~221 if(server["action"] == "start") { ...
-            for (qw(dedicated rollback liquid_finite mapgen mods privs)) {
+            for (qw(dedicated rollback liquid_real mapgen mods privs)) {
                 $param->{$_} ||= $old->{$_} if $old->{$_} and !($param->{action} ~~ 'start');
             }
             $param->{pop_n} = $old->{pop_n} + 1;

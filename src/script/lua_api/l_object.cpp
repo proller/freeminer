@@ -29,7 +29,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "log.h"
 #include "tool.h"
 #include "serverobject.h"
-#include "content_object.h"
 #include "content_sao.h"
 #include "server.h"
 #include "hud.h"
@@ -135,6 +134,7 @@ int ObjectRef::l_remove(lua_State *L)
 	ObjectRef *ref = checkobject(L, 1);
 	ServerActiveObject *co = getobject(ref);
 	if(co == NULL) return 0;
+	if(co->getType() == ACTIVEOBJECT_TYPE_PLAYER) return 0;
 /*
 	verbosestream<<"ObjectRef::l_remove(): id="<<co->getId()<<std::endl;
 */
@@ -213,8 +213,26 @@ int ObjectRef::l_punch(lua_State *L)
 		time_from_last_punch = lua_tonumber(L, 3);
 	ToolCapabilities toolcap = read_tool_capabilities(L, 4);
 	dir.normalize();
+
+	s16 src_original_hp = co->getHP();
+	s16 dst_origin_hp = puncher->getHP();
+
 	// Do it
 	co->punch(dir, &toolcap, puncher, time_from_last_punch);
+
+	// If the punched is a player, and its HP changed
+	if (src_original_hp != co->getHP() &&
+			co->getType() == ACTIVEOBJECT_TYPE_PLAYER) {
+		getServer(L)->SendPlayerHPOrDie(((PlayerSAO*)co)->getPeerID(),
+				co->getHP() == 0);
+	}
+
+	// If the puncher is a player, and its HP changed
+	if (dst_origin_hp != puncher->getHP() &&
+			puncher->getType() == ACTIVEOBJECT_TYPE_PLAYER) {
+		getServer(L)->SendPlayerHPOrDie(((PlayerSAO*)puncher)->getPeerID(),
+				puncher->getHP() == 0);
+	}
 	return 0;
 }
 
@@ -248,6 +266,9 @@ int ObjectRef::l_set_hp(lua_State *L)
 			<<" hp="<<hp<<std::endl;*/
 	// Do it
 	co->setHP(hp);
+	if (co->getType() == ACTIVEOBJECT_TYPE_PLAYER) {
+		getServer(L)->SendPlayerHPOrDie(((PlayerSAO*)co)->getPeerID(), co->getHP() == 0);
+	}
 	// Return
 	return 0;
 }
@@ -339,6 +360,9 @@ int ObjectRef::l_set_wielded_item(lua_State *L)
 	// Do it
 	ItemStack item = read_item(L, 2, getServer(L));
 	bool success = co->setWieldedItem(item);
+	if (success && co->getType() == ACTIVEOBJECT_TYPE_PLAYER) {
+		getServer(L)->SendInventory(((PlayerSAO*)co));
+	}
 	lua_pushboolean(L, success);
 	return 1;
 }
@@ -447,7 +471,7 @@ int ObjectRef::l_set_eye_offset(lua_State *L)
 	// Do it
 	v3f offset_first = v3f(0, 0, 0);
 	v3f offset_third = v3f(0, 0, 0);
-	
+
 	if(!lua_isnil(L, 2))
 		offset_first = read_v3f(L, 2);
 	if(!lua_isnil(L, 3))
@@ -796,7 +820,11 @@ int ObjectRef::l_set_breath(lua_State *L)
 	u16 breath = luaL_checknumber(L, 2);
 	// Do it
 	co->setBreath(breath);
-	co->m_breath_not_sent = true;
+
+	// If the object is a player sent the breath to client
+	if (co->getType() == ACTIVEOBJECT_TYPE_PLAYER)
+			getServer(L)->SendPlayerBreath(((PlayerSAO*)co)->getPeerID());
+
 	return 0;
 }
 
@@ -919,7 +947,11 @@ int ObjectRef::l_hud_add(lua_State *L)
 	elem->text   = getstringfield_default(L, 2, "text", "");
 	elem->number = getintfield_default(L, 2, "number", 0);
 	elem->item   = getintfield_default(L, 2, "item", 0);
-	elem->dir    = getintfield_default(L, 2, "dir", 0);
+	elem->dir    = getintfield_default(L, 2, "direction", 0);
+
+	// Deprecated, only for compatibility's sake
+	if (elem->dir == 0)
+		elem->dir = getintfield_default(L, 2, "dir", 0);
 
 	lua_getfield(L, 2, "alignment");
 	elem->align = lua_istable(L, -1) ? read_v2f(L, -1) : v2f();
@@ -975,14 +1007,14 @@ int ObjectRef::l_hud_change(lua_State *L)
 	if (player == NULL)
 		return 0;
 
-	u32 id = !lua_isnil(L, 2) ? lua_tonumber(L, 2) : -1;
+	u32 id = lua_isnumber(L, 2) ? lua_tonumber(L, 2) : -1;
 
 	HudElement *e = player->getHud(id);
 	if (!e)
 		return 0;
 
 	HudElementStat stat = HUD_STAT_NUMBER;
-	if (!lua_isnil(L, 3)) {
+	if (lua_isstring(L, 3)) {
 		int statint;
 		std::string statstr = lua_tostring(L, 3);
 		stat = string_to_enum(es_HudElementStat, statint, statstr) ?
@@ -996,7 +1028,7 @@ int ObjectRef::l_hud_change(lua_State *L)
 			value = &e->pos;
 			break;
 		case HUD_STAT_NAME:
-			e->name = lua_tostring(L, 4);
+			e->name = luaL_checkstring(L, 4);
 			value = &e->name;
 			break;
 		case HUD_STAT_SCALE:
@@ -1004,19 +1036,19 @@ int ObjectRef::l_hud_change(lua_State *L)
 			value = &e->scale;
 			break;
 		case HUD_STAT_TEXT:
-			e->text = lua_tostring(L, 4);
+			e->text = luaL_checkstring(L, 4);
 			value = &e->text;
 			break;
 		case HUD_STAT_NUMBER:
-			e->number = lua_tonumber(L, 4);
+			e->number = luaL_checknumber(L, 4);
 			value = &e->number;
 			break;
 		case HUD_STAT_ITEM:
-			e->item = lua_tonumber(L, 4);
+			e->item = luaL_checknumber(L, 4);
 			value = &e->item;
 			break;
 		case HUD_STAT_DIR:
-			e->dir = lua_tonumber(L, 4);
+			e->dir = luaL_checknumber(L, 4);
 			value = &e->dir;
 			break;
 		case HUD_STAT_ALIGN:
@@ -1081,6 +1113,10 @@ int ObjectRef::l_hud_get(lua_State *L)
 	lua_setfield(L, -2, "item");
 
 	lua_pushnumber(L, e->dir);
+	lua_setfield(L, -2, "direction");
+
+	// Deprecated, only for compatibility's sake
+	lua_pushnumber(L, e->dir);
 	lua_setfield(L, -2, "dir");
 
 	push_v3f(L, e->world_pos);
@@ -1100,7 +1136,7 @@ int ObjectRef::l_hud_set_flags(lua_State *L)
 	u32 flags = 0;
 	u32 mask  = 0;
 	bool flag;
-	
+
 	const EnumString *esp = es_HudBuiltinElement;
 	for (int i = 0; esp[i].str; i++) {
 		if (getboolfield(L, 2, esp[i].str, flag)) {

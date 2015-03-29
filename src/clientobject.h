@@ -44,6 +44,7 @@ class ITextureSource;
 class IGameDef;
 class LocalPlayer;
 struct ItemStack;
+class WieldMeshSceneNode;
 
 class ClientActiveObject : public ActiveObject
 {
@@ -61,8 +62,10 @@ public:
 	virtual bool getCollisionBox(aabb3f *toset){return false;}
 	virtual bool collideWithObjects(){return false;}
 	virtual v3f getPosition(){return v3f(0,0,0);}
+	virtual scene::ISceneNode *getSceneNode(){return NULL;}
 	virtual scene::IMeshSceneNode *getMeshSceneNode(){return NULL;}
 	virtual scene::IAnimatedMeshSceneNode *getAnimatedMeshSceneNode(){return NULL;}
+	virtual WieldMeshSceneNode *getWieldMeshSceneNode(){return NULL;}
 	virtual scene::IBillboardSceneNode *getSpriteSceneNode(){return NULL;}
 	virtual bool isPlayer() const {return false;}
 	virtual bool isLocalPlayer() const {return false;}
@@ -86,7 +89,7 @@ public:
 	virtual void initialize(const std::string &data){}
 
 	// Create a certain type of ClientActiveObject
-	static ClientActiveObject* create(u8 type, IGameDef *gamedef,
+	static ClientActiveObject* create(ActiveObjectType type, IGameDef *gamedef,
 			ClientEnvironment *env);
 
 	// If returns true, punch will not be sent to the server

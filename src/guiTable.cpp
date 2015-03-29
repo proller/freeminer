@@ -31,11 +31,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <IGUIScrollBar.h>
 #include "debug.h"
 #include "log.h"
-#include "tile.h"
+#include "client/tile.h"
 #include "gettime.h"
 #include "util/string.h"
 #include "util/numeric.h"
-#include "guiFormSpecMenu.h" // for parseColor()
+#include "util/string.h" // for parseColorString()
 #include "main.h"
 #include "settings.h" // for settings
 #include "porting.h" // for dpi
@@ -168,7 +168,7 @@ void GUITable::setTextList(const std::vector<std::string> &content,
 			cell->content_index = allocString(s.substr(2));
 		}
 		else if (s[0] == '#' && s.size() >= 7 &&
-				GUIFormSpecMenu::parseColor(
+				parseColorString(
 					s.substr(0,7), cell->color, false)) {
 			// single # for color
 			cell->color_defined = true;
@@ -215,15 +215,15 @@ void GUITable::setTable(const TableOptions &options,
 		const std::string &name = options[k].name;
 		const std::string &value = options[k].value;
 		if (name == "color")
-			GUIFormSpecMenu::parseColor(value, m_color, false);
+			parseColorString(value, m_color, false);
 		else if (name == "background")
-			GUIFormSpecMenu::parseColor(value, m_background, false);
+			parseColorString(value, m_background, false);
 		else if (name == "border")
 			m_border = is_yes(value);
 		else if (name == "highlight")
-			GUIFormSpecMenu::parseColor(value, m_highlight, false);
+			parseColorString(value, m_highlight, false);
 		else if (name == "highlight_text")
-			GUIFormSpecMenu::parseColor(value, m_highlight_text, false);
+			parseColorString(value, m_highlight_text, false);
 		else if (name == "opendepth")
 			opendepth = stoi(value);
 		else
@@ -420,7 +420,7 @@ void GUITable::setTable(const TableOptions &options,
 		else if (columntype == COLUMN_TYPE_COLOR) {
 			for (s32 i = 0; i < rowcount; ++i) {
 				video::SColor cellcolor(255, 255, 255, 255);
-				if (GUIFormSpecMenu::parseColor(content[i * colcount + j], cellcolor, true))
+				if (parseColorString(content[i * colcount + j], cellcolor, true))
 					rows[i].colors.push_back(std::make_pair(cellcolor, j+span));
 			}
 		}
@@ -642,10 +642,11 @@ void GUITable::draw()
 	client_clip.UpperLeftCorner.Y += 1;
 	client_clip.UpperLeftCorner.X += 1;
 	client_clip.LowerRightCorner.Y -= 1;
-	client_clip.LowerRightCorner.X -=
-		m_scrollbar->isVisible() ?
-		skin->getSize(gui::EGDS_SCROLLBAR_SIZE) :
-		1;
+	client_clip.LowerRightCorner.X -= 1;
+	if (m_scrollbar->isVisible()) {
+		client_clip.LowerRightCorner.X =
+				m_scrollbar->getAbsolutePosition().UpperLeftCorner.X;
+	}
 	client_clip.clipAgainst(AbsoluteClippingRect);
 
 	// draw visible rows
@@ -865,6 +866,14 @@ bool GUITable::OnEvent(const SEvent &event)
 
 		// Update tooltip
 		setToolTipText(cell ? m_strings[cell->tooltip_index].c_str() : L"");
+
+		// Fix for #1567/#1806:
+		// IGUIScrollBar passes double click events to its parent,
+		// which we don't want. Detect this case and discard the event
+		if (event.MouseInput.Event != EMIE_MOUSE_MOVED &&
+				m_scrollbar->isVisible() &&
+				m_scrollbar->isPointInside(p))
+			return true;
 
 		if (event.MouseInput.isLeftPressed() &&
 				(isPointInside(p) ||

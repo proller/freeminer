@@ -34,7 +34,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "tool.h"
 #include "serverobject.h"
 #include "porting.h"
-#include "mapgen.h"
+#include "mg_schematic.h"
+#include "noise.h"
 #include "json/json.h"
 
 struct EnumString es_TileAnimationType[] =
@@ -193,8 +194,8 @@ void read_object_properties(lua_State *L, int index,
 	getboolfield(L, -1, "is_visible", prop->is_visible);
 	getboolfield(L, -1, "makes_footstep_sound", prop->makes_footstep_sound);
 	getfloatfield(L, -1, "automatic_rotate", prop->automatic_rotate);
-	getfloatfield(L, -1, "stepheight", prop->stepheight);
-	prop->stepheight*=BS;
+	if (getfloatfield(L, -1, "stepheight", prop->stepheight))
+		prop->stepheight *= BS;
 	lua_getfield(L, -1, "automatic_face_movement_dir");
 	if (lua_isnumber(L, -1)) {
 		prop->automatic_face_movement_dir = true;
@@ -283,7 +284,7 @@ ContentFeatures read_content_features(lua_State *L, int index)
 	lua_getfield(L, index, "on_rightclick");
 	f.rightclickable = lua_isfunction(L, -1);
 	lua_pop(L, 1);
-	
+
 	/* Name */
 	getstringfield(L, index, "name", f.name);
 
@@ -297,6 +298,9 @@ ContentFeatures read_content_features(lua_State *L, int index)
 	f.drawtype = (NodeDrawType)getenumfield(L, index, "drawtype",
 			ScriptApiNode::es_DrawType,NDT_NORMAL);
 	getfloatfield(L, index, "visual_scale", f.visual_scale);
+
+	/* Meshnode model filename */
+	getstringfield(L, index, "mesh", f.mesh);
 
 	// tiles = {}
 	lua_getfield(L, index, "tiles");
@@ -514,6 +518,11 @@ ContentFeatures read_content_features(lua_State *L, int index)
 		f.selection_box = read_nodebox(L, -1);
  	lua_pop(L, 1);
 
+	lua_getfield(L, index, "collision_box");
+	if(lua_istable(L, -1))
+		f.collision_box = read_nodebox(L, -1);
+	lua_pop(L, 1);
+
 	f.waving = getintfield_default(L, index,
 			"waving", f.waving);
 
@@ -623,22 +632,23 @@ NodeBox read_nodebox(lua_State *L, int index)
 MapNode readnode(lua_State *L, int index, INodeDefManager *ndef)
 {
 	lua_getfield(L, index, "name");
-	const char *name = luaL_checkstring(L, -1);
+	if (!lua_isstring(L, -1))
+		throw LuaError("Node name is not set or is not a string!");
+	const char *name = lua_tostring(L, -1);
 	lua_pop(L, 1);
-	u8 param1;
+
+	u8 param1 = 0;
 	lua_getfield(L, index, "param1");
-	if(lua_isnil(L, -1))
-		param1 = 0;
-	else
+	if (!lua_isnil(L, -1))
 		param1 = lua_tonumber(L, -1);
 	lua_pop(L, 1);
-	u8 param2;
+
+	u8 param2 = 0;
 	lua_getfield(L, index, "param2");
-	if(lua_isnil(L, -1))
-		param2 = 0;
-	else
+	if (!lua_isnil(L, -1))
 		param2 = lua_tonumber(L, -1);
 	lua_pop(L, 1);
+
 	return MapNode(ndef, name, param1, param2);
 }
 
@@ -1051,19 +1061,7 @@ void luaentity_get(lua_State *L, u16 id)
 }
 
 /******************************************************************************/
-NoiseParams *read_noiseparams(lua_State *L, int index)
-{
-	NoiseParams *np = new NoiseParams;
-
-	if (!read_noiseparams_nc(L, index, np)) {
-		delete np;
-		np = NULL;
-	}
-
-	return np;
-}
-
-bool read_noiseparams_nc(lua_State *L, int index, NoiseParams *np)
+bool read_noiseparams(lua_State *L, int index, NoiseParams *np)
 {
 	if (index < 0)
 		index = lua_gettop(L) + 1 + index;
@@ -1071,100 +1069,21 @@ bool read_noiseparams_nc(lua_State *L, int index, NoiseParams *np)
 	if (!lua_istable(L, index))
 		return false;
 
-	np->offset  = getfloatfield_default(L, index, "offset",  0.0);
-	np->scale   = getfloatfield_default(L, index, "scale",   0.0);
-	np->persist = getfloatfield_default(L, index, "persist", 0.0);
-	np->seed    = getintfield_default(L,   index, "seed",    0);
-	np->octaves = getintfield_default(L,   index, "octaves", 0);
+	np->offset     = getfloatfield_default(L, index, "offset",     0.0);
+	np->scale      = getfloatfield_default(L, index, "scale",      0.0);
+	np->persist    = getfloatfield_default(L, index, "persist",    0.0);
+	np->lacunarity = getfloatfield_default(L, index, "lacunarity", 2.0);
+	np->seed       = getintfield_default(L,   index, "seed",       0);
+	np->octaves    = getintfield_default(L,   index, "octaves",    0);
+
+	u32 flags = 0, flagmask = 0;
+	np->flags = getflagsfield(L, index, "flags", flagdesc_noiseparams,
+		&flags, &flagmask) ? flags : NOISE_FLAG_DEFAULTS;
 
 	lua_getfield(L, index, "spread");
 	np->spread  = read_v3f(L, -1);
 	lua_pop(L, 1);
 
-	return true;
-}
-
-/******************************************************************************/
-bool read_schematic(lua_State *L, int index, DecoSchematic *dschem, Server *server) {
-	if (index < 0)
-		index = lua_gettop(L) + 1 + index;
-
-	INodeDefManager *ndef = server->getNodeDefManager();
-
-	if (lua_istable(L, index)) {
-		lua_getfield(L, index, "size");
-		v3s16 size = read_v3s16(L, -1);
-		lua_pop(L, 1);
-		
-		int numnodes = size.X * size.Y * size.Z;
-		MapNode *schemdata = new MapNode[numnodes];
-		int i = 0;
-		
-		// Get schematic data
-		lua_getfield(L, index, "data");
-		luaL_checktype(L, -1, LUA_TTABLE);
-		
-		lua_pushnil(L);
-		while (lua_next(L, -2)) {
-			if (i < numnodes) {
-				// same as readnode, except param1 default is MTSCHEM_PROB_CONST
-				lua_getfield(L, -1, "name");
-				const char *name = luaL_checkstring(L, -1);
-				lua_pop(L, 1);
-				
-				u8 param1;
-				lua_getfield(L, -1, "param1");
-				param1 = !lua_isnil(L, -1) ? lua_tonumber(L, -1) : MTSCHEM_PROB_ALWAYS;
-				lua_pop(L, 1);
-	
-				u8 param2;
-				lua_getfield(L, -1, "param2");
-				param2 = !lua_isnil(L, -1) ? lua_tonumber(L, -1) : 0;
-				lua_pop(L, 1);
-				
-				schemdata[i] = MapNode(ndef, name, param1, param2);
-			}
-			
-			i++;
-			lua_pop(L, 1);
-		}
-		
-		if (i != numnodes) {
-			errorstream << "read_schematic: incorrect number of "
-				"nodes provided in raw schematic data (got " << i <<
-				", expected " << numnodes << ")." << std::endl;
-			return false;
-		}
-
-		u8 *sliceprobs = new u8[size.Y];
-		for (i = 0; i != size.Y; i++)
-			sliceprobs[i] = MTSCHEM_PROB_ALWAYS;
-
-		// Get Y-slice probability values (if present)
-		lua_getfield(L, index, "yslice_prob");
-		if (lua_istable(L, -1)) {
-			lua_pushnil(L);
-			while (lua_next(L, -2)) {
-				if (getintfield(L, -1, "ypos", i) && i >= 0 && i < size.Y) {
-					sliceprobs[i] = getintfield_default(L, -1,
-						"prob", MTSCHEM_PROB_ALWAYS);
-				}
-				lua_pop(L, 1);
-			}
-		}
-
-		dschem->size        = size;
-		dschem->schematic   = schemdata;
-		dschem->slice_probs = sliceprobs;
-
-	} else if (lua_isstring(L, index)) {
-		dschem->filename = std::string(lua_tostring(L, index));
-	} else {
-		errorstream << "read_schematic: missing schematic "
-			"filename or raw schematic data" << std::endl;
-		return false;
-	}
-	
 	return true;
 }
 

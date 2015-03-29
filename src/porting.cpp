@@ -39,12 +39,21 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 	#include <sys/utsname.h>
 #endif
 
+#if !defined(_WIN32) && !defined(__APPLE__) && \
+	!defined(__ANDROID__) && !defined(SERVER)
+	#define XORG_USED
+#endif
+
+#ifdef XORG_USED
+	#include <X11/Xlib.h>
+	#include <X11/Xutil.h>
+#endif
+
 #include "config.h"
 #include "debug.h"
 #include "filesys.h"
 #include "log.h"
 #include "util/string.h"
-#include "main.h"
 #include "settings.h"
 #include <list>
 
@@ -62,11 +71,25 @@ bool * signal_handler_killstatus(void)
 	return &g_killed;
 }
 
+std::atomic_bool g_sighup, g_siginfo;
+
 #if !defined(_WIN32) // POSIX
 	#include <signal.h>
 
 void sigint_handler(int sig)
 {
+	switch(sig) {
+#if defined(SIGINFO)
+		case SIGINFO:
+			g_siginfo = true;
+		break;
+#endif
+		case SIGHUP:
+			g_sighup = true;
+		break;
+		case SIGINT:
+		case SIGTERM:
+
 	if(g_killed == false)
 	{
 		g_killed = true;
@@ -79,15 +102,25 @@ void sigint_handler(int sig)
 				<<"Printing debug stacks"<<std::endl;
 		debug_stacks_print();*/
 	}
-	else
-	{
-		(void)signal(SIGINT, SIG_DFL);
+		break;
+
+		default:
+		(void)signal(sig, SIG_DFL);
 	}
+
 }
 
 void signal_handler_init(void)
 {
-	(void)signal(SIGINT, sigint_handler);
+	g_sighup = false;
+	g_siginfo = false;
+
+	signal(SIGINT, sigint_handler);
+	signal(SIGTERM, sigint_handler);
+	signal(SIGHUP, sigint_handler);
+#if defined(SIGINFO)
+	signal(SIGINFO, sigint_handler);
+#endif
 }
 
 #else // _WIN32
@@ -138,7 +171,10 @@ void signal_handler_init(void)
 	Multithreading support
 */
 int getNumberOfProcessors() {
-#if defined(_SC_NPROCESSORS_ONLN)
+#if defined(_SC_NPROCESSORS_CONF)
+	return sysconf(_SC_NPROCESSORS_CONF);
+
+#elif defined(_SC_NPROCESSORS_ONLN)
 
 	return sysconf(_SC_NPROCESSORS_ONLN);
 
@@ -283,7 +319,11 @@ void pathRemoveFile(char *path, char delim)
 bool detectMSVCBuildDir(char *c_path)
 {
 	std::string path(c_path);
-	const char *ends[] = {"bin\\Release", "bin\\Build", "bin\\Debug", NULL};
+	const char *ends[] = {
+		"bin\\Release",
+		"bin\\Debug",
+		"bin\\Build",
+		NULL};
 	return (removeStringEnd(path, ends) != "");
 }
 
@@ -369,7 +409,7 @@ void initializePaths()
 	char buf[BUFSIZ];
 	memset(buf, 0, BUFSIZ);
 	// Get path to executable
-	assert(readlink("/proc/self/exe", buf, BUFSIZ-1) != -1);
+	FATAL_ERROR_IF(readlink("/proc/self/exe", buf, BUFSIZ-1) == -1, "Failed to get cwd");
 
 	pathRemoveFile(buf, '/');
 
@@ -381,16 +421,16 @@ void initializePaths()
 	*/
 	#elif defined(__APPLE__)
 
-	//https://developer.apple.com/library/mac/#documentation/Darwin/Reference/ManPages/man3/dyld.3.html
-	//TODO: Test this code
-	char buf[BUFSIZ];
-	uint32_t len = sizeof(buf);
-	assert(_NSGetExecutablePath(buf, &len) != -1);
-
-	pathRemoveFile(buf, '/');
-
-	path_share = std::string(buf) + "/..";
-	path_user = std::string(buf) + "/..";
+	CFBundleRef main_bundle = CFBundleGetMainBundle();
+	CFURLRef resources_url = CFBundleCopyResourcesDirectoryURL(main_bundle);
+	char path[PATH_MAX];
+	if (CFURLGetFileSystemRepresentation(resources_url, TRUE, (UInt8 *)path, PATH_MAX)) {
+		path_share = std::string(path);
+		path_user = std::string(path) + "/../User";
+	} else {
+		dstream << "WARNING: Could not determine bundle resource path" << std::endl;
+	}
+	CFRelease(resources_url);
 
 	/*
 		FreeBSD
@@ -405,7 +445,7 @@ void initializePaths()
 	mib[1] = KERN_PROC;
 	mib[2] = KERN_PROC_PATHNAME;
 	mib[3] = -1;
-	assert(sysctl(mib, 4, buf, &len, NULL, 0) != -1);
+	FATAL_ERROR_IF(sysctl(mib, 4, buf, &len, NULL, 0) == -1, "");
 
 	pathRemoveFile(buf, '/');
 
@@ -440,13 +480,13 @@ void initializePaths()
 	*/
 	#if defined(_WIN32)
 
-	const DWORD buflen = 1000;
+	const DWORD buflen = 1000; // FIXME: Surely there is a better way to do this
 	char buf[buflen];
 	DWORD len;
 
 	// Find path of executable and set path_share relative to it
 	len = GetModuleFileName(GetModuleHandle(NULL), buf, buflen);
-	assert(len < buflen);
+	FATAL_ERROR_IF(len >= buflen, "Overlow");
 	pathRemoveFile(buf, '\\');
 
 	// Use ".\bin\.."
@@ -454,8 +494,8 @@ void initializePaths()
 
 	// Use "C:\Documents and Settings\user\Application Data\<PROJECT_NAME>"
 	len = GetEnvironmentVariable("APPDATA", buf, buflen);
-	assert(len < buflen);
-	path_user = std::string(buf) + DIR_DELIM + PROJECT_NAME;
+	FATAL_ERROR_IF(len >= buflen, "Overlow");
+	path_user = std::string(buf) + DIR_DELIM + lowercase(PROJECT_NAME);
 
 	/*
 		Linux
@@ -470,7 +510,7 @@ void initializePaths()
 		if (readlink("/proc/self/exe", buf, BUFSIZ-1) == -1) {
 			errorstream << "Unable to read bindir "<< std::endl;
 #ifndef __ANDROID__
-			assert("Unable to read bindir" == 0);
+			FATAL_ERROR("Unable to read bindir");
 #endif
 		} else {
 			pathRemoveFile(buf, '/');
@@ -485,10 +525,10 @@ void initializePaths()
 	if(static_sharedir != "" && static_sharedir != ".")
 		trylist.push_back(static_sharedir);
 	trylist.push_back(
-			bindir + DIR_DELIM + ".." + DIR_DELIM + "share" + DIR_DELIM + PROJECT_NAME);
+			bindir + DIR_DELIM + ".." + DIR_DELIM + "share" + DIR_DELIM + lowercase(PROJECT_NAME));
 	trylist.push_back(bindir + DIR_DELIM + "..");
 #ifdef __ANDROID__
-	trylist.push_back(DIR_DELIM "sdcard" DIR_DELIM PROJECT_NAME);
+	trylist.push_back(path_user);
 #endif
 
 	for(std::list<std::string>::const_iterator i = trylist.begin();
@@ -509,9 +549,7 @@ void initializePaths()
 		break;
 	}
 #ifndef __ANDROID__
-	path_user = std::string(getenv("HOME")) + DIR_DELIM + "." + PROJECT_NAME;
-#else
-	path_user = std::string(DIR_DELIM "sdcard" DIR_DELIM PROJECT_NAME DIR_DELIM);
+	path_user = std::string(getenv("HOME")) + DIR_DELIM + "." + lowercase(PROJECT_NAME);
 #endif
 
 	/*
@@ -519,63 +557,172 @@ void initializePaths()
 	*/
 	#elif defined(__APPLE__)
 
-	// Code based on
-	// http://stackoverflow.com/questions/516200/relative-paths-not-working-in-xcode-c
 	CFBundleRef main_bundle = CFBundleGetMainBundle();
 	CFURLRef resources_url = CFBundleCopyResourcesDirectoryURL(main_bundle);
 	char path[PATH_MAX];
-	if(CFURLGetFileSystemRepresentation(resources_url, TRUE, (UInt8 *)path, PATH_MAX))
-	{
-		dstream<<"Bundle resource path: "<<path<<std::endl;
-		//chdir(path);
-		path_share = std::string(path) + DIR_DELIM + "share";
-	}
-	else
-	{
-		// error!
-		dstream<<"WARNING: Could not determine bundle resource path"<<std::endl;
+	if (CFURLGetFileSystemRepresentation(resources_url, TRUE, (UInt8 *)path, PATH_MAX)) {
+		path_share = std::string(path);
+	} else {
+		dstream << "WARNING: Could not determine bundle resource path" << std::endl;
 	}
 	CFRelease(resources_url);
 
-	path_user = std::string(getenv("HOME")) + "/Library/Application Support/" + PROJECT_NAME;
+	path_user = std::string(getenv("HOME")) + "/Library/Application Support/" + lowercase(PROJECT_NAME);
 
 	#else // FreeBSD, and probably many other POSIX-like systems.
 
 	path_share = STATIC_SHAREDIR;
-	path_user = std::string(getenv("HOME")) + DIR_DELIM + "." + PROJECT_NAME;
+	path_user = std::string(getenv("HOME")) + DIR_DELIM + "." + lowercase(PROJECT_NAME);
 
 	#endif
 
 #endif // RUN_IN_PLACE
 }
 
-static irr::IrrlichtDevice* device;
+static irr::IrrlichtDevice *device;
 
-void initIrrlicht(irr::IrrlichtDevice * _device) {
-	device = _device;
+void initIrrlicht(irr::IrrlichtDevice *device_)
+{
+	device = device_;
+}
+
+void setXorgClassHint(const video::SExposedVideoData &video_data,
+	const std::string &name)
+{
+#ifdef XORG_USED
+	if (video_data.OpenGLLinux.X11Display == NULL)
+		return;
+
+	XClassHint *classhint = XAllocClassHint();
+	classhint->res_name  = (char *)name.c_str();
+	classhint->res_class = (char *)name.c_str();
+
+	XSetClassHint((Display *)video_data.OpenGLLinux.X11Display,
+		video_data.OpenGLLinux.X11Window, classhint);
+	XFree(classhint);
+#endif
 }
 
 #ifndef SERVER
-v2u32 getWindowSize() {
+
+v2u32 getWindowSize()
+{
 	return device->getVideoDriver()->getScreenSize();
 }
 
-#ifndef __ANDROID__
 
-float getDisplayDensity() {
-	float gui_scaling = g_settings->getFloat("gui_scaling");
-	// using Y here feels like a bug, this needs to be discussed later!
-	if (getWindowSize().Y <= 800) {
-		return (2.0/3.0) * gui_scaling;
-	}
-	if (getWindowSize().Y <= 1280) {
-		return 1.0 * gui_scaling;
+std::vector<core::vector3d<u32> > getSupportedVideoModes()
+{
+	IrrlichtDevice *nulldevice = createDevice(video::EDT_NULL);
+	sanity_check(nulldevice != NULL);
+
+	std::vector<core::vector3d<u32> > mlist;
+	video::IVideoModeList *modelist = nulldevice->getVideoModeList();
+
+	u32 num_modes = modelist->getVideoModeCount();
+	for (u32 i = 0; i != num_modes; i++) {
+		core::dimension2d<u32> mode_res = modelist->getVideoModeResolution(i);
+		s32 mode_depth = modelist->getVideoModeDepth(i);
+		mlist.push_back(core::vector3d<u32>(mode_res.Width, mode_res.Height, mode_depth));
 	}
 
-	return (4.0/3.0) * gui_scaling;
+	nulldevice->drop();
+
+	return mlist;
 }
 
-v2u32 getDisplaySize() {
+std::vector<irr::video::E_DRIVER_TYPE> getSupportedVideoDrivers()
+{
+	std::vector<irr::video::E_DRIVER_TYPE> drivers;
+
+	for (int i = 0; i != irr::video::EDT_COUNT; i++) {
+		if (irr::IrrlichtDevice::isDriverSupported((irr::video::E_DRIVER_TYPE)i))
+			drivers.push_back((irr::video::E_DRIVER_TYPE)i);
+	}
+
+	return drivers;
+}
+
+const char *getVideoDriverName(irr::video::E_DRIVER_TYPE type)
+{
+	static const char *driver_ids[] = {
+		"null",
+		"software",
+		"burningsvideo",
+		"direct3d8",
+		"direct3d9",
+		"opengl",
+		"ogles1",
+		"ogles2",
+	};
+
+	return driver_ids[type];
+}
+
+
+const char *getVideoDriverFriendlyName(irr::video::E_DRIVER_TYPE type)
+{
+	static const char *driver_names[] = {
+		"NULL Driver",
+		"Software Renderer",
+		"Burning's Video",
+		"Direct3D 8",
+		"Direct3D 9",
+		"OpenGL",
+		"OpenGL ES1",
+		"OpenGL ES2",
+	};
+
+	return driver_names[type];
+}
+
+
+#ifndef __ANDROID__
+#if defined(WTF) && defined(XORG_USED)
+
+static float calcDisplayDensity()
+{
+	const char* current_display = getenv("DISPLAY");
+
+	if (current_display != NULL) {
+			Display * x11display = XOpenDisplay(current_display);
+
+			if (x11display != NULL) {
+				/* try x direct */
+				float dpi_height =
+						floor(DisplayHeight(x11display, 0) /
+								(DisplayHeightMM(x11display, 0) * 0.039370) + 0.5);
+				float dpi_width =
+						floor(DisplayWidth(x11display, 0) /
+								(DisplayWidthMM(x11display, 0) * 0.039370) +0.5);
+
+				XCloseDisplay(x11display);
+
+				return std::max(dpi_height,dpi_width) / 96.0;
+			}
+		}
+
+	/* return manually specified dpi */
+	return g_settings->getFloat("screen_dpi")/96.0;
+}
+
+
+float getDisplayDensity()
+{
+	static float cached_display_density = calcDisplayDensity();
+	return cached_display_density;
+}
+
+
+#else
+float getDisplayDensity()
+{
+	return g_settings->getFloat("screen_dpi")/96.0;
+}
+#endif
+
+v2u32 getDisplaySize()
+{
 	IrrlichtDevice *nulldevice = createDevice(video::EDT_NULL);
 
 	core::dimension2d<u32> deskres = nulldevice->getVideoModeList()->getDesktopResolution();

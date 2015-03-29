@@ -186,7 +186,8 @@ void ItemStack::deSerialize(std::istream &is, IItemDefManager *itemdef)
 		legacy_nimap.getName(material, name);
 		if(name == "")
 			name = "unknown_block";
-		name = itemdef->getAlias(name);
+		if (itemdef)
+			name = itemdef->getAlias(name);
 		count = materialcount;
 	}
 	else if(name == "MaterialItem2")
@@ -205,7 +206,8 @@ void ItemStack::deSerialize(std::istream &is, IItemDefManager *itemdef)
 		legacy_nimap.getName(material, name);
 		if(name == "")
 			name = "unknown_block";
-		name = itemdef->getAlias(name);
+		if (itemdef)
+			name = itemdef->getAlias(name);
 		count = materialcount;
 	}
 	else if(name == "node" || name == "NodeItem" || name == "MaterialItem3"
@@ -226,7 +228,8 @@ void ItemStack::deSerialize(std::istream &is, IItemDefManager *itemdef)
 			name = fnd.next(" ");
 		}
 		fnd.skip_over(" ");
-		name = itemdef->getAlias(name);
+		if (itemdef)
+			name = itemdef->getAlias(name);
 		count = stoi(trim(fnd.next("")));
 		if(count == 0)
 			count = 1;
@@ -255,7 +258,8 @@ void ItemStack::deSerialize(std::istream &is, IItemDefManager *itemdef)
 		count = 1;
 		// Then read wear
 		fnd.skip_over(" ");
-		name = itemdef->getAlias(name);
+		if (itemdef)
+			name = itemdef->getAlias(name);
 		wear = stoi(trim(fnd.next("")));
 	}
 	else
@@ -265,7 +269,8 @@ void ItemStack::deSerialize(std::istream &is, IItemDefManager *itemdef)
 			// The real thing
 
 			// Apply item aliases
-			name = itemdef->getAlias(name);
+			if (itemdef)
+				name = itemdef->getAlias(name);
 
 			// Read the count
 			std::string count_str;
@@ -297,9 +302,9 @@ void ItemStack::deSerialize(std::istream &is, IItemDefManager *itemdef)
 		} while(false);
 	}
 
-	if(name.empty() || count == 0)
+	if (name.empty() || count == 0)
 		clear();
-	else if(itemdef->get(name).type == ITEM_TOOL)
+	else if (itemdef && itemdef->get(name).type == ITEM_TOOL)
 		count = 1;
 }
 
@@ -311,11 +316,11 @@ void ItemStack::deSerialize(const std::string &str, IItemDefManager *itemdef)
 
 std::string ItemStack::getItemString() const
 {
-	// Get item string
 	std::ostringstream os(std::ios::binary);
 	serialize(os);
 	return os.str();
 }
+
 
 ItemStack ItemStack::addItem(const ItemStack &newitem_,
 		IItemDefManager *itemdef)
@@ -647,7 +652,7 @@ ItemStack InventoryList::changeItem(u32 i, const ItemStack &newitem)
 
 void InventoryList::deleteItem(u32 i)
 {
-	assert(i < m_items.size());
+	assert(i < m_items.size()); // Pre-condition
 	m_items[i].clear();
 }
 
@@ -840,6 +845,7 @@ Inventory::~Inventory()
 
 void Inventory::clear()
 {
+	m_dirty = true;
 	for(u32 i=0; i<m_lists.size(); i++)
 	{
 		delete m_lists[i];
@@ -849,6 +855,7 @@ void Inventory::clear()
 
 void Inventory::clearContents()
 {
+	m_dirty = true;
 	for(u32 i=0; i<m_lists.size(); i++)
 	{
 		InventoryList *list = m_lists[i];
@@ -861,12 +868,14 @@ void Inventory::clearContents()
 
 Inventory::Inventory(IItemDefManager *itemdef)
 {
+	m_dirty = false;
 	m_itemdef = itemdef;
 }
 
 Inventory::Inventory(const Inventory &other)
 {
 	*this = other;
+	m_dirty = false;
 }
 
 Inventory & Inventory::operator = (const Inventory &other)
@@ -874,6 +883,7 @@ Inventory & Inventory::operator = (const Inventory &other)
 	// Gracefully handle self assignment
 	if(this != &other)
 	{
+		m_dirty = true;
 		clear();
 		m_itemdef = other.m_itemdef;
 		for(u32 i=0; i<other.m_lists.size(); i++)
@@ -947,13 +957,14 @@ void Inventory::deSerialize(std::istream &is)
 		}
 		else
 		{
-			throw SerializationError("invalid inventory specifier");
+			throw SerializationError("invalid inventory specifier: " + name);
 		}
 	}
 }
 
 InventoryList * Inventory::addList(const std::string &name, u32 size)
 {
+	m_dirty = true;
 	s32 i = getListIndex(name);
 	if(i != -1)
 	{
@@ -999,6 +1010,7 @@ bool Inventory::deleteList(const std::string &name)
 	s32 i = getListIndex(name);
 	if(i == -1)
 		return false;
+	m_dirty = true;
 	delete m_lists[i];
 	m_lists.erase(m_lists.begin() + i);
 	return true;

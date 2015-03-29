@@ -22,26 +22,29 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "guiEngine.h"
 
+#include <IGUIStaticText.h>
+#include <ICameraSceneNode.h>
 #include "scripting_mainmenu.h"
+#include "util/numeric.h"
 #include "config.h"
 #include "version.h"
 #include "porting.h"
 #include "filesys.h"
-#include "main.h"
+#include <fstream>
 #include "settings.h"
 #include "guiMainMenu.h"
 #include "sound.h"
 #include "sound_openal.h"
 #include "clouds.h"
 #include "httpfetch.h"
-#include "util/numeric.h"
+#include "log.h"
+#include "fontengine.h"
+
 #ifdef __ANDROID__
-#include "tile.h"
+#include "client/tile.h"
 #include <GLES/gl.h>
 #endif
 
-#include <IGUIStaticText.h>
-#include <ICameraSceneNode.h>
 
 /******************************************************************************/
 /** TextDestGuiEngine                                                         */
@@ -171,9 +174,11 @@ GUIEngine::GUIEngine(	irr::IrrlichtDevice* dev,
 		m_sound_manager = &dummySoundManager;
 
 	//create topleft header
-	core::rect<s32> rect(0, 0, 500, 20);
+	std::string t = (std::string(PROJECT_NAME " ") +
+			g_version_hash);
+
+	core::rect<s32> rect(0, 0, g_fontengine->getTextWidth(t), g_fontengine->getTextHeight());
 	rect += v2s32(4, 0);
-	std::string t = std::string("Freeminer ") + minetest_version_hash;
 
 	m_irr_toplefttext =
 		m_device->getGUIEnvironment()->addStaticText(narrow_to_wide(t).c_str(),
@@ -192,7 +197,8 @@ GUIEngine::GUIEngine(	irr::IrrlichtDevice* dev,
 			m_texture_source,
 			m_formspecgui,
 			m_buttonhandler,
-			NULL);
+			NULL,
+			false);
 
 	m_menu->allowClose(false);
 	m_menu->lockSize(true,v2u32(800,600));
@@ -222,8 +228,7 @@ GUIEngine::GUIEngine(	irr::IrrlichtDevice* dev,
 	}
 
 	m_menu->quitMenu();
-	m_menu->remove();
-	delete m_menu;
+	m_menu->drop();
 	m_menu = NULL;
 }
 
@@ -259,7 +264,16 @@ void GUIEngine::run()
 
 	cloudInit();
 
-	while(m_device->run() && (!m_startgame) && (!m_kill)) {
+	unsigned int text_height = g_fontengine->getTextHeight();
+
+	while(m_device->run() && (!m_startgame) && (!m_kill))
+	{
+		//check if we need to update the "upper left corner"-text
+		if (text_height != g_fontengine->getTextHeight()) {
+			updateTopLeftTextSize();
+			text_height = g_fontengine->getTextHeight();
+		}
+
 		driver->beginScene(true, true, video::SColor(255,140,186,250));
 
 		if (m_clouds_enabled)
@@ -294,7 +308,7 @@ void GUIEngine::run()
 GUIEngine::~GUIEngine()
 {
 	video::IVideoDriver* driver = m_device->getVideoDriver();
-	assert(driver != 0);
+	FATAL_ERROR_IF(driver == 0, "Could not get video driver");
 
 	if(m_sound_manager != &dummySoundManager){
 		delete m_sound_manager;
@@ -354,15 +368,14 @@ void GUIEngine::cloudPostProcess()
 {
 	float fps_max = g_settings->getFloat("fps_max");
 	// Time of frame without fps limit
-	float busytime;
 	u32 busytime_u32;
+
 	// not using getRealTime is necessary for wine
 	u32 time = m_device->getTimer()->getTime();
 	if(time > m_cloud.lasttime)
 		busytime_u32 = time - m_cloud.lasttime;
 	else
 		busytime_u32 = 0;
-	busytime = busytime_u32 / 1000.0;
 
 	// FPS limiter
 	u32 frametime_min = 1000./fps_max;
@@ -505,7 +518,7 @@ bool GUIEngine::setTexture(texture_layer layer, std::string texturepath,
 		bool tile_image, unsigned int minsize)
 {
 	video::IVideoDriver* driver = m_device->getVideoDriver();
-	assert(driver != 0);
+	FATAL_ERROR_IF(driver == 0, "Could not get video driver");
 
 	if (m_textures[layer].texture != NULL)
 	{
@@ -531,27 +544,26 @@ bool GUIEngine::setTexture(texture_layer layer, std::string texturepath,
 }
 
 /******************************************************************************/
-bool GUIEngine::downloadFile(std::string url,std::string target)
+bool GUIEngine::downloadFile(std::string url, std::string target)
 {
 #if USE_CURL
-	std::ofstream targetfile(target.c_str(), std::ios::out | std::ios::binary);
+	std::ofstream target_file(target.c_str(), std::ios::out | std::ios::binary);
 
-	if (!targetfile.good()) {
+	if (!target_file.good()) {
 		return false;
 	}
 
-	HTTPFetchRequest fetchrequest;
-	HTTPFetchResult fetchresult;
-	fetchrequest.url = url;
-	fetchrequest.caller = HTTPFETCH_SYNC;
-	fetchrequest.timeout = g_settings->getS32("curl_file_download_timeout");
-	httpfetch_sync(fetchrequest, fetchresult);
+	HTTPFetchRequest fetch_request;
+	HTTPFetchResult fetch_result;
+	fetch_request.url = url;
+	fetch_request.caller = HTTPFETCH_SYNC;
+	fetch_request.timeout = g_settings->getS32("curl_file_download_timeout");
+	httpfetch_sync(fetch_request, fetch_result);
 
-	if (fetchresult.succeeded) {
-		targetfile << fetchresult.data;
-	} else {
+	if (!fetch_result.succeeded) {
 		return false;
 	}
+	target_file << fetch_result.data;
 
 	return true;
 #else
@@ -562,14 +574,32 @@ bool GUIEngine::downloadFile(std::string url,std::string target)
 /******************************************************************************/
 void GUIEngine::setTopleftText(std::string append)
 {
-	std::string toset = std::string("Freeminer ") + minetest_version_hash;
+	std::string toset = (std::string(PROJECT_NAME " ") +
+			g_version_hash);
 
-	if (append != "") {
+	if (append != "")
+	{
 		toset += " / ";
 		toset += append;
 	}
 
 	m_irr_toplefttext->setText(narrow_to_wide(toset).c_str());
+
+	updateTopLeftTextSize();
+}
+
+/******************************************************************************/
+void GUIEngine::updateTopLeftTextSize()
+{
+	std::wstring text = m_irr_toplefttext->getText();
+
+	core::rect<s32> rect(0, 0, g_fontengine->getTextWidth(text), g_fontengine->getTextHeight());
+		rect += v2s32(4, 0);
+
+	m_irr_toplefttext->remove();
+	m_irr_toplefttext =
+		m_device->getGUIEnvironment()->addStaticText(text.c_str(),
+		rect,false,true,0,-1);
 }
 
 /******************************************************************************/

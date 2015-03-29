@@ -16,7 +16,7 @@
 --51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 local function create_world_formspec(dialogdata)
-	local mapgens = {"v6", "v7", "indev", "singlenode", "math"}
+	local mapgens = core.get_mapgen_names()
 
 	local current_seed = core.setting_get("fixed_map_seed") or ""
 	local current_mg   = core.setting_get("mg_name")
@@ -46,7 +46,7 @@ local function create_world_formspec(dialogdata)
 
 	current_seed = core.formspec_escape(current_seed)
 	local retval =
-		"size[12,6,true]" ..
+		"size[12,5,false]" ..
 		"label[2,0;" .. fgettext("World name") .. "]"..
 		"field[4.5,0.4;6,0.5;te_world_name;;]" ..
 
@@ -57,11 +57,21 @@ local function create_world_formspec(dialogdata)
 		"dropdown[4.2,2;6.3;dd_mapgen;" .. mglist .. ";" .. selindex .. "]" ..
 
 		"label[2,3;" .. fgettext("Game") .. "]"..
-		"textlist[4.2,3;5.8,2.3;games;" .. gamemgr.gamelist() ..
+		"textlist[4.2,3;5.8,1;games;" .. gamemgr.gamelist() ..
 		";" .. gameidx .. ";true]" ..
 
-		"button[5,5.5;2.6,0.5;world_create_confirm;" .. fgettext("Create") .. "]" ..
-		"button[7.5,5.5;2.8,0.5;world_create_cancel;" .. fgettext("Cancel") .. "]"
+		"button[7.7,4.5;2.6,0.5;world_create_confirm;" .. fgettext("Create") .. "]" ..
+		"button[4.2,4.5;2.8,0.5;world_create_cancel;" .. fgettext("Cancel") .. "]"
+		
+	if #gamemgr.games == 0 then
+		retval = retval .. "box[2,4;8,1;#ff8800]label[2.25,4;" ..
+				fgettext("You have no subgames installed.") .. "]label[2.25,4.4;" ..
+				fgettext("Download one from minetest.net") .. "]"
+	elseif #gamemgr.games == 1 and gamemgr.games[1].id == "minimal" then
+		retval = retval .. "box[1.75,4;8.7,1;#ff8800]label[2,4;" ..
+				fgettext("Warning: The minimal development test is meant for developers.") .. "]label[2,4.4;" ..
+				fgettext("Download a subgame, such as minetest_game, from minetest.net") .. "]"
+	end
 
 	return retval
 
@@ -80,14 +90,14 @@ local function create_world_buttonhandler(this, fields)
 
 			local message = nil
 
+			core.setting_set("fixed_map_seed", fields["te_seed"])
+
 			if not menudata.worldlist:uid_exists_raw(worldname) then
 				core.setting_set("mg_name",fields["dd_mapgen"])
 				message = core.create_world(worldname,gameindex)
 			else
 				message = fgettext("A world named \"$1\" already exists", worldname)
 			end
-
-			core.setting_set("fixed_map_seed", fields["te_seed"])
 
 			if message ~= nil then
 				gamedata.errormessage = message

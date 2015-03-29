@@ -19,7 +19,9 @@ local commonpath = scriptdir.."common"..DIR_DELIM
 local asyncpath = scriptdir.."async"..DIR_DELIM
 
 --dofile(scriptdir.."profiler.lua") --TODO: repair me
-
+--[[ too buggy
+dofile(commonpath.."strict.lua")
+]]
 dofile(commonpath.."serialize.lua")
 dofile(commonpath.."misc_helpers.lua")
 
@@ -32,7 +34,11 @@ elseif INIT == "mainmenu" then
 	if mainmenuscript ~= nil and mainmenuscript ~= "" then
 		dofile(mainmenuscript)
 	else
+	  if PLATFORM == "Android" then
 		dofile(core.get_mainmenu_path()..DIR_DELIM.."init.lua")
+	  else
+		dofile(core.get_mainmenu_path()..DIR_DELIM.."fm_init.lua")
+	  end
 	end
 elseif INIT == "async" then
 	dofile(asyncpath.."init.lua")

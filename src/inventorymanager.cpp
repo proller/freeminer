@@ -29,6 +29,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "settings.h"
 #include "craftdef.h"
 #include "rollback_interface.h"
+#include "strfnd.h"
 
 #define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
@@ -64,7 +65,7 @@ void InventoryLocation::serialize(std::ostream &os) const
 		os<<"detached:"<<name;
 		break;
 	default:
-		assert(0);
+		FATAL_ERROR("Unhandled inventory location type");
 	}
 }
 
@@ -371,7 +372,7 @@ void IMoveAction::apply(InventoryManager *mgr, ServerActiveObject *player, IGame
 	*/
 	if(!ignore_rollback && gamedef->rollback())
 	{
-		IRollbackReportSink *rollback = gamedef->rollback();
+		IRollbackManager *rollback = gamedef->rollback();
 
 		// If source is not infinite, record item take
 		if(src_can_take_count != -1){
@@ -383,7 +384,7 @@ void IMoveAction::apply(InventoryManager *mgr, ServerActiveObject *player, IGame
 				loc = os.str();
 			}
 			action.setModifyInventoryStack(loc, from_list, from_i, false,
-					src_item.getItemString());
+					src_item);
 			rollback->reportAction(action);
 		}
 		// If destination is not infinite, record item put
@@ -396,7 +397,7 @@ void IMoveAction::apply(InventoryManager *mgr, ServerActiveObject *player, IGame
 				loc = os.str();
 			}
 			action.setModifyInventoryStack(loc, to_list, to_i, true,
-					src_item.getItemString());
+					src_item);
 			rollback->reportAction(action);
 		}
 	}
@@ -458,9 +459,9 @@ void IMoveAction::apply(InventoryManager *mgr, ServerActiveObject *player, IGame
 		}
 	}
 	
-	mgr->setInventoryModified(from_inv);
+	mgr->setInventoryModified(from_inv, false);
 	if(inv_from != inv_to)
-		mgr->setInventoryModified(to_inv);
+		mgr->setInventoryModified(to_inv, false);
 }
 
 void IMoveAction::clientApply(InventoryManager *mgr, IGameDef *gamedef)
@@ -600,7 +601,7 @@ void IDropAction::apply(InventoryManager *mgr, ServerActiveObject *player, IGame
 			if(item2.count != actually_dropped_count)
 				errorstream<<"Could not take dropped count of items"<<std::endl;
 
-			mgr->setInventoryModified(from_inv);
+			mgr->setInventoryModified(from_inv, false);
 		}
 	}
 
@@ -635,7 +636,7 @@ void IDropAction::apply(InventoryManager *mgr, ServerActiveObject *player, IGame
 	*/
 	if(!ignore_src_rollback && gamedef->rollback())
 	{
-		IRollbackReportSink *rollback = gamedef->rollback();
+		IRollbackManager *rollback = gamedef->rollback();
 
 		// If source is not infinite, record item take
 		if(src_can_take_count != -1){
@@ -647,7 +648,7 @@ void IDropAction::apply(InventoryManager *mgr, ServerActiveObject *player, IGame
 				loc = os.str();
 			}
 			action.setModifyInventoryStack(loc, from_list, from_i,
-					false, src_item.getItemString());
+					false, src_item);
 			rollback->reportAction(action);
 		}
 	}
@@ -730,9 +731,9 @@ void ICraftAction::apply(InventoryManager *mgr, ServerActiveObject *player, IGam
 	ItemStack crafted;
 	ItemStack craftresultitem;
 	int count_remaining = count;
-	bool found = getCraftingResult(inv_craft, crafted, false, gamedef);
+	getCraftingResult(inv_craft, crafted, false, gamedef);
 	PLAYER_TO_SA(player)->item_CraftPredict(crafted, player, list_craft, craft_inv);
-	found = !crafted.empty();
+	bool found = !crafted.empty();
 
 	while(found && list_craftresult->itemFits(0, crafted))
 	{

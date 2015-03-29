@@ -23,16 +23,17 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "clientmedia.h"
 #include "httpfetch.h"
 #include "client.h"
-#include "clientserver.h"
 #include "filecache.h"
-#include "hex.h"
-#include "sha1.h"
+#include "filesys.h"
 #include "debug.h"
 #include "log.h"
 #include "porting.h"
 #include "settings.h"
 #include "main.h"
+#include "network/networkprotocol.h"
+#include "util/hex.h"
 #include "util/serialize.h"
+#include "util/sha1.h"
 #include "util/string.h"
 
 static std::string getMediaCacheDir()
@@ -74,7 +75,7 @@ ClientMediaDownloader::~ClientMediaDownloader()
 
 void ClientMediaDownloader::addFile(std::string name, std::string sha1)
 {
-	assert(!m_initial_step_done);
+	assert(!m_initial_step_done); // pre-condition
 
 	// if name was already announced, ignore the new announcement
 	if (m_files.count(name) != 0) {
@@ -109,7 +110,7 @@ void ClientMediaDownloader::addFile(std::string name, std::string sha1)
 
 void ClientMediaDownloader::addRemoteServer(std::string baseurl)
 {
-	assert(!m_initial_step_done);
+	assert(!m_initial_step_done);	// pre-condition
 
 	#ifdef USE_CURL
 
@@ -143,17 +144,17 @@ void ClientMediaDownloader::step(Client *client)
 	// Remote media: check for completion of fetches
 	if (m_httpfetch_active) {
 		bool fetched_something = false;
-		HTTPFetchResult fetchresult;
+		HTTPFetchResult fetch_result;
 
-		while (httpfetch_async_get(m_httpfetch_caller, fetchresult)) {
+		while (httpfetch_async_get(m_httpfetch_caller, fetch_result)) {
 			m_httpfetch_active--;
 			fetched_something = true;
 
 			// Is this a hashset (index.mth) or a media file?
-			if (fetchresult.request_id < m_remotes.size())
-				remoteHashSetReceived(fetchresult);
+			if (fetch_result.request_id < m_remotes.size())
+				remoteHashSetReceived(fetch_result);
 			else
-				remoteMediaReceived(fetchresult, client);
+				remoteMediaReceived(fetch_result, client);
 		}
 
 		if (fetched_something)
@@ -268,17 +269,17 @@ void ClientMediaDownloader::initialStep(Client *client)
 			actionstream << "Client: Contacting remote server \""
 				<< remote->baseurl << "\"" << std::endl;
 
-			HTTPFetchRequest fetchrequest;
-			fetchrequest.url =
+			HTTPFetchRequest fetch_request;
+			fetch_request.url =
 				remote->baseurl + MTHASHSET_FILE_NAME;
-			fetchrequest.caller = m_httpfetch_caller;
-			fetchrequest.request_id = m_httpfetch_next_id; // == i
-			fetchrequest.timeout = m_httpfetch_timeout;
-			fetchrequest.connect_timeout = m_httpfetch_timeout;
-			fetchrequest.post_data = required_hash_set;
-			fetchrequest.extra_headers.push_back(
+			fetch_request.caller = m_httpfetch_caller;
+			fetch_request.request_id = m_httpfetch_next_id; // == i
+			fetch_request.timeout = m_httpfetch_timeout;
+			fetch_request.connect_timeout = m_httpfetch_timeout;
+			fetch_request.post_data = required_hash_set;
+			fetch_request.extra_headers.push_back(
 				"Content-Type: application/octet-stream");
-			httpfetch_async(fetchrequest);
+			httpfetch_async(fetch_request);
 
 			m_httpfetch_active++;
 			m_httpfetch_next_id++;
@@ -288,21 +289,21 @@ void ClientMediaDownloader::initialStep(Client *client)
 }
 
 void ClientMediaDownloader::remoteHashSetReceived(
-		const HTTPFetchResult &fetchresult)
+		const HTTPFetchResult &fetch_result)
 {
-	u32 remote_id = fetchresult.request_id;
+	u32 remote_id = fetch_result.request_id;
 	assert(remote_id < m_remotes.size());
 	RemoteServerStatus *remote = m_remotes[remote_id];
 
 	m_outstanding_hash_sets--;
 
-	if (fetchresult.succeeded) {
+	if (fetch_result.succeeded) {
 		try {
 			// Server sent a list of file hashes that are
 			// available on it, try to parse the list
 
 			std::set<std::string> sha1_set;
-			deSerializeHashSet(fetchresult.data, sha1_set);
+			deSerializeHashSet(fetch_result.data, sha1_set);
 
 			// Parsing succeeded: For every file that is
 			// available on this server, add this server
@@ -329,7 +330,7 @@ void ClientMediaDownloader::remoteHashSetReceived(
 	// Do NOT check for any particular response code (e.g. 404) here,
 	// because different servers respond differently
 
-	if (!fetchresult.succeeded && !fetchresult.timeout) {
+	if (!fetch_result.succeeded && !fetch_result.timeout) {
 		infostream << "Client: Enabling compatibility mode for remote "
 			<< "server \"" << remote->baseurl << "\"" << std::endl;
 		remote->request_by_filename = true;
@@ -347,7 +348,7 @@ void ClientMediaDownloader::remoteHashSetReceived(
 }
 
 void ClientMediaDownloader::remoteMediaReceived(
-		const HTTPFetchResult &fetchresult,
+		const HTTPFetchResult &fetch_result,
 		Client *client)
 {
 	// Some remote server sent us a file.
@@ -358,17 +359,17 @@ void ClientMediaDownloader::remoteMediaReceived(
 	std::string name;
 	{
 		std::map<unsigned long, std::string>::iterator it =
-			m_remote_file_transfers.find(fetchresult.request_id);
+			m_remote_file_transfers.find(fetch_result.request_id);
 		assert(it != m_remote_file_transfers.end());
 		name = it->second;
 		m_remote_file_transfers.erase(it);
 	}
 
-	assert(m_files.count(name) != 0);
+	sanity_check(m_files.count(name) != 0);
 
 	FileStatus *filestatus = m_files[name];
-	assert(!filestatus->received);
-	assert(filestatus->current_remote >= 0);
+	sanity_check(!filestatus->received);
+	sanity_check(filestatus->current_remote >= 0);
 
 	RemoteServerStatus *remote = m_remotes[filestatus->current_remote];
 
@@ -377,9 +378,9 @@ void ClientMediaDownloader::remoteMediaReceived(
 
 	// If fetch succeeded, try to load media file
 
-	if (fetchresult.succeeded) {
+	if (fetch_result.succeeded) {
 		bool success = checkAndLoad(name, filestatus->sha1,
-				fetchresult.data, false, client);
+				fetch_result.data, false, client);
 		if (success) {
 			filestatus->received = true;
 			assert(m_uncached_received_count < m_uncached_count);
@@ -390,6 +391,7 @@ void ClientMediaDownloader::remoteMediaReceived(
 
 s32 ClientMediaDownloader::selectRemoteServer(FileStatus *filestatus)
 {
+	// Pre-conditions
 	assert(filestatus != NULL);
 	assert(!filestatus->received);
 	assert(filestatus->current_remote < 0);
@@ -454,14 +456,14 @@ void ClientMediaDownloader::startRemoteMediaTransfers()
 					<< "\"" << name << "\" "
 					<< "\"" << url << "\"" << std::endl;
 
-				HTTPFetchRequest fetchrequest;
-				fetchrequest.url = url;
-				fetchrequest.caller = m_httpfetch_caller;
-				fetchrequest.request_id = m_httpfetch_next_id;
-				fetchrequest.timeout = 0; // no data timeout!
-				fetchrequest.connect_timeout =
+				HTTPFetchRequest fetch_request;
+				fetch_request.url = url;
+				fetch_request.caller = m_httpfetch_caller;
+				fetch_request.request_id = m_httpfetch_next_id;
+				fetch_request.timeout = 0; // no data timeout!
+				fetch_request.connect_timeout =
 					m_httpfetch_timeout;
-				httpfetch_async(fetchrequest);
+				httpfetch_async(fetch_request);
 
 				m_remote_file_transfers.insert(std::make_pair(
 							m_httpfetch_next_id,
@@ -491,12 +493,12 @@ void ClientMediaDownloader::startRemoteMediaTransfers()
 
 void ClientMediaDownloader::startConventionalTransfers(Client *client)
 {
-	assert(m_httpfetch_active == 0);
+	assert(m_httpfetch_active == 0);	// pre-condition
 
 	if (m_uncached_received_count != m_uncached_count) {
 		// Some media files have not been received yet, use the
 		// conventional slow method (minetest protocol) to get them
-		std::list<std::string> file_requests;
+		std::vector<std::string> file_requests;
 		for (std::map<std::string, FileStatus*>::iterator
 				it = m_files.begin();
 				it != m_files.end(); ++it) {
@@ -624,7 +626,7 @@ std::string ClientMediaDownloader::serializeRequiredHashSet()
 			it = m_files.begin();
 			it != m_files.end(); ++it) {
 		if (!it->second->received) {
-			assert(it->second->sha1.size() == 20);
+			FATAL_ERROR_IF(it->second->sha1.size() != 20, "Invalid SHA1 size");
 			os << it->second->sha1;
 		}
 	}
