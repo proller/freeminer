@@ -39,7 +39,7 @@ class Map;
 	Mesh making stuff
 */
 #define FARMESH_STEP_MAX 5
-bool getFarmeshGrid(v3s16 blockpos, int step);
+bool getFarmeshGrid(const v3s16 & blockpos, int step);
 int getFarmeshStep(MapDrawControl& draw_control, const v3POS & player_pos, const v3POS & block_pos);
 
 class MapBlock;

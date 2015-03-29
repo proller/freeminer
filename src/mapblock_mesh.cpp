@@ -61,7 +61,7 @@ int getFarmeshStep(MapDrawControl& draw_control, const v3POS & playerpos, const 
 	return s;
 };
 
-bool getFarmeshGrid(v3s16 blockpos, int step) {
+bool getFarmeshGrid(const v3POS & blockpos, int step) {
 	int skip = pow(2, step - 1);
 	return !(blockpos.X % skip || blockpos.Y % skip || blockpos.Z % skip);
 }

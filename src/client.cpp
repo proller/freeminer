@@ -1490,7 +1490,7 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent, int step)
 
 	//int step = getFarmeshStep(m_env.getClientMap().getControl(), getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
 	if (!step)
-		getFarmeshStep(data->draw_control, getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
+		step = getFarmeshStep(data->draw_control, getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
 
 	if (!getFarmeshGrid(p, step)) {
 //infostream<<"meshskip "<<" s="<<step<< " p="<<p<<" player="<<getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS))<<std::endl;
