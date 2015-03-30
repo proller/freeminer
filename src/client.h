@@ -458,9 +458,9 @@ public:
 
 	u64 getMapSeed(){ return m_map_seed; }
 
-	void addUpdateMeshTask(v3s16 blockpos, bool urgent=false, int step = 0);
+	void addUpdateMeshTask(v3POS blockpos, bool urgent = false, int step = 0);
 	// Including blocks at appropriate edges
-	void addUpdateMeshTaskWithEdge(v3POS blockpos, bool urgent = false);
+	void addUpdateMeshTaskWithEdge(v3POS blockpos, bool urgent = false, int step = 0);
 	void addUpdateMeshTaskForNode(v3s16 nodepos, bool urgent=false);
 
 	void updateMeshTimestampWithEdge(v3s16 blockpos);

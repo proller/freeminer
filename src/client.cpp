@@ -1524,14 +1524,18 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent, int step)
 
 }
 
-void Client::addUpdateMeshTaskWithEdge(v3POS blockpos, bool urgent)
+void Client::addUpdateMeshTaskWithEdge(v3POS blockpos, bool urgent, int step)
 {
 // TODO: skip edges if step>1
+	if (step > 1) {
+			addUpdateMeshTask(blockpos, urgent, step);
+			return;
+	}
 	for (int i=0;i<7;i++)
 	{
 		try{
 			v3s16 p = blockpos + g_6dirs[i];
-			addUpdateMeshTask(p, urgent);
+			addUpdateMeshTask(p, urgent, step);
 		}
 		catch(InvalidPositionException &e){}
 	}
