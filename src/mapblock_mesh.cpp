@@ -1346,33 +1346,10 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 	v3f t = v3f(0,0,0);
 	if (step>1) {
+		translateMesh(m_mesh, v3f(HBS, 0, HBS));
 		float scale = pow(2,step-1);
-//scale *=0.9; //debug
-		//float scale = step;
-		//translateMesh(m_mesh, v3f(-BS/2, -BS/2, -BS/2));
-		//translateMesh(m_mesh, v3f(BS/2, BS/2, BS/2));
-		//float mv = 2.5;
-		//float mv = BS/(2*scale); //ok2
-		//float mv = BS/2;
-		float mv = -BS/4; // TODO BUGgy
-		//float mv = -BS/(4*scale);
-		translateMesh(m_mesh, v3f(mv, mv, mv)); // TODO move to after translate
-		//translateMesh(m_mesh, v3f(-BS, -BS, -BS));
-		scaleMesh(m_mesh, v3f(scale,scale,scale)); // SPOW
-		// TODO: remove this wrong numbers, find formula   good test: fly above ocean
-		//t = v3f(scale*mv,		 scale*mv,		scale*mv); //ok2
-		//t = v3f(scale*BS/2,		 scale*BS/2,		scale*BS/2);
-		//t = v3f(-scale*BS/2,		 -scale*BS/2,		-scale*BS/2);
-		//t = v3f(-scale*BS*2,		 -scale*BS*2,		-scale*BS*2);
-/*
-		if (step == 1)	t = v3f(BS/2,		 BS/2,		BS/2);
-		if (step == 2)	t = v3f(BS*1.666,	-BS/3.0,	BS*1.666);
-		if (step == 3)	t = v3f(BS*2.666,	-BS*2.4,	BS*2.666);
-		if (step == 4)	t = v3f(BS*6.4,		-BS*6.4,	BS*6.4);
-		if (step == 5)	t = v3f(BS*18,		-BS*18,		BS*18);
-		if (step == 6)	t = v3f(BS*40,		-BS*40,		BS*40);
-		if (step == 7)	t = v3f(BS*80,		-BS*80,		BS*80);
-*/
+		scaleMesh(m_mesh, v3f(scale,scale,scale));
+		t = v3f( -HBS, -BS*scale/2+1.4142135623731*BS, -HBS); //magic number is sqrt(2)
 	}
 	translateMesh(m_mesh, intToFloat(data->m_blockpos * MAP_BLOCKSIZE - camera_offset, BS) + t);
 
