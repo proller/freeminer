@@ -25,7 +25,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef SERVER
 	#include "mapblock_mesh.h"
 #endif
-#include "main.h"
 #include "filesys.h"
 #include "voxel.h"
 #include "porting.h"
@@ -784,6 +783,7 @@ u32 Map::updateLighting(enum LightBank bank,
 			// Bottom sunlight is not valid; get the block and loop to it
 
 			pos.Y--;
+			lock->unlock();
 			block = getBlockNoCreateNoEx(pos);
 		}
 		if (porting::getTimeMs() > end_ms) {
@@ -3000,7 +3000,7 @@ MapBlock * ServerMap::loadBlock(v3s16 p3d)
 		block->resetModified();
 
 		if (block->getLightingExpired()) {
-			infostream<<"Loaded block with exiried lighting. (maybe sloooow appear), try recalc " << p3d<<std::endl;
+			verbosestream<<"Loaded block with exiried lighting. (maybe sloooow appear), try recalc " << p3d<<std::endl;
 			lighting_modified_blocks.set(p3d, nullptr);
 		}
 
