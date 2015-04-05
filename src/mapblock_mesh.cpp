@@ -65,6 +65,18 @@ bool getFarmeshGrid(const v3POS & blockpos, int step) {
 	return !(blockpos.X % skip || blockpos.Y % skip || blockpos.Z % skip);
 }
 
+v3POS getFarmeshActual(v3POS blockpos, int step) {
+	//infostream<<" getFarmeshActual "<<blockpos << " step="<< step << " => ";
+	blockpos.X >>= step;
+	blockpos.X <<= step;
+	blockpos.Y >>= step;
+	blockpos.Y <<= step;
+	blockpos.Z >>= step;
+	blockpos.Z <<= step;
+	//infostream<<"  "<<blockpos<<" grid="<<getFarmeshGrid(blockpos, step) << std::endl;
+	return blockpos;
+}
+
 /*
 	MeshMakeData
 */
