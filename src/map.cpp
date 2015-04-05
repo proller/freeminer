@@ -58,7 +58,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 	Map
 */
 Map::Map(IGameDef *gamedef):
-	m_liquid_step_flow(1000),
 	m_blocks_delete(&m_blocks_delete_1),
 	m_gamedef(gamedef),
 	m_transforming_liquid_loop_count_multiplier(1.0f),
@@ -69,6 +68,7 @@ Map::Map(IGameDef *gamedef):
 	m_blocks_update_last(0),
 	m_blocks_save_last(0)
 {
+	m_liquid_step_flow = 1000;
 	updateLighting_last[LIGHTBANK_DAY] = updateLighting_last[LIGHTBANK_NIGHT] = 0;
 	time_life = 0;
 	getBlockCacheFlush();
@@ -661,7 +661,7 @@ s16 Map::propagateSunlight(v3s16 start,
 }
 
 u32 Map::updateLighting(enum LightBank bank,
-		shared_map<v3POS, MapBlock*> & a_blocks,
+		concurrent_map<v3POS, MapBlock*> & a_blocks,
 		std::map<v3POS, MapBlock*> & modified_blocks, unsigned int max_cycle_ms)
 {
 	INodeDefManager *nodemgr = m_gamedef->ndef();
@@ -912,7 +912,7 @@ u32 Map::updateLighting(enum LightBank bank,
 	//m_dout<<"Done ("<<getTimestamp()<<")"<<std::endl;
 }
 
-u32 Map::updateLighting(shared_map<v3POS, MapBlock*> & a_blocks,
+u32 Map::updateLighting(concurrent_map<v3POS, MapBlock*> & a_blocks,
 		std::map<v3POS, MapBlock*> & modified_blocks, unsigned int max_cycle_ms)
 {
 	int ret = 0;
