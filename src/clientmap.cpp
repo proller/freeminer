@@ -372,7 +372,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigne
 					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache)
 			)
 			{
-//infostream<<"culled "<< spn<<" "<<cpn<<"step="<<mesh_step<<" total="<<blocks_occlusion_culled<<std::endl;
+				//infostream<<"culled "<< spn<<" "<<cpn<<"step="<<mesh_step<<" total="<<blocks_occlusion_culled<<std::endl;
 				blocks_occlusion_culled++;
 				continue;
 			}
@@ -507,7 +507,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 	DSTACK(__FUNCTION_NAME);
 
 	ScopeProfiler sp(g_profiler, "CM::renderMap()", SPT_AVG);
-	g_profiler->add("CM::renderMap) count", 1);
+	g_profiler->add("CM::renderMap() count", 1);
 
 	bool is_transparent_pass = pass == scene::ESNRP_TRANSPARENT;
 

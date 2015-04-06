@@ -102,9 +102,7 @@ MeshMakeData::MeshMakeData(IGameDef *gamedef, bool use_shaders, Map * map_, Node
 	draw_control(draw_control_),
 	debug(0),
 	filled(false)
-{
-errorstream<<"MMD "<<map_<<nodecontainer_<<draw_control_<<std::endl;
-}
+{ }
 
 MeshMakeData::~MeshMakeData() {
 	//infostream<<"~MeshMakeData "<<m_blockpos<<std::endl;
@@ -851,7 +849,6 @@ static void getTileInfo(
 	INodeDefManager *ndef = data->m_gamedef->ndef();
 	v3s16 blockpos_nodes = data->m_blockpos * MAP_BLOCKSIZE;
 
-	//int s = sqrt(step);
 	auto n0 = vmanip.getNodeRefUnsafe(blockpos_nodes + p*step);
 
 	// Don't even try to get n1 if n0 is already CONTENT_IGNORE
@@ -859,8 +856,6 @@ static void getTileInfo(
 		makes_face = false;
 		return;
 	}
-	//if(data->debug) infostream<<" GN "<<" step="<<step<<" p="<<p<<" n="<<n0<< n1<< blockpos_nodes<<blockpos_nodes + p*step<<blockpos_nodes + p*step + face_dir*step<<std::endl;
-	//if(data->debug) infostream<<" GN "<<" step="<<step<<" s="<<s<<" p="<<p<<" n="<<n0<< n1<<" bpn="<<blockpos_nodes<<blockpos_nodes + p*s<<blockpos_nodes + p*s + face_dir*s<<std::endl;
 
 	auto n1 = vmanip.getNodeRefUnsafeCheckFlags(blockpos_nodes + p*step + face_dir*step);
 	// if(data->debug) infostream<<" GN "<<n0<< n1<< blockpos_nodes<<blockpos_nodes + p*step<<blockpos_nodes + p*step + face_dir*step<<std::endl;
@@ -1161,7 +1156,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	// 24-155ms for MAP_BLOCKSIZE=32  (NOTE: probably outdated)
 	//TimeTaker timer1("MapBlockMesh()");
 
-	if (step>3) data->debug=1;
+	//if (step>3) data->debug=1;
 
 	if (!data->fill_data())
 		return;
