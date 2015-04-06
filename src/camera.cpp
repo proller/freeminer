@@ -38,7 +38,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/mathconstants.h"
 #include "constants.h"
 
-#define CAMERA_OFFSET_STEP 1000
+#define CAMERA_OFFSET_STEP 5000
 
 #include "nodedef.h"
 #include "game.h" // CameraModes

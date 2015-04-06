@@ -102,7 +102,7 @@ MeshMakeData::MeshMakeData(IGameDef *gamedef, bool use_shaders, Map * map_, Node
 	draw_control(draw_control_),
 	debug(0),
 	filled(false)
-{ }
+{}
 
 MeshMakeData::~MeshMakeData() {
 	//infostream<<"~MeshMakeData "<<m_blockpos<<std::endl;
@@ -1137,6 +1137,7 @@ static void updateAllFastFaceRows(MeshMakeData *data,
 MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	clearHardwareBuffer(false),
 	step(data->step),
+	scale(1),
 	no_draw(data->no_draw),
 	m_mesh(nullptr),
 	m_gamedef(data->m_gamedef),
@@ -1160,6 +1161,8 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 	if (!data->fill_data())
 		return;
+
+	scale = pow(2, step - 1);
 
 	timestamp = data->timestamp;
 
@@ -1363,7 +1366,6 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	v3f t = v3f(0,0,0);
 	if (step>1) {
 		translateMesh(m_mesh, v3f(HBS, 0, HBS));
-		float scale = pow(2,step-1);
 		scaleMesh(m_mesh, v3f(scale,scale,scale));
 		t = v3f( -HBS, -BS*scale/2+1.4142135623731*BS, -HBS); //magic number is sqrt(2)
 	}
@@ -1371,14 +1373,14 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 	if(m_mesh)
 	{
-//#if 0
+#if 0
 		// Usually 1-700 faces and 1-7 materials
 if (data->debug)
 		infostream<<"Updated MapBlock has "<<fastfaces_new.size()<<" faces "
 				<<" step="<<step<< " range="<<data->range<<" p="<<data->m_blockpos
 				<<"and uses "<<m_mesh->getMeshBufferCount()
 				<<" materials (meshbuffers)"<<std::endl;
-//#endif
+#endif
 	}
 
 	//std::cout<<"added "<<fastfaces.getSize()<<" faces."<<std::endl;

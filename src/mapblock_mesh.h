@@ -160,6 +160,7 @@ public:
 	bool clearHardwareBuffer;
 
 	int step;
+	float scale;
 	bool no_draw;
 	unsigned int timestamp;
 

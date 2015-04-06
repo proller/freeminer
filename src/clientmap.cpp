@@ -274,7 +274,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigne
 		}
 	}
 
-	const int maxq = 1000;
+	const int maxq = 10000;
 
 			// No occlusion culling when free_move is on and camera is
 			// inside ground
@@ -348,7 +348,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigne
 			float endoff = -BS*MAP_BLOCKSIZE; //*1.42; //*1.42;
 			v3s16 spn = cam_pos_nodes + v3s16(0,0,0);
 			s16 bs2 = MAP_BLOCKSIZE/2 + 1;
-			bs2 *= mesh_step;
+			bs2 *= mesh->scale;
 			u32 needed_count = 1;
 			if( range > 1 && smesh_size &&
 				occlusion_culling_enabled &&
