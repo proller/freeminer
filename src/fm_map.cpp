@@ -321,3 +321,19 @@ void Map::copy_27_blocks_to_vm(MapBlock * block, VoxelManipulator & vmanip) {
 
 }
 
+MapNode dummy_node;
+
+MapNode & Map::getNodeRef(v3POS p)
+{
+#ifndef NDEBUG
+	ScopeProfiler sp(g_profiler, "Map: getNodeNoEx");
+#endif
+
+	v3POS blockpos = getNodeBlockPos(p);
+	MapBlock *block = getBlockNoCreateNoEx(blockpos);
+	if (!block)
+		return dummy_node;
+
+	v3s16 relpos = p - blockpos*MAP_BLOCKSIZE;
+	return block->getNodeRef(relpos);
+}

@@ -74,8 +74,7 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 		reallocate();
 
 #ifndef SERVER
-	mesh.resize(FARMESH_STEP_MAX+1);
-	//for (auto & i : mesh) i = nullptr;
+	mesh.fill(nullptr);
 #endif
 	m_next_analyze_timestamp = 0;
 	m_abm_timestamp = 0;

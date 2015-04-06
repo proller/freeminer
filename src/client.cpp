@@ -1468,25 +1468,21 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent, int step)
 {
 	//ScopeProfiler sp(g_profiler, "Client: Mesh prepare");
 	MapBlock *b = m_env.getMap().getBlockNoCreateNoEx(p);
-	if(b == NULL)
-{
-//infostream<<"no block for mesh "<<p<<" "<<b<<std::endl;
+	if(b == NULL) {
+		//verbosestream<<"no block for mesh "<<p<<" "<<b<<std::endl;
 		return;
-}
-	
+	}
 
 	/*
 		Create a task to update the mesh of the block
 	*/
 	auto & draw_control = m_env.getClientMap().getControl();
-	std::shared_ptr<MeshMakeData> data(new MeshMakeData(this, m_cache_enable_shaders, m_env.getMap(), draw_control));
-
-	//int step = getFarmeshStep(m_env.getClientMap().getControl(), getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
 	if (!step)
-		step = getFarmeshStep(data->draw_control, getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
+		step = getFarmeshStep(draw_control, getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
+	std::shared_ptr<MeshMakeData> data(new MeshMakeData(this, m_cache_enable_shaders, &m_env.getMap(), step > 1 ? &m_env.getMap() : nullptr, &draw_control));
 
 	if (!getFarmeshGrid(p, step)) {
-//infostream<<"meshskip "<<" s="<<step<< " p="<<p<<" player="<<getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS))<<std::endl;
+		//verbosestream<<"meshskip "<<" s="<<step<< " p="<<p<<" player="<<getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS))<<std::endl;
 		return;
 	}
 
@@ -1506,7 +1502,7 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent, int step)
 		data->setSmoothLighting(m_cache_smooth_lighting);
 		data->step = step;
 		data->range = getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p);
-//if (data->step>=2) infostream<<"meshmake "<<" s="<<data->step<< " p="<<p<<" rng="<<data->range <<std::endl;
+		//if (data->step>=2) infostream<<"meshmake "<<" s="<<data->step<< " p="<<p<<" rng="<<data->range <<std::endl;
 		if (step)
 			data->no_draw = true;
 	}
@@ -1519,7 +1515,6 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent, int step)
 
 void Client::addUpdateMeshTaskWithEdge(v3POS blockpos, bool urgent, int step)
 {
-// TODO: skip edges if step>1
 	if (step > 1) {
 			addUpdateMeshTask(blockpos, urgent, step);
 			return;

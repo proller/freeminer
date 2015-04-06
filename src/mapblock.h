@@ -36,6 +36,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/numeric.h" // getContainerPos
 #include "util/lock.h"
 
+#define FARMESH_STEP_MAX 5
+
 class Map;
 class NodeMetadataList;
 class IGameDef;
@@ -553,6 +555,8 @@ private:
 		Used only internally, because changes can't be tracked
 	*/
 
+public:
+
 	MapNode & getNodeRef(s16 x, s16 y, s16 z)
 	{
 		if(data == NULL)
@@ -573,7 +577,7 @@ public:
 	*/
 
 #ifndef SERVER // Only on client
-	std::vector<MapBlock::mesh_type> mesh;
+	std::array<MapBlock::mesh_type, FARMESH_STEP_MAX> mesh;
 	mesh_type mesh_old;
 #endif
 	

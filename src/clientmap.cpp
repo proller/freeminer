@@ -407,7 +407,7 @@ infostream<<" making mesh for new step="<<mesh_step<<" bp="<<bp<<std::endl;
 			}
 */
 			//if (block->getTimestamp() > mesh->timestamp && (m_mesh_queued < maxq*1.5 || range <= 2)) {
-			if (block->getTimestamp() > mesh->timestamp + (smesh_size ? 0 : range >= 1 ? 60 : 5) && (m_mesh_queued < maxq*1.5 || range <= 2)) {
+			if (block->getTimestamp() > mesh->timestamp /*todo far null block check + (smesh_size ? 0 : range >= 1 ? 60 : 5) */ && (m_mesh_queued < maxq*1.5 || range <= 2)) {
 				m_client->addUpdateMeshTaskWithEdge(bp, mesh_step);
 				++m_mesh_queued;
 			}

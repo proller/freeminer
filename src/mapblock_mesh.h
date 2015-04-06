@@ -28,9 +28,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "voxel.h"
 #include <map>
 
-#define MESH_ZEROCOPY //Exprimental, slower, needed for next farmesh
-
-
 class IGameDef;
 struct MapDrawControl;
 class Map;
@@ -38,7 +35,6 @@ class Map;
 /*
 	Mesh making stuff
 */
-#define FARMESH_STEP_MAX 5
 bool getFarmeshGrid(const v3POS & blockpos, int step);
 int getFarmeshStep(MapDrawControl& draw_control, const v3POS & player_pos, const v3POS & blockpos);
 v3POS getFarmeshActual(v3POS blockpos, int step);
@@ -47,11 +43,9 @@ class MapBlock;
 
 struct MeshMakeData
 {
-#if defined(MESH_ZEROCOPY)
-	Map & m_vmanip;
-#else
-	VoxelManipulator m_vmanip;
-#endif
+	NodeContainer * m_nodecontainer; // Map or filled VoxelManipulator
+	VoxelManipulator m_vmanip_store;
+	NodeContainer & m_vmanip;
 	v3s16 m_blockpos;
 	v3s16 m_crack_pos_relative;
 	v3s16 m_highlighted_pos_relative;
@@ -68,12 +62,13 @@ struct MeshMakeData
 	bool no_draw;
 	unsigned int timestamp;
 	MapBlock * block;
-	Map & map;
-	MapDrawControl& draw_control;
+	Map *map;
+	MapDrawControl *draw_control;
 	bool debug;
 	bool filled;
 
-	MeshMakeData(IGameDef *gamedef, bool use_shaders, Map & map_, MapDrawControl& draw_control_);
+	MeshMakeData(IGameDef *gamedef, bool use_shaders, Map *map_ = nullptr, NodeContainer *nodecontainer_ = nullptr, MapDrawControl *draw_control_ = nullptr);
+	
 	~MeshMakeData();
 
 	/*

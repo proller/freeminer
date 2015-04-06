@@ -40,8 +40,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "nodetimer.h"
 
 #include "mapblock.h"
-#include <unordered_set>
 #include "config.h"
+#include <fm_nodecontainer.h>
 
 class Settings;
 class Database;
@@ -147,7 +147,7 @@ public:
 	virtual void onMapEditEvent(MapEditEvent *event) = 0;
 };
 
-class Map /*: public NodeContainer*/
+class Map : public NodeContainer
 {
 public:
 	Map(IGameDef *gamedef);
@@ -200,17 +200,19 @@ public:
 	//MapNode getNodeNoLock(v3s16 p); // dont use
 	// If is_valid_position is not NULL then this will be set to true if the
 	// position is valid, otherwise false
-	MapNode getNodeNoEx(v3s16 p, bool *is_valid_position = NULL);
+	MapNode getNodeNoEx(v3s16 p, bool *is_valid_position);
 	MapNode getNode(v3POS p) { return getNodeNoEx(p); };
+	MapNode getNodeNoEx(v3s16 p) { return getNodeNoEx(p, nullptr); };
 	//MapNode getNodeLog(v3POS p);
-	MapNode getNodeRefUnsafe(const v3s16 &p) {
-		return getNodeNoEx(p);
+	MapNode & getNodeRefUnsafe(const v3s16 &p) {
+		return getNodeRef(p);
 	}
 
-	const MapNode getNodeRefUnsafeCheckFlags(const v3s16 &p) {
-		return getNodeNoEx(p);
+	const MapNode & getNodeRefUnsafeCheckFlags(const v3s16 &p) {
+		return getNodeRef(p);
 	}
 
+	MapNode & getNodeRef(v3POS p);
 
 
 

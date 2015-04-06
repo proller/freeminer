@@ -67,6 +67,7 @@ bool getFarmeshGrid(const v3POS & blockpos, int step) {
 
 v3POS getFarmeshActual(v3POS blockpos, int step) {
 	//infostream<<" getFarmeshActual "<<blockpos << " step="<< step << " => ";
+	--step;
 	blockpos.X >>= step;
 	blockpos.X <<= step;
 	blockpos.Y >>= step;
@@ -81,10 +82,9 @@ v3POS getFarmeshActual(v3POS blockpos, int step) {
 	MeshMakeData
 */
 
-MeshMakeData::MeshMakeData(IGameDef *gamedef, bool use_shaders, Map & map_, MapDrawControl& draw_control_):
-#if defined(MESH_ZEROCOPY)
-	m_vmanip(map_),
-#endif
+MeshMakeData::MeshMakeData(IGameDef *gamedef, bool use_shaders, Map * map_, NodeContainer * nodecontainer_, MapDrawControl * draw_control_):
+	m_nodecontainer(nodecontainer_),
+	m_vmanip(nodecontainer_ ? *nodecontainer_ : m_vmanip_store),
 	m_blockpos(-1337,-1337,-1337),
 	m_crack_pos_relative(-1337, -1337, -1337),
 	m_highlighted_pos_relative(-1337, -1337, -1337),
@@ -102,7 +102,9 @@ MeshMakeData::MeshMakeData(IGameDef *gamedef, bool use_shaders, Map & map_, MapD
 	draw_control(draw_control_),
 	debug(0),
 	filled(false)
-{}
+{
+errorstream<<"MMD "<<map_<<nodecontainer_<<draw_control_<<std::endl;
+}
 
 MeshMakeData::~MeshMakeData() {
 	//infostream<<"~MeshMakeData "<<m_blockpos<<std::endl;
@@ -122,18 +124,19 @@ bool MeshMakeData::fill_data()
 	if (filled)
 		return filled;
 
-	if (!block)
-		block = map.getBlockNoCreateNoEx(m_blockpos);
+	if (!block && map)
+		block = map->getBlockNoCreateNoEx(m_blockpos);
 
 	if (!block)
 		return filled;
 	filled = true;
 	timestamp = block->getTimestamp();
 
-#if !defined(MESH_ZEROCOPY)
+	if (!m_nodecontainer) {
 	ScopeProfiler sp(g_profiler, "Client: Mesh data fill");
 
-	map.copy_27_blocks_to_vm(block, m_vmanip);
+	if (map)
+		map->copy_27_blocks_to_vm(block, *static_cast<VoxelManipulator*>(&m_vmanip));
 
 #if 0
 	v3POS blockpos_nodes = m_blockpos*MAP_BLOCKSIZE;
@@ -179,14 +182,14 @@ bool MeshMakeData::fill_data()
 
 #endif
 
-#endif
+}
 	return filled;
 }
 
 void MeshMakeData::fillSingleNode(MapNode *node, v3POS blockpos) {
 	m_blockpos = blockpos;
 
-#if !defined(MESH_ZEROCOPY)
+	if (!m_nodecontainer) {
 	v3s16 blockpos_nodes = m_blockpos * MAP_BLOCKSIZE;
 	VoxelArea area(blockpos_nodes-v3s16(1,1,1)*MAP_BLOCKSIZE,
 			blockpos_nodes+v3s16(1,1,1)*MAP_BLOCKSIZE*2-v3s16(1,1,1));
@@ -194,8 +197,8 @@ void MeshMakeData::fillSingleNode(MapNode *node, v3POS blockpos) {
 	s32 our_node_index = area.index(1,1,1);
 
 	// Allocate this block + neighbors
-	m_vmanip.clear();
-	m_vmanip.addArea(area);
+	m_vmanip_store.clear();
+	m_vmanip_store.addArea(area);
 
 	// Fill in data
 	MapNode *data = reinterpret_cast<MapNode*>( ::operator new(volume * sizeof(MapNode)));
@@ -210,9 +213,10 @@ void MeshMakeData::fillSingleNode(MapNode *node, v3POS blockpos) {
 			data[i] = MapNode(CONTENT_AIR, LIGHT_MAX, 0);
 		}
 	}
-	m_vmanip.copyFrom(data, area, area.MinEdge, area.MinEdge, area.getExtent());
+	m_vmanip_store.copyFrom(data, area, area.MinEdge, area.MinEdge, area.getExtent());
 	delete data;
-#endif
+	filled = true;
+	}
 }
 
 void MeshMakeData::setCrack(int crack_level, v3s16 crack_pos)
@@ -1242,7 +1246,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	{
 		PreMeshBuffer &p = collector.prebuffers[i];
 
-		if (step <= data->draw_control.farmesh || !data->draw_control.farmesh) {
+		if (!data->draw_control || (step <= data->draw_control->farmesh || !data->draw_control->farmesh)) {
 		// Generate animation data
 		// - Cracks
 		if(p.tile.material_flags & MATERIAL_FLAG_CRACK)

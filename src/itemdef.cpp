@@ -431,28 +431,6 @@ public:
 				/*
 					Make a mesh from the node
 				*/
-				Map map(gamedef);
-				MapDrawControl map_draw_control;
-				MeshMakeData mesh_make_data(gamedef, false, map, map_draw_control);
-				v3POS bp = v3POS(32000, 32000, 32000-id);
-				auto block = map.createBlankBlockNoInsert(bp);
-				auto air_node = MapNode(CONTENT_AIR, LIGHT_MAX);
-				for(s16 z0=0; z0<=2; ++z0)
-				for(s16 y0=0; y0<=2; ++y0)
-				for(s16 x0=0; x0<=2; ++x0) {
-					v3s16 p(x0,y0,z0);
-					block->setNode(p, air_node);
-				}
-				u8 param2 = 0;
-				if (f.param_type_2 == CPT2_WALLMOUNTED)
-					param2 = 1;
-				MapNode mesh_make_node(id, param1, param2);
-				mesh_make_data.fillSingleNode(&mesh_make_node, bp);
-				block->setNode(v3s16(1,1,1), mesh_make_node);
-				map.insertBlock(block);
-				MapBlockMesh mapblock_mesh(&mesh_make_data, bp*MAP_BLOCKSIZE);
-
-/* MT
 				MeshMakeData mesh_make_data(gamedef, false);
 				u8 param2 = 0;
 				if (f.param_type_2 == CPT2_WALLMOUNTED)
@@ -460,7 +438,6 @@ public:
 				MapNode mesh_make_node(id, param1, param2);
 				mesh_make_data.fillSingleNode(&mesh_make_node);
 				MapBlockMesh mapblock_mesh(&mesh_make_data, v3s16(0, 0, 0));
-*/
 
 				node_mesh = mapblock_mesh.getMesh();
 				node_mesh->grab();

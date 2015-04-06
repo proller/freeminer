@@ -33,6 +33,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <list>
 #include <map>
 
+#include <fm_nodecontainer.h>
+
 class INodeDefManager;
 
 // For VC++
@@ -347,7 +349,7 @@ enum VoxelPrintMode
 	VOXELPRINT_LIGHT_DAY,
 };
 
-class VoxelManipulator /*: public NodeContainer*/
+class VoxelManipulator : public NodeContainer
 {
 public:
 	VoxelManipulator();

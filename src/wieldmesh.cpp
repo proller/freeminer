@@ -342,11 +342,10 @@ void WieldMeshSceneNode::setItem(const ItemStack &item, IGameDef *gamedef)
 		} else if (f.drawtype == NDT_NORMAL || f.drawtype == NDT_ALLFACES) {
 			setCube(f.tiles, def.wield_scale, tsrc);
 		} else {
-			Map map(gamedef);
-			MapDrawControl map_draw_control;
 			//// TODO: Change false in the following constructor args to
 			//// appropriate value when shader is added for wield items (if applicable)
-			MeshMakeData mesh_make_data(gamedef, false, map, map_draw_control);
+			//MeshMakeData mesh_make_data(gamedef, false, nullptr, nullptr, MapDrawControl());
+			MeshMakeData mesh_make_data(gamedef, false);
 			MapNode mesh_make_node(id, 255, 0);
 			mesh_make_data.fillSingleNode(&mesh_make_node);
 			MapBlockMesh mapblock_mesh(&mesh_make_data, v3s16(0, 0, 0));
@@ -355,6 +354,7 @@ void WieldMeshSceneNode::setItem(const ItemStack &item, IGameDef *gamedef)
 			m_meshnode->setScale(
 					def.wield_scale * WIELD_SCALE_FACTOR
 					/ (BS * f.visual_scale));
+
 		}
 		for (u32 i = 0; i < m_meshnode->getMaterialCount(); ++i) {
 			assert(i < 6);
