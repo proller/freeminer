@@ -676,6 +676,12 @@ void ServerEnvironment::loadMeta()
 		u32 active_object_count = this->countObjects(block, &m_env->getServerMap(), active_object_count_wider);
 		m_env->m_added_objects = 0;
 
+#if !ENABLE_THREADS
+		auto lock_map = m_env->getServerMap().m_nothread_locker.try_lock_shared_rec();
+		if (!lock_map->owns_lock())
+			return;
+#endif
+
 		v3POS bpr = block->getPosRelative();
 		v3s16 p0;
 		for(p0.X=0; p0.X<MAP_BLOCKSIZE; p0.X++)
@@ -743,13 +749,19 @@ void MapBlock::abmTriggersRun(ServerEnvironment * m_env, u32 time, bool activate
 		ScopeProfiler sp(g_profiler, "ABM trigger blocks", SPT_ADD);
 
 		std::unique_lock<std::mutex> lock(abm_triggers_mutex);
-		if (!abm_triggers)
-			return;
-
 		if (!lock.owns_lock())
 			return;
 
+		if (!abm_triggers)
+			return;
+
 		ServerMap *map = &m_env->getServerMap();
+
+#if !ENABLE_THREADS
+		auto lock_map = m_env->getServerMap().m_nothread_locker.try_lock_shared_rec();
+		if (!lock_map->owns_lock())
+			return;
+#endif
 
 		float dtime = 0;
 		if (m_abm_timestamp) {
@@ -956,9 +968,9 @@ bool ServerEnvironment::swapNode(v3s16 p, const MapNode &n)
 	return true;
 }
 
-std::set<u16> ServerEnvironment::getObjectsInsideRadius(v3f pos, float radius)
+std::unordered_set<u16> ServerEnvironment::getObjectsInsideRadius(v3f pos, float radius)
 {
-	std::set<u16> objects;
+	std::unordered_set<u16> objects;
 	auto lock = m_active_objects.lock_shared_rec();
 	for(auto
 			i = m_active_objects.begin();
@@ -966,6 +978,11 @@ std::set<u16> ServerEnvironment::getObjectsInsideRadius(v3f pos, float radius)
 	{
 		ServerActiveObject* obj = i->second;
 		u16 id = i->first;
+		if (!obj) {
+			infostream<<"ServerEnvironment::getObjectsInsideRadius(): "<<"got null object"<<id<<" = "<<obj<<std::endl;
+			continue;
+		}
+
 		v3f objectpos = obj->getBasePosition();
 		if(objectpos.getDistanceFrom(pos) > radius)
 			continue;
@@ -1134,7 +1151,9 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	}
 
 	TimeTaker timer_step("Environment step");
+#if ENABLE_THREADS
 	g_profiler->add("SMap: Blocks", getMap().m_blocks.size());
+#endif
 
 	/*
 		Handle players
@@ -1517,11 +1536,18 @@ int ServerEnvironment::analyzeBlocks(float dtime, unsigned int max_cycle_ms) {
 		u32 end_ms = porting::getTimeMs() + max_cycle_ms/10;
 
 		if (m_abm_random_blocks.empty()) {
-			auto lock = m_map->m_blocks.try_lock_shared_rec();
-			for (auto ir : m_map->m_blocks) {
-				if (!ir.second || !ir.second->abm_triggers)
-					continue;
-				m_abm_random_blocks.emplace_back(ir.first);
+#if !ENABLE_THREADS
+			auto lock_map = m_map->m_nothread_locker.try_lock_shared_rec();
+			if (lock_map->owns_lock())
+#endif
+			{
+				auto lock = m_map->m_blocks.try_lock_shared_rec();
+				if (lock->owns_lock())
+				for (auto ir : m_map->m_blocks) {
+					if (!ir.second || !ir.second->abm_triggers)
+						continue;
+					m_abm_random_blocks.emplace_back(ir.first);
+				}
 			}
 			//infostream<<"Start ABM random cycle s="<<m_abm_random_blocks.size()<<std::endl;
 		}
