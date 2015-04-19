@@ -1,4 +1,4 @@
-package org.freeminer.freeminer;
+package org.freeminer.minetest;
 
 import java.io.BufferedReader;
 import java.io.File;

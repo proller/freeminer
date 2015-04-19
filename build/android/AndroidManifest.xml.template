@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-	package="org.freeminer.freeminer"
+	package="org.freeminer.minetest"
 	android:versionCode="###ANDROID_VERSION###"
 	android:versionName="###BASE_VERSION###.###ANDROID_VERSION###"
 	android:installLocation="auto">
@@ -12,7 +12,7 @@
 	###DEBUG_BUILD###
 	<application android:icon="@drawable/irr_icon" android:label="freeminer" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" ###DEBUG_FLAG###>
 	<activity android:name=".MtNativeActivity"
-		android:label="freeminer"
+		android:label="freeminermt"
 		android:launchMode="singleTask"
 		android:configChanges="orientation|keyboard|keyboardHidden|navigation"
 		android:screenOrientation="sensorLandscape"

@@ -1,4 +1,4 @@
-package org.freeminer.freeminer;
+package org.freeminer.minetest;
 
 import android.app.Activity;
 import android.app.AlertDialog;
