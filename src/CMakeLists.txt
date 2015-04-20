@@ -89,7 +89,7 @@ else()
 	set(ENABLE_THREADS 0)
 endif()
 
-option(MINETEST_PROTO "Use minetest protocol (Slow and buggy)" 0)
+option(MINETEST_PROTO "Use minetest protocol (Slow and buggy)" 1)
 if(MINETEST_PROTO)
 	set(MINETEST_PROTO 1)
 	message(STATUS "Using minetest compatible networking (slow, some features missing)")
