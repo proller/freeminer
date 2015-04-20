@@ -1,4 +1,4 @@
-package org.freeminer.minetest;
+package org.freeminer.freeminermt;
 
 import android.app.NativeActivity;
 import android.content.Intent;

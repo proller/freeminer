@@ -61,7 +61,7 @@ include $(PREBUILT_STATIC_LIBRARY)
 
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := freeminer
+LOCAL_MODULE := freeminermt
 
 LOCAL_CPP_FEATURES += exceptions
 

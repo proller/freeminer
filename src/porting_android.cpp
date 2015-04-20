@@ -138,7 +138,7 @@ void initAndroid()
 		exit(-1);
 	}
 
-	nativeActivity = findClass("org/freeminer/freeminer/MtNativeActivity");
+	nativeActivity = findClass("org/freeminer/freeminermt/MtNativeActivity");
 	if (nativeActivity == 0) {
 		errorstream <<
 			"porting::initAndroid unable to find java native activity class" <<
