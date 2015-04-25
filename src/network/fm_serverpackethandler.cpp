@@ -26,7 +26,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "content_abm.h"
 #include "content_sao.h"
 #include "emerge.h"
-#include "main.h"
 #include "nodedef.h"
 #include "player.h"
 #include "rollback_interface.h"
@@ -46,13 +45,15 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 //todo: split as in serverpackethandler.cpp
 
-void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
+void Server::ProcessData(NetworkPacket *pkt)
 {
 	DSTACK(__FUNCTION_NAME);
 	// Environment is locked first.
 	//JMutexAutoLock envlock(m_env_mutex);
 
 	ScopeProfiler sp(g_profiler, "Server::ProcessData");
+
+	auto peer_id = pkt->getPeerId();
 
 	std::string addr_s;
 	try{
@@ -86,13 +87,16 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 	try
 	{
 
+	auto datasize = pkt->getSize();
+
 	if(datasize < 2)
 		return;
 
 	int command;
-	std::map<int, msgpack::object> packet;
+	MsgpackPacket packet;
 	msgpack::unpacked msg;
-	if (!con::parse_msgpack_packet(data, datasize, &packet, &command, &msg)) {
+	if (!con::parse_msgpack_packet(pkt->getString(0), datasize, &packet, &command, &msg)) {
+		verbosestream<<"Server: Ignoring broken packet from " <<addr_s<<" (peer_id="<<peer_id<<")"<<std::endl;
 		return;
 	}
 
@@ -538,6 +542,8 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		player->setYaw(modulo360f(packet[TOSERVER_PLAYERPOS_YAW].as<f32>()));
 		u32 keyPressed = packet[TOSERVER_PLAYERPOS_KEY_PRESSED].as<u32>();
 		player->keyPressed = keyPressed;
+		{
+		std::lock_guard<std::mutex> lock(player->control_mutex);
 		player->control.up = (bool)(keyPressed&1);
 		player->control.down = (bool)(keyPressed&2);
 		player->control.left = (bool)(keyPressed&4);
@@ -547,7 +553,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		player->control.sneak = (bool)(keyPressed&64);
 		player->control.LMB = (bool)(keyPressed&128);
 		player->control.RMB = (bool)(keyPressed&256);
-
+		}
 		auto old_pos = playersao->m_last_good_position;
 		if(playersao->checkMovementCheat()){
 			// Call callbacks
@@ -565,8 +571,10 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			auto uptime = m_uptime.get();
 			if (!obj->m_uptime_last)  // not very good place, but minimum modifications
 				obj->m_uptime_last = uptime - 0.1;
-			obj->step(uptime - obj->m_uptime_last, true); //todo: maybe limit count per time
-			obj->m_uptime_last = uptime;
+			if (uptime - obj->m_uptime_last > 0.5) {
+				obj->step(uptime - obj->m_uptime_last, true); //todo: maybe limit count per time
+				obj->m_uptime_last = uptime;
+			}
 		}
 
 		/*infostream<<"Server::ProcessData(): Moved player "<<peer_id<<" to "
@@ -615,8 +623,8 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			ma->from_inv.applyCurrentPlayer(player->getName());
 			ma->to_inv.applyCurrentPlayer(player->getName());
 
-			setInventoryModified(ma->from_inv);
-			setInventoryModified(ma->to_inv);
+			setInventoryModified(ma->from_inv, false);
+			setInventoryModified(ma->to_inv, false);
 
 			bool from_inv_is_current_player =
 				(ma->from_inv.type == InventoryLocation::PLAYER) &&
@@ -673,7 +681,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 
 			da->from_inv.applyCurrentPlayer(player->getName());
 
-			setInventoryModified(da->from_inv);
+			setInventoryModified(da->from_inv, false);
 
 			/*
 				Disable dropping items out of craftpreview
@@ -704,7 +712,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 
 			ca->craft_inv.applyCurrentPlayer(player->getName());
 
-			setInventoryModified(ca->craft_inv);
+			setInventoryModified(ca->craft_inv, false);
 
 			//bool craft_inv_is_current_player =
 			//	(ca->craft_inv.type == InventoryLocation::PLAYER) &&
@@ -725,6 +733,9 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		a->apply(this, playersao, this);
 		// Eat the action
 		delete a;
+
+		SendInventory(playersao);
+
 	}
 	else if(command == TOSERVER_CHAT_MESSAGE)
 	{

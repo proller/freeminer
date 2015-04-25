@@ -22,7 +22,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "localplayer.h"
 
-#include "main.h" // For g_settings
 #include "event.h"
 #include "collision.h"
 #include "gamedef.h"
@@ -208,8 +207,14 @@ void LocalPlayer::move(f32 dtime, Environment *env, f32 pos_max_d,
 	{
 		f32 maxd = 0.5*BS + sneak_max;
 		v3f lwn_f = intToFloat(m_sneak_node, BS);
+		auto old_pos = position;
 		position.X = rangelim(position.X, lwn_f.X-maxd, lwn_f.X+maxd);
 		position.Z = rangelim(position.Z, lwn_f.Z-maxd, lwn_f.Z+maxd);
+
+		if (old_pos != position) {
+			m_speed.X = rangelim(m_speed.X, -movement_speed_climb, movement_speed_climb);
+			m_speed.Z = rangelim(m_speed.Z, -movement_speed_climb, movement_speed_climb);
+		}
 
 		if(!is_climbing)
 		{
@@ -232,7 +237,7 @@ void LocalPlayer::move(f32 dtime, Environment *env, f32 pos_max_d,
 	// this shouldn't be hardcoded but transmitted from server
 	float player_stepheight = touching_ground ? (BS*0.6) : (BS*0.2);
 
-	if (g_settings->getBool("autojump")) {
+	if (control.aux1 || g_settings->getBool("autojump")) {
 		player_stepheight += (0.5 * BS);
 	}
 

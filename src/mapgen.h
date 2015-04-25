@@ -123,8 +123,8 @@ struct MapgenParams {
 		water_level(1),
 		liquid_pressure(0),
 		flags(MG_TREES | MG_CAVES | MG_LIGHT),
-		np_biome_heat(NoiseParams(15, 30, v3f(500.0, 500.0, 500.0), 5349, 2, 0.5, 2.0)),
-		np_biome_humidity(NoiseParams(50, 50, v3f(500.0, 500.0, 500.0), 842, 3, 0.5, 2.0)),
+		np_biome_heat(NoiseParams(15, 30, v3f(400.0, 400.0, 400.0), 5349, 2, 0.5, 2.0)),
+		np_biome_humidity(NoiseParams(50, 50, v3f(400.0, 400.0, 400.0), 842, 3, 0.5, 2.0)),
 		sparams(NULL)
 	{}
 
@@ -188,36 +188,69 @@ struct MapgenFactory {
 	virtual ~MapgenFactory() {}
 };
 
-class GenElement {
+typedef std::map<std::string, std::string> StringMap;
+typedef u32 ObjDefHandle;
+
+#define OBJDEF_INVALID_INDEX ((u32)(-1))
+#define OBJDEF_INVALID_HANDLE 0
+#define OBJDEF_HANDLE_SALT 0x00585e6fu
+#define OBJDEF_MAX_ITEMS (1 << 18)
+#define OBJDEF_UID_MASK ((1 << 7) - 1)
+
+enum ObjDefType {
+	OBJDEF_GENERIC,
+	OBJDEF_BIOME,
+	OBJDEF_ORE,
+	OBJDEF_DECORATION,
+	OBJDEF_SCHEMATIC,
+};
+
+class ObjDef {
 public:
-	virtual ~GenElement() {}
-	u32 id;
+	virtual ~ObjDef() {}
+
+	u32 index;
+	u32 uid;
+	ObjDefHandle handle;
 	std::string name;
 };
 
-class GenElementManager {
+class ObjDefManager {
 public:
-	static const char *ELEMENT_TITLE;
-	static const size_t ELEMENT_LIMIT = -1;
+	ObjDefManager(IGameDef *gamedef, ObjDefType type);
+	virtual ~ObjDefManager();
 
-	GenElementManager(IGameDef *gamedef);
-	virtual ~GenElementManager();
+	virtual const char *getObjectTitle() const = 0;
 
-	virtual GenElement *create(int type) = 0;
-
-	virtual u32 add(GenElement *elem);
-	virtual GenElement *get(u32 id);
-	virtual GenElement *update(u32 id, GenElement *elem);
-	virtual GenElement *remove(u32 id);
 	virtual void clear();
+	virtual ObjDef *getByName(const std::string &name) const;
 
-	virtual GenElement *getByName(const std::string &name);
+	//// Add new/get/set object definitions by handle
+	virtual ObjDefHandle add(ObjDef *obj);
+	virtual ObjDef *get(ObjDefHandle handle) const;
+	virtual ObjDef *set(ObjDefHandle handle, ObjDef *obj);
 
-	INodeDefManager *getNodeDef() { return m_ndef; }
+	//// Raw variants that work on indexes
+	virtual u32 addRaw(ObjDef *obj);
+
+	// It is generally assumed that getRaw() will always return a valid object
+	// This won't be true if people do odd things such as call setRaw() with NULL
+	virtual ObjDef *getRaw(u32 index) const;
+	virtual ObjDef *setRaw(u32 index, ObjDef *obj);
+
+	size_t getNumObjects() const { return m_objects.size(); }
+	ObjDefType getType() const { return m_objtype; }
+	INodeDefManager *getNodeDef() const { return m_ndef; }
+
+	u32 validateHandle(ObjDefHandle handle) const;
+	static ObjDefHandle createHandle(u32 index, ObjDefType type, u32 uid);
+	static bool decodeHandle(ObjDefHandle handle, u32 *index,
+		ObjDefType *type, u32 *uid);
 
 protected:
 	INodeDefManager *m_ndef;
-	std::vector<GenElement *> m_elements;
+	std::vector<ObjDef *> m_objects;
+	ObjDefType m_objtype;
 };
 
 #endif

@@ -33,7 +33,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "map.h"
 #include "emerge.h"
 #include "serverobject.h"              // TODO this is used for cleanup of only
-#include "main.h"                      // for g_settings
 
 #include "util/numeric.h"
 #include "util/mathconstants.h"
@@ -389,7 +388,15 @@ int RemoteClient::GetNextBlocks (
 			/*
 				Check if map has this block
 			*/
-			MapBlock *block = env->getMap().getBlockNoCreateNoEx(p);
+
+			MapBlock *block;
+			{
+#if !ENABLE_THREADS
+			auto lock = env->getServerMap().m_nothread_locker.lock_shared_rec();
+#endif
+
+			block = env->getMap().getBlockNoCreateNoEx(p);
+			}
 
 			bool surely_not_found_on_disk = false;
 			bool block_is_invalid = false;

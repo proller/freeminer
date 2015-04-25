@@ -49,10 +49,10 @@ LOCAL_MODULE := crypto
 LOCAL_SRC_FILES := deps/openssl/libcrypto.a
 include $(PREBUILT_STATIC_LIBRARY)
 
-include $(CLEAR_VARS)
-LOCAL_MODULE := iconv
-LOCAL_SRC_FILES := deps/libiconv/lib/.libs/libiconv.a
-include $(PREBUILT_STATIC_LIBRARY)
+#include $(CLEAR_VARS)
+#LOCAL_MODULE := iconv
+#LOCAL_SRC_FILES := deps/libiconv/lib/.libs/libiconv.a
+#include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := msgpack
@@ -81,7 +81,7 @@ LOCAL_CFLAGS := -D_IRR_ANDROID_PLATFORM_      \
 				-DHAVE_THREAD_LOCAL=1 \
 				-pipe -fstrict-aliasing
 
-#too slow fmtodo				-DENABLE_THREADS=1 -DHAVE_FUTURE=1 -DHAVE_THREAD_LOCAL=1 \
+#too slow fmtodo				-DENABLE_THREADS=1 -DHAVE_FUTURE=1 \
 
 
 ifndef NDEBUG
@@ -105,7 +105,6 @@ endif
 LOCAL_C_INCLUDES :=                               \
 		jni/src/enet/include                      \
 		deps/msgpack/include                      \
-		deps/libiconv/include                     \
 		deps/msgpack/src                          \
 		jni/src jni/src/sqlite                    \
 		jni/src/script                            \
@@ -119,9 +118,10 @@ LOCAL_C_INCLUDES :=                               \
 		deps/libvorbis-libogg-android/jni/include \
 		deps/leveldb/include                      \
 		deps/sqlite/
+#		deps/libiconv/include                     \
+
 
 LOCAL_SRC_FILES :=                                \
-		jni/src/util/utf8.cpp                     \
 		jni/src/gsmapper.cpp                      \
 		jni/src/guiTextInputMenu.cpp              \
 		jni/src/FMColoredString.cpp               \
@@ -132,7 +132,6 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/intlGUIEditBox.cpp                \
 		jni/src/key_value_storage.cpp             \
 		jni/src/log_types.cpp                     \
-		jni/src/profiler.cpp                      \
 		jni/src/ban.cpp                           \
 		jni/src/camera.cpp                        \
 		jni/src/cavegen.cpp                       \
@@ -175,9 +174,11 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/guiKeyChangeMenu.cpp              \
 		jni/src/guiPasswordChange.cpp             \
 		jni/src/guiTable.cpp                      \
+		jni/src/guiscalingfilter.cpp              \
 		jni/src/guiVolumeChange.cpp               \
 		jni/src/httpfetch.cpp                     \
 		jni/src/hud.cpp                           \
+		jni/src/imagefilters.cpp                  \
 		jni/src/inventory.cpp                     \
 		jni/src/inventorymanager.cpp              \
 		jni/src/itemdef.cpp                       \
@@ -215,6 +216,7 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/player.cpp                        \
 		jni/src/porting_android.cpp               \
 		jni/src/porting.cpp                       \
+		jni/src/profiler.cpp                      \
 		jni/src/quicktune.cpp                     \
 		jni/src/rollback.cpp                      \
 		jni/src/rollback_interface.cpp            \
@@ -365,8 +367,8 @@ LOCAL_SRC_FILES += \
 		jni/src/enet/protocol.c                  \
 		jni/src/enet/unix.c
 
-LOCAL_STATIC_LIBRARIES += iconv msgpack
-
+LOCAL_STATIC_LIBRARIES += msgpack
+# iconv
 
 ifeq ($(HAVE_LEVELDB), 1)
 	LOCAL_STATIC_LIBRARIES += LevelDB

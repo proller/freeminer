@@ -209,7 +209,8 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("mg_name", "indev");
 	settings->setDefault("water_level", "1");
 	settings->setDefault("chunksize", "5");
-	settings->setDefault("mg_flags", "trees, caves, v6_biome_blend, v6_jungles, dungeons");
+	settings->setDefault("mg_flags", "trees, caves, dungeons");
+	settings->setDefault("mgv6_spflags", "jungles, biome_blend, snowbiomes");
 	settings->setDefault("enable_floating_dungeons", "true");
 
 	settings->setDefault("mg_math", ""); // configuration in json struct
@@ -221,7 +222,7 @@ void set_default_settings(Settings *settings) {
 	//
 
 	// Filters
-	settings->setDefault("anisotropic_filter", "false");
+	settings->setDefault("anisotropic_filter", "true");
 	settings->setDefault("bilinear_filter", "false");
 	settings->setDefault("trilinear_filter", "false");
 
@@ -247,7 +248,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("display_gamma", "1.8");
 	settings->setDefault("disable_wieldlight", "false");
 	settings->setDefault("enable_node_highlighting", "false");
-	settings->setDefault("mip_map", "false");
+	settings->setDefault("mip_map", "true");
 	settings->setDefault("ambient_occlusion_gamma", "2.2");
 
 	// Clouds, water, glass, leaves, fog
@@ -331,6 +332,9 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("crosshair_alpha", "255");
 	settings->setDefault("hud_scaling", "1.0");
 	settings->setDefault("gui_scaling", "1.0");
+	settings->setDefault("gui_scaling_filter", "false");
+	settings->setDefault("gui_scaling_filter_txr2img", "true");
+
 	settings->setDefault("hud_hotbar_max_width", "1.0");
 
 	// Client Backend
@@ -397,7 +401,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("cache_block_before_spawn", "true");
 	settings->setDefault("active_object_send_range_blocks", "3");
 #if ENABLE_THREADS
-	settings->setDefault("active_block_range", "3");
+	settings->setDefault("active_block_range", "4");
 	settings->setDefault("abm_neighbors_range_max", win32 ? "1" : "16");
 #else
 	settings->setDefault("active_block_range", "2");
@@ -538,7 +542,6 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("farmesh", "2");
 	settings->setDefault("farmesh_step", "1");
 	settings->setDefault("new_style_leaves", "false");
-	settings->setDefault("mip_map", "true");
 	settings->setDefault("autojump", "1");
 
 #else

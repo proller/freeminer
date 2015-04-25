@@ -144,6 +144,8 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("crosshair_alpha", "255");
 	settings->setDefault("hud_scaling", "1.0");
 	settings->setDefault("gui_scaling", "1.0");
+	settings->setDefault("gui_scaling_filter", "false");
+	settings->setDefault("gui_scaling_filter_txr2img", "true");
 	settings->setDefault("mouse_sensitivity", "0.2");
 	settings->setDefault("enable_sound", "true");
 	settings->setDefault("sound_volume", "0.8");
@@ -300,7 +302,8 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("mg_name", "v6");
 	settings->setDefault("water_level", "1");
 	settings->setDefault("chunksize", "5");
-	settings->setDefault("mg_flags", "");
+	settings->setDefault("mg_flags", "dungeons");
+	settings->setDefault("mgv6_spflags", "jungles");
 	settings->setDefault("enable_floating_dungeons", "true");
 
 	// IPv6

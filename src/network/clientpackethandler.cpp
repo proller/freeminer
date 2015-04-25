@@ -155,9 +155,7 @@ void Client::handleCommand_AccessDenied(NetworkPacket* pkt)
 		u8 denyCode = SERVER_ACCESSDENIED_UNEXPECTED_DATA;
 		*pkt >> denyCode;
 		if (denyCode == SERVER_ACCESSDENIED_CUSTOM_STRING) {
-			std::wstring wide_reason;
-			*pkt >> wide_reason;
-			m_access_denied_reason = wide_to_narrow(wide_reason);
+			*pkt >> m_access_denied_reason;
 		}
 		else if (denyCode < SERVER_ACCESSDENIED_MAX) {
 			m_access_denied_reason = accessDeniedStrings[denyCode];
@@ -253,8 +251,9 @@ void Client::handleCommand_BlockData(NetworkPacket* pkt)
 	/*
 		Add it to mesh update queue and set it to be acknowledged after update.
 	*/
-	//addUpdateMeshTaskWithEdge(p, true);
 	updateMeshTimestampWithEdge(p);
+	if (getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p) <= 1)
+		addUpdateMeshTaskWithEdge(p);
 
 	sendGotBlocks(p);
 }
@@ -350,7 +349,6 @@ void Client::handleCommand_ChatMessage(NetworkPacket* pkt)
 void Client::handleCommand_ActiveObjectRemoveAdd(NetworkPacket* pkt)
 {
 	/*
-		u16 command
 		u16 count of removed objects
 		for all removed objects {
 			u16 id
@@ -364,30 +362,34 @@ void Client::handleCommand_ActiveObjectRemoveAdd(NetworkPacket* pkt)
 		}
 	*/
 
-	// Read removed objects
-	u8 type;
-	u16 removed_count, added_count, id;
+	try {
+		u8 type;
+		u16 removed_count, added_count, id;
 
-	*pkt >> removed_count;
+		// Read removed objects
+		*pkt >> removed_count;
 
-	for (u16 i = 0; i < removed_count; i++) {
-		*pkt >> id;
-		m_env.removeActiveObject(id);
-	}
+		for (u16 i = 0; i < removed_count; i++) {
+			*pkt >> id;
+			m_env.removeActiveObject(id);
+		}
 
-	// Read added objects
-	*pkt >> added_count;
+		// Read added objects
+		*pkt >> added_count;
 
-	for (u16 i = 0; i < added_count; i++) {
-		*pkt >> id >> type;
-		m_env.addActiveObject(id, type, pkt->readLongString());
+		for (u16 i = 0; i < added_count; i++) {
+			*pkt >> id >> type;
+			m_env.addActiveObject(id, type, pkt->readLongString());
+		}
+	} catch (PacketError &e) {
+		infostream << "handleCommand_ActiveObjectRemoveAdd: " << e.what()
+				<< ". The packet is unreliable, ignoring" << std::endl;
 	}
 }
 
 void Client::handleCommand_ActiveObjectMessages(NetworkPacket* pkt)
 {
 	/*
-		u16 command
 		for all objects
 		{
 			u16 id
@@ -401,21 +403,27 @@ void Client::handleCommand_ActiveObjectMessages(NetworkPacket* pkt)
 	// Throw them in an istringstream
 	std::istringstream is(datastring, std::ios_base::binary);
 
-	while(is.eof() == false) {
-		is.read(buf, 2);
-		u16 id = readU16((u8*)buf);
-		if (is.eof())
-			break;
-		is.read(buf, 2);
-		size_t message_size = readU16((u8*)buf);
-		std::string message;
-		message.reserve(message_size);
-		for (u32 i = 0; i < message_size; i++) {
-			is.read(buf, 1);
-			message.append(buf, 1);
+	try {
+		while(is.eof() == false) {
+			is.read(buf, 2);
+			u16 id = readU16((u8*)buf);
+			if (is.eof())
+				break;
+			is.read(buf, 2);
+			size_t message_size = readU16((u8*)buf);
+			std::string message;
+			message.reserve(message_size);
+			for (u32 i = 0; i < message_size; i++) {
+				is.read(buf, 1);
+				message.append(buf, 1);
+			}
+			// Pass on to the environment
+			m_env.processActiveObjectMessage(id, message);
 		}
-		// Pass on to the environment
-		m_env.processActiveObjectMessage(id, message);
+	// Packet could be unreliable then ignore it
+	} catch (PacketError &e) {
+		infostream << "handleCommand_ActiveObjectMessages: " << e.what()
+					<< ". The packet is unreliable, ignoring" << std::endl;
 	}
 }
 

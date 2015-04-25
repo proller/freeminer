@@ -239,9 +239,8 @@ void init_gettext(const char *path, const std::string &configured_language) {
 #endif
 #endif
 
-	static const char *name = lowercase(PROJECT_NAME).c_str();
-	bindtextdomain(name, path);
-	textdomain(name);
+	bindtextdomain(PROJECT_NAME_LOWER, path);
+	textdomain(PROJECT_NAME_LOWER);
 
 #if defined(_WIN32)
 	// Set character encoding for Win32

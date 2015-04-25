@@ -31,7 +31,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <vector>
 #include <set>
 #include "util/timetaker.h"
-#include "main.h" // g_profiler
 #include "profiler.h"
 
 // float error is 10 - 9.96875 = 0.03125 // default with bug = 0
@@ -309,8 +308,9 @@ collisionMoveResult collisionMoveSimple(Environment *env, IGameDef *gamedef,
 			ServerEnvironment *s_env = dynamic_cast<ServerEnvironment*>(env);
 			if (s_env != 0) {
 				f32 distance = speed_f.getLength();
-				std::set<u16> s_objects = s_env->getObjectsInsideRadius(pos_f,distance * 1.5);
-				for (std::set<u16>::iterator iter = s_objects.begin(); iter != s_objects.end(); iter++) {
+				std::vector<u16> s_objects;
+				s_env->getObjectsInsideRadius(s_objects, pos_f, distance * 1.5);
+				for (std::vector<u16>::iterator iter = s_objects.begin(); iter != s_objects.end(); iter++) {
 					ServerActiveObject *current = s_env->getActiveObject(*iter);
 					if ((self == 0) || (self != current)) {
 						objects.push_back((ActiveObject*)current);

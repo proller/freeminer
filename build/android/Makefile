@@ -23,7 +23,7 @@ GAMES_TO_COPY = default
 ANDROID_VERSION_CODE = 12
 
 #and for freeminer for skip conflict:
-ANDROID_VERSION_CODE = 15
+ANDROID_VERSION_CODE = 16
 
 ################################################################################
 # toolchain config for arm old processors
@@ -702,7 +702,7 @@ msgpack_download :
 		echo "msgpack sources missing, downloading...";                        \
 		mkdir -p ${ROOT}/deps;                                                 \
 		cd ${ROOT}/deps ;                                                      \
-		git clone -b cpp-0.5.9 ${MSGPACK_URL_GIT} ${MSGPACK_DIR} || exit 1;                 \
+		git clone -b cpp-1.1.0 ${MSGPACK_URL_GIT} ${MSGPACK_DIR} || exit 1;    \
 	fi
 	
 msgpack : $(MSGPACK_LIB)
@@ -812,7 +812,7 @@ clean_iconv :
 	
 apk: $(PATHCFGFILE) assets $(IRRLICHT_LIB) $(CURL_LIB) $(LEVELDB_TARGET)       \
 	$(OPENAL_LIB) $(OGG_LIB) prep_srcdir $(ROOT)/jni/src/android_version.h     \
-	$(MSGPACK_TARGET) $(ICONV_LIB)                                             \
+	$(MSGPACK_TARGET)                                                          \
 	sqlite3_download
 	@export NDEBUG=$$NDEBUG; $(MAKE) manifest;                                 \
 	export PATH=$$PATH:${SDKFOLDER}/platform-tools:${ANDROID_NDK};             \
@@ -877,8 +877,8 @@ $(ROOT)/jni/src/android_version.h :
 	export GITTAG=$$(git describe --abbrev=0 --tags);                          \
 	echo "#define VERSION_GITHASH \"$$GITTAG-$$GITHASH-Android\""              \
 	>> ${ROOT}/jni/src/android_version.h;                                      \
-	echo "#define VERSION_STRING STR(VERSION_MAJOR) \".\" STR(VERSION_MINOR)\
-	\".\"STR(VERSION_PATCH) \".\" STR(VERSION_TWEAK)"                          \
+	echo "#define VERSION_STRING STR(VERSION_MAJOR) \".\" STR(VERSION_MINOR)   \
+	 \".\" STR(VERSION_PATCH) \".\" STR(VERSION_TWEAK)"                        \
 	>> ${ROOT}/jni/src/android_version.h;                                      \
 	echo "#endif"                                                              \
 	>> ${ROOT}/jni/src/android_version.h;
