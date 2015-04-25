@@ -849,7 +849,7 @@ static void getTileInfo(
 	INodeDefManager *ndef = data->m_gamedef->ndef();
 	v3s16 blockpos_nodes = data->m_blockpos * MAP_BLOCKSIZE;
 
-	auto n0 = vmanip.getNodeRefUnsafe(blockpos_nodes + p*step);
+	auto & n0 = vmanip.getNodeRefUnsafe(blockpos_nodes + p*step);
 
 	// Don't even try to get n1 if n0 is already CONTENT_IGNORE
 	if (n0.getContent() == CONTENT_IGNORE) {
@@ -857,7 +857,7 @@ static void getTileInfo(
 		return;
 	}
 
-	auto n1 = vmanip.getNodeRefUnsafeCheckFlags(blockpos_nodes + p*step + face_dir*step);
+	auto & n1 = vmanip.getNodeRefUnsafeCheckFlags(blockpos_nodes + p*step + face_dir*step);
 	// if(data->debug) infostream<<" GN "<<n0<< n1<< blockpos_nodes<<blockpos_nodes + p*step<<blockpos_nodes + p*step + face_dir*step<<std::endl;
 
 	if (n1.getContent() == CONTENT_IGNORE) {
@@ -867,16 +867,8 @@ static void getTileInfo(
 
 	// This is hackish
 	bool equivalent = false;
-	u8 mf;
-/*if (step>16 && n0.getContent() != CONTENT_IGNORE)
-	mf = 1;
-else*/
-	mf = face_contents(n0.getContent(), n1.getContent(),
+	u8 mf = face_contents(n0.getContent(), n1.getContent(),
 			&equivalent, ndef);
-
-//if (stp)
-//verbosestream<<" n0="<<ndef->get(n0).name<<" n1="<<ndef->get(n1).name<< " mf="<<(int)mf<<std::endl;
-//if (step>16) mf=1,equivalent=0;
 
 	if(mf == 0)
 	{

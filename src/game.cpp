@@ -1455,7 +1455,7 @@ struct GameRunData {
 	v3f update_draw_list_last_cam_pos;
 	unsigned int autoexit;
 	bool profiler_state;
-	int update_draw_list_last_vrange;
+	int update_draw_list_last_wrange;
 
 
 	float time_of_day;
@@ -4324,7 +4324,7 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 		if (!flags.no_output)
 		if (client->getEnv().getClientMap().m_drawlist_last || runData->update_draw_list_timer >= 3 ||
 				runData->update_draw_list_last_cam_pos.getDistanceFrom(camera_position) > MAP_BLOCKSIZE*BS*1 ||
-				runData->update_draw_list_last_vrange != draw_control->wanted_range ||
+				runData->update_draw_list_last_wrange != draw_control->wanted_range ||
 				flags.camera_offset_changed){
 			runData->update_draw_list_timer = 0;
 			bool allow = true;
@@ -4345,7 +4345,7 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 				client->getEnv().getClientMap().updateDrawList(driver, dtime);
 			if (allow) {
 				runData->update_draw_list_last_cam_pos = camera_position;
-				runData->update_draw_list_last_vrange = draw_control->wanted_range;
+				runData->update_draw_list_last_wrange = draw_control->wanted_range;
 			}
 		}
 
