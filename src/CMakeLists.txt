@@ -101,8 +101,6 @@ endif()
 # Set some optimizations and tweaks
 #
 
-OPTION(ENABLE_OCULUSVR "Use Oculus Rift" 0)
-
 include(CheckCXXCompilerFlag)
 
 if(STATIC_BUILD)
@@ -436,6 +434,30 @@ else()
 	set(USE_IPV4_DEFAULT 0)
 endif()
 
+if(BUILD_CLIENT)
+OPTION(ENABLE_OCULUSVR "Use Oculus Rift" 0)
+if(ENABLE_OCULUSVR)
+	find_package(OculusVR)
+	if(OCULUSVR_FOUND)
+		set(FMclient_SRCS
+			${FMclient_SRCS}
+			IrrOculusVR/OculusRenderer.cpp
+		)
+		include_directories(
+			${OCULUSVR_INCLUDE_DIR}
+		)
+	endif()
+endif()
+endif()
+if(OCULUSVR_FOUND)
+	SET(USE_OCULUSVR 1)
+else()
+	SET(USE_OCULUSVR 0)
+	if(ENABLE_OCULUSVR)
+		message(WARNING "Oculus enabled but not found")
+	endif()
+endif()
+
 
 if(NOT MSVC)
 	set(USE_GPROF FALSE CACHE BOOL "Use -pg flag for g++")
@@ -663,30 +685,13 @@ if(WIN32)
 endif()
 
 set(FMclient_SRCS
+	${FMclient_SRCS}
 	FMColoredString.cpp
 	gsmapper.cpp
 	guiTextInputMenu.cpp
 	intlGUIEditBox.cpp
 	FMStaticText.cpp
 )
-
-if(ENABLE_OCULUSVR)
-	find_package(OculusVR)
-	if(OCULUSVR_FOUND)
-		set(FMclient_SRCS
-			${FMclient_SRCS}
-			IrrOculusVR/OculusRenderer.cpp
-		)
-		include_directories(
-			${OCULUSVR_INCLUDE_DIR}
-		)
-	endif()
-endif()
-if(OCULUSVR_FOUND)
-	SET(USE_OCULUSVR 1)
-else()
-	SET(USE_OCULUSVR 0)
-endif()
 
 
 # Client sources
@@ -782,9 +787,9 @@ if(BUILD_CLIENT)
 		${ZLIB_LIBRARIES}
 	)
 	if(OCULUSVR_FOUND)
-		set(minetest_LIBS ${minetest_LIBS} ${OCULUSVR_LIBRARY} ${XRANDR_LIBRARY})
+		set(client_LIBS ${client_LIBS} ${OCULUSVR_LIBRARY} ${XRANDR_LIBRARY})
 	endif()
-	set(minetest_LIBS ${minetest_LIBS}
+	set(client_LIBS ${client_LIBS}
 		${IRRLICHT_LIBRARY}
 		${OPENGLES2_LIBRARIES}
 		${EGL_LIBRARIES}
