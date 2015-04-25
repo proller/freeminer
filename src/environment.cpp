@@ -968,9 +968,8 @@ bool ServerEnvironment::swapNode(v3s16 p, const MapNode &n)
 	return true;
 }
 
-std::unordered_set<u16> ServerEnvironment::getObjectsInsideRadius(v3f pos, float radius)
+void ServerEnvironment::getObjectsInsideRadius(std::vector<u16> &objects, v3f pos, float radius)
 {
-	std::unordered_set<u16> objects;
 	auto lock = m_active_objects.lock_shared_rec();
 	for(auto
 			i = m_active_objects.begin();
@@ -986,9 +985,8 @@ std::unordered_set<u16> ServerEnvironment::getObjectsInsideRadius(v3f pos, float
 		v3f objectpos = obj->getBasePosition();
 		if(objectpos.getDistanceFrom(pos) > radius)
 			continue;
-		objects.insert(id);
+		objects.push_back(id);
 	}
-	return objects;
 }
 
 void ServerEnvironment::clearAllObjects()
@@ -1461,7 +1459,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 /*
 			while(!obj->m_messages_out.empty())
 			{
-				m_active_object_messages.push_back(
+				m_active_object_messages.push(
 						obj->m_messages_out.front());
 				obj->m_messages_out.pop();
 			}
@@ -1788,6 +1786,11 @@ ActiveObjectMessage ServerEnvironment::getActiveObjectMessage()
 	if(m_active_object_messages.empty())
 		return ActiveObjectMessage(0);
 
+/*
+	ActiveObjectMessage message = m_active_object_messages.front();
+	m_active_object_messages.pop();
+	return message;
+*/
 	return m_active_object_messages.pop_front();
 }
 

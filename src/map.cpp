@@ -1478,12 +1478,13 @@ u32 Map::timerUpdate(float uptime, float unload_timeout,
 	// Profile modified reasons
 	Profiler modprofiler;
 
-	if (/*!m_blocks_update_last && */ m_blocks_delete->size() > 100) {
+	if (/*!m_blocks_update_last && */ m_blocks_delete->size() > 1000) {
 		m_blocks_delete = (m_blocks_delete == &m_blocks_delete_1 ? &m_blocks_delete_2 : &m_blocks_delete_1);
 		verbosestream<<"Deleting blocks="<<m_blocks_delete->size()<<std::endl;
 		for (auto & ir : *m_blocks_delete)
 			delete ir.first;
 		m_blocks_delete->clear();
+		getBlockCacheFlush();
 	}
 
 	u32 deleted_blocks_count = 0;
@@ -2285,6 +2286,17 @@ bool ServerMap::initBlockMake(BlockMakeData *data, v3s16 blockpos)
 	blockpos_min += chunk_offset;
 	blockpos_max += chunk_offset;
 
+	{
+		auto lock = m_mapgen_process.lock_unique_rec();
+		auto gen = m_mapgen_process.get(blockpos_min);
+		auto now = porting::getTimeMs();
+		if (gen > now - 60000 ) {
+			//verbosestream << " already generating" << blockpos_min << " for " << blockpos << " gentime=" << now - gen << std::endl;
+			return false;
+		}
+		m_mapgen_process.set(blockpos_min, now);
+	}
+
 	v3s16 extra_borders(1,1,1);
 
 	// Do nothing if not inside limits (+-1 because of neighbors)
@@ -2386,6 +2398,8 @@ void ServerMap::finishBlockMake(BlockMakeData *data,
 	/*infostream<<"finishBlockMake(): ("<<blockpos_requested.X<<","
 			<<blockpos_requested.Y<<","
 			<<blockpos_requested.Z<<")"<<std::endl;*/
+
+	m_mapgen_process.erase(blockpos_min);
 
 	v3s16 extra_borders(1,1,1);
 

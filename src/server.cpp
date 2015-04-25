@@ -400,7 +400,7 @@ Server::Server(
 	m_nodedef->setNodeRegistrationStatus(true);
 
 	// Perform pending node name resolutions
-	m_nodedef->runNodeResolverCallbacks();
+	m_nodedef->runNodeResolveCallbacks();
 
 	// init the recipe hashes to speed up crafting
 	m_craftdef->initHashes(this);
@@ -2813,12 +2813,6 @@ void Server::DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::string 
 	SendAccessDenied(peer_id, reason, custom_reason);
 	m_clients.event(peer_id, CSE_SetDenied);
 	m_con.DisconnectPeer(peer_id);
-}
-
-//fmtodo: remove:
-void Server::DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::wstring &custom_reason)
-{
-    DenyAccess(peer_id, reason, wide_to_narrow(custom_reason));
 }
 
 //fmtodo: remove:

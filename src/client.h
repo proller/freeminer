@@ -398,7 +398,7 @@ public:
 	void sendInventoryAction(InventoryAction *a);
 	void sendChatMessage(const std::string &message);
 	void sendChangePassword(const std::string &oldpassword,
-							const std::string &newpassword);
+	                        const std::string &newpassword);
 	void sendDamage(u8 damage);
 	void sendBreath(u16 breath);
 	void sendRespawn();
@@ -570,7 +570,6 @@ private:
 	bool m_inventory_updated;
 	Inventory *m_inventory_from_server;
 	float m_inventory_from_server_age;
-	std::set<v3s16> m_active_blocks;
 	PacketCounter m_packetcounter;
 	bool m_show_highlighted;
 	// Block mesh animation parameters
