@@ -89,13 +89,13 @@ else()
 endif()
 
 
-set(USE_ENET 1)
 option(MINETEST_PROTO "Use minetest protocol (Slow and buggy)" 0)
 if(MINETEST_PROTO)
 	set(MINETEST_PROTO 1)
 	set(USE_ENET 0)
 	message(STATUS "Using minetest compatible networking (slow, some features missing)")
 else()
+	set(USE_ENET 1)
 	set(MINETEST_PROTO 0)
 endif()
 
@@ -543,14 +543,18 @@ add_subdirectory(unittest)
 add_subdirectory(util)
 
 
-OPTION(USE_SCTP "Enable SCTP networking" 0)
-if(USE_SCTP)
+OPTION(ENABLE_SCTP "Enable SCTP networking" 0)
+if(ENABLE_SCTP)
+	set(USE_SCTP 1)
 	add_subdirectory(network/usrsctplib)
 	set(USE_ENET 0)
+else()
+	set(USE_SCTP 0)
 endif()
 
 if(USE_ENET)
 	add_subdirectory(enet)
+	include_directories(${PROJECT_SOURCE_DIR}/enet/include)
 endif()
 
 set(FMcommon_SRCS
@@ -747,10 +751,6 @@ include_directories(
 	${MSGPACK_INCLUDE_DIR}
 	${PROJECT_SOURCE_DIR}/script
 )
-
-if(USE_ENET)
-	include_directories(${PROJECT_SOURCE_DIR}/enet/include)
-endif()
 
 if(USE_FREETYPE)
 	include_directories(${FREETYPE_INCLUDE_DIRS} ${CGUITTFONT_INCLUDE_DIR})
