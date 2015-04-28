@@ -542,7 +542,6 @@ add_subdirectory(script)
 add_subdirectory(unittest)
 add_subdirectory(util)
 
-
 OPTION(ENABLE_SCTP "Enable SCTP networking" 0)
 if(ENABLE_SCTP)
 	set(USE_SCTP 1)
