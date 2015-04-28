@@ -539,7 +539,15 @@ add_subdirectory(script)
 add_subdirectory(unittest)
 add_subdirectory(util)
 
+
+OPTION(USE_SCTP "Enable SCTP networking" TRUE)
+if(USE_SCTP)
+add_subdirectory(network/usrsctplib)
+endif()
+
+if(!USE_SCTP)
 add_subdirectory(enet)
+endif()
 
 set(FMcommon_SRCS
 	circuit.cpp
@@ -745,6 +753,10 @@ if(USE_CURL)
 	include_directories(${CURL_INCLUDE_DIR})
 endif()
 
+if(USE_SCTP)
+	include_directories(${PROJECT_SOURCE_DIR}/network/usrsctplib)
+endif()
+
 
 set(EXECUTABLE_OUTPUT_PATH "${CMAKE_SOURCE_DIR}/bin")
 
@@ -769,10 +781,14 @@ if(BUILD_CLIENT)
 		${LUA_LIBRARY}
 		${JSON_LIBRARY}
 		${MSGPACK_LIBRARY}
-		enet
 		${PLATFORM_LIBS}
 		${CLIENT_PLATFORM_LIBS}
 	)
+
+	if(!USE_SCTP)
+			target_link_libraries(enet)
+	endif()
+
 	if(STATIC_BUILD AND USE_GETTEXT)
 		target_link_libraries(
 			${PROJECT_NAME}
@@ -835,11 +851,13 @@ if(BUILD_SERVER)
 		${ICONV_LIBRARY}
 		${LUA_LIBRARY}
 		${MSGPACK_LIBRARY}
-		enet
 		${PLATFORM_LIBS}
 	)
 	set_target_properties(${PROJECT_NAME}server PROPERTIES
 			COMPILE_DEFINITIONS "SERVER")
+	if(!USE_SCTP)
+			target_link_libraries(enet)
+	endif()
 	if (USE_LEVELDB)
 		target_link_libraries(${PROJECT_NAME}server ${LEVELDB_LIBRARY} ${SNAPPY_LIBRARY})
 	endif()
