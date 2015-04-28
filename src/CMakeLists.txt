@@ -88,9 +88,12 @@ else()
 	set(ENABLE_THREADS 0)
 endif()
 
+
+set(USE_ENET 1)
 option(MINETEST_PROTO "Use minetest protocol (Slow and buggy)" 0)
 if(MINETEST_PROTO)
 	set(MINETEST_PROTO 1)
+	set(USE_ENET 0)
 	message(STATUS "Using minetest compatible networking (slow, some features missing)")
 else()
 	set(MINETEST_PROTO 0)
@@ -540,13 +543,14 @@ add_subdirectory(unittest)
 add_subdirectory(util)
 
 
-OPTION(USE_SCTP "Enable SCTP networking" TRUE)
+OPTION(USE_SCTP "Enable SCTP networking" 0)
 if(USE_SCTP)
-add_subdirectory(network/usrsctplib)
+	add_subdirectory(network/usrsctplib)
+	set(USE_ENET 0)
 endif()
 
-if(!USE_SCTP)
-add_subdirectory(enet)
+if(USE_ENET)
+	add_subdirectory(enet)
 endif()
 
 set(FMcommon_SRCS
@@ -742,8 +746,11 @@ include_directories(
 	${JSON_INCLUDE_DIR}
 	${MSGPACK_INCLUDE_DIR}
 	${PROJECT_SOURCE_DIR}/script
-	${PROJECT_SOURCE_DIR}/enet/include
 )
+
+if(USE_ENET)
+	include_directories(${PROJECT_SOURCE_DIR}/enet/include)
+endif()
 
 if(USE_FREETYPE)
 	include_directories(${FREETYPE_INCLUDE_DIRS} ${CGUITTFONT_INCLUDE_DIR})
@@ -785,10 +792,6 @@ if(BUILD_CLIENT)
 		${CLIENT_PLATFORM_LIBS}
 	)
 
-	if(!USE_SCTP)
-			target_link_libraries(enet)
-	endif()
-
 	if(STATIC_BUILD AND USE_GETTEXT)
 		target_link_libraries(
 			${PROJECT_NAME}
@@ -824,6 +827,9 @@ if(BUILD_CLIENT)
 			${CGUITTFONT_LIBRARY}
 		)
 	endif()
+	if(USE_ENET)
+		target_link_libraries(${PROJECT_NAME} enet)
+	endif()
 	if (USE_LEVELDB AND NOT FORCE_LEVELDB)
 		target_link_libraries(${PROJECT_NAME} ${LEVELDB_LIBRARY} ${SNAPPY_LIBRARY})
 	endif()
@@ -855,8 +861,8 @@ if(BUILD_SERVER)
 	)
 	set_target_properties(${PROJECT_NAME}server PROPERTIES
 			COMPILE_DEFINITIONS "SERVER")
-	if(!USE_SCTP)
-			target_link_libraries(enet)
+	if(USE_ENET)
+		target_link_libraries(${PROJECT_NAME}server enet)
 	endif()
 	if (USE_LEVELDB)
 		target_link_libraries(${PROJECT_NAME}server ${LEVELDB_LIBRARY} ${SNAPPY_LIBRARY})

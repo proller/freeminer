@@ -57,7 +57,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "client/clientlauncher.h"
 #endif
 
-#if !USE_SCTP
+#if USE_ENET
 // todo: move to connection
 #include "enet/enet.h"
 #endif
@@ -157,7 +157,7 @@ int main(int argc, char *argv[])
 {
 	int retval = 0;
 
-#if !USE_SCTP
+#if USE_ENET
 	if (enet_initialize() != 0) {
 		std::cerr << "enet failed to initialize\n";
 		return EXIT_FAILURE;
