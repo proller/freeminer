@@ -377,8 +377,8 @@ def main():
 	patch(os.path.join("src", "freeminer.vcxproj"), "</AdditionalLibraryDirectories>", r";$(DXSDK_DIR)\Lib\x86</AdditionalLibraryDirectories>")
 	#patch(os.path.join("src", "sqlite", "sqlite3.vcxproj"), "MultiThreadedDebugDLL", "MultiThreadedDebug")
 	# wtf, cmake?
-	patch(os.path.join("src", "enet", "enet.vcxproj"), "<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreaded</RuntimeLibrary>")
-	patch(os.path.join("src", "enet", "enet.vcxproj"), "<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>")
+	#patch(os.path.join("src", "enet", "enet.vcxproj"), "<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreaded</RuntimeLibrary>")
+	#patch(os.path.join("src", "enet", "enet.vcxproj"), "<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>")
 
 	# install LevelDB package
 	os.system(r"..\NuGet.exe install LevelDB -source {}\..\deps".format(os.getcwd()))
