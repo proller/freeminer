@@ -324,6 +324,7 @@ def main():
 	cmake_string = r"""
 		-DCMAKE_BUILD_TYPE={build_type}
 		-DRUN_IN_PLACE=1
+		-DMINETEST_PROTO=1
 		-DCUSTOM_BINDIR=.
 		-DCMAKE_INSTALL_PREFIX=..\install_tmp\
 		-DSTATIC_BUILD=1
