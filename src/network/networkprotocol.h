@@ -29,6 +29,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <string>
 #include "../irrlichttypes.h"
 #include "../msgpack_fix.h"
+#include "../config.h"
 
 #define MAX_PACKET_SIZE 1400
 
@@ -886,7 +887,7 @@ enum {
 #if !MINETEST_PROTO
 #define TOSERVER_NUM_MSG_TYPES 1
 #else
-#define TOSERVER_NUM_MSG_TYPES 0x45
+#define TOSERVER_NUM_MSG_TYPES 0x44
 #endif
 
 enum AccessDeniedCode {
