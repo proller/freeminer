@@ -33,6 +33,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 namespace con
 {
 
+#define BUFFER_SIZE (1<<16)
+
 //very ugly windows hack
 #if defined(_MSC_VER) && defined(ENET_IPV6)
 
@@ -96,22 +98,39 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	m_protocol_id(protocol_id),
 	m_max_packet_size(max_packet_size),
 	m_timeout(timeout),
-	m_enet_host(0),
+	sock(nullptr),
 	m_peer_id(0),
 	m_bc_peerhandler(peerhandler),
 	m_last_recieved(0),
 	m_last_recieved_warn(0)
 {
+	usrsctp_init(30042, NULL, NULL);
 	start();
+
+	//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, receive_cb, NULL, 0, NULL)) == NULL) {
+	//struct sctp_udpencaps encaps;
+	if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
+		errorstream<<("usrsctp_socket")<<std::endl;
+		ConnectionEvent ev(CONNEVENT_BIND_FAILED);
+		putEvent(ev);
+	}
+
+
 }
 
 
 Connection::~Connection()
 {
 	join();
-	if(m_enet_host)
-		enet_host_destroy(m_enet_host);
-	m_enet_host = nullptr;
+
+	while (usrsctp_finish() != 0) {
+#ifdef _WIN32
+		Sleep(1000);
+#else
+		sleep(1);
+#endif
+	}
+
 }
 
 /* Internal stuff */
@@ -181,9 +200,10 @@ void Connection::processCommand(ConnectionCommand &c)
 // Receive packets from the network and buffers and create ConnectionEvents
 void Connection::receive()
 {
-	if (!m_enet_host) {
+	if (!sock) {
 		return;
 	}
+/*
 	ENetEvent event;
 	int ret = enet_host_service(m_enet_host, & event, 10);
 	if (ret > 0)
@@ -218,13 +238,13 @@ void Connection::receive()
 				putEvent(e);
 			}
 
-			/* Clean up the packet now that we're done using it. */
+			/ * Clean up the packet now that we're done using it. * /
 			enet_packet_destroy (event.packet);
 			break;
 		case ENET_EVENT_TYPE_DISCONNECT:
 			deletePeer(*((u16*)event.peer->data), false);
 
-			/* Reset the peer's client information. */
+			/ *  Reset the peer's client information. * /
 			delete (u16*)event.peer->data;
 
 			break;
@@ -260,12 +280,51 @@ void Connection::receive()
 			}
 		}
 	}
+*/
+
+
+			struct sockaddr_in6 addr;
+			socklen_t from_len = (socklen_t)sizeof(addr);
+			int flags = 0;
+			struct sctp_rcvinfo rcv_info;
+			socklen_t infolen = (socklen_t)sizeof(rcv_info);
+			unsigned int infotype;
+			char buffer[BUFFER_SIZE]; //move to class
+			ssize_t n = usrsctp_recvv(sock, (void*)buffer, BUFFER_SIZE, (struct sockaddr *) &addr, &from_len, (void *)&rcv_info,
+			                  &infolen, &infotype, &flags);
+			if (n > 0) {
+				if (flags & MSG_NOTIFICATION) {
+					printf("Notification of length %llu received.\n", (unsigned long long)n);
+				} else {
+						char name[INET6_ADDRSTRLEN];
+					if (infotype == SCTP_RECVV_RCVINFO) {
+						printf("Msg of length %llu received from %s:%u on stream %d with SSN %u and TSN %u, PPID %d, context %u, complete %d.\n",
+						        (unsigned long long)n,
+						        inet_ntop(AF_INET6, &addr.sin6_addr, name, INET6_ADDRSTRLEN), ntohs(addr.sin6_port),
+						        rcv_info.rcv_sid,
+						        rcv_info.rcv_ssn,
+						        rcv_info.rcv_tsn,
+						        ntohl(rcv_info.rcv_ppid),
+						        rcv_info.rcv_context,
+						        (flags & MSG_EOR) ? 1 : 0);
+					} else {
+						printf("Msg of length %llu received from %s:%u, complete %d.\n",
+						        (unsigned long long)n,
+						        inet_ntop(AF_INET6, &addr.sin6_addr, name, INET6_ADDRSTRLEN), ntohs(addr.sin6_port),
+						        (flags & MSG_EOR) ? 1 : 0);
+					}
+				}
+			} else {
+				// drop peer here
+				//break;
+			}
+
 }
 
 // host
 void Connection::serve(Address bind_addr)
 {
-	ENetAddress address;
+/*
 #if defined(ENET_IPV6)
 	address.host = in6addr_any;
 #else
@@ -274,10 +333,40 @@ void Connection::serve(Address bind_addr)
 	address.port = bind_addr.getPort(); // fmtodo
 
 	m_enet_host = enet_host_create(&address, g_settings->getU16("max_users"), CHANNEL_COUNT, 0, 0);
-	if (m_enet_host == NULL) {
-		ConnectionEvent ev(CONNEVENT_BIND_FAILED);
-		putEvent(ev);
-	}
+*/
+
+//for connect too
+	//if (argc > 2) {
+		memset(&encaps, 0, sizeof(encaps));
+		encaps.sue_address.ss_family = AF_INET6;
+		encaps.sue_port = htons(bind_addr.getPort());
+		if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_REMOTE_UDP_ENCAPS_PORT, (const void*)&encaps, (socklen_t)sizeof(encaps)) < 0) {
+			errorstream<<("setsockopt")<<std::endl;
+			ConnectionEvent ev(CONNEVENT_BIND_FAILED);
+			putEvent(ev);
+		}
+	//}
+
+
+    struct sockaddr_in6 addr;
+
+    /* Acting as the 'server' */
+    memset((void *)&addr, 0, sizeof(addr));
+#ifdef HAVE_SIN_LEN
+    addr.sin_len = sizeof(struct sockaddr_in);
+#endif
+    addr.sin6_family = AF_INET6;
+    addr.sin6_port = bind_addr.getPort(); //htons(13);
+    //addr.sin6_addr.s6_addr = in6addr_any; //htonl(INADDR_ANY);
+    addr.sin6_addr = in6addr_any; //htonl(INADDR_ANY);
+    printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
+    if (usrsctp_bind(sock, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) < 0) {
+      perror("usrsctp_bind");
+    }
+    if (usrsctp_listen(sock, 1) < 0) {
+      perror("usrsctp_listen");
+    }
+
 }
 
 // peer
@@ -293,6 +382,7 @@ void Connection::connect(Address addr)
 		putEvent(ev);
 	}
 
+/*
 	m_enet_host = enet_host_create(NULL, 1, 0, 0, 0);
 	ENetAddress address;
 #if defined(ENET_IPV6)
@@ -323,27 +413,65 @@ void Connection::connect(Address addr)
 	} else {
 		if (ret == 0)
 			errorstream<<"enet_host_service ret="<<ret<<std::endl;
-
-		/* Either the 5 seconds are up or a disconnect event was */
-		/* received. Reset the peer in the event the 5 seconds   */
-		/* had run out without any significant event.            */
 		enet_peer_reset(peer);
 	}
+*/
+
+    struct sockaddr_in6 addr6;
+
+    memset((void *)&addr6, 0, sizeof(addr6));
+
+	if (!addr.isIPv6())
+		inet_pton (AF_INET6, ("::ffff:"+addr.serializeString()).c_str(), &addr6.sin6_addr);
+	else
+		addr6 = addr.getAddress6();
+
+    /* Acting as the connector */
+    //printf("Connecting to %s %s\n",argv[3],argv[4]);
+    //memset((void *)&addr4, 0, sizeof(struct sockaddr_in));
+//#ifdef HAVE_SIN_LEN
+//    addr4.sin_len = sizeof(struct sockaddr_in);
+//#endif
+#ifdef HAVE_SIN6_LEN
+    addr6.sin6_len = sizeof(struct sockaddr_in6);
+#endif
+    //addr4.sin_family = AF_INET;
+    addr6.sin6_family = AF_INET6;
+    //addr4.sin_port = htons(atoi(argv[4]));
+    addr6.sin6_port = addr.getPort(); //htons(atoi(argv[4]));
+    //if (inet_pton(AF_INET6, argv[3], &addr6.sin6_addr) == 1) {
+      if (usrsctp_connect(sock, (struct sockaddr *)&addr6, sizeof(struct sockaddr_in6)) < 0) {
+        perror("usrsctp_connect");
+      }
+/*
+    } else if (inet_pton(AF_INET, argv[3], &addr4.sin_addr) == 1) {
+      if (usrsctp_connect(sock, (struct sockaddr *)&addr4, sizeof(struct sockaddr_in)) < 0) {
+        perror("usrsctp_connect");
+      }
+    } else {
+      printf("Illegal destination address.\n");
+    }
+*/
+
+
 }
 
 void Connection::disconnect()
 {
 	//JMutexAutoLock peerlock(m_peers_mutex);
 	m_peers.lock_shared_rec();
+
 	for (auto i = m_peers.begin();
 			i != m_peers.end(); ++i)
-		enet_peer_disconnect(i->second, 0);
+		usrsctp_close(i->second);
 }
 
 void Connection::sendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable)
 {
+/*
 	ENetPacket *packet = enet_packet_create(*data, data.getSize(), reliable ? ENET_PACKET_FLAG_RELIABLE : 0);
 	enet_host_broadcast(m_enet_host, 0, packet);
+*/
 }
 
 void Connection::send(u16 peer_id, u8 channelnum,
@@ -356,20 +484,38 @@ void Connection::send(u16 peer_id, u8 channelnum,
 	}
 	dout_con<<getDesc()<<" sending to peer_id="<<peer_id<<std::endl;
 
-	assert(channelnum < CHANNEL_COUNT);
+	if(channelnum >= CHANNEL_COUNT)
+		return;
 
+/*
 	ENetPacket *packet = enet_packet_create(*data, data.getSize(), reliable ? ENET_PACKET_FLAG_RELIABLE : 0);
+*/
 
-	ENetPeer *peer = getPeer(peer_id);
+	auto peer = getPeer(peer_id);
 	if(!peer) {
 		deletePeer(peer_id, false);
 		return;
 	}
+/*
 	if (enet_peer_send(peer, channelnum, packet) < 0)
 		errorstream<<"enet_peer_send failed"<<std::endl;
+*/
+	struct sctp_sndinfo sndinfo = {};
+	//char buffer[BUFFER_SIZE];
+	sndinfo.snd_sid = 1;
+	//sndinfo.snd_flags = 0;
+	//sndinfo.snd_ppid = htonl(DISCARD_PPID);
+	//sndinfo.snd_context = 0;
+	//sndinfo.snd_assoc_id = 0;
+	if (usrsctp_sendv(peer, *data, data.getSize(), NULL, 0, (void *)&sndinfo,
+	                  sizeof(sndinfo), SCTP_SENDV_SNDINFO, 0) < 0) {
+		perror("usrsctp_sendv");
+	}
+
 }
 
-ENetPeer* Connection::getPeer(u16 peer_id)
+
+struct socket * Connection::getPeer(u16 peer_id)
 {
 	auto node = m_peers.find(peer_id);
 

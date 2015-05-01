@@ -341,6 +341,7 @@ private:
 	void sendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable);
 	void send(u16 peer_id, u8 channelnum, SharedBuffer<u8> data, bool reliable);
 	//!ENetPeer* getPeer(u16 peer_id);
+	struct socket * getPeer(u16 peer_id);
 	bool deletePeer(u16 peer_id, bool timeout);
 
 	MutexedQueue<ConnectionEvent> m_event_queue;
@@ -349,11 +350,13 @@ private:
 	u32 m_protocol_id;
 	u32 m_max_packet_size;
 	float m_timeout;
+	struct sctp_udpencaps encaps;
+	struct socket *sock;
 	//!ENetHost *m_enet_host;
 	//!ENetPeer *m_peer;
 	u16 m_peer_id;
 
-	//!concurrent_map<u16, ENetPeer*> m_peers;
+	concurrent_map<u16, struct socket *> m_peers;
 	concurrent_unordered_map<u16, Address> m_peers_address;
 	//JMutex m_peers_mutex;
 
