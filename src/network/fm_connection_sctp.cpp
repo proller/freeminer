@@ -104,16 +104,20 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	m_last_recieved(0),
 	m_last_recieved_warn(0)
 {
-	usrsctp_init(30042, NULL, NULL);
-	start();
+	//start();
+
+	usrsctp_init(30042, nullptr, nullptr);
+
+	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
 
 	//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, receive_cb, NULL, 0, NULL)) == NULL) {
 	//struct sctp_udpencaps encaps;
-	if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
+	if ((sock = usrsctp_socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
 		errorstream<<("usrsctp_socket")<<std::endl;
 		ConnectionEvent ev(CONNEVENT_BIND_FAILED);
 		putEvent(ev);
 	}
+errorstream<<"makesock ok = " << sock <<std::endl;
 
 
 }
@@ -121,7 +125,7 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 
 Connection::~Connection()
 {
-	join();
+	//join();
 
 	while (usrsctp_finish() != 0) {
 #ifdef _WIN32
@@ -135,6 +139,7 @@ Connection::~Connection()
 
 /* Internal stuff */
 
+/*
 void * Connection::Thread()
 {
 	ThreadStarted();
@@ -151,6 +156,7 @@ void * Connection::Thread()
 
 	return nullptr;
 }
+*/
 
 void Connection::putEvent(ConnectionEvent &e)
 {
@@ -203,6 +209,9 @@ void Connection::receive()
 	if (!sock) {
 		return;
 	}
+
+errorstream<<"receive() ... "<<__LINE__<<std::endl;
+
 /*
 	ENetEvent event;
 	int ret = enet_host_service(m_enet_host, & event, 10);
@@ -319,11 +328,14 @@ void Connection::receive()
 				//break;
 			}
 
+errorstream<<"receive() ... "<<__LINE__<<std::endl;
+
 }
 
 // host
 void Connection::serve(Address bind_addr)
 {
+errorstream<<"serve()"<< bind_addr.serializeString() << " :" << bind_addr.getPort()<<std::endl;
 /*
 #if defined(ENET_IPV6)
 	address.host = in6addr_any;
@@ -348,30 +360,39 @@ void Connection::serve(Address bind_addr)
 	//}
 
 
-    struct sockaddr_in6 addr;
+    struct sockaddr_in6 addr = bind_addr.getAddress6();
 
     /* Acting as the 'server' */
-    memset((void *)&addr, 0, sizeof(addr));
+    //memset((void *)&addr, 0, sizeof(addr));
 #ifdef HAVE_SIN_LEN
     addr.sin_len = sizeof(struct sockaddr_in);
+#endif
+#ifdef HAVE_SIN6_LEN
+    addr.sin6_len = sizeof(struct sockaddr_in6);
 #endif
     addr.sin6_family = AF_INET6;
     addr.sin6_port = bind_addr.getPort(); //htons(13);
     //addr.sin6_addr.s6_addr = in6addr_any; //htonl(INADDR_ANY);
-    addr.sin6_addr = in6addr_any; //htonl(INADDR_ANY);
-    printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
-    if (usrsctp_bind(sock, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) < 0) {
+    //addr.sin6_addr = in6addr_any; //htonl(INADDR_ANY);
+    //printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
+    printf("Waiting for connections on port %d\n",(addr.sin6_port));
+    if (usrsctp_bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
       perror("usrsctp_bind");
     }
-    if (usrsctp_listen(sock, 1) < 0) {
+    if (usrsctp_listen(sock, 10) < 0) {
       perror("usrsctp_listen");
     }
+
+errorstream<<"serve() ok"<<std::endl;
 
 }
 
 // peer
 void Connection::connect(Address addr)
 {
+errorstream<<"connect() "<< addr.serializeString() << " :" << addr.getPort()<<std::endl;
+
+
 	m_last_recieved = porting::getTimeMs();
 	//JMutexAutoLock peerlock(m_peers_mutex);
 	//m_peers.lock_unique_rec();
@@ -417,12 +438,28 @@ void Connection::connect(Address addr)
 	}
 */
 
+
+		//memset(&encaps, 0, sizeof(encaps));
+		encaps = {};
+		encaps.sue_address.ss_family = AF_INET6;
+		encaps.sue_port = htons(addr.getPort());
+		if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_REMOTE_UDP_ENCAPS_PORT, (const void*)&encaps, (socklen_t)sizeof(encaps)) < 0) {
+			errorstream<<("connect setsockopt fail")<<std::endl;
+			ConnectionEvent ev(CONNEVENT_CONNECT_FAILED);
+			putEvent(ev);
+		}
+
+
     struct sockaddr_in6 addr6;
 
     memset((void *)&addr6, 0, sizeof(addr6));
 
 	if (!addr.isIPv6())
+{
+errorstream<<"connect() transform to v6 "<<__LINE__<<std::endl;
+
 		inet_pton (AF_INET6, ("::ffff:"+addr.serializeString()).c_str(), &addr6.sin6_addr);
+}
 	else
 		addr6 = addr.getAddress6();
 
@@ -440,7 +477,9 @@ void Connection::connect(Address addr)
     //addr4.sin_port = htons(atoi(argv[4]));
     addr6.sin6_port = addr.getPort(); //htons(atoi(argv[4]));
     //if (inet_pton(AF_INET6, argv[3], &addr6.sin6_addr) == 1) {
-      if (usrsctp_connect(sock, (struct sockaddr *)&addr6, sizeof(struct sockaddr_in6)) < 0) {
+
+errorstream<<"connect() ... "<<__LINE__<<std::endl;
+      if (usrsctp_connect(sock, (struct sockaddr *)&addr6, sizeof(addr6)) < 0) {
         perror("usrsctp_connect");
       }
 /*
@@ -452,6 +491,8 @@ void Connection::connect(Address addr)
       printf("Illegal destination address.\n");
     }
 */
+
+errorstream<<"connect() ok"<<std::endl;
 
 
 }
@@ -472,6 +513,10 @@ void Connection::sendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable)
 	ENetPacket *packet = enet_packet_create(*data, data.getSize(), reliable ? ENET_PACKET_FLAG_RELIABLE : 0);
 	enet_host_broadcast(m_enet_host, 0, packet);
 */
+	m_peers.lock_shared_rec();
+	for (auto i = m_peers.begin();
+			i != m_peers.end(); ++i)
+		send(i->first, channelnum, data, reliable);
 }
 
 void Connection::send(u16 peer_id, u8 channelnum,
@@ -567,7 +612,8 @@ ConnectionEvent Connection::waitEvent(u32 timeout_ms)
 
 void Connection::putCommand(ConnectionCommand &c)
 {
-	m_command_queue.push_back(c);
+	//m_command_queue.push_back(c);
+	processCommand(c);
 }
 
 void Connection::Serve(Address bind_address)
