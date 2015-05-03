@@ -127,7 +127,7 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
 #endif
 
-	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
+	usrsctp_sysctl_set_sctp_ecn_enable(0);
 
 	//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, receive_cb, NULL, 0, NULL)) == NULL) {
 	//struct sctp_udpencaps encaps;
@@ -419,6 +419,38 @@ return n;
 
 }
 
+
+	static uint16_t event_types[] = {SCTP_ASSOC_CHANGE,
+	                          SCTP_PEER_ADDR_CHANGE,
+	                          SCTP_REMOTE_ERROR,
+	                          SCTP_SHUTDOWN_EVENT,
+	                          SCTP_ADAPTATION_INDICATION,
+	                          SCTP_SEND_FAILED_EVENT,
+	                          SCTP_STREAM_RESET_EVENT,
+	                          SCTP_STREAM_CHANGE_EVENT};
+
+
+void Connection::sock_setup(u16 peer_id, struct socket *sock) {
+
+	/* Disable Nagle */
+	uint32_t nodelay = 1;
+	if(usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_NODELAY, &nodelay, sizeof(nodelay))) {
+		errorstream<<" setsockopt error: SCTP_NODELAY"<< peer_id << std::endl;
+		//return NULL;
+	}
+
+	struct sctp_event event = {};
+	event.se_assoc_id = SCTP_ALL_ASSOC;
+	event.se_on = 1;
+	for (unsigned int i = 0; i < sizeof(event_types)/sizeof(uint16_t); i++) {
+		event.se_type = event_types[i];
+		if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_EVENT, &event, sizeof(event)) < 0) {
+			perror("setsockopt SCTP_EVENT");
+		}
+	}
+
+}
+
 // host
 void Connection::serve(Address bind_addr)
 {
@@ -444,7 +476,7 @@ errorstream<<"serve()"<< bind_addr.serializeString() << " :" << bind_addr.getPor
 
 //for connect too
 	//if (argc > 2) {
- /*
+// /*
 	//	memset(&encaps, 0, sizeof(encaps));
 		encaps = {};
 		encaps.sue_address.ss_family = AF_INET6;
@@ -455,7 +487,7 @@ errorstream<<"serve()"<< bind_addr.serializeString() << " :" << bind_addr.getPor
 			ConnectionEvent ev(CONNEVENT_BIND_FAILED);
 			putEvent(ev);
 		}
-*/
+// */
 	//}
 
 /*
@@ -533,8 +565,11 @@ errorstream<<"connect() "<< addr.serializeString() << " :" << addr.getPort()<<st
 		errorstream<<("usrsctp_socket")<<std::endl;
 		ConnectionEvent ev(CONNEVENT_BIND_FAILED);
 		putEvent(ev);
+		return;
 	}
 
+
+	sock_setup(PEER_ID_SERVER, sock);
 /*
   if (usrsctp_set_non_blocking(sock, 1) < 0) {
     errorstream << "Failed to set SCTP to non blocking." << std::endl;
@@ -624,7 +659,8 @@ errorstream<<"connect() transform to v6 "<<__LINE__<<std::endl;
 
 errorstream<<"connect() ... "<<__LINE__<<std::endl;
       if (usrsctp_connect(sock, (struct sockaddr *)&addr6, sizeof(addr6)) < 0) {
-        perror("usrsctp_connect");
+        perror("usrsctp_connect fail");
+		sock = nullptr;
       }
 /*
     } else if (inet_pton(AF_INET, argv[3], &addr4.sin_addr) == 1) {
@@ -636,7 +672,7 @@ errorstream<<"connect() ... "<<__LINE__<<std::endl;
     }
 */
 
-errorstream<<"connect() ok"<<std::endl;
+errorstream<<"connect() ok sock="<<sock<<std::endl;
 
 
 }

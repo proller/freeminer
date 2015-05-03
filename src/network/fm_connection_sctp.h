@@ -372,6 +372,7 @@ private:
 	std::string getDesc();
 
 	int recv(u16 peer_id, struct socket *sock);
+	void sock_setup(u16 peer_id, struct socket *sock);
 
 };
 
