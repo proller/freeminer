@@ -42,10 +42,13 @@ if(HAS_SOCKLEN_T)
     add_definitions(-DHAS_SOCKLEN_T=1)
 endif()
 
-add_definitions(-DSCTP_PROCESS_LEVEL_LOCKS -DSCTP_SIMPLE_ALLOCATOR -D__Userspace__)
-add_definitions(-D__Userspace_os_Linux=1)
+add_definitions(-DSCTP_DEBUG -DSCTP_SIMPLE_ALLOCATOR -DSCTP_PROCESS_LEVEL_LOCKS)
+#add_definitions(-D__Userspace_os_Linux)
+add_definitions( -D__Userspace__ "-D__Userspace_os_${CMAKE_SYSTEM_NAME}")
 
-add_definitions(-DINET=1 -DINET6=1 -D_GNU_SOURCE)
+add_definitions(-DINET -DINET6)
+#add_definitions(-DHAVE_SA_LEN -DHAVE_SIN_LEN -DHAVE_SIN6_LEN) # freebsd
+add_definitions(-D_GNU_SOURCE)
 #add_definitions(-DINET=1 -DINET6=1 -DHAVE_SOCKET=1)
 
 include_directories(${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/netinet ${PROJECT_SOURCE_DIR}/netinet6 )
