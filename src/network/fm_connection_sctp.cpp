@@ -20,6 +20,11 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+
+/*
+https://chromium.googlesource.com/external/webrtc/+/master/talk/media/sctp/sctpdataengine.cc
+*/
+
 #include "network/fm_connection_sctp.h"
 #include "serialization.h"
 #include "log.h"
@@ -128,6 +133,8 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 #endif
 
 	usrsctp_sysctl_set_sctp_ecn_enable(0);
+
+	usrsctp_sysctl_set_sctp_nr_outgoing_streams_default(2);
 
 	//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, receive_cb, NULL, 0, NULL)) == NULL) {
 	//struct sctp_udpencaps encaps;
@@ -448,6 +455,12 @@ void Connection::sock_setup(u16 peer_id, struct socket *sock) {
 			perror("setsockopt SCTP_EVENT");
 		}
 	}
+// /*
+  if (usrsctp_set_non_blocking(sock, 1) < 0) {
+    errorstream << "Failed to set SCTP to non blocking." << std::endl;
+    //OCreturn false;
+  }
+// */
 
 }
 
@@ -570,12 +583,6 @@ errorstream<<"connect() "<< addr.serializeString() << " :" << addr.getPort()<<st
 
 
 	sock_setup(PEER_ID_SERVER, sock);
-/*
-  if (usrsctp_set_non_blocking(sock, 1) < 0) {
-    errorstream << "Failed to set SCTP to non blocking." << std::endl;
-    //OCreturn false;
-  }
-*/
 
 	m_peers.set(PEER_ID_SERVER, sock);
 

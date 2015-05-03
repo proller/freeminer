@@ -42,7 +42,7 @@ if(HAS_SOCKLEN_T)
     add_definitions(-DHAS_SOCKLEN_T=1)
 endif()
 
-add_definitions(-DSCTP_DEBUG -DSCTP_SIMPLE_ALLOCATOR -DSCTP_PROCESS_LEVEL_LOCKS)
+add_definitions(-DSCTP_DEBUG -DSCTP_SIMPLE_ALLOCATOR -DSCTP_PROCESS_LEVEL_LOCKS -DSCTP_WITH_NO_CSUM)
 #add_definitions(-D__Userspace_os_Linux)
 add_definitions( -D__Userspace__ "-D__Userspace_os_${CMAKE_SYSTEM_NAME}")
 

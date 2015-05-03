@@ -547,7 +547,7 @@ OPTION(ENABLE_SCTP "Enable SCTP networking" 0)
 if(ENABLE_SCTP)
 	set(USE_SCTP 1)
 	add_subdirectory(network/usrsctplib)
-	add_definitions(-DINET -DINET6)
+	add_definitions(-DINET -DINET6 -DSCTP_WITH_NO_CSUM)
 	add_definitions(-DSCTP_DEBUG)
 
 	set(USE_ENET 0)
