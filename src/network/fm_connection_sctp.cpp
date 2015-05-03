@@ -30,6 +30,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "settings.h"
 #include "profiler.h"
 
+#include <cstdarg>
+//#include <socket.h>
+
 namespace con
 {
 
@@ -92,6 +95,16 @@ const char *inet_ntop(int af, const void *src, char *dst, socklen_t size)
 /*
 	Connection
 */
+void
+debug_printf(const char *format, ...)
+{
+	va_list ap;
+
+	va_start(ap, format);
+	vprintf(format, ap);
+	va_end(ap);
+}
+
 
 Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 		bool ipv6, PeerHandler *peerhandler):
@@ -104,20 +117,8 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	m_last_recieved(0),
 	m_last_recieved_warn(0)
 {
-	//start();
+	start();
 
-	usrsctp_init(30042, nullptr, nullptr);
-
-	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
-
-	//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, receive_cb, NULL, 0, NULL)) == NULL) {
-	//struct sctp_udpencaps encaps;
-	if ((sock = usrsctp_socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
-		errorstream<<("usrsctp_socket")<<std::endl;
-		ConnectionEvent ev(CONNEVENT_BIND_FAILED);
-		putEvent(ev);
-	}
-errorstream<<"makesock ok = " << sock <<std::endl;
 
 
 }
@@ -139,11 +140,34 @@ Connection::~Connection()
 
 /* Internal stuff */
 
-/*
 void * Connection::Thread()
 {
 	ThreadStarted();
 	log_register_thread("Connection");
+
+	//usrsctp_init(9899, nullptr, nullptr);
+	usrsctp_init(9899, nullptr, debug_printf);
+	//usrsctp_init(0, nullptr, debug_printf);
+
+#ifdef SCTP_DEBUG
+	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
+	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
+#endif
+
+	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
+
+	//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, receive_cb, NULL, 0, NULL)) == NULL) {
+	//struct sctp_udpencaps encaps;
+/*
+	if ((sock = usrsctp_socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
+		errorstream<<("usrsctp_socket")<<std::endl;
+		ConnectionEvent ev(CONNEVENT_BIND_FAILED);
+		putEvent(ev);
+	}
+*/
+	//sock->so_state |= SS_NBIO;
+errorstream<<"threadstart" <<std::endl;
+
 
 	while(!StopRequested())
 	{
@@ -156,7 +180,6 @@ void * Connection::Thread()
 
 	return nullptr;
 }
-*/
 
 void Connection::putEvent(ConnectionEvent &e)
 {
@@ -206,11 +229,13 @@ void Connection::processCommand(ConnectionCommand &c)
 // Receive packets from the network and buffers and create ConnectionEvents
 void Connection::receive()
 {
+/*
 	if (!sock) {
 		return;
 	}
+*/
 
-errorstream<<"receive() ... "<<__LINE__<<std::endl;
+//errorstream<<"receive() ... "<<__LINE__<<std::endl;
 
 /*
 	ENetEvent event;
@@ -291,6 +316,58 @@ errorstream<<"receive() ... "<<__LINE__<<std::endl;
 	}
 */
 
+	if (sock) {
+
+errorstream<<"receive() try accept "<<  std::endl;
+		//if (!recv(0, sock)) {
+		//}
+				//struct socket **conn_sock;
+				struct socket *conn_sock = nullptr;
+				struct sockaddr_in6 remote_addr;
+				socklen_t addr_len = sizeof(remote_addr);
+				//conn_sock = (struct socket **)malloc(sizeof(struct socket *));
+				if ((conn_sock = usrsctp_accept(sock, (struct sockaddr *) &remote_addr, &addr_len))== NULL) {
+					printf("usrsctp_accept failed.  exiting...\n");
+					return;
+					//continue;
+				}
+
+				u16 peer_id = PEER_ID_SERVER + 1;
+				if (m_peers.size() > 0)
+					// TODO: fix this shit
+					peer_id = m_peers.rbegin()->first + 1;
+
+errorstream<<"receive() accepted "<< conn_sock << " addr_len="<<addr_len<< " id="<<peer_id<<std::endl;
+
+				m_peers.set(peer_id, conn_sock);
+				//m_peers_address.set(peer_id, Address(event.peer->address.host, event.peer->address.port));
+
+				//event.peer->data = new u16;
+				//*((u16*)event.peer->data) = peer_id;
+
+				// Create peer addition event
+				ConnectionEvent e;
+				e.peerAdded(peer_id);
+				putEvent(e);
+
+	}
+
+	for (auto & i : m_peers) {
+		recv(i.first, i.second);
+	}
+
+
+//errorstream<<"receive() ... "<<__LINE__<<std::endl;
+
+}
+
+int Connection::recv(u16 peer_id, struct socket *sock) {
+
+//errorstream<<"receive() ... "<<__LINE__ << " peer_id="<<peer_id<<" sock="<<sock<<std::endl;
+	if (!sock) {
+		return 0;
+	}
+
 
 			struct sockaddr_in6 addr;
 			socklen_t from_len = (socklen_t)sizeof(addr);
@@ -302,6 +379,7 @@ errorstream<<"receive() ... "<<__LINE__<<std::endl;
 			ssize_t n = usrsctp_recvv(sock, (void*)buffer, BUFFER_SIZE, (struct sockaddr *) &addr, &from_len, (void *)&rcv_info,
 			                  &infolen, &infotype, &flags);
 			if (n > 0) {
+errorstream<<"receive() ... "<<__LINE__ << " n="<<n<<std::endl;
 				if (flags & MSG_NOTIFICATION) {
 					printf("Notification of length %llu received.\n", (unsigned long long)n);
 				} else {
@@ -325,10 +403,15 @@ errorstream<<"receive() ... "<<__LINE__<<std::endl;
 				}
 			} else {
 				// drop peer here
+//errorstream<<"receive() ... drop "<<__LINE__<<std::endl;
+				//if (m_peers.count(peer_id)) { //ugly fix. todo: fix enet and remove
+				//	deletePeer(peer_id,  false);
+				//}
 				//break;
 			}
 
-errorstream<<"receive() ... "<<__LINE__<<std::endl;
+
+return n;
 
 }
 
@@ -347,20 +430,32 @@ errorstream<<"serve()"<< bind_addr.serializeString() << " :" << bind_addr.getPor
 	m_enet_host = enet_host_create(&address, g_settings->getU16("max_users"), CHANNEL_COUNT, 0, 0);
 */
 
+	if ((sock = usrsctp_socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
+		errorstream<<("usrsctp_socket")<<std::endl;
+		ConnectionEvent ev(CONNEVENT_BIND_FAILED);
+		putEvent(ev);
+	}
+
+
 //for connect too
 	//if (argc > 2) {
-		memset(&encaps, 0, sizeof(encaps));
+// /*
+	//	memset(&encaps, 0, sizeof(encaps));
+		encaps = {};
 		encaps.sue_address.ss_family = AF_INET6;
-		encaps.sue_port = htons(bind_addr.getPort());
+		encaps.sue_port = htons(bind_addr.getPort()+10);
 		if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_REMOTE_UDP_ENCAPS_PORT, (const void*)&encaps, (socklen_t)sizeof(encaps)) < 0) {
 			errorstream<<("setsockopt")<<std::endl;
 			ConnectionEvent ev(CONNEVENT_BIND_FAILED);
 			putEvent(ev);
 		}
+// */
 	//}
 
 
-    struct sockaddr_in6 addr = bind_addr.getAddress6();
+    //struct sockaddr_in6 addr = bind_addr.getAddress6();
+    struct sockaddr_in6 addr;
+	//addr. = in6addr_any;
 
     /* Acting as the 'server' */
     //memset((void *)&addr, 0, sizeof(addr));
@@ -371,11 +466,12 @@ errorstream<<"serve()"<< bind_addr.serializeString() << " :" << bind_addr.getPor
     addr.sin6_len = sizeof(struct sockaddr_in6);
 #endif
     addr.sin6_family = AF_INET6;
-    addr.sin6_port = bind_addr.getPort(); //htons(13);
+    addr.sin6_port = htons(bind_addr.getPort()); //htons(13);
+    //addr.sin6_port = bind_addr.getPort(); //htons(13);
     //addr.sin6_addr.s6_addr = in6addr_any; //htonl(INADDR_ANY);
-    //addr.sin6_addr = in6addr_any; //htonl(INADDR_ANY);
+    addr.sin6_addr = in6addr_any; //htonl(INADDR_ANY);
     //printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
-    printf("Waiting for connections on port %d\n",(addr.sin6_port));
+    printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
     if (usrsctp_bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
       perror("usrsctp_bind");
     }
@@ -402,6 +498,23 @@ errorstream<<"connect() "<< addr.serializeString() << " :" << addr.getPort()<<st
 		ConnectionEvent ev(CONNEVENT_CONNECT_FAILED);
 		putEvent(ev);
 	}
+
+	struct socket *sock;
+
+	if ((sock = usrsctp_socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
+		errorstream<<("usrsctp_socket")<<std::endl;
+		ConnectionEvent ev(CONNEVENT_BIND_FAILED);
+		putEvent(ev);
+	}
+
+/*
+  if (usrsctp_set_non_blocking(sock, 1) < 0) {
+    errorstream << "Failed to set SCTP to non blocking." << std::endl;
+    //OCreturn false;
+  }
+*/
+
+	m_peers.set(PEER_ID_SERVER, sock);
 
 /*
 	m_enet_host = enet_host_create(NULL, 1, 0, 0, 0);
@@ -440,16 +553,17 @@ errorstream<<"connect() "<< addr.serializeString() << " :" << addr.getPort()<<st
 
 
 		//memset(&encaps, 0, sizeof(encaps));
+// /*
 		encaps = {};
 		encaps.sue_address.ss_family = AF_INET6;
-		encaps.sue_port = htons(addr.getPort());
+		encaps.sue_port = htons(addr.getPort()+10);
+		//encaps.sue_port = htons(30042);
 		if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_REMOTE_UDP_ENCAPS_PORT, (const void*)&encaps, (socklen_t)sizeof(encaps)) < 0) {
 			errorstream<<("connect setsockopt fail")<<std::endl;
 			ConnectionEvent ev(CONNEVENT_CONNECT_FAILED);
 			putEvent(ev);
 		}
-
-
+// */
     struct sockaddr_in6 addr6;
 
     memset((void *)&addr6, 0, sizeof(addr6));
@@ -475,7 +589,8 @@ errorstream<<"connect() transform to v6 "<<__LINE__<<std::endl;
     //addr4.sin_family = AF_INET;
     addr6.sin6_family = AF_INET6;
     //addr4.sin_port = htons(atoi(argv[4]));
-    addr6.sin6_port = addr.getPort(); //htons(atoi(argv[4]));
+    addr6.sin6_port = htons(addr.getPort()); //atoi(argv[4]));
+    //addr6.sin6_port = addr.getPort(); //atoi(argv[4]));
     //if (inet_pton(AF_INET6, argv[3], &addr6.sin6_addr) == 1) {
 
 errorstream<<"connect() ... "<<__LINE__<<std::endl;
@@ -572,7 +687,17 @@ struct socket * Connection::getPeer(u16 peer_id)
 
 bool Connection::deletePeer(u16 peer_id, bool timeout)
 {
+	errorstream<<"Connection::deletePeer("<< peer_id << ", "<< timeout << std::endl;
 	//JMutexAutoLock peerlock(m_peers_mutex);
+	if (!peer_id) {
+		if (sock) {
+			usrsctp_close(sock);
+			sock = nullptr;
+			return true;
+		} else {
+			return false;
+		}
+	}
 	if(m_peers.find(peer_id) == m_peers.end())
 		return false;
 
@@ -580,6 +705,8 @@ bool Connection::deletePeer(u16 peer_id, bool timeout)
 	ConnectionEvent e;
 	e.peerRemoved(peer_id, timeout);
 	putEvent(e);
+
+	usrsctp_close(m_peers.get(peer_id));
 
 	// delete m_peers[peer_id]; -- enet should handle this
 	m_peers.erase(peer_id);
@@ -612,8 +739,8 @@ ConnectionEvent Connection::waitEvent(u32 timeout_ms)
 
 void Connection::putCommand(ConnectionCommand &c)
 {
-	//m_command_queue.push_back(c);
-	processCommand(c);
+	m_command_queue.push_back(c);
+	//processCommand(c);
 }
 
 void Connection::Serve(Address bind_address)
