@@ -120,34 +120,6 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 
 	sock_listen = sock_connect = sctp_inited = false;
 
-	//usrsctp_init(9899, nullptr, nullptr);
-	//usrsctp_init(9899, nullptr, debug_printf);
-	//if (!sctp_inited)
-	//usrsctp_init(0, nullptr, debug_printf);
-
-#ifdef SCTP_DEBUG
-	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
-	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
-#endif
-
-	//usrsctp_sysctl_set_sctp_ecn_enable(0);
-
-	usrsctp_sysctl_set_sctp_nr_outgoing_streams_default(2);
-
-	usrsctp_sysctl_set_sctp_multiple_asconfs(1);
-
-	//usrsctp_sysctl_set_sctp_inits_include_nat_friendly(1);
-
-	//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, receive_cb, NULL, 0, NULL)) == NULL) {
-	//struct sctp_udpencaps encaps;
-	/*
-		if ((sock = usrsctp_socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
-			errorstream<<("usrsctp_socket")<<std::endl;
-			ConnectionEvent ev(CONNEVENT_BIND_FAILED);
-			putEvent(ev);
-		}
-	*/
-	//sock->so_state |= SS_NBIO;
 
 
 
@@ -280,6 +252,53 @@ static int OnSctpInboundPacket(struct socket* sock, union sctp_sockstore addr,
 }
 
 #endif
+
+
+
+
+
+void Connection::sctp_setup(u16 port) {
+	//usrsctp_init(9899, nullptr, nullptr);
+	//usrsctp_init(9899, nullptr, debug_printf);
+	//if (!sctp_inited)
+	//usrsctp_init(0, nullptr, debug_printf);
+	if (sctp_inited) 
+	 	return;
+	sctp_inited = true;
+	usrsctp_init(port, nullptr, debug_printf);
+
+#ifdef SCTP_DEBUG
+	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
+	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
+#endif
+
+	//usrsctp_sysctl_set_sctp_ecn_enable(0);
+
+	//usrsctp_sysctl_set_sctp_nr_outgoing_streams_default(2);
+
+	usrsctp_sysctl_set_sctp_multiple_asconfs(1);
+
+	//usrsctp_sysctl_set_sctp_inits_include_nat_friendly(1);
+
+	//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, receive_cb, NULL, 0, NULL)) == NULL) {
+	//struct sctp_udpencaps encaps;
+	/*
+		if ((sock = usrsctp_socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
+			errorstream<<("usrsctp_socket")<<std::endl;
+			ConnectionEvent ev(CONNEVENT_BIND_FAILED);
+			putEvent(ev);
+		}
+	*/
+	//sock->so_state |= SS_NBIO;
+
+#ifdef SCTP_DEBUG
+	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
+	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
+#endif
+
+}
+
+
 
 // Receive packets from the network and buffers and create ConnectionEvents
 void Connection::receive() {
@@ -618,12 +637,10 @@ static uint16_t event_types[] = {SCTP_ASSOC_CHANGE,
                                 };
 
 
+
+
 void Connection::sock_setup(u16 peer_id, struct socket *sock) {
 
-#ifdef SCTP_DEBUG
-	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
-	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
-#endif
 
 
 	/* Disable Nagle */
@@ -684,10 +701,7 @@ void Connection::serve(Address bind_addr) {
 
 		m_enet_host = enet_host_create(&address, g_settings->getU16("max_users"), CHANNEL_COUNT, 0, 0);
 	*/
-	if (!sctp_inited) {
-		sctp_inited = true;
-		usrsctp_init(bind_addr.getPort(), nullptr, debug_printf);
-	}
+	sctp_setup(bind_addr.getPort());
 
 	//usrsctp_sysctl_set_sctp_udp_tunneling_port(bind_addr.getPort());
 	//usrsctp_sysctl_set_sctp_udp_tunneling_port(9899);
@@ -771,10 +785,7 @@ void Connection::serve(Address bind_addr) {
 void Connection::connect(Address addr) {
 	errorstream << "connect() " << addr.serializeString() << " :" << addr.getPort() << std::endl;
 
-	if (!sctp_inited) {
-		sctp_inited = true;
-		usrsctp_init(addr.getPort()+100, nullptr, debug_printf);
-	}
+	sctp_setup(addr.getPort()+100);
 
 	m_last_recieved = porting::getTimeMs();
 	//JMutexAutoLock peerlock(m_peers_mutex);
