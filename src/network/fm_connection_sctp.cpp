@@ -393,6 +393,98 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 errorstream<<"receive() ... "<<__LINE__ << " n="<<n<<std::endl;
 				if (flags & MSG_NOTIFICATION) {
 					printf("Notification of length %llu received.\n", (unsigned long long)n);
+
+  const sctp_notification& notification =
+      reinterpret_cast<const sctp_notification&>(buffer);
+  if (notification.sn_header.sn_length != n) {
+errorstream<<" wrong notification"<<std::endl;
+}
+
+  // TODO(ldixon): handle notifications appropriately.
+  switch (notification.sn_header.sn_type) {
+    case SCTP_ASSOC_CHANGE:
+      errorstream << "SCTP_ASSOC_CHANGE"<<std::endl;
+      //OnNotificationAssocChange(notification.sn_assoc_change);
+
+
+    {
+    const sctp_assoc_change& change = notification.sn_assoc_change;
+  switch (change.sac_state) {
+    case SCTP_COMM_UP:
+      errorstream << "Association change SCTP_COMM_UP"<<std::endl;
+      break;
+    case SCTP_COMM_LOST:
+      errorstream << "Association change SCTP_COMM_LOST"<<std::endl;
+      break;
+    case SCTP_RESTART:
+      errorstream << "Association change SCTP_RESTART"<<std::endl;
+      break;
+    case SCTP_SHUTDOWN_COMP:
+      errorstream << "Association change SCTP_SHUTDOWN_COMP"<<std::endl;
+      break;
+    case SCTP_CANT_STR_ASSOC:
+      errorstream << "Association change SCTP_CANT_STR_ASSOC"<<std::endl;
+      break;
+    default:
+      errorstream << "Association change UNKNOWN " << std::endl;
+      break;
+  }
+   }
+
+
+
+
+
+
+
+      break;
+    case SCTP_REMOTE_ERROR:
+      errorstream << "SCTP_REMOTE_ERROR"<<std::endl;
+      break;
+    case SCTP_SHUTDOWN_EVENT:
+      errorstream << "SCTP_SHUTDOWN_EVENT"<<std::endl;
+      break;
+    case SCTP_ADAPTATION_INDICATION:
+      errorstream << "SCTP_ADAPTATION_INDICATION"<<std::endl;
+      break;
+    case SCTP_PARTIAL_DELIVERY_EVENT:
+      errorstream << "SCTP_PARTIAL_DELIVERY_EVENT"<<std::endl;
+      break;
+    case SCTP_AUTHENTICATION_EVENT:
+      errorstream << "SCTP_AUTHENTICATION_EVENT"<<std::endl;
+      break;
+    case SCTP_SENDER_DRY_EVENT:
+      errorstream << "SCTP_SENDER_DRY_EVENT"<<std::endl;
+      //SignalReadyToSend(true);
+      break;
+    // TODO(ldixon): Unblock after congestion.
+    case SCTP_NOTIFICATIONS_STOPPED_EVENT:
+      errorstream << "SCTP_NOTIFICATIONS_STOPPED_EVENT"<<std::endl;
+      break;
+    case SCTP_SEND_FAILED_EVENT:
+      errorstream << "SCTP_SEND_FAILED_EVENT"<<std::endl;
+      break;
+    case SCTP_STREAM_RESET_EVENT:
+      errorstream << "SCTP_STREAM_RESET_EVENT"<<std::endl;
+      //OnStreamResetEvent(&notification.sn_strreset_event);
+      break;
+    case SCTP_ASSOC_RESET_EVENT:
+      errorstream << "SCTP_ASSOC_RESET_EVENT"<<std::endl;
+      break;
+    case SCTP_STREAM_CHANGE_EVENT:
+      errorstream  << "SCTP_STREAM_CHANGE_EVENT"<<std::endl;
+      // An acknowledgment we get after our stream resets have gone through,
+      // if they've failed.  We log the message, but don't react -- we don't
+      // keep around the last-transmitted set of SSIDs we wanted to close for
+      // error recovery.  It doesn't seem likely to occur, and if so, likely
+      // harmless within the lifetime of a single SCTP association.
+      break;
+    default:
+      errorstream << "Unknown SCTP event: "
+                      << notification.sn_header.sn_type <<std::endl;
+      break;
+  }
+
 				} else {
 						char name[INET6_ADDRSTRLEN];
 					if (infotype == SCTP_RECVV_RCVINFO) {
@@ -503,12 +595,12 @@ errorstream<<"serve()"<< bind_addr.serializeString() << " :" << bind_addr.getPor
 // */
 	//}
 
-/*
+// /*
 	const int on = 1;
 	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_I_WANT_MAPPED_V4_ADDR, (const void*)&on, (socklen_t)sizeof(int)) < 0) {
 		perror("usrsctp_setsockopt SCTP_I_WANT_MAPPED_V4_ADDR");
 	}
-*/
+// */
 
     struct sockaddr_in6 addr;
 
@@ -530,9 +622,11 @@ errorstream<<"connect() transform to v6 "<<__LINE__<<std::endl;
 
     /* Acting as the 'server' */
     //memset((void *)&addr, 0, sizeof(addr));
+/*
 #ifdef HAVE_SIN_LEN
     addr.sin_len = sizeof(struct sockaddr_in);
 #endif
+*/
 #ifdef HAVE_SIN6_LEN
     addr.sin6_len = sizeof(struct sockaddr_in6);
 #endif
@@ -621,6 +715,25 @@ errorstream<<"connect() "<< addr.serializeString() << " :" << addr.getPort()<<st
 	}
 */
 
+    // needed???
+    struct sockaddr_in6 addr_local;
+#ifdef HAVE_SIN6_LEN
+    addr_local.sin6_len = sizeof(struct sockaddr_in6);
+#endif
+    addr_local.sin6_family = AF_INET6;
+    //addr.sin6_port = htons(bind_addr.getPort()); //htons(13);
+    addr_local.sin6_port = htons(0); //htons(13);
+    addr_local.sin6_addr = in6addr_any; //htonl(INADDR_ANY);
+	//addr.sin6_addr = in6addr_loopback;
+
+    //addr.sin_family = AF_INET;
+    //addr.sin_port = htons(bind_addr.getPort()); //htons(13);
+    //printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
+    //printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
+    if (usrsctp_bind(sock, (struct sockaddr *)&addr_local, sizeof(addr)) < 0) {
+      perror("usrsctp_bind");
+    }
+
 
 		//memset(&encaps, 0, sizeof(encaps));
 // /*
@@ -665,9 +778,11 @@ errorstream<<"connect() transform to v6 "<<__LINE__<<std::endl;
     //if (inet_pton(AF_INET6, argv[3], &addr6.sin6_addr) == 1) {
 
 errorstream<<"connect() ... "<<__LINE__<<std::endl;
-      if (usrsctp_connect(sock, (struct sockaddr *)&addr6, sizeof(addr6)) < 0) {
+      if (auto connect_result = usrsctp_connect(sock, (struct sockaddr *)&addr6, sizeof(addr6)) < 0) {
+if (connect_result < 0 && errno != EINPROGRESS) {
         perror("usrsctp_connect fail");
 		sock = nullptr;
+}
       }
 /*
     } else if (inet_pton(AF_INET, argv[3], &addr4.sin_addr) == 1) {
