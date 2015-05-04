@@ -118,10 +118,11 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	m_last_recieved(0),
 	m_last_recieved_warn(0) {
 
-	sock_listen = sock_connect = false;
+	sock_listen = sock_connect = sctp_inited = false;
 
 	//usrsctp_init(9899, nullptr, nullptr);
-	usrsctp_init(9899, nullptr, debug_printf);
+	//usrsctp_init(9899, nullptr, debug_printf);
+	//if (!sctp_inited)
 	//usrsctp_init(0, nullptr, debug_printf);
 
 #ifdef SCTP_DEBUG
@@ -132,6 +133,10 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	//usrsctp_sysctl_set_sctp_ecn_enable(0);
 
 	usrsctp_sysctl_set_sctp_nr_outgoing_streams_default(2);
+
+	usrsctp_sysctl_set_sctp_multiple_asconfs(1);
+
+	//usrsctp_sysctl_set_sctp_inits_include_nat_friendly(1);
 
 	//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, receive_cb, NULL, 0, NULL)) == NULL) {
 	//struct sctp_udpencaps encaps;
@@ -667,6 +672,13 @@ void Connection::serve(Address bind_addr) {
 
 		m_enet_host = enet_host_create(&address, g_settings->getU16("max_users"), CHANNEL_COUNT, 0, 0);
 	*/
+	if (!sctp_inited) {
+		sctp_inited = true;
+		usrsctp_init(bind_addr.getPort(), nullptr, debug_printf);
+	}
+
+	//usrsctp_sysctl_set_sctp_udp_tunneling_port(bind_addr.getPort());
+	//usrsctp_sysctl_set_sctp_udp_tunneling_port(9899);
 
 	if ((sock = usrsctp_socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
 		//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
@@ -680,18 +692,18 @@ void Connection::serve(Address bind_addr) {
 
 //for connect too
 	//if (argc > 2) {
-// /*
+/*
 	//	memset(&encaps, 0, sizeof(encaps));
 	encaps = {};
 	encaps.sue_address.ss_family = AF_INET6;
-	//encaps.sue_port = htons(bind_addr.getPort()+10);
-	encaps.sue_port = htons(9899);
+	encaps.sue_port = htons(bind_addr.getPort());
+	//encaps.sue_port = htons(9899);
 	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_REMOTE_UDP_ENCAPS_PORT, (const void*)&encaps, (socklen_t)sizeof(encaps)) < 0) {
 		errorstream << ("setsockopt") << std::endl;
 		ConnectionEvent ev(CONNEVENT_BIND_FAILED);
 		putEvent(ev);
 	}
-// */
+ */
 	//}
 
 
@@ -747,6 +759,10 @@ void Connection::serve(Address bind_addr) {
 void Connection::connect(Address addr) {
 	errorstream << "connect() " << addr.serializeString() << " :" << addr.getPort() << std::endl;
 
+	if (!sctp_inited) {
+		sctp_inited = true;
+		usrsctp_init(addr.getPort(), nullptr, debug_printf);
+	}
 
 	m_last_recieved = porting::getTimeMs();
 	//JMutexAutoLock peerlock(m_peers_mutex);
@@ -832,9 +848,9 @@ void Connection::connect(Address addr) {
 // /*
 	encaps = {};
 	encaps.sue_address.ss_family = AF_INET6;
-//		encaps.sue_port = htons(addr.getPort()+10);
+		encaps.sue_port = htons(addr.getPort());
 	//encaps.sue_port = htons(30042);
-	encaps.sue_port = htons(9899);
+	//encaps.sue_port = htons(9899);
 	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_REMOTE_UDP_ENCAPS_PORT, (const void*)&encaps, (socklen_t)sizeof(encaps)) < 0) {
 		errorstream << ("connect setsockopt fail") << std::endl;
 		ConnectionEvent ev(CONNEVENT_CONNECT_FAILED);

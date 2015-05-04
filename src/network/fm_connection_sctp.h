@@ -371,7 +371,7 @@ private:
 	void PrintInfo();
 	std::string getDesc();
 
-	bool sock_listen, sock_connect;
+	bool sock_listen, sock_connect, sctp_inited;
 	int recv(u16 peer_id, struct socket *sock);
 	void sock_setup(u16 peer_id, struct socket *sock);
 	std::unordered_map<u16, std::string> recv_buf;
