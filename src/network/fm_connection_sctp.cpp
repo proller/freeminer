@@ -367,7 +367,7 @@ void Connection::receive() {
 	}
 	if (sock_listen && sock) {
 
-//if (m_peers.size() >=1 ) return;  // NONONONONONONONONONONONONONONONONON!!!!!!!!!!!!!!!!!!!!!!!
+if (m_peers.size() >=1 ) return;  // NONONONONONONONONONONONONONONONONON!!!!!!!!!!!!!!!!!!!!!!!
 
 		errorstream << "receive() try accept s=" << sock<<  std::endl;
 		//if (!recv(0, sock)) {
@@ -925,6 +925,7 @@ errorstream<<" === sending to peer_id="<<peer_id << " bytes="<<data.getSize()<< 
 	if (usrsctp_sendv(peer, *data, data.getSize(), NULL, 0, (void *)&sndinfo,
 	                  sizeof(sndinfo), SCTP_SENDV_SNDINFO, 0) < 0) {
 		perror("usrsctp_sendv");
+		deletePeer(peer_id, 0);
 	}
 
 }
