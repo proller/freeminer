@@ -129,7 +129,7 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
 #endif
 
-	usrsctp_sysctl_set_sctp_ecn_enable(0);
+	//usrsctp_sysctl_set_sctp_ecn_enable(0);
 
 	usrsctp_sysctl_set_sctp_nr_outgoing_streams_default(2);
 
@@ -375,9 +375,11 @@ void Connection::receive() {
 	}
 	if (sock_listen && sock) {
 
-if (m_peers.size() >=1 ) return;  // NONONONONONONONONONONONONONONONONON!!!!!!!!!!!!!!!!!!!!!!!
+//if (m_peers.size() >=1 ) return;  // NONONONONONONONONONONONONONONONONON!!!!!!!!!!!!!!!!!!!!!!!
 
-		errorstream << "receive() try accept s=" << sock<<  std::endl;
+		usrsctp_set_non_blocking(sock, 1);
+
+		//errorstream << "receive() try accept s=" << sock<<  std::endl;
 		//if (!recv(0, sock)) {
 		//}
 		//struct socket **conn_sock;
@@ -386,8 +388,13 @@ if (m_peers.size() >=1 ) return;  // NONONONONONONONONONONONONONONONONON!!!!!!!!
 		socklen_t addr_len = sizeof(remote_addr);
 		//conn_sock = (struct socket **)malloc(sizeof(struct socket *));
 		if ((conn_sock = usrsctp_accept(sock, (struct sockaddr *) &remote_addr, &addr_len)) == NULL) {
+if (errno == EWOULDBLOCK) {
+std::this_thread::sleep_for(std::chrono::milliseconds(10));
+return;
+} else {
 			printf("usrsctp_accept failed.  exiting...\n");
 			return;
+}
 			//continue;
 		}
 
@@ -423,6 +430,8 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 	if (!sock) {
 		return 0;
 	}
+
+	usrsctp_set_non_blocking(sock, 1);
 
 
 	struct sockaddr_in6 addr;
@@ -558,9 +567,9 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 				       (flags & MSG_EOR) ? 1 : 0);
 */
 				recv_buf[peer_id] += std::string(buffer, n); // optimize here if firs packet complete`
+				verbosestream <<  "recieved data n="<< n << " complete="<<(flags & MSG_EOR)<< " buf="<<recv_buf[peer_id].size()<<" from sock="<<sock<<std::endl;
 				if ((flags & MSG_EOR))
 				{
-				verbosestream << "recieved data "<< n <<" from sock="<<sock<<std::endl;
 
 					ConnectionEvent e;
 					//SharedBuffer<u8> resultdata((const unsigned char*)buffer, n);
@@ -602,11 +611,13 @@ static uint16_t event_types[] = {SCTP_ASSOC_CHANGE,
 void Connection::sock_setup(u16 peer_id, struct socket *sock) {
 
 	/* Disable Nagle */
+/*
 	uint32_t nodelay = 1;
 	if(usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_NODELAY, &nodelay, sizeof(nodelay))) {
 		errorstream << " setsockopt error: SCTP_NODELAY" << peer_id << std::endl;
 		//return NULL;
 	}
+*/
 
 	struct sctp_event event = {};
 	event.se_assoc_id = SCTP_ALL_ASSOC;
@@ -620,7 +631,7 @@ void Connection::sock_setup(u16 peer_id, struct socket *sock) {
 // /*
 	if (usrsctp_set_non_blocking(sock, 1) < 0) {
 		errorstream << "Failed to set SCTP to non blocking." << std::endl;
-		//OCreturn false;
+		//return false;
 	}
 // */
 
@@ -630,6 +641,11 @@ void Connection::sock_setup(u16 peer_id, struct socket *sock) {
 		perror("usrsctp_setsockopt SCTP_I_WANT_MAPPED_V4_ADDR");
 	}
 // */
+
+	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_EXPLICIT_EOR, &on, sizeof(int)) < 0) {
+		perror("setsockopt SCTP_EXPLICIT_EOR");
+	}
+
 
 }
 
@@ -655,6 +671,7 @@ void Connection::serve(Address bind_addr) {
 		putEvent(ev);
 	}
 
+	sock_setup(0, sock);
 
 //for connect too
 	//if (argc > 2) {
@@ -912,8 +929,8 @@ errorstream<<" === send no chan "<<channelnum<<"/"<< CHANNEL_COUNT<<std::endl;
 		ENetPacket *packet = enet_packet_create(*data, data.getSize(), reliable ? ENET_PACKET_FLAG_RELIABLE : 0);
 	*/
 
-	auto peer = getPeer(peer_id);
-	if(!peer) {
+	auto sock = getPeer(peer_id);
+	if(!sock) {
 errorstream<<" === send no peer sock"<<std::endl;
 		deletePeer(peer_id, false);
 		return;
@@ -924,21 +941,67 @@ errorstream<<" === send no peer sock"<<std::endl;
 	*/
 
 //errorstream<<" === send to peer " << peer_id<< "sock="<< peer<<std::endl;
-verbosestream<<" === sending to peer_id="<<peer_id << " bytes="<<data.getSize()<< " sock="<< peer<<std::endl;
 
+//usrsctp_set_non_blocking(peer, 0);
 
 	struct sctp_sndinfo sndinfo = {};
 	//char buffer[BUFFER_SIZE];
+	//todo 
+//sndinfo.snd_sid = channelnum;
 	sndinfo.snd_sid = 1;
 	//sndinfo.snd_flags = 0;
+	//sndinfo.snd_flags = SCTP_EOR;
 	//sndinfo.snd_ppid = htonl(DISCARD_PPID);
 	//sndinfo.snd_context = 0;
 	//sndinfo.snd_assoc_id = 0;
+/*
 	if (usrsctp_sendv(peer, *data, data.getSize(), NULL, 0, (void *)&sndinfo,
 	                  sizeof(sndinfo), SCTP_SENDV_SNDINFO, 0) < 0) {
 		perror("usrsctp_sendv");
 		deletePeer(peer_id, 0);
+errorstream<<" === sending FAILED to peer_id="<<peer_id << " bytes="<<data.getSize()<< " sock="<< peer<<std::endl;
 	}
+*/
+    size_t maxlen = 0xffff-100;
+	size_t buflen = data.getSize();
+    size_t sendlen = std::min(buflen, maxlen);
+    size_t remlen  = buflen;
+    size_t curpos = 0;
+
+    while (remlen > 0)
+    {
+
+
+if (remlen <= maxlen){
+
+	sndinfo.snd_flags |= SCTP_EOR;
+
+}
+
+errorstream<<" psend" << " remlen=" << remlen << " curpos="<<curpos<< " sendlen="<<sendlen << " buflen="<<buflen<< " nowsent="<<(curpos+sendlen)<<" flags="<<sndinfo.snd_flags<<std::endl;
+
+int len = usrsctp_sendv(sock, *data+curpos, sendlen, NULL, 0, (void *)&sndinfo,
+	                  sizeof(sndinfo), SCTP_SENDV_SNDINFO, 0);
+	if (len < 0) {
+		perror("usrsctp_sendv");
+		deletePeer(peer_id, 0);
+
+errorstream<<" === sending FAILED to peer_id="<<peer_id << " bytes="<<data.getSize()<< " sock="<< sock<<std::endl;
+		break;
+	}
+
+
+        //ssize_t len = sendto(sock, curpos, sendlen, flags, dest_addr, addrlen);
+        //if (len == -1)
+        //    return -1;
+
+        curpos += len;
+        remlen -= len;
+        sendlen = std::min(remlen, maxlen);
+    }
+
+    //return buflen;
+
 
 }
 
