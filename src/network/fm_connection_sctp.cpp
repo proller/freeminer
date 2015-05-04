@@ -237,6 +237,45 @@ void Connection::processCommand(ConnectionCommand &c)
 	}
 }
 
+
+static int OnSctpInboundPacket(struct socket* sock, union sctp_sockstore addr,
+                               void* data, size_t length,
+                               struct sctp_rcvinfo rcv, int flags,
+                               void* ulp_info) {
+
+errorstream<<"OnSctpInboundPacket" <<sock << " l="<< length<<" notif="<<(flags & MSG_NOTIFICATION)<<std::endl;
+/*
+  SctpDataMediaChannel* channel = static_cast<SctpDataMediaChannel*>(ulp_info);
+  // Post data to the channel's receiver thread (copying it).
+  // TODO(ldixon): Unclear if copy is needed as this method is responsible for
+  // memory cleanup. But this does simplify code.
+  const SctpDataMediaChannel::PayloadProtocolIdentifier ppid =
+      static_cast<SctpDataMediaChannel::PayloadProtocolIdentifier>(
+          rtc::HostToNetwork32(rcv.rcv_ppid));
+  cricket::DataMessageType type = cricket::DMT_NONE;
+  if (!GetDataMediaType(ppid, &type) && !(flags & MSG_NOTIFICATION)) {
+    // It's neither a notification nor a recognized data packet.  Drop it.
+    LOG(LS_ERROR) << "Received an unknown PPID " << ppid
+                  << " on an SCTP packet.  Dropping.";
+  } else {
+    SctpInboundPacket* packet = new SctpInboundPacket;
+    packet->buffer.SetData(reinterpret_cast<uint8_t*>(data), length);
+    packet->params.ssrc = rcv.rcv_sid;
+    packet->params.seq_num = rcv.rcv_ssn;
+    packet->params.timestamp = rcv.rcv_tsn;
+    packet->params.type = type;
+    packet->flags = flags;
+    // The ownership of |packet| transfers to |msg|.
+    InboundPacketMessage* msg = new InboundPacketMessage(packet);
+    channel->worker_thread()->Post(channel, MSG_SCTPINBOUNDPACKET, msg);
+  }
+*/
+  free(data);
+  return 1;
+
+}
+
+
 // Receive packets from the network and buffers and create ConnectionEvents
 void Connection::receive()
 {
@@ -554,6 +593,13 @@ void Connection::sock_setup(u16 peer_id, struct socket *sock) {
   }
 // */
 
+// /*
+	const int on = 1;
+	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_I_WANT_MAPPED_V4_ADDR, (const void*)&on, (socklen_t)sizeof(int)) < 0) {
+		perror("usrsctp_setsockopt SCTP_I_WANT_MAPPED_V4_ADDR");
+	}
+// */
+
 }
 
 // host
@@ -571,8 +617,9 @@ errorstream<<"serve()"<< bind_addr.serializeString() << " :" << bind_addr.getPor
 	m_enet_host = enet_host_create(&address, g_settings->getU16("max_users"), CHANNEL_COUNT, 0, 0);
 */
 
-	//if ((sock = usrsctp_socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
-	if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
+	if ((sock = usrsctp_socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
+	//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
+	//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, OnSctpInboundPacket, NULL, 0, NULL)) == NULL) {
 		errorstream<<("usrsctp_socket")<<std::endl;
 		ConnectionEvent ev(CONNEVENT_BIND_FAILED);
 		putEvent(ev);
@@ -595,12 +642,6 @@ errorstream<<"serve()"<< bind_addr.serializeString() << " :" << bind_addr.getPor
 // */
 	//}
 
-// /*
-	const int on = 1;
-	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_I_WANT_MAPPED_V4_ADDR, (const void*)&on, (socklen_t)sizeof(int)) < 0) {
-		perror("usrsctp_setsockopt SCTP_I_WANT_MAPPED_V4_ADDR");
-	}
-// */
 
     struct sockaddr_in6 addr;
 
