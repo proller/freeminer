@@ -359,7 +359,11 @@ void Connection::receive() {
 		recv(i.first, i.second);
 	}
 
+		//errorstream << "receive() pre accept s=" << sock<< " m_peers="<<m_peers.size()<<  std::endl;
+
 	if (sock) {
+
+if (m_peers.size() >=1 ) return;  // NONONONONONONONONONONONONONONONONON!!!!!!!!!!!!!!!!!!!!!!!
 
 		errorstream << "receive() try accept s=" << sock<<  std::endl;
 		//if (!recv(0, sock)) {
@@ -761,6 +765,7 @@ void Connection::connect(Address addr) {
 		}
 	*/
 
+/*
 	// needed???
 	struct sockaddr_in6 addr_local;
 #ifdef HAVE_SIN6_LEN
@@ -779,7 +784,7 @@ void Connection::connect(Address addr) {
 	if (usrsctp_bind(sock, (struct sockaddr *)&addr_local, sizeof(addr)) < 0) {
 		perror("usrsctp_bind");
 	}
-
+*/
 
 	//memset(&encaps, 0, sizeof(encaps));
 // /*

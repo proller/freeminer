@@ -55,6 +55,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 
 	auto peer_id = pkt->getPeerId();
 
+
 	std::string addr_s;
 	try{
 		Address address = getPeerAddress(peer_id);
@@ -79,7 +80,8 @@ void Server::ProcessData(NetworkPacket *pkt)
 		 * respond for some time, your server was overloaded or
 		 * things like that.
 		 */
-		verbosestream<<"Server::ProcessData(): Canceling: peer "
+		//verbosestream
+		errorstream<<"Server::ProcessData(): Canceling: peer "
 				<<peer_id<<" not found"<<std::endl;
 		return;
 	}
@@ -88,6 +90,9 @@ void Server::ProcessData(NetworkPacket *pkt)
 	{
 
 	auto datasize = pkt->getSize();
+
+
+errorstream<<"Server::ProcessData s="<<datasize<< "from " << peer_id <<std::endl;
 
 	if(datasize < 2)
 		return;
