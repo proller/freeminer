@@ -355,6 +355,10 @@ void Connection::receive() {
 		}
 	*/
 
+	for (auto & i : m_peers) {
+		recv(i.first, i.second);
+	}
+
 	if (sock) {
 
 		errorstream << "receive() try accept " <<  std::endl;
@@ -379,7 +383,7 @@ void Connection::receive() {
 		errorstream << "receive() accepted " << conn_sock << " addr_len=" << addr_len << " id=" << peer_id << std::endl;
 
 		m_peers.set(peer_id, conn_sock);
-		//m_peers_address.set(peer_id, Address(event.peer->address.host, event.peer->address.port));
+		m_peers_address.set(peer_id, Address(remote_addr.sin6_addr, remote_addr.sin6_port));
 
 		//event.peer->data = new u16;
 		//*((u16*)event.peer->data) = peer_id;
@@ -391,9 +395,6 @@ void Connection::receive() {
 
 	}
 
-	for (auto & i : m_peers) {
-		recv(i.first, i.second);
-	}
 
 
 //errorstream<<"receive() ... "<<__LINE__<<std::endl;
@@ -885,6 +886,9 @@ void Connection::send(u16 peer_id, u8 channelnum,
 		if (enet_peer_send(peer, channelnum, packet) < 0)
 			errorstream<<"enet_peer_send failed"<<std::endl;
 	*/
+
+errorstream<<" === sending to peer_id="<<peer_id << " bytes="<<data.getSize()<<std::endl;
+
 	struct sctp_sndinfo sndinfo = {};
 	//char buffer[BUFFER_SIZE];
 	sndinfo.snd_sid = 1;
