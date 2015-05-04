@@ -369,7 +369,7 @@ void Connection::receive() {
 		recv(i.first, i.second);
 	}
 
-		//errorstream << "receive() pre accept s=" << sock<< " m_peers="<<m_peers.size()<<  std::endl;
+	//errorstream << "receive() pre accept s=" << sock<< " m_peers="<<m_peers.size()<<  std::endl;
 	if (sock_connect && sock) {
 		recv(PEER_ID_SERVER, sock);
 	}
@@ -388,13 +388,13 @@ void Connection::receive() {
 		socklen_t addr_len = sizeof(remote_addr);
 		//conn_sock = (struct socket **)malloc(sizeof(struct socket *));
 		if ((conn_sock = usrsctp_accept(sock, (struct sockaddr *) &remote_addr, &addr_len)) == NULL) {
-if (errno == EWOULDBLOCK) {
-std::this_thread::sleep_for(std::chrono::milliseconds(10));
-return;
-} else {
-			printf("usrsctp_accept failed.  exiting...\n");
-			return;
-}
+			if (errno == EWOULDBLOCK) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				return;
+			} else {
+				printf("usrsctp_accept failed.  exiting...\n");
+				return;
+			}
 			//continue;
 		}
 
@@ -474,9 +474,11 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 							putEvent(e);
 						}
 						break;
-					case SCTP_COMM_LOST:
+					case SCTP_COMM_LOST: {
 						errorstream << "Association change SCTP_COMM_LOST" << std::endl;
-						break;
+						deletePeer(peer_id,  false);
+					}
+					break;
 					case SCTP_RESTART:
 						errorstream << "Association change SCTP_RESTART" << std::endl;
 						break;
@@ -497,9 +499,13 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 
 
 				break;
-			case SCTP_PEER_ADDR_CHANGE:
-				errorstream << "SCTP_PEER_ADDR_CHANGE" << std::endl;
+			case SCTP_PEER_ADDR_CHANGE: {
+				//auto * snp = (union sctp_notification *)buffer;
+				const sctp_paddr_change* spc = &notification.sn_paddr_change;
+				//printf("SCTP_PEER_ADDR_CHANGE: state=%d, error=%d\n",spc->spc_state, spc->spc_error);
 
+				errorstream << "SCTP_PEER_ADDR_CHANGE state=" << spc->spc_state << " error=" << spc->spc_error << std::endl;
+			}
 			case SCTP_REMOTE_ERROR:
 				errorstream << "SCTP_REMOTE_ERROR" << std::endl;
 				break;
@@ -560,16 +566,15 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 				       rcv_info.rcv_context,
 				       (flags & MSG_EOR) ? 1 : 0);
 			} else {
-/*
-				printf("Msg of length %llu received from %s:%u, complete %d.\n",
-				       (unsigned long long)n,
-				       inet_ntop(AF_INET6, &addr.sin6_addr, name, INET6_ADDRSTRLEN), ntohs(addr.sin6_port),
-				       (flags & MSG_EOR) ? 1 : 0);
-*/
+				/*
+								printf("Msg of length %llu received from %s:%u, complete %d.\n",
+								       (unsigned long long)n,
+								       inet_ntop(AF_INET6, &addr.sin6_addr, name, INET6_ADDRSTRLEN), ntohs(addr.sin6_port),
+								       (flags & MSG_EOR) ? 1 : 0);
+				*/
 				recv_buf[peer_id] += std::string(buffer, n); // optimize here if firs packet complete`
 				//verbosestream <<  "recieved data n="<< n << " complete="<<(flags & MSG_EOR)<< " buf="<<recv_buf[peer_id].size()<<" from sock="<<sock<<std::endl;
-				if ((flags & MSG_EOR))
-				{
+				if ((flags & MSG_EOR)) {
 
 					ConnectionEvent e;
 					//SharedBuffer<u8> resultdata((const unsigned char*)buffer, n);
@@ -611,13 +616,13 @@ static uint16_t event_types[] = {SCTP_ASSOC_CHANGE,
 void Connection::sock_setup(u16 peer_id, struct socket *sock) {
 
 	/* Disable Nagle */
-/*
-	uint32_t nodelay = 1;
-	if(usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_NODELAY, &nodelay, sizeof(nodelay))) {
-		errorstream << " setsockopt error: SCTP_NODELAY" << peer_id << std::endl;
-		//return NULL;
-	}
-*/
+	/*
+		uint32_t nodelay = 1;
+		if(usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_NODELAY, &nodelay, sizeof(nodelay))) {
+			errorstream << " setsockopt error: SCTP_NODELAY" << peer_id << std::endl;
+			//return NULL;
+		}
+	*/
 
 	struct sctp_event event = {};
 	event.se_assoc_id = SCTP_ALL_ASSOC;
@@ -802,26 +807,26 @@ void Connection::connect(Address addr) {
 		}
 	*/
 
-/*
-	// needed???
-	struct sockaddr_in6 addr_local;
-#ifdef HAVE_SIN6_LEN
-	addr_local.sin6_len = sizeof(struct sockaddr_in6);
-#endif
-	addr_local.sin6_family = AF_INET6;
-	//addr.sin6_port = htons(bind_addr.getPort()); //htons(13);
-	addr_local.sin6_port = htons(0); //htons(13);
-	addr_local.sin6_addr = in6addr_any; //htonl(INADDR_ANY);
-	//addr.sin6_addr = in6addr_loopback;
+	/*
+		// needed???
+		struct sockaddr_in6 addr_local;
+	#ifdef HAVE_SIN6_LEN
+		addr_local.sin6_len = sizeof(struct sockaddr_in6);
+	#endif
+		addr_local.sin6_family = AF_INET6;
+		//addr.sin6_port = htons(bind_addr.getPort()); //htons(13);
+		addr_local.sin6_port = htons(0); //htons(13);
+		addr_local.sin6_addr = in6addr_any; //htonl(INADDR_ANY);
+		//addr.sin6_addr = in6addr_loopback;
 
-	//addr.sin_family = AF_INET;
-	//addr.sin_port = htons(bind_addr.getPort()); //htons(13);
-	//printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
-	//printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
-	if (usrsctp_bind(sock, (struct sockaddr *)&addr_local, sizeof(addr)) < 0) {
-		perror("usrsctp_bind");
-	}
-*/
+		//addr.sin_family = AF_INET;
+		//addr.sin_port = htons(bind_addr.getPort()); //htons(13);
+		//printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
+		//printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
+		if (usrsctp_bind(sock, (struct sockaddr *)&addr_local, sizeof(addr)) < 0) {
+			perror("usrsctp_bind");
+		}
+	*/
 
 	//memset(&encaps, 0, sizeof(encaps));
 // /*
@@ -911,19 +916,17 @@ void Connection::send(u16 peer_id, u8 channelnum,
 //errorstream<<" === sending to peer_id="<<peer_id << " bytes="<<data.getSize()<<std::endl;
 	{
 		//JMutexAutoLock peerlock(m_peers_mutex);
-		if (m_peers.find(peer_id) == m_peers.end())
-{
-errorstream<<" === send no peer "<< peer_id<<std::endl;
+		if (m_peers.find(peer_id) == m_peers.end()) {
+			errorstream << " === send no peer " << peer_id << std::endl;
 			return;
-}
+		}
 	}
 	dout_con << getDesc() << " sending to peer_id=" << peer_id << std::endl;
 
-	if(channelnum >= CHANNEL_COUNT)
-{
-errorstream<<" === send no chan "<<channelnum<<"/"<< CHANNEL_COUNT<<std::endl;
+	if(channelnum >= CHANNEL_COUNT) {
+		errorstream << " === send no chan " << channelnum << "/" << CHANNEL_COUNT << std::endl;
 		return;
-}
+	}
 
 	/*
 		ENetPacket *packet = enet_packet_create(*data, data.getSize(), reliable ? ENET_PACKET_FLAG_RELIABLE : 0);
@@ -931,7 +934,7 @@ errorstream<<" === send no chan "<<channelnum<<"/"<< CHANNEL_COUNT<<std::endl;
 
 	auto sock = getPeer(peer_id);
 	if(!sock) {
-errorstream<<" === send no peer sock"<<std::endl;
+		errorstream << " === send no peer sock" << std::endl;
 		deletePeer(peer_id, false);
 		return;
 	}
@@ -946,7 +949,7 @@ errorstream<<" === send no peer sock"<<std::endl;
 
 	struct sctp_sndinfo sndinfo = {};
 	//char buffer[BUFFER_SIZE];
-	//todo 
+	//todo
 //sndinfo.snd_sid = channelnum;
 	sndinfo.snd_sid = 1;
 	//sndinfo.snd_flags = 0;
@@ -954,54 +957,53 @@ errorstream<<" === send no peer sock"<<std::endl;
 	//sndinfo.snd_ppid = htonl(DISCARD_PPID);
 	//sndinfo.snd_context = 0;
 	//sndinfo.snd_assoc_id = 0;
-/*
-	if (usrsctp_sendv(peer, *data, data.getSize(), NULL, 0, (void *)&sndinfo,
-	                  sizeof(sndinfo), SCTP_SENDV_SNDINFO, 0) < 0) {
-		perror("usrsctp_sendv");
-		deletePeer(peer_id, 0);
-errorstream<<" === sending FAILED to peer_id="<<peer_id << " bytes="<<data.getSize()<< " sock="<< peer<<std::endl;
-	}
-*/
-    size_t maxlen = 0xffff-1000;
-    //size_t maxlen = 1400;
+	/*
+		if (usrsctp_sendv(peer, *data, data.getSize(), NULL, 0, (void *)&sndinfo,
+		                  sizeof(sndinfo), SCTP_SENDV_SNDINFO, 0) < 0) {
+			perror("usrsctp_sendv");
+			deletePeer(peer_id, 0);
+	errorstream<<" === sending FAILED to peer_id="<<peer_id << " bytes="<<data.getSize()<< " sock="<< peer<<std::endl;
+		}
+	*/
+	size_t maxlen = 0xffff - 1000;
+	//size_t maxlen = 1400;
 	size_t buflen = data.getSize();
-    size_t sendlen = std::min(buflen, maxlen);
-    size_t remlen  = buflen;
-    size_t curpos = 0;
+	size_t sendlen = std::min(buflen, maxlen);
+	size_t remlen  = buflen;
+	size_t curpos = 0;
 
-    while (remlen > 0)
-    {
+	while (remlen > 0) {
 
 
-if (remlen <= maxlen){
+		if (remlen <= maxlen) {
 
-	sndinfo.snd_flags |= SCTP_EOR;
+			sndinfo.snd_flags |= SCTP_EOR;
 
-}
+		}
 
 //errorstream<<" psend" << " remlen=" << remlen << " curpos="<<curpos<< " sendlen="<<sendlen << " buflen="<<buflen<< " nowsent="<<(curpos+sendlen)<<" flags="<<sndinfo.snd_flags<<std::endl;
 
-int len = usrsctp_sendv(sock, *data+curpos, sendlen, NULL, 0, (void *)&sndinfo,
-	                  sizeof(sndinfo), SCTP_SENDV_SNDINFO, 0);
-	if (len < 0) {
-		perror("usrsctp_sendv");
-		deletePeer(peer_id, 0);
+		int len = usrsctp_sendv(sock, *data + curpos, sendlen, NULL, 0, (void *)&sndinfo,
+		                        sizeof(sndinfo), SCTP_SENDV_SNDINFO, 0);
+		if (len < 0) {
+			perror("usrsctp_sendv");
+			deletePeer(peer_id, 0);
 
-errorstream<<" === sending FAILED to peer_id="<<peer_id << " bytes="<<data.getSize()<< " sock="<< sock<<std::endl;
-		break;
+			errorstream << " === sending FAILED to peer_id=" << peer_id << " bytes=" << data.getSize() << " sock=" << sock << std::endl;
+			break;
+		}
+
+
+		//ssize_t len = sendto(sock, curpos, sendlen, flags, dest_addr, addrlen);
+		//if (len == -1)
+		//    return -1;
+
+		curpos += len;
+		remlen -= len;
+		sendlen = std::min(remlen, maxlen);
 	}
 
-
-        //ssize_t len = sendto(sock, curpos, sendlen, flags, dest_addr, addrlen);
-        //if (len == -1)
-        //    return -1;
-
-        curpos += len;
-        remlen -= len;
-        sendlen = std::min(remlen, maxlen);
-    }
-
-    //return buflen;
+	//return buflen;
 
 
 }
@@ -1215,8 +1217,8 @@ bool parse_msgpack_packet(char *data, u32 datasize, MsgpackPacket *packet, int *
 		*packet = obj.as<MsgpackPacket>();
 
 		*command = (*packet)[MSGPACK_COMMAND].as<int>();
-	} catch (msgpack::type_error e) { errorstream<< "msgpack::type_error sz=" << datasize<<" e=" << e.what()<< std::endl; return false; }
-	catch (msgpack::unpack_error e) { errorstream<< "msgpack::type_error sz=" << datasize<<" e=" << e.what()<< std::endl; return false; }
+	} catch (msgpack::type_error e) { errorstream << "msgpack::type_error sz=" << datasize << " e=" << e.what() << std::endl; return false; }
+	catch (msgpack::unpack_error e) { errorstream << "msgpack::type_error sz=" << datasize << " e=" << e.what() << std::endl; return false; }
 	return true;
 }
 
