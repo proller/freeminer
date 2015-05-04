@@ -674,7 +674,8 @@ void Connection::serve(Address bind_addr) {
 	*/
 	if (!sctp_inited) {
 		sctp_inited = true;
-		usrsctp_init(bind_addr.getPort(), nullptr, debug_printf);
+		usrsctp_init(0, nullptr, debug_printf);
+		//usrsctp_init(bind_addr.getPort(), nullptr, debug_printf);
 	}
 
 	//usrsctp_sysctl_set_sctp_udp_tunneling_port(bind_addr.getPort());
@@ -761,7 +762,8 @@ void Connection::connect(Address addr) {
 
 	if (!sctp_inited) {
 		sctp_inited = true;
-		usrsctp_init(addr.getPort(), nullptr, debug_printf);
+		//usrsctp_init(addr.getPort(), nullptr, debug_printf);
+		usrsctp_init(0, nullptr, debug_printf);
 	}
 
 	m_last_recieved = porting::getTimeMs();
@@ -845,7 +847,7 @@ void Connection::connect(Address addr) {
 	*/
 
 	//memset(&encaps, 0, sizeof(encaps));
-// /*
+ /*
 	encaps = {};
 	encaps.sue_address.ss_family = AF_INET6;
 		encaps.sue_port = htons(addr.getPort());
@@ -856,7 +858,7 @@ void Connection::connect(Address addr) {
 		ConnectionEvent ev(CONNEVENT_CONNECT_FAILED);
 		putEvent(ev);
 	}
-// */
+ */
 	struct sockaddr_in6 addr6 = {};
 
 	//memset((void *)&addr6, 0, sizeof(addr6));
