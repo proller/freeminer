@@ -567,7 +567,7 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 				       (flags & MSG_EOR) ? 1 : 0);
 */
 				recv_buf[peer_id] += std::string(buffer, n); // optimize here if firs packet complete`
-				verbosestream <<  "recieved data n="<< n << " complete="<<(flags & MSG_EOR)<< " buf="<<recv_buf[peer_id].size()<<" from sock="<<sock<<std::endl;
+				//verbosestream <<  "recieved data n="<< n << " complete="<<(flags & MSG_EOR)<< " buf="<<recv_buf[peer_id].size()<<" from sock="<<sock<<std::endl;
 				if ((flags & MSG_EOR))
 				{
 
@@ -942,7 +942,7 @@ errorstream<<" === send no peer sock"<<std::endl;
 
 //errorstream<<" === send to peer " << peer_id<< "sock="<< peer<<std::endl;
 
-//usrsctp_set_non_blocking(peer, 0);
+	usrsctp_set_non_blocking(sock, 0);
 
 	struct sctp_sndinfo sndinfo = {};
 	//char buffer[BUFFER_SIZE];
@@ -962,7 +962,8 @@ errorstream<<" === send no peer sock"<<std::endl;
 errorstream<<" === sending FAILED to peer_id="<<peer_id << " bytes="<<data.getSize()<< " sock="<< peer<<std::endl;
 	}
 */
-    size_t maxlen = 0xffff-100;
+    size_t maxlen = 0xffff-1000;
+    //size_t maxlen = 1400;
 	size_t buflen = data.getSize();
     size_t sendlen = std::min(buflen, maxlen);
     size_t remlen  = buflen;
@@ -978,7 +979,7 @@ if (remlen <= maxlen){
 
 }
 
-errorstream<<" psend" << " remlen=" << remlen << " curpos="<<curpos<< " sendlen="<<sendlen << " buflen="<<buflen<< " nowsent="<<(curpos+sendlen)<<" flags="<<sndinfo.snd_flags<<std::endl;
+//errorstream<<" psend" << " remlen=" << remlen << " curpos="<<curpos<< " sendlen="<<sendlen << " buflen="<<buflen<< " nowsent="<<(curpos+sendlen)<<" flags="<<sndinfo.snd_flags<<std::endl;
 
 int len = usrsctp_sendv(sock, *data+curpos, sendlen, NULL, 0, (void *)&sndinfo,
 	                  sizeof(sndinfo), SCTP_SENDV_SNDINFO, 0);
