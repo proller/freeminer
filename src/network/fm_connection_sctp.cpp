@@ -229,6 +229,7 @@ void Connection::processCommand(ConnectionCommand &c) {
 	}
 }
 
+#if 0
 
 static int OnSctpInboundPacket(struct socket* sock, union sctp_sockstore addr,
                                void* data, size_t length,
@@ -267,6 +268,7 @@ static int OnSctpInboundPacket(struct socket* sock, union sctp_sockstore addr,
 
 }
 
+#endif
 
 // Receive packets from the network and buffers and create ConnectionEvents
 void Connection::receive() {
@@ -427,7 +429,7 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 	ssize_t n = usrsctp_recvv(sock, (void*)buffer, BUFFER_SIZE, (struct sockaddr *) &addr, &from_len, (void *)&rcv_info,
 	                          &infolen, &infotype, &flags);
 	if (n > 0) {
-		errorstream << "receive() ... " << __LINE__ << " n=" << n << std::endl;
+		verbosestream << "receive() ... " << __LINE__ << " n=" << n << std::endl;
 		if (flags & MSG_NOTIFICATION) {
 			printf("Notification of length %llu received.\n", (unsigned long long)n);
 
@@ -543,19 +545,23 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 				       rcv_info.rcv_context,
 				       (flags & MSG_EOR) ? 1 : 0);
 			} else {
+/*
 				printf("Msg of length %llu received from %s:%u, complete %d.\n",
 				       (unsigned long long)n,
 				       inet_ntop(AF_INET6, &addr.sin6_addr, name, INET6_ADDRSTRLEN), ntohs(addr.sin6_port),
 				       (flags & MSG_EOR) ? 1 : 0);
-
-
+*/
+				recv_buf[peer_id] += std::string(buffer, n); // optimize here if firs packet complete`
+				if ((flags & MSG_EOR))
 				{
-				errorstream << "recieved data "<< n <<" from sock="<<sock<<std::endl;
+				verbosestream << "recieved data "<< n <<" from sock="<<sock<<std::endl;
 
 					ConnectionEvent e;
-					SharedBuffer<u8> resultdata((const unsigned char*)buffer, n);
+					//SharedBuffer<u8> resultdata((const unsigned char*)buffer, n);
+					SharedBuffer<u8> resultdata((const unsigned char*)recv_buf[peer_id].c_str(), recv_buf[peer_id].size());
 					e.dataReceived(peer_id, resultdata);
 					putEvent(e);
+					recv_buf.erase(peer_id);
 				}
 
 
@@ -912,7 +918,7 @@ errorstream<<" === send no peer sock"<<std::endl;
 	*/
 
 //errorstream<<" === send to peer " << peer_id<< "sock="<< peer<<std::endl;
-errorstream<<" === sending to peer_id="<<peer_id << " bytes="<<data.getSize()<< " sock="<< peer<<std::endl;
+verbosestream<<" === sending to peer_id="<<peer_id << " bytes="<<data.getSize()<< " sock="<< peer<<std::endl;
 
 
 	struct sctp_sndinfo sndinfo = {};
@@ -1145,4 +1151,3 @@ bool parse_msgpack_packet(char *data, u32 datasize, MsgpackPacket *packet, int *
 }
 
 } // namespace
-

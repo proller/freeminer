@@ -374,6 +374,7 @@ private:
 	bool sock_listen, sock_connect;
 	int recv(u16 peer_id, struct socket *sock);
 	void sock_setup(u16 peer_id, struct socket *sock);
+	std::unordered_map<u16, std::string> recv_buf;
 
 };
 

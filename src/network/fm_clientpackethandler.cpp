@@ -57,10 +57,10 @@ void Client::ProcessData(NetworkPacket *pkt) {
 	MsgpackPacket packet;
 	msgpack::unpacked msg;
 
-errorstream<<"Client::ProcessData s="<<datasize<< "from " << sender_peer_id <<std::endl;
+	//errorstream<<"Client::ProcessData s="<<datasize<< " from " << sender_peer_id <<std::endl;
 	if (!con::parse_msgpack_packet(pkt->getString(0), datasize, &packet, &command, &msg)) {
 		// invalid packet
-errorstream<<"Client::ProcessData invalid"<<std::endl;
+		errorstream<<"Client::ProcessData invalid s="<<datasize<< " from " << sender_peer_id<<std::endl;
 		return;
 	}
 

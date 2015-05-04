@@ -91,9 +91,6 @@ void Server::ProcessData(NetworkPacket *pkt)
 
 	auto datasize = pkt->getSize();
 
-
-errorstream<<"Server::ProcessData s="<<datasize<< "from " << peer_id <<std::endl;
-
 	if(datasize < 2)
 		return;
 
@@ -101,7 +98,7 @@ errorstream<<"Server::ProcessData s="<<datasize<< "from " << peer_id <<std::endl
 	MsgpackPacket packet;
 	msgpack::unpacked msg;
 	if (!con::parse_msgpack_packet(pkt->getString(0), datasize, &packet, &command, &msg)) {
-		verbosestream<<"Server: Ignoring broken packet from " <<addr_s<<" (peer_id="<<peer_id<<")"<<std::endl;
+		verbosestream<<"Server: Ignoring broken packet from " <<addr_s<<" (peer_id="<<peer_id<<") size="<<datasize<<std::endl;
 		return;
 	}
 
