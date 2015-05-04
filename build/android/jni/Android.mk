@@ -79,6 +79,8 @@ LOCAL_CFLAGS := -D_IRR_ANDROID_PLATFORM_      \
 				-DHAS_INET_PTON=1 -DHAS_INET_NTOP=1 -DHAS_GETHOSTBYNAME_R=1 -DHAS_FCNTL=1 -DHAS_POLL=1 -DHAS_MSGHDR_FLAGS=1 \
 				-DUSE_MANDELBULBER=1 \
 				-DHAVE_THREAD_LOCAL=1 \
+				-DUSE_SCTP=1 -DINET -DINET6 -DSCTP_WITH_NO_CSUM \
+				-DSCTP_SIMPLE_ALLOCATOR -DSCTP_PROCESS_LEVEL_LOCKS -D__Userspace__ -D__Userspace_os_Linux \
 				-pipe -fstrict-aliasing
 
 #too slow fmtodo				-DENABLE_THREADS=1 -DHAVE_FUTURE=1 \
@@ -104,6 +106,7 @@ endif
 
 LOCAL_C_INCLUDES :=                               \
 		jni/src/enet/include                      \
+		jni/src/network/usrsctplib                \
 		deps/msgpack/include                      \
 		deps/msgpack/src                          \
 		jni/src jni/src/sqlite                    \
@@ -372,16 +375,9 @@ LOCAL_SRC_FILES += jni/src/json/jsoncpp.cpp
 LOCAL_SHARED_LIBRARIES := openal ogg vorbis
 LOCAL_STATIC_LIBRARIES := Irrlicht freetype curl ssl crypto android_native_app_glue $(PROFILER_LIBS)
 
+#LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/jni/src/enet/*.c)
 
-LOCAL_SRC_FILES += \
-		jni/src/enet/callbacks.c                 \
-		jni/src/enet/compress.c                  \
-		jni/src/enet/host.c                      \
-		jni/src/enet/list.c                      \
-		jni/src/enet/packet.c                    \
-		jni/src/enet/peer.c                      \
-		jni/src/enet/protocol.c                  \
-		jni/src/enet/unix.c
+LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/*.c) $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/netinet/*.c) $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/netinet6/*.c)
 
 LOCAL_STATIC_LIBRARIES += msgpack
 # iconv

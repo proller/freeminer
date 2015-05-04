@@ -543,7 +543,7 @@ add_subdirectory(script)
 add_subdirectory(unittest)
 add_subdirectory(util)
 
-OPTION(ENABLE_SCTP "Enable SCTP networking" 0)
+OPTION(ENABLE_SCTP "Enable SCTP networking" 1)
 if(ENABLE_SCTP)
 	set(USE_SCTP 1)
 	add_subdirectory(network/usrsctplib)
