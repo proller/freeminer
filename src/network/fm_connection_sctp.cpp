@@ -258,13 +258,13 @@ static int OnSctpInboundPacket(struct socket* sock, union sctp_sockstore addr,
 
 
 void Connection::sctp_setup(u16 port) {
-	//usrsctp_init(9899, nullptr, nullptr);
-	//usrsctp_init(9899, nullptr, debug_printf);
-	//if (!sctp_inited)
-	//usrsctp_init(0, nullptr, debug_printf);
 	if (sctp_inited) 
 	 	return;
 	sctp_inited = true;
+
+	//usrsctp_init(9899, nullptr, nullptr);
+	//usrsctp_init(9899, nullptr, debug_printf);
+	//usrsctp_init(0, nullptr, debug_printf);
 	usrsctp_init(port, nullptr, debug_printf);
 
 #ifdef SCTP_DEBUG
@@ -276,7 +276,7 @@ void Connection::sctp_setup(u16 port) {
 
 	//usrsctp_sysctl_set_sctp_nr_outgoing_streams_default(2);
 
-	usrsctp_sysctl_set_sctp_multiple_asconfs(1);
+	//usrsctp_sysctl_set_sctp_multiple_asconfs(1);
 
 	//usrsctp_sysctl_set_sctp_inits_include_nat_friendly(1);
 
@@ -290,11 +290,6 @@ void Connection::sctp_setup(u16 port) {
 		}
 	*/
 	//sock->so_state |= SS_NBIO;
-
-#ifdef SCTP_DEBUG
-	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
-	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
-#endif
 
 }
 
