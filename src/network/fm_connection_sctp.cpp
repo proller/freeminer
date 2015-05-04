@@ -362,7 +362,9 @@ void Connection::receive() {
 	}
 
 		//errorstream << "receive() pre accept s=" << sock<< " m_peers="<<m_peers.size()<<  std::endl;
-
+	if (sock_connect && sock) {
+		recv(PEER_ID_SERVER, sock);
+	}
 	if (sock_listen && sock) {
 
 //if (m_peers.size() >=1 ) return;  // NONONONONONONONONONONONONONONONONON!!!!!!!!!!!!!!!!!!!!!!!
@@ -548,6 +550,8 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 
 
 				{
+				errorstream << "recieved data "<< n <<"from sock="<<sock<<std::endl;
+
 					ConnectionEvent e;
 					SharedBuffer<u8> resultdata((const unsigned char*)buffer, n);
 					e.dataReceived(peer_id, resultdata);
@@ -875,12 +879,12 @@ void Connection::sendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable) 
 
 void Connection::send(u16 peer_id, u8 channelnum,
                       SharedBuffer<u8> data, bool reliable) {
-errorstream<<" === sending to peer_id="<<peer_id << " bytes="<<data.getSize()<<std::endl;
+//errorstream<<" === sending to peer_id="<<peer_id << " bytes="<<data.getSize()<<std::endl;
 	{
 		//JMutexAutoLock peerlock(m_peers_mutex);
 		if (m_peers.find(peer_id) == m_peers.end())
 {
-errorstream<<" === send no peer"<<std::endl;
+errorstream<<" === send no peer "<< peer_id<<std::endl;
 			return;
 }
 	}
@@ -906,6 +910,9 @@ errorstream<<" === send no peer sock"<<std::endl;
 		if (enet_peer_send(peer, channelnum, packet) < 0)
 			errorstream<<"enet_peer_send failed"<<std::endl;
 	*/
+
+//errorstream<<" === send to peer " << peer_id<< "sock="<< peer<<std::endl;
+errorstream<<" === sending to peer_id="<<peer_id << " bytes="<<data.getSize()<< "sock="<< peer<<std::endl;
 
 
 	struct sctp_sndinfo sndinfo = {};
