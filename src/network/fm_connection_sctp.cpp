@@ -550,7 +550,7 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 
 
 				{
-				errorstream << "recieved data "<< n <<"from sock="<<sock<<std::endl;
+				errorstream << "recieved data "<< n <<" from sock="<<sock<<std::endl;
 
 					ConnectionEvent e;
 					SharedBuffer<u8> resultdata((const unsigned char*)buffer, n);
@@ -912,7 +912,7 @@ errorstream<<" === send no peer sock"<<std::endl;
 	*/
 
 //errorstream<<" === send to peer " << peer_id<< "sock="<< peer<<std::endl;
-errorstream<<" === sending to peer_id="<<peer_id << " bytes="<<data.getSize()<< "sock="<< peer<<std::endl;
+errorstream<<" === sending to peer_id="<<peer_id << " bytes="<<data.getSize()<< " sock="<< peer<<std::endl;
 
 
 	struct sctp_sndinfo sndinfo = {};
