@@ -341,7 +341,7 @@ private:
 	void sendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable);
 	void send(u16 peer_id, u8 channelnum, SharedBuffer<u8> data, bool reliable);
 	ENetPeer* getPeer(u16 peer_id);
-	bool deletePeer(u16 peer_id, bool timeout=0);
+	bool deletePeer(u16 peer_id, bool timeout);
 
 	MutexedQueue<ConnectionEvent> m_event_queue;
 	MutexedQueue<ConnectionCommand> m_command_queue;

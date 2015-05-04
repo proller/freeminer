@@ -154,7 +154,13 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 
 
 Connection::~Connection() {
-	//join();
+
+	join();
+	deletePeer(0);
+
+	for (auto & i : m_peers) {
+		usrsctp_close(i.second);
+	}
 
 	while (usrsctp_finish() != 0) {
 #ifdef _WIN32
