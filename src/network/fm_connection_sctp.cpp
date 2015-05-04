@@ -620,6 +620,12 @@ static uint16_t event_types[] = {SCTP_ASSOC_CHANGE,
 
 void Connection::sock_setup(u16 peer_id, struct socket *sock) {
 
+#ifdef SCTP_DEBUG
+	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
+	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
+#endif
+
+
 	/* Disable Nagle */
 	/*
 		uint32_t nodelay = 1;
@@ -655,6 +661,12 @@ void Connection::sock_setup(u16 peer_id, struct socket *sock) {
 	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_EXPLICIT_EOR, &on, sizeof(int)) < 0) {
 		perror("setsockopt SCTP_EXPLICIT_EOR");
 	}
+
+/*
+	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_REUSE_PORT, &on, sizeof(int)) < 0) {
+		perror("setsockopt SCTP_REUSE_PORT");
+	}
+*/
 
 
 }
@@ -761,7 +773,7 @@ void Connection::connect(Address addr) {
 
 	if (!sctp_inited) {
 		sctp_inited = true;
-		usrsctp_init(addr.getPort(), nullptr, debug_printf);
+		usrsctp_init(addr.getPort()+100, nullptr, debug_printf);
 	}
 
 	m_last_recieved = porting::getTimeMs();
@@ -831,7 +843,8 @@ void Connection::connect(Address addr) {
 	#endif
 		addr_local.sin6_family = AF_INET6;
 		//addr.sin6_port = htons(bind_addr.getPort()); //htons(13);
-		addr_local.sin6_port = htons(0); //htons(13);
+		addr_local.sin6_port = htons(addr.getPort()+100); //htons(13);
+		//addr_local.sin6_port = htons(0); //htons(13);
 		addr_local.sin6_addr = in6addr_any; //htonl(INADDR_ANY);
 		//addr.sin6_addr = in6addr_loopback;
 
@@ -1041,6 +1054,11 @@ bool Connection::deletePeer(u16 peer_id, bool timeout) {
 		if (sock) {
 			usrsctp_close(sock);
 			sock = nullptr;
+
+	ConnectionEvent e;
+	e.peerRemoved(peer_id, timeout);
+	putEvent(e);
+
 			return true;
 		} else {
 			return false;

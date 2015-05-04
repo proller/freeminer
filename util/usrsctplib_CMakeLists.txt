@@ -42,9 +42,10 @@ if(HAS_SOCKLEN_T)
     add_definitions(-DHAS_SOCKLEN_T=1)
 endif()
 
-add_definitions(-DSCTP_DEBUG -DSCTP_SIMPLE_ALLOCATOR -DSCTP_PROCESS_LEVEL_LOCKS -DSCTP_WITH_NO_CSUM)
-#add_definitions(-D__Userspace_os_Linux)
+add_definitions(-DSCTP_SIMPLE_ALLOCATOR -DSCTP_PROCESS_LEVEL_LOCKS -DSCTP_WITH_NO_CSUM)
 add_definitions( -D__Userspace__ "-D__Userspace_os_${CMAKE_SYSTEM_NAME}")
+
+add_definitions(-DSCTP_DEBUG)
 
 add_definitions(-DINET -DINET6)
 #add_definitions(-DHAVE_SA_LEN -DHAVE_SIN_LEN -DHAVE_SIN6_LEN) # freebsd
