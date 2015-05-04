@@ -124,7 +124,7 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 
 #ifdef SCTP_DEBUG
 	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
-	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
+	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
 #endif
 
 	usrsctp_sysctl_set_sctp_ecn_enable(0);
@@ -361,7 +361,7 @@ void Connection::receive() {
 
 	if (sock) {
 
-		errorstream << "receive() try accept " <<  std::endl;
+		errorstream << "receive() try accept s=" << sock<<  std::endl;
 		//if (!recv(0, sock)) {
 		//}
 		//struct socket **conn_sock;
@@ -443,6 +443,7 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 						errorstream << "Association change SCTP_COMM_UP" << std::endl;
 
 						{
+							m_peers_address.set(peer_id, Address(addr.sin6_addr, addr.sin6_port));
 							ConnectionEvent e;
 							e.peerAdded(peer_id);
 							putEvent(e);
@@ -470,9 +471,10 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 
 
 
-
-
 				break;
+			case SCTP_PEER_ADDR_CHANGE:
+				errorstream << "SCTP_PEER_ADDR_CHANGE" << std::endl;
+
 			case SCTP_REMOTE_ERROR:
 				errorstream << "SCTP_REMOTE_ERROR" << std::endl;
 				break;
@@ -863,15 +865,22 @@ void Connection::sendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable) 
 
 void Connection::send(u16 peer_id, u8 channelnum,
                       SharedBuffer<u8> data, bool reliable) {
+errorstream<<" === sending to peer_id="<<peer_id << " bytes="<<data.getSize()<<std::endl;
 	{
 		//JMutexAutoLock peerlock(m_peers_mutex);
 		if (m_peers.find(peer_id) == m_peers.end())
+{
+errorstream<<" === send no peer"<<std::endl;
 			return;
+}
 	}
 	dout_con << getDesc() << " sending to peer_id=" << peer_id << std::endl;
 
 	if(channelnum >= CHANNEL_COUNT)
+{
+errorstream<<" === send no chan "<<channelnum<<"/"<< CHANNEL_COUNT<<std::endl;
 		return;
+}
 
 	/*
 		ENetPacket *packet = enet_packet_create(*data, data.getSize(), reliable ? ENET_PACKET_FLAG_RELIABLE : 0);
@@ -879,6 +888,7 @@ void Connection::send(u16 peer_id, u8 channelnum,
 
 	auto peer = getPeer(peer_id);
 	if(!peer) {
+errorstream<<" === send no peer sock"<<std::endl;
 		deletePeer(peer_id, false);
 		return;
 	}
@@ -887,7 +897,6 @@ void Connection::send(u16 peer_id, u8 channelnum,
 			errorstream<<"enet_peer_send failed"<<std::endl;
 	*/
 
-errorstream<<" === sending to peer_id="<<peer_id << " bytes="<<data.getSize()<<std::endl;
 
 	struct sctp_sndinfo sndinfo = {};
 	//char buffer[BUFFER_SIZE];
@@ -1112,8 +1121,8 @@ bool parse_msgpack_packet(char *data, u32 datasize, MsgpackPacket *packet, int *
 		*packet = obj.as<MsgpackPacket>();
 
 		*command = (*packet)[MSGPACK_COMMAND].as<int>();
-	} catch (msgpack::type_error) { return false; }
-	catch (msgpack::unpack_error) { return false; }
+	} catch (msgpack::type_error e) { errorstream<< "msgpack::type_error sz=" << datasize<<" e=" << e.what()<< std::endl; return false; }
+	catch (msgpack::unpack_error e) { errorstream<< "msgpack::type_error sz=" << datasize<<" e=" << e.what()<< std::endl; return false; }
 	return true;
 }
 
