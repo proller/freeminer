@@ -118,6 +118,8 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	m_last_recieved(0),
 	m_last_recieved_warn(0) {
 
+	sock_listen = sock_connect = false;
+
 	//usrsctp_init(9899, nullptr, nullptr);
 	usrsctp_init(9899, nullptr, debug_printf);
 	//usrsctp_init(0, nullptr, debug_printf);
@@ -361,9 +363,9 @@ void Connection::receive() {
 
 		//errorstream << "receive() pre accept s=" << sock<< " m_peers="<<m_peers.size()<<  std::endl;
 
-	if (sock) {
+	if (sock_listen && sock) {
 
-if (m_peers.size() >=1 ) return;  // NONONONONONONONONONONONONONONONONON!!!!!!!!!!!!!!!!!!!!!!!
+//if (m_peers.size() >=1 ) return;  // NONONONONONONONONONONONONONONONONON!!!!!!!!!!!!!!!!!!!!!!!
 
 		errorstream << "receive() try accept s=" << sock<<  std::endl;
 		//if (!recv(0, sock)) {
@@ -699,6 +701,8 @@ void Connection::serve(Address bind_addr) {
 
 	errorstream << "serve() ok" << std::endl;
 
+	sock_listen = true;
+
 }
 
 // peer
@@ -845,6 +849,7 @@ void Connection::connect(Address addr) {
 
 	errorstream << "connect() ok sock=" << sock << std::endl;
 
+	sock_connect = true;
 
 }
 
