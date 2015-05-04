@@ -780,7 +780,8 @@ void Connection::serve(Address bind_addr) {
 void Connection::connect(Address addr) {
 	errorstream << "connect() " << addr.serializeString() << " :" << addr.getPort() << std::endl;
 
-	sctp_setup(addr.getPort()+100);
+	//sctp_setup(addr.getPort()+100);
+	sctp_setup(addr.getPort()+myrand_range(1000, 10000));
 
 	m_last_recieved = porting::getTimeMs();
 	//JMutexAutoLock peerlock(m_peers_mutex);
