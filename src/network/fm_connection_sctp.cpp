@@ -43,7 +43,7 @@ namespace con {
 #define BUFFER_SIZE (1<<16)
 
 //very ugly windows hack
-#if defined(_MSC_VER) && defined(ENET_IPV6)
+#if defined(_MSC_VER)
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
