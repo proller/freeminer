@@ -1010,9 +1010,11 @@ void Connection::connect(Address addr) {
 	//memset((void *)&addr6, 0, sizeof(addr6));
 
 	if (!addr.isIPv6()) {
-		errorstream << "connect() transform to v6 " << __LINE__ << std::endl;
-
-		inet_pton (AF_INET6, ("::ffff:" + addr.serializeString()).c_str(), &addr6.sin6_addr);
+		errorstream << "connect() transform to v6 " << addr.serializeString()<< std::endl;
+		if (addr.serializeString() == "127.0.0.1")
+			addr6.sin6_addr = in6addr_loopback;
+		else 
+			inet_pton (AF_INET6, ("::ffff:" + addr.serializeString()).c_str(), &addr6.sin6_addr);
 	} else
 		addr6 = addr.getAddress6();
 
