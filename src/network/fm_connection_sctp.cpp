@@ -795,9 +795,10 @@ void Connection::sock_setup(u16 peer_id, struct socket *sock) {
 	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_I_WANT_MAPPED_V4_ADDR, (const void*)&on, (socklen_t)sizeof(int)) < 0) {
 		perror("usrsctp_setsockopt SCTP_I_WANT_MAPPED_V4_ADDR");
 	}
-// */
+//  */
 
-	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_EXPLICIT_EOR, &on, sizeof(int)) < 0) {
+	const int one = 1;
+	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_EXPLICIT_EOR, &one, sizeof(int)) < 0) {
 		perror("setsockopt SCTP_EXPLICIT_EOR");
 	}
 
