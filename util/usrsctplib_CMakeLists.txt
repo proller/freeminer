@@ -43,7 +43,11 @@ if(HAS_SOCKLEN_T)
 endif()
 
 add_definitions(-DSCTP_SIMPLE_ALLOCATOR -DSCTP_PROCESS_LEVEL_LOCKS -DSCTP_WITH_NO_CSUM)
-add_definitions( -D__Userspace__ "-D__Userspace_os_${CMAKE_SYSTEM_NAME}")
+add_definitions(-D__Userspace__ "-D__Userspace_os_${CMAKE_SYSTEM_NAME}")
+
+if (${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
+    add_definitions(-U__FreeBSD__)
+endif()
 
 add_definitions(-DSCTP_DEBUG)
 
