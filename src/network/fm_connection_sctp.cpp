@@ -276,7 +276,7 @@ void Connection::sctp_setup(u16 port) {
 
 	//usrsctp_sysctl_set_sctp_nr_outgoing_streams_default(2);
 
-	//usrsctp_sysctl_set_sctp_multiple_asconfs(1);
+	usrsctp_sysctl_set_sctp_multiple_asconfs(1);
 
 	//usrsctp_sysctl_set_sctp_inits_include_nat_friendly(1);
 
@@ -443,6 +443,132 @@ void Connection::receive() {
 
 }
 
+static void
+handle_association_change_event(const struct sctp_assoc_change *sac)
+{
+	unsigned int i, n;
+
+	printf("Association change ");
+	switch (sac->sac_state) {
+	case SCTP_COMM_UP:
+		printf("SCTP_COMM_UP");
+		break;
+	case SCTP_COMM_LOST:
+		printf("SCTP_COMM_LOST");
+		break;
+	case SCTP_RESTART:
+		printf("SCTP_RESTART");
+		break;
+	case SCTP_SHUTDOWN_COMP:
+		printf("SCTP_SHUTDOWN_COMP");
+		break;
+	case SCTP_CANT_STR_ASSOC:
+		printf("SCTP_CANT_STR_ASSOC");
+		break;
+	default:
+		printf("UNKNOWN");
+		break;
+	}
+	printf(", streams (in/out) = (%u/%u)",
+	       sac->sac_inbound_streams, sac->sac_outbound_streams);
+	n = sac->sac_length - sizeof(struct sctp_assoc_change);
+	if (((sac->sac_state == SCTP_COMM_UP) ||
+	     (sac->sac_state == SCTP_RESTART)) && (n > 0)) {
+		printf(", supports");
+		for (i = 0; i < n; i++) {
+			switch (sac->sac_info[i]) {
+			case SCTP_ASSOC_SUPPORTS_PR:
+				printf(" PR");
+				break;
+			case SCTP_ASSOC_SUPPORTS_AUTH:
+				printf(" AUTH");
+				break;
+			case SCTP_ASSOC_SUPPORTS_ASCONF:
+				printf(" ASCONF");
+				break;
+			case SCTP_ASSOC_SUPPORTS_MULTIBUF:
+				printf(" MULTIBUF");
+				break;
+			case SCTP_ASSOC_SUPPORTS_RE_CONFIG:
+				printf(" RE-CONFIG");
+				break;
+			default:
+				printf(" UNKNOWN(0x%02x)", sac->sac_info[i]);
+				break;
+			}
+		}
+	} else if (((sac->sac_state == SCTP_COMM_LOST) ||
+	            (sac->sac_state == SCTP_CANT_STR_ASSOC)) && (n > 0)) {
+		printf(", ABORT =");
+		for (i = 0; i < n; i++) {
+			printf(" 0x%02x", sac->sac_info[i]);
+		}
+	}
+	printf(".\n");
+	if ((sac->sac_state == SCTP_CANT_STR_ASSOC) ||
+	    (sac->sac_state == SCTP_SHUTDOWN_COMP) ||
+	    (sac->sac_state == SCTP_COMM_LOST)) {
+		exit(0);
+	}
+	return;
+}
+
+
+static void
+handle_peer_address_change_event(const struct sctp_paddr_change *spc)
+{
+	char addr_buf[INET6_ADDRSTRLEN];
+	const char *addr;
+	struct sockaddr_in *sin;
+	struct sockaddr_in6 *sin6;
+
+	switch (spc->spc_aaddr.ss_family) {
+	case AF_INET:
+		sin = (struct sockaddr_in *)&spc->spc_aaddr;
+		addr = inet_ntop(AF_INET, &sin->sin_addr, addr_buf, INET_ADDRSTRLEN);
+		break;
+	case AF_INET6:
+		sin6 = (struct sockaddr_in6 *)&spc->spc_aaddr;
+		addr = inet_ntop(AF_INET6, &sin6->sin6_addr, addr_buf, INET6_ADDRSTRLEN);
+		break;
+	default:
+#ifdef _WIN32
+		_snprintf(addr_buf, INET6_ADDRSTRLEN, "Unknown family %d", spc->spc_aaddr.ss_family);
+#else
+		snprintf(addr_buf, INET6_ADDRSTRLEN, "Unknown family %d", spc->spc_aaddr.ss_family);
+#endif
+		addr = addr_buf;
+		break;
+	}
+	printf("Peer address %s is now ", addr);
+	switch (spc->spc_state) {
+	case SCTP_ADDR_AVAILABLE:
+		printf("SCTP_ADDR_AVAILABLE");
+		break;
+	case SCTP_ADDR_UNREACHABLE:
+		printf("SCTP_ADDR_UNREACHABLE");
+		break;
+	case SCTP_ADDR_REMOVED:
+		printf("SCTP_ADDR_REMOVED");
+		break;
+	case SCTP_ADDR_ADDED:
+		printf("SCTP_ADDR_ADDED");
+		break;
+	case SCTP_ADDR_MADE_PRIM:
+		printf("SCTP_ADDR_MADE_PRIM");
+		break;
+	case SCTP_ADDR_CONFIRMED:
+		printf("SCTP_ADDR_CONFIRMED");
+		break;
+	default:
+		printf("UNKNOWN");
+		break;
+	}
+	printf(" (error = 0x%08x).\n", spc->spc_error);
+	return;
+}
+
+
 int Connection::recv(u16 peer_id, struct socket *sock) {
 
 //errorstream<<"receive() ... "<<__LINE__ << " peer_id="<<peer_id<<" sock="<<sock<<std::endl;
@@ -478,9 +604,9 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 			case SCTP_ASSOC_CHANGE:
 				errorstream << "SCTP_ASSOC_CHANGE" << std::endl;
 				//OnNotificationAssocChange(notification.sn_assoc_change);
-
-
 				{
+				handle_association_change_event(&(notification.sn_assoc_change));
+#if 0 
 					const sctp_assoc_change& change = notification.sn_assoc_change;
 					switch (change.sac_state) {
 					case SCTP_COMM_UP:
@@ -511,6 +637,7 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 						errorstream << "Association change UNKNOWN " << std::endl;
 						break;
 					}
+#endif
 				}
 
 
@@ -522,7 +649,7 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 				//auto * snp = (union sctp_notification *)buffer;
 				const sctp_paddr_change* spc = &notification.sn_paddr_change;
 				//printf("SCTP_PEER_ADDR_CHANGE: state=%d, error=%d\n",spc->spc_state, spc->spc_error);
-
+                handle_peer_address_change_event(spc);
 				errorstream << "SCTP_PEER_ADDR_CHANGE state=" << spc->spc_state << " error=" << spc->spc_error << std::endl;
 			}
 			case SCTP_REMOTE_ERROR:

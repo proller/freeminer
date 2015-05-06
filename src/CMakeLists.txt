@@ -549,6 +549,7 @@ if(ENABLE_SCTP)
 	add_subdirectory(network/usrsctplib)
 	add_definitions(-DINET -DINET6 -DSCTP_WITH_NO_CSUM)
 	add_definitions(-DSCTP_DEBUG)
+	include_directories(${PROJECT_SOURCE_DIR}/network/usrsctplib)
 	set(SCTP_LIBRARY usrsctp)
 
 	set(USE_ENET 0)
@@ -763,10 +764,6 @@ endif()
 
 if(USE_CURL)
 	include_directories(${CURL_INCLUDE_DIR})
-endif()
-
-if(USE_SCTP)
-	include_directories(${PROJECT_SOURCE_DIR}/network/usrsctplib)
 endif()
 
 
