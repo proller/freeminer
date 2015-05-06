@@ -549,6 +549,7 @@ if(ENABLE_SCTP)
 	add_subdirectory(network/usrsctplib)
 	add_definitions(-DINET -DINET6 -DSCTP_WITH_NO_CSUM)
 	add_definitions(-DSCTP_DEBUG)
+	set(SCTP_LIBRARY usrsctp)
 
 	set(USE_ENET 0)
 else()
@@ -793,6 +794,7 @@ if(BUILD_CLIENT)
 		${JSON_LIBRARY}
 		${MSGPACK_LIBRARY}
 		${ENET_LIBRARY}
+		${SCTP_LIBRARY}
 		${PLATFORM_LIBS}
 		${CLIENT_PLATFORM_LIBS}
 	)
@@ -832,9 +834,6 @@ if(BUILD_CLIENT)
 			${CGUITTFONT_LIBRARY}
 		)
 	endif()
-	if(USE_SCTP)
-		target_link_libraries(${PROJECT_NAME} usrsctp)
-	endif()
 	if (USE_LEVELDB AND NOT FORCE_LEVELDB)
 		target_link_libraries(${PROJECT_NAME} ${LEVELDB_LIBRARY} ${SNAPPY_LIBRARY})
 	endif()
@@ -863,13 +862,11 @@ if(BUILD_SERVER)
 		${LUA_LIBRARY}
 		${MSGPACK_LIBRARY}
 		${ENET_LIBRARY}
+		${SCTP_LIBRARY}
 		${PLATFORM_LIBS}
 	)
 	set_target_properties(${PROJECT_NAME}server PROPERTIES
 			COMPILE_DEFINITIONS "SERVER")
-	if(USE_SCTP)
-		target_link_libraries(${PROJECT_NAME}server usrsctp)
-	endif()
 	if (USE_LEVELDB)
 		target_link_libraries(${PROJECT_NAME}server ${LEVELDB_LIBRARY} ${SNAPPY_LIBRARY})
 	endif()
