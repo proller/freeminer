@@ -300,6 +300,7 @@ void set_default_settings(Settings *settings) {
 
 	// Weather
 	settings->setDefault("weather", "true");
+	settings->setDefault("weather_biome", "false");
 	settings->setDefault("weather_heat_season", "30");
 	settings->setDefault("weather_heat_daily", "8");
 	settings->setDefault("weather_heat_width", "3000");
@@ -434,7 +435,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("enable_ipv6", "false");
 #endif
 
-#if !defined(_WIN32) && !USE_IPV4_DEFAULT && (ENET_IPV6 || MINETEST_PROTO || USE_SCTP)
+#if !USE_IPV4_DEFAULT && (ENET_IPV6 || MINETEST_PROTO || USE_SCTP)
 	settings->setDefault("ipv6_server", "true"); // problems on all windows versions (unable to play in local game)
 #else
 	settings->setDefault("ipv6_server", "false");

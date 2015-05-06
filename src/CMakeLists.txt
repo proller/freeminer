@@ -532,7 +532,7 @@ add_custom_target(GenerateVersion
 	-D "GENERATE_VERSION_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
 	-D "GENERATE_VERSION_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}"
 	-D "VERSION_STRING=${VERSION_STRING}"
-	-D "VERSION_EXTRA=${VERSION_EXTRA}"
+	-D "DEVELOPMENT_BUILD=${DEVELOPMENT_BUILD}"
 	-P "${CMAKE_SOURCE_DIR}/cmake/Modules/GenerateVersion.cmake"
 	WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -558,6 +558,7 @@ endif()
 if(USE_ENET)
 	add_subdirectory(enet)
 	include_directories(${PROJECT_SOURCE_DIR}/enet/include)
+	set(ENET_LIBRARY enet)
 endif()
 
 set(FMcommon_SRCS
@@ -791,6 +792,7 @@ if(BUILD_CLIENT)
 		${LUA_LIBRARY}
 		${JSON_LIBRARY}
 		${MSGPACK_LIBRARY}
+		${ENET_LIBRARY}
 		${PLATFORM_LIBS}
 		${CLIENT_PLATFORM_LIBS}
 	)
@@ -830,9 +832,6 @@ if(BUILD_CLIENT)
 			${CGUITTFONT_LIBRARY}
 		)
 	endif()
-	if(USE_ENET)
-		target_link_libraries(${PROJECT_NAME} enet)
-	endif()
 	if(USE_SCTP)
 		target_link_libraries(${PROJECT_NAME} usrsctp)
 	endif()
@@ -863,13 +862,11 @@ if(BUILD_SERVER)
 		${ICONV_LIBRARY}
 		${LUA_LIBRARY}
 		${MSGPACK_LIBRARY}
+		${ENET_LIBRARY}
 		${PLATFORM_LIBS}
 	)
 	set_target_properties(${PROJECT_NAME}server PROPERTIES
 			COMPILE_DEFINITIONS "SERVER")
-	if(USE_ENET)
-		target_link_libraries(${PROJECT_NAME}server enet)
-	endif()
 	if(USE_SCTP)
 		target_link_libraries(${PROJECT_NAME}server usrsctp)
 	endif()
