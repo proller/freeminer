@@ -268,8 +268,8 @@ void Connection::sctp_setup(u16 port) {
 	usrsctp_init(port, nullptr, debug_printf);
 
 #ifdef SCTP_DEBUG
-	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
-	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
+	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
+	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
 #endif
 
 	//usrsctp_sysctl_set_sctp_ecn_enable(0);
