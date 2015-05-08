@@ -36,7 +36,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <list>
 #include <map>
 
-#include "network/usrsctplib/usrsctp.h"
+//#include "network/usrsctplib/usrsctp.h"
 #include "../msgpack_fix.h"
 #include "util/msgpack_serialize.h"
 #include "util/thread_pool.h"
@@ -49,6 +49,8 @@ extern std::ostream *dout_con_ptr;
 extern std::ostream *derr_con_ptr;
 #define dout_con (*dout_con_ptr)
 #define derr_con (*derr_con_ptr)
+
+struct socket;
 
 namespace con
 {
@@ -350,7 +352,7 @@ private:
 	u32 m_protocol_id;
 	u32 m_max_packet_size;
 	float m_timeout;
-	struct sctp_udpencaps encaps;
+	//struct sctp_udpencaps encaps;
 	struct socket *sock;
 	//!ENetHost *m_enet_host;
 	//!ENetPeer *m_peer;

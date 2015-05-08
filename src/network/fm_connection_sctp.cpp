@@ -26,6 +26,7 @@ https://chromium.googlesource.com/external/webrtc/+/master/talk/media/sctp/sctpd
 */
 
 #include "network/fm_connection_sctp.h"
+#include "network/usrsctplib/usrsctp.h"
 #include "serialization.h"
 #include "log.h"
 #include "porting.h"
@@ -994,7 +995,7 @@ void Connection::connect(Address addr) {
 
 	//memset(&encaps, 0, sizeof(encaps));
 // /*
-	encaps = {};
+	sctp_udpencaps encaps = {};
 	encaps.sue_address.ss_family = AF_INET6;
 		encaps.sue_port = htons(addr.getPort());
 	//encaps.sue_port = htons(30042);
