@@ -213,9 +213,10 @@ void Connection::processCommand(ConnectionCommand &c) {
 	}
 }
 
-#if 0
+//#if 0
 
-static int OnSctpInboundPacket(struct socket* sock, union sctp_sockstore addr,
+//static 
+int Connection::sctp_recieve_callback(struct socket* sock, union sctp_sockstore addr,
                                void* data, size_t length,
                                struct sctp_rcvinfo rcv, int flags,
                                void* ulp_info) {
@@ -252,7 +253,7 @@ static int OnSctpInboundPacket(struct socket* sock, union sctp_sockstore addr,
 
 }
 
-#endif
+//#endif
 
 
 
@@ -830,6 +831,8 @@ void Connection::serve(Address bind_addr) {
 	//usrsctp_sysctl_set_sctp_udp_tunneling_port(bind_addr.getPort());
 	//usrsctp_sysctl_set_sctp_udp_tunneling_port(9899);
 
+	//if ((sock = usrsctp_socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP, this->*sctp_recieve_callback, NULL, 0, NULL)) == NULL) {
+	//if ((sock = usrsctp_socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP, &con::Connection::sctp_recieve_callback, NULL, 0, NULL)) == NULL) {
 	if ((sock = usrsctp_socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
 		//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
 		//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, OnSctpInboundPacket, NULL, 0, NULL)) == NULL) {
@@ -1063,8 +1066,11 @@ void Connection::disconnect() {
 	m_peers.lock_shared_rec();
 
 	for (auto i = m_peers.begin();
-	        i != m_peers.end(); ++i)
+	        i != m_peers.end(); ++i) {
 		usrsctp_close(i->second);
+		i->second = nullptr;
+	}
+	m_peers.clear();
 }
 
 void Connection::sendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable) {
@@ -1209,6 +1215,8 @@ bool Connection::deletePeer(u16 peer_id, bool timeout) {
 	ConnectionEvent e;
 	e.peerRemoved(peer_id, timeout);
 	putEvent(e);
+
+	auto lock = m_peers.lock_unique_rec();
 
 	usrsctp_close(m_peers.get(peer_id));
 

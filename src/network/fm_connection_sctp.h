@@ -51,6 +51,8 @@ extern std::ostream *derr_con_ptr;
 #define derr_con (*derr_con_ptr)
 
 struct socket;
+union sctp_sockstore;
+struct sctp_rcvinfo;
 
 namespace con
 {
@@ -378,6 +380,10 @@ private:
 	void sock_setup(u16 peer_id, struct socket *sock);
 	void sctp_setup(u16 port = 9899);
 	std::unordered_map<u16, std::string> recv_buf;
+
+	int sctp_recieve_callback(struct socket *sock, union sctp_sockstore addr, void *data,
+                                 size_t datalen, struct sctp_rcvinfo, int flags, void *ulp_info);
+
 
 };
 
