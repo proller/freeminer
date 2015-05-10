@@ -2,24 +2,15 @@ cmake_minimum_required(VERSION 2.6)
 
 project(usrsctplib)
 
-# The "configure" step.
-#include(CheckFunctionExists)
+include(CheckFunctionExists)
 include(CheckStructHasMember)
 include(CheckIncludeFile)
-INCLUDE(CMakePushCheckState)
+include(CMakePushCheckState)
 
-#include(CheckTypeSize)
-#check_function_exists("fcntl" HAS_FCNTL)
-#check_function_exists("poll" HAS_POLL)
-#check_function_exists("gethostbyname_r" HAS_GETHOSTBYNAME_R)
-#check_function_exists("gethostbyaddr_r" HAS_GETHOSTBYADDR_R)
-#check_function_exists("inet_pton" HAS_INET_PTON)
-#check_function_exists("inet_ntop" HAS_INET_NTOP)
-#check_struct_has_member("struct msghdr" "msg_flags" "sys/types.h;sys/socket.h" HAS_MSGHDR_FLAGS)
+include(CheckTypeSize)
 
-#set(CMAKE_EXTRA_INCLUDE_FILES "sys/types.h" "sys/socket.h")
-#check_type_size("socklen_t" HAS_SOCKLEN_T BUILTIN_TYPES_ONLY)
-#unset(CMAKE_EXTRA_INCLUDE_FILES)
+check_type_size("size_t" HAVE_SIZE_T )
+check_type_size("ssize_t" HAVE_SSIZE_T)
 
 check_include_file(sys/socket.h HAVE_SYS_SOCKET_H)
 check_include_file(sys/types.h HAVE_SYS_TYPES_H)
@@ -28,8 +19,9 @@ check_include_file(linux/if_addr.h HAVE_LINUX_IF_ADDR_H)
 check_include_file(linux/rtnetlink.h HAVE_LINUX_RTNETLINK_H)
 check_include_file(netinet/ip_icmp.h HAVE_NETINET_IP_ICMP_H)
 
+check_function_exists("socket" HAVE_SOCKET)
+check_function_exists("inet_addr" HAVE_INET_ADDR)
 
-add_definitions(-DSCTP_SIMPLE_ALLOCATOR -DSCTP_PROCESS_LEVEL_LOCKS -DSCTP_WITH_NO_CSUM)
 add_definitions(-D__Userspace__ "-D__Userspace_os_${CMAKE_SYSTEM_NAME}")
 
 check_struct_has_member("struct sockaddr" "sa_len" "sys/types.h;sys/socket.h" HAVE_SA_LEN)
@@ -47,13 +39,13 @@ if(HAVE_SIN6_LEN)
     add_definitions(-DHAVE_SIN6_LEN)
 endif()
 
-CMAKE_PUSH_CHECK_STATE()
+cmake_push_check_state()
 set(CMAKE_REQUIRED_INCLUDES "${CMAKE_SOURCE_DIR}/src/network")
 check_struct_has_member("struct sockaddr_conn" "sconn_len" "usrsctplib/usrsctp.h" HAVE_SCONN_LEN)
 if(HAVE_SCONN_LEN)
     add_definitions(-DHAVE_SCONN_LEN)
 endif()
-CMAKE_POP_CHECK_STATE()
+cmake_pop_check_state()
 
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
@@ -92,14 +84,38 @@ if (INET6)
 	add_definitions(-DINET6)
 endif()
 
-option(SCTP_WITH_NO_CSUM " " 1)
-option(SCTP_MBUF_LOGGING " " 0)
-option(SCTP_PACKET_LOGGING " " 0)
-option(SCTP_SO_LOCK_TESTING " " 0)
 
+option(SCTP_SIMPLE_ALLOCATOR " " 1)
+if (SCTP_SIMPLE_ALLOCATOR)
+	add_definitions(-DSCTP_SIMPLE_ALLOCATOR)
+endif()
+
+option(SCTP_PROCESS_LEVEL_LOCKS " " 1)
+if (SCTP_PROCESS_LEVEL_LOCKS)
+	add_definitions(-DSCTP_PROCESS_LEVEL_LOCKS)
+endif()
+
+option(SCTP_WITH_NO_CSUM " " 1)
+if (SCTP_WITH_NO_CSUM)
+	add_definitions(-DSCTP_WITH_NO_CSUM)
+endif()
+
+option(SCTP_MBUF_LOGGING " " 0)
+if (SCTP_MBUF_LOGGING)
+	add_definitions(-DSCTP_MBUF_LOGGING)
+endif()
+
+option(SCTP_PACKET_LOGGING " " 0)
+if (SCTP_PACKET_LOGGING)
+	add_definitions(-DSCTP_PACKET_LOGGING)
+endif()
+
+option(SCTP_SO_LOCK_TESTING " " 0)
+if (SCTP_SO_LOCK_TESTING)
+	add_definitions(-DSCTP_SO_LOCK_TESTING)
+endif()
 
 add_definitions(-D_GNU_SOURCE)
-#add_definitions(-DINET=1 -DINET6=1 -DHAVE_SOCKET=1)
 
 include_directories(${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/netinet ${PROJECT_SOURCE_DIR}/netinet6 )
 
