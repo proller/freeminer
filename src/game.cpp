@@ -2077,7 +2077,6 @@ bool Game::createSingleplayerServer(const std::string map_dir,
 
 	if (g_settings->getBool("ipv6_server")) {
 		bind_addr.setAddress(in6addr_any);
-		*address = "::1";
 	}
 
 	try {
@@ -2419,6 +2418,7 @@ bool Game::connectToServer(const std::string &playername,
 			}
 
 			wait_time += dtime;
+
 			// Only time out if we aren't waiting for the server we started
 			if ((*address != "") && (wait_time > 10)) {
 				*error_message = "Connection timed out.";
@@ -2428,7 +2428,7 @@ bool Game::connectToServer(const std::string &playername,
 			}
 
 			// Update status
-			showOverlayMessage(wstrgettext("Connecting to server..."), dtime, 20);
+			showOverlayMessage((wstrgettext("Connecting to server... ") + narrow_to_wide(itos(int(wait_time)))).c_str(), dtime, 20);
 		}
 
 #ifdef NDEBUG
@@ -3038,8 +3038,13 @@ void Game::openConsole(float height, bool close_on_return, const std::wstring& i
 		guienv->setFocus(gui_chat_console);
 
 #ifdef __ANDROID__
-		int type = 1;
-		porting::showInputDialog(_("ok"), "", wide_to_narrow(gui_chat_console->getText()), type);
+		if (0 /* porting::android_version_sdk_int >= 18 */) {
+			// fmtodo: invisible input text before pressing enter
+			porting::displayKeyboard(true, porting::app_global, porting::jnienv);
+		} else {
+			int type = 1;
+			porting::showInputDialog(_("ok"), "", wide_to_narrow(gui_chat_console->getText()), type);
+		}
 #endif
 
 	}
