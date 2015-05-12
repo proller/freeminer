@@ -57,6 +57,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "util/directiontables.h"
 #include "util/pointedthing.h"
 #include "version.h"
+#include "gsmapper.h"
 
 #include "sound.h"
 
@@ -1565,6 +1566,7 @@ private:
 	Sky *sky;                         // Free using ->Drop()
 	Inventory *local_inventory;
 	Hud *hud;
+	gsMapper *mapper;
 
 	/* 'cache'
 	   This class does take ownership/responsibily for cleaning up etc of any of
@@ -1640,7 +1642,8 @@ Game::Game() :
 	clouds(NULL),
 	sky(NULL),
 	local_inventory(NULL),
-	hud(NULL)
+	hud(NULL),
+	mapper(NULL)
 {
 	m_cache_doubletap_jump            = g_settings->getBool("doubletap_jump");
 	m_cache_enable_node_highlighting  = g_settings->getBool("enable_node_highlighting");
@@ -1668,6 +1671,7 @@ Game::~Game()
 
 	delete server; // deleted first to stop all server threads
 
+	delete mapper;
 	delete hud;
 	delete local_inventory;
 	delete camera;
@@ -2047,6 +2051,24 @@ bool Game::createClient(const std::string &playername,
 		return false;
 	}
 
+	// create mapper
+	mapper = new  gsMapper(device, client);	
+	
+		// Update mapper elements
+		u16 w = g_settings->getU16("hud_map_width");
+		struct _gsm_color { u32 red; u32 green; u32 blue; } gsm_color;
+		g_settings->getStruct("hud_map_back", "u32,u32,u32",
+			&gsm_color, sizeof(gsm_color) );
+		mapper->setMapVis(800-(w+10),10, w,
+			g_settings->getU16("hud_map_height"),
+			g_settings->getFloat("hud_map_scale"),
+			g_settings->getU16("hud_map_alpha"),
+			video::SColor(0, gsm_color.red, gsm_color.green, gsm_color.blue));
+		mapper->setMapType(g_settings->getBool("hud_map_above"),
+			g_settings->getU16("hud_map_scan"),
+			g_settings->getS16("hud_map_surface"),
+			g_settings->getBool("hud_map_tracking"),
+			g_settings->getU16("hud_map_border"));
 	return true;
 }
 
@@ -2097,6 +2119,7 @@ bool Game::initGui()
 	}
 
 	// Profiler text (size is updated when text is updated)
+
 	guitext_profiler = guienv->addStaticText(
 			L"<Profiler>",
 			core::rect<s32>(0, 0, 0, 0),
@@ -3963,6 +3986,14 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 
 		if (player->hurt_tilt_timer < 0)
 			player->hurt_tilt_strength = 0;
+	}
+
+	/*
+			Draw map
+	*/
+	if ((g_settings->getBool("hud_map")) && flags.show_hud)
+	{
+		mapper->drawMap( floatToInt(player->getPosition(), BS) ,&client->getEnv().getClientMap(), false, 4);
 	}
 
 	/*

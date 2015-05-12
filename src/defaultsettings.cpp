@@ -174,6 +174,19 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("enable_particles", "true");
 	settings->setDefault("enable_mesh_cache", "true");
 
+	// gsmapper
+	settings->setDefault("hud_map", "false");
+	settings->setDefault("hud_map_back", "0,0,0");
+	settings->setDefault("hud_map_width", "128");
+	settings->setDefault("hud_map_height", "128");
+	settings->setDefault("hud_map_scale", "1.0");
+	settings->setDefault("hud_map_alpha", "192");
+	settings->setDefault("hud_map_above", "true");
+	settings->setDefault("hud_map_scan", "64");
+	settings->setDefault("hud_map_surface", "32");
+	settings->setDefault("hud_map_tracking", "true");
+	settings->setDefault("hud_map_border", "16");
+
 	settings->setDefault("curl_timeout", "5000");
 	settings->setDefault("curl_parallel_limit", "8");
 	settings->setDefault("curl_file_download_timeout", "300000");

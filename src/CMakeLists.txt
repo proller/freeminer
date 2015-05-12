@@ -414,6 +414,7 @@ set(client_SRCS
 	guiscalingfilter.cpp
 	guiTable.cpp
 	guiVolumeChange.cpp
+	gsmapper.cpp
 	hud.cpp
 	imagefilters.cpp
 	keycode.cpp
