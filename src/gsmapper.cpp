@@ -301,59 +301,58 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 		z++;
 	}
 
-	if (1)
-	{
-		// set up the image
-		core::dimension2d<u32> dim(nwidth, nheight);
-		video::IImage *image = driver->createImage(video::ECF_A8R8G8B8, dim);
-		assert(image);
+	// set up the image
+	core::dimension2d<u32> dim(nwidth, nheight);
+	video::IImage *image = driver->createImage(video::ECF_A8R8G8B8, dim);
+	assert(image);
+	for (z = 0; z < nheight; z++) {
+		for (x = 0; x < nwidth; x++) {
 
-		for (z = 0; z < nheight; z++)
-		{
-			for (x = 0; x < nwidth; x++)
-			{
-				v3s16 p(origin.X + x, 0, origin.Z + z);
+			v3s16 p(origin.X + x, 0, origin.Z + z);
+			u16 i = CONTENT_IGNORE;
+			float factor = 0; 
 
-				u16 i = CONTENT_IGNORE;
-				float factor = 0; 
-
-				std::map<v3s16, v3s16>::iterator iter = m_minimap.find(p);
-				if (iter != m_minimap.end()) {
-					i = m_minimap[p].X;
-					factor = m_minimap[p].Y;
-				}
-
-				video::SColor c(240,0,0,0);
-				if (!m_radar) {
-					c = getColorFromId(i);
-					factor = 1.0 + 2.0*((scan_height/2)-factor)/scan_height; 
-					c.setRed(core::clamp(core::round32(c.getRed() * factor), 0, 255));
-					c.setGreen(core::clamp(core::round32(c.getGreen() * factor), 0, 255));
-					c.setBlue(core::clamp(core::round32(c.getBlue() * factor), 0, 255));
-				} else {
-					if (factor > 0) {
-						c.setGreen(core::clamp(core::round32(32 + factor * 8), 0, 255));
-					}	
-				}
-
-				c.setAlpha(240);
-				image->setPixel(x, nheight - z - 1, c);
+			std::map<v3s16, v3s16>::iterator iter = m_minimap.find(p);
+			if (iter != m_minimap.end()) {
+				i = m_minimap[p].X;
+				factor = m_minimap[p].Y;
 			}
-		}
 
-	if (d_hastex)
-	{
+			video::SColor c(240,0,0,0);
+			if (!m_radar) {
+				c = getColorFromId(i);
+				factor = 1.0 + 2.0*((scan_height/2)-factor)/scan_height; 
+				c.setRed(core::clamp(core::round32(c.getRed() * factor), 0, 255));
+				c.setGreen(core::clamp(core::round32(c.getGreen() * factor), 0, 255));
+				c.setBlue(core::clamp(core::round32(c.getBlue() * factor), 0, 255));
+			} else {
+				if (factor > 0) {
+					c.setGreen(core::clamp(core::round32(32 + factor * 8), 0, 255));
+				}	
+			}
+		c.setAlpha(250);
+		image->setPixel(x, nheight - z - 1, c);
+		}
+	}
+
+	if (d_hastex) {
 		driver->removeTexture(d_texture);
 		d_hastex = false;
 	}
-		std::string f = "gsmapper__" + itos(device->getTimer()->getRealTime());
-		d_texture = driver->addTexture(f.c_str(), image);
-		assert(d_texture);
-		d_hastex = true;
-		image->drop();
-	} 
+	std::string f = "gsmapper__" + itos(device->getTimer()->getRealTime());
+	d_texture = driver->addTexture(f.c_str(), image);
+	assert(d_texture);
+	d_hastex = true;
+	image->drop();
 
 	// draw map texture
+	v2u32 screensize = driver->getScreenSize();
+	d_width = 0.1875 * screensize.X;
+	d_height = 0.21875 * screensize.Y;
+
+	d_posx = screensize.X - d_width - 10;
+	d_posy = 10;
+	
 	if (d_hastex) {
 		driver->draw2DImage( d_texture,
 			core::rect<s32>(d_posx, d_posy, d_posx+d_width, d_posy+d_height),
