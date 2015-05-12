@@ -551,6 +551,9 @@ void Server::start(Address bind_addr)
 #endif
 			<< " cpp="<<__cplusplus<<" \t"
 			<< " cores="<< porting::getNumberOfProcessors()
+#if __ANDROID__
+			<< " android=" << porting::android_version_sdk_int
+#endif
 			<< std::endl;
 	actionstream<<"World at ["<<m_path_world<<"]"<<std::endl;
 	actionstream<<"Server for gameid=\""<<m_gamespec.id
@@ -1466,9 +1469,12 @@ void Server::ProcessData(NetworkPacket *pkt)
 		}
 
 		handleCommand(pkt);
-	}
-	catch(SendFailedException &e) {
+	} catch (SendFailedException &e) {
 		errorstream << "Server::ProcessData(): SendFailedException: "
+				<< "what=" << e.what()
+				<< std::endl;
+	} catch (PacketError &e) {
+		actionstream << "Server::ProcessData(): PacketError: "
 				<< "what=" << e.what()
 				<< std::endl;
 	}

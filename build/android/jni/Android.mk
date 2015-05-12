@@ -76,7 +76,7 @@ LOCAL_CFLAGS := -D_IRR_ANDROID_PLATFORM_      \
 				-DUSE_FREETYPE=1              \
 				-DUSE_LEVELDB=$(HAVE_LEVELDB) \
 				$(GPROF_DEF)                  \
-				-DHAS_INET_PTON=1 -DHAS_INET_NTOP=1 -DHAS_GETHOSTBYNAME_R=1 -DHAS_FCNTL=1 -DHAS_POLL=1 -DHAS_MSGHDR_FLAGS=1 \
+				-DHAS_INET_PTON=1 -DHAS_INET_NTOP=1 -DHAS_GETHOSTBYNAME_R=1 -DHAS_GETADDRINFO=1 -DHAS_GETNAMEINFO=1 -DHAS_FCNTL=1 -DHAS_POLL=1 -DHAS_MSGHDR_FLAGS=1 \
 				-DUSE_MANDELBULBER=1 \
 				-DHAVE_THREAD_LOCAL=1 \
 				-DMINETEST_PROTO=1 \
@@ -253,9 +253,12 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/unittest/test_inventory.cpp       \
 		jni/src/unittest/test_mapnode.cpp         \
 		jni/src/unittest/test_nodedef.cpp         \
+		jni/src/unittest/test_noderesolver.cpp    \
 		jni/src/unittest/test_noise.cpp           \
+		jni/src/unittest/test_objdef.cpp          \
 		jni/src/unittest/test_profiler.cpp        \
 		jni/src/unittest/test_random.cpp          \
+		jni/src/unittest/test_schematic.cpp       \
 		jni/src/unittest/test_serialization.cpp   \
 		jni/src/unittest/test_settings.cpp        \
 		jni/src/unittest/test_socket.cpp          \
@@ -373,16 +376,7 @@ LOCAL_SRC_FILES += jni/src/json/jsoncpp.cpp
 LOCAL_SHARED_LIBRARIES := openal ogg vorbis
 LOCAL_STATIC_LIBRARIES := Irrlicht freetype curl ssl crypto android_native_app_glue $(PROFILER_LIBS)
 
-
-LOCAL_SRC_FILES += \
-		jni/src/enet/callbacks.c                 \
-		jni/src/enet/compress.c                  \
-		jni/src/enet/host.c                      \
-		jni/src/enet/list.c                      \
-		jni/src/enet/packet.c                    \
-		jni/src/enet/peer.c                      \
-		jni/src/enet/protocol.c                  \
-		jni/src/enet/unix.c
+LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/jni/src/enet/*.c)
 
 LOCAL_STATIC_LIBRARIES += msgpack
 # iconv
