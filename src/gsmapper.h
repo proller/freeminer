@@ -58,6 +58,9 @@ class gsMapper
 		bool d_valid;
 		bool d_hastex;
 		bool d_hasptex;
+		bool m_radar;
+		u16 m_zoom;
+		u16 m_mode;
 
 	public:
 		IrrlichtDevice *device;
@@ -69,8 +72,9 @@ class gsMapper
 		~gsMapper();
 		video::SColor getColorFromId(u16 id);
 		void setMapVis(u16 x, u16 y, u16 w, u16 h, f32 scale, u32 alpha, video::SColor back);
-		void setMapType(bool bAbove, u16 iScan, s16 iSurface, bool bTracking, u16 iBorder);
-		void drawMap(v3s16 pos, ClientMap *map, bool radar, u16 zoom);
+		u16 getMinimapMode();
+		void setMinimapMode(u16 mode);
+		void drawMap(v3s16 pos, ClientMap *map);
 };
 
 #endif

@@ -43,6 +43,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("keymap_special1", "KEY_KEY_E");
 	settings->setDefault("keymap_chat", "KEY_KEY_T");
 	settings->setDefault("keymap_cmd", "/");
+	settings->setDefault("keymap_minimap", "KEY_F9");
 	settings->setDefault("keymap_console", "KEY_F10");
 	settings->setDefault("keymap_rangeselect", "KEY_KEY_R");
 	settings->setDefault("keymap_freemove", "KEY_KEY_K");
@@ -175,6 +176,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("enable_mesh_cache", "true");
 
 	// gsmapper
+	settings->setDefault("enable_minimap", "false");
 	settings->setDefault("hud_map", "false");
 	settings->setDefault("hud_map_back", "0,0,0");
 	settings->setDefault("hud_map_width", "128");

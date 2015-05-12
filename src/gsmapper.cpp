@@ -49,6 +49,10 @@ gsMapper::gsMapper(IrrlichtDevice *device, Client *client)
 	d_nodeids[CONTENT_UNKNOWN] = 2;
 	d_colordefs = 3;
 
+	m_mode = 0;
+	m_zoom = 1;
+	m_radar = false;
+
 	d_valid = false;
 	d_hastex = false;
 	d_hasptex = false;
@@ -178,13 +182,54 @@ void gsMapper::setMapVis(u16 x, u16 y, u16 w, u16 h, f32 scale, u32 alpha, video
  * entered into a border region.
  */
 
-void gsMapper::setMapType(bool bAbove, u16 iScan, s16 iSurface, bool bTracking, u16 iBorder)
+u16 gsMapper::getMinimapMode()
 {
-	d_above = bAbove;
-	d_scan = iScan;
-	d_surface = iSurface;
-	d_tracking = bTracking;
-	d_border = iBorder;
+	return m_mode;
+}
+
+void gsMapper::setMinimapMode(u16 mode)
+{
+	switch (mode) {	
+		case 1:
+			{
+				m_radar = false;
+				m_zoom = 1;
+				break;
+			}
+		case 2:
+			{
+				m_radar = false;
+				m_zoom = 2;
+				break;
+			}
+		case 3:
+			{
+				m_radar = false;
+				m_zoom = 4;
+				break;
+			}
+		case 4:
+			{
+				m_radar = true;
+				m_zoom = 1;
+				break;
+			}
+		case 5:
+			{
+				m_radar = true;
+				m_zoom = 2;
+				break;
+			}
+		case 6:
+			{
+				m_radar = true;
+				m_zoom = 4;
+				break;
+			}
+		default:
+			mode = 0;
+	}
+	m_mode = mode;
 }
 
 /*
@@ -196,17 +241,17 @@ void gsMapper::setMapType(bool bAbove, u16 iScan, s16 iSurface, bool bTracking, 
  * with each iteration.
  */
 
-void gsMapper::drawMap(v3s16 pos, ClientMap *map, bool radar, u16 zoom)
+void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 {
 	m_minimap.clear();
 
 	s16 scan_height = 128;
-	if (radar) {
+	if (m_radar) {
 		scan_height = 16;
 	}	
 
-	s16 nwidth = floor(d_width / zoom);
-	s16 nheight = floor(d_height / zoom);
+	s16 nwidth = floor(d_width / m_zoom);
+	s16 nheight = floor(d_height / m_zoom);
 
 	v3s16 origin (floor(pos.X - (nwidth / 2)), floor(pos.Y), floor(pos.Z - (nheight / 2)));
 
@@ -224,7 +269,7 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map, bool radar, u16 zoom)
 			p.X = origin.X + x;
 
 			// surface scanner
-			if (!radar)
+			if (!m_radar)
 			{
 				p.Y = origin.Y + (scan_height / 2);
 				for (y = 0; y < scan_height; y++)
@@ -279,7 +324,7 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map, bool radar, u16 zoom)
 				}
 
 				video::SColor c(240,0,0,0);
-				if (!radar) {
+				if (!m_radar) {
 					c = getColorFromId(i);
 					factor = 1.0 + 2.0*((scan_height/2)-factor)/scan_height; 
 					c.setRed(core::clamp(core::round32(c.getRed() * factor), 0, 255));
@@ -369,8 +414,8 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map, bool radar, u16 zoom)
 				image2->drop();
 			}
 
-			s32 sx = d_posx + floor((p.X - origin.X) * zoom) - (size.X / 2);
-			s32 sy = d_posy + floor((nheight - (p.Z - origin.Z)) * zoom) - (size.Y / 2);
+			s32 sx = d_posx + floor((p.X - origin.X) * m_zoom) - (size.X / 2);
+			s32 sy = d_posy + floor((nheight - (p.Z - origin.Z)) * m_zoom) - (size.Y / 2);
 			driver->draw2DImage( pmarker,
 				core::rect<s32>(sx, sy, sx+size.X, sy+size.Y),
 				core::rect<s32>(0, 0, size.X, size.Y),

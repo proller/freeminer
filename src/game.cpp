@@ -1236,6 +1236,7 @@ struct KeyCache {
 		KEYMAP_ID_CHAT,
 		KEYMAP_ID_CMD,
 		KEYMAP_ID_CONSOLE,
+		KEYMAP_ID_MINIMAP,
 		KEYMAP_ID_FREEMOVE,
 		KEYMAP_ID_FASTMOVE,
 		KEYMAP_ID_NOCLIP,
@@ -1285,6 +1286,7 @@ void KeyCache::populate()
 	key[KEYMAP_ID_CHAT]         = getKeySetting("keymap_chat");
 	key[KEYMAP_ID_CMD]          = getKeySetting("keymap_cmd");
 	key[KEYMAP_ID_CONSOLE]      = getKeySetting("keymap_console");
+	key[KEYMAP_ID_MINIMAP]      = getKeySetting("keymap_minimap");
 	key[KEYMAP_ID_FREEMOVE]     = getKeySetting("keymap_freemove");
 	key[KEYMAP_ID_FASTMOVE]     = getKeySetting("keymap_fastmove");
 	key[KEYMAP_ID_NOCLIP]       = getKeySetting("keymap_noclip");
@@ -1390,6 +1392,7 @@ struct VolatileRunFlags {
 	bool invert_mouse;
 	bool show_chat;
 	bool show_hud;
+	bool show_minimap;
 	bool force_fog_off;
 	bool show_debug;
 	bool show_profiler_graph;
@@ -1488,6 +1491,7 @@ protected:
 
 	void toggleChat(float *statustext_time, bool *flag);
 	void toggleHud(float *statustext_time, bool *flag);
+	void toggleMinimap(float *statustext_time, bool *flag1, bool *flag2);
 	void toggleFog(float *statustext_time, bool *flag);
 	void toggleDebug(float *statustext_time, bool *show_debug,
 			bool *show_profiler_graph);
@@ -1741,6 +1745,7 @@ void Game::run()
 
 	flags.show_chat = true;
 	flags.show_hud = true;
+	flags.show_minimap = g_settings->getBool("enable_minimap");;
 	flags.show_debug = g_settings->getBool("show_debug");
 	flags.invert_mouse = g_settings->getBool("invert_mouse");
 	flags.first_loop_after_window_activation = true;
@@ -2064,11 +2069,7 @@ bool Game::createClient(const std::string &playername,
 			g_settings->getFloat("hud_map_scale"),
 			g_settings->getU16("hud_map_alpha"),
 			video::SColor(0, gsm_color.red, gsm_color.green, gsm_color.blue));
-		mapper->setMapType(g_settings->getBool("hud_map_above"),
-			g_settings->getU16("hud_map_scan"),
-			g_settings->getS16("hud_map_surface"),
-			g_settings->getBool("hud_map_tracking"),
-			g_settings->getU16("hud_map_border"));
+		mapper->setMinimapMode(0);
 	return true;
 }
 
@@ -2604,6 +2605,8 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 		client->makeScreenshot(device);
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_TOGGLE_HUD])) {
 		toggleHud(statustext_time, &flags->show_hud);
+	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_MINIMAP])) {
+		toggleMinimap(statustext_time, &flags->show_minimap, &flags->show_hud);
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_TOGGLE_CHAT])) {
 		toggleChat(statustext_time, &flags->show_chat);
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_TOGGLE_FORCE_FOG_OFF])) {
@@ -2816,6 +2819,39 @@ void Game::toggleHud(float *statustext_time, bool *flag)
 	statustext = msg[*flag];
 	if (g_settings->getBool("enable_node_highlighting"))
 		client->setHighlighted(client->getHighlighted(), *flag);
+}
+
+void Game::toggleMinimap(float *statustext_time, bool *flag, bool *show_hud)
+{
+	if (*show_hud && g_settings->getBool("enable_minimap")) {
+		u16 mode = mapper->getMinimapMode();	
+		mode++;
+		if (mode>6) {
+			mode = 0;
+			*flag = false;
+			statustext = L"Minimap hidden";
+		} else if (mode == 1) {
+			*flag = true;
+			statustext = L"Minimap in surface mode, Zoom x1";
+		} else if (mode == 2) {
+			*flag = true;
+			statustext = L"Minimap in surface mode, Zoom x2";
+		} else if (mode == 3) {
+			*flag = true;
+			statustext = L"Minimap in surface mode, Zoom x4";
+		} else if (mode == 4) {
+			*flag = true;
+			statustext = L"Minimap in radar mode, Zoom x1";
+		} else if (mode == 5) {
+			*flag = true;
+			statustext = L"Minimap in radar mode, Zoom x2";
+		} else if (mode == 6) {
+			*flag = true;
+			statustext = L"Minimap in radar mode, Zoom x4";
+		} 
+		*statustext_time = 0;
+		mapper->setMinimapMode(mode);
+	}
 }
 
 
@@ -3991,9 +4027,9 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 	/*
 			Draw map
 	*/
-	if ((g_settings->getBool("hud_map")) && flags.show_hud)
+	if (flags.show_minimap && flags.show_hud)
 	{
-		mapper->drawMap( floatToInt(player->getPosition(), BS) ,&client->getEnv().getClientMap(), false, 4);
+		mapper->drawMap( floatToInt(player->getPosition(), BS) ,&client->getEnv().getClientMap());
 	}
 
 	/*
