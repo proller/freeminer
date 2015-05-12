@@ -52,8 +52,10 @@ gsMapper::gsMapper(IrrlichtDevice *device, Client *client)
 	m_mode = 0;
 	m_zoom = 1;
 	m_radar = false;
-	m_scancomplete = false;
-	m_scanstarted = false;
+	m_scan_complete = false;
+	m_scan_started = false;
+	m_scan_height = 128;
+	m_scan_height2 = 64;
 
 	d_valid = false;
 	d_hastex = false;
@@ -232,6 +234,14 @@ void gsMapper::setMinimapMode(u16 mode)
 			mode = 0;
 	}
 	m_mode = mode;
+
+	if (m_radar) {
+		m_scan_height = 16;
+		m_scan_height2 = 8;
+	} else {
+		m_scan_height = 128;
+		m_scan_height2 = 64;
+	}
 }
 
 /*
@@ -246,15 +256,10 @@ void gsMapper::setMinimapMode(u16 mode)
 void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 {
 	
-	if (!m_scanstarted) {
+	if (!m_scan_started) {
 		m_pos = pos;
-		m_scanstarted = true;
+		m_scan_started = true;
 	}
-
-	s16 scan_height = 128;
-	if (m_radar) {
-		scan_height = 16;
-	}	
 
 	s16 nwidth = floor(d_width / m_zoom);
 	s16 nheight = floor(d_height / m_zoom);
@@ -277,8 +282,8 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 			// surface scanner
 			if (!m_radar)
 			{
-				p.Y = origin.Y + (scan_height / 2);
-				for (y = 0; y < scan_height; y++)
+				p.Y = origin.Y + m_scan_height2;
+				for (y = 0; y < m_scan_height; y++)
 				{
 					MapNode n = map->getNodeNoEx(p);
 					p.Y--;
@@ -293,8 +298,8 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 
 			// radar mode
 			} else {
-				p.Y = origin.Y - (scan_height / 2);
-				for (y = 0; y < scan_height; y++)
+				p.Y = origin.Y - m_scan_height2;
+				for (y = 0; y < m_scan_height; y++)
 				{
 					MapNode n = map->getNodeNoEx(v3s16(p.X, p.Y + y, p.Z));
 					if (n.param0 == CONTENT_AIR) {
@@ -309,14 +314,13 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 
 	// move the scan block
 	d_scanX += (nwidth / 4);
-	if (d_scanX >= nwidth)
-	{
-		m_scancomplete = true;
-		m_scanstarted = false;
+	if (d_scanX >= nwidth) {
+		m_scan_complete = true;
+		m_scan_started = false;
 		d_scanX = 0;
 	}
 
-	if (m_scancomplete) {
+	if (m_scan_complete) {
 	// set up the image
 	core::dimension2d<u32> dim(nwidth, nheight);
 	video::IImage *image = driver->createImage(video::ECF_A8R8G8B8, dim);
@@ -337,7 +341,7 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 			video::SColor c(240,0,0,0);
 			if (!m_radar) {
 				c = getColorFromId(i);
-				factor = 1.0 + 2.0*((scan_height/2)-factor)/scan_height; 
+				factor = 1.0 + 2.0 * (m_scan_height2-factor) / m_scan_height; 
 				c.setRed(core::clamp(core::round32(c.getRed() * factor), 0, 255));
 				c.setGreen(core::clamp(core::round32(c.getGreen() * factor), 0, 255));
 				c.setBlue(core::clamp(core::round32(c.getBlue() * factor), 0, 255));
@@ -346,7 +350,7 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 					c.setGreen(core::clamp(core::round32(32 + factor * 8), 0, 255));
 				}	
 			}
-		c.setAlpha(250);
+		c.setAlpha(240);
 		image->setPixel(x, nheight - z - 1, c);
 		}
 		}
@@ -362,7 +366,7 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 	assert(d_texture);
 	d_hastex = true;
 	image->drop();
-	m_scancomplete = false;
+	m_scan_complete = false;
 	}
 	
 	// draw map texture

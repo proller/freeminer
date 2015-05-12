@@ -58,12 +58,15 @@ class gsMapper
 		bool d_valid;
 		bool d_hastex;
 		bool d_hasptex;
+
 		bool m_radar;
 		u16 m_zoom;
 		u16 m_mode;
-		bool m_scancomplete;
-		bool m_scanstarted;
+		bool m_scan_complete;
+		bool m_scan_started;
 		v3s16 m_pos;
+		u16 m_scan_height;
+		u16 m_scan_height2;
 
 	public:
 		IrrlichtDevice *device;
