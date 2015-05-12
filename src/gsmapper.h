@@ -61,6 +61,9 @@ class gsMapper
 		bool m_radar;
 		u16 m_zoom;
 		u16 m_mode;
+		bool m_scancomplete;
+		bool m_scanstarted;
+		v3s16 m_pos;
 
 	public:
 		IrrlichtDevice *device;

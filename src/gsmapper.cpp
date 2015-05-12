@@ -52,6 +52,8 @@ gsMapper::gsMapper(IrrlichtDevice *device, Client *client)
 	m_mode = 0;
 	m_zoom = 1;
 	m_radar = false;
+	m_scancomplete = false;
+	m_scanstarted = false;
 
 	d_valid = false;
 	d_hastex = false;
@@ -243,7 +245,11 @@ void gsMapper::setMinimapMode(u16 mode)
 
 void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 {
-	m_minimap.clear();
+	
+	if (!m_scanstarted) {
+		m_pos = pos;
+		m_scanstarted = true;
+	}
 
 	s16 scan_height = 128;
 	if (m_radar) {
@@ -253,7 +259,7 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 	s16 nwidth = floor(d_width / m_zoom);
 	s16 nheight = floor(d_height / m_zoom);
 
-	v3s16 origin (floor(pos.X - (nwidth / 2)), floor(pos.Y), floor(pos.Z - (nheight / 2)));
+	v3s16 origin (floor(m_pos.X - (nwidth / 2)), floor(m_pos.Y), floor(m_pos.Z - (nheight / 2)));
 
 	v3s16 p;
 	s16 x = 0;
@@ -264,9 +270,9 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 	{
 		p.Z = origin.Z + z;
 		x = 0;
-		while (x < nwidth)
+		while ((x < (nwidth / 4)) && ((x + d_scanX) < nwidth))
 		{
-			p.X = origin.X + x;
+			p.X = origin.X + x + d_scanX;
 
 			// surface scanner
 			if (!m_radar)
@@ -301,6 +307,16 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 		z++;
 	}
 
+	// move the scan block
+	d_scanX += (nwidth / 4);
+	if (d_scanX >= nwidth)
+	{
+		m_scancomplete = true;
+		m_scanstarted = false;
+		d_scanX = 0;
+	}
+
+	if (m_scancomplete) {
 	// set up the image
 	core::dimension2d<u32> dim(nwidth, nheight);
 	video::IImage *image = driver->createImage(video::ECF_A8R8G8B8, dim);
@@ -333,18 +349,22 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 		c.setAlpha(250);
 		image->setPixel(x, nheight - z - 1, c);
 		}
-	}
+		}
+	
+		if (d_hastex) {
+			driver->removeTexture(d_texture);
+			d_hastex = false;
+		}
 
-	if (d_hastex) {
-		driver->removeTexture(d_texture);
-		d_hastex = false;
-	}
+	m_minimap.clear();
 	std::string f = "gsmapper__" + itos(device->getTimer()->getRealTime());
 	d_texture = driver->addTexture(f.c_str(), image);
 	assert(d_texture);
 	d_hastex = true;
 	image->drop();
-
+	m_scancomplete = false;
+	}
+	
 	// draw map texture
 	v2u32 screensize = driver->getScreenSize();
 	d_width = 0.1875 * screensize.X;
@@ -363,7 +383,7 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 	// draw local player marker
 	if (tsrc->isKnownSourceImage("player_marker0.png"))
 	{
-		v3s16 p = floatToInt(player->getPosition(), BS);
+		v3s16 p = m_pos;
 		if ( p.X >= origin.X && p.X <= (origin.X + nwidth) &&
 			p.Z >= origin.Z && p.Z <= (origin.Z + nheight) )
 		{
