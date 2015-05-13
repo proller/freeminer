@@ -314,7 +314,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("weather_humidity_days", "2");
 
 	// Mini Map
-	settings->setDefault("hud_map", "false");
+	settings->setDefault("enable_minimap", "true");
 	settings->setDefault("hud_map_back", "0,0,0");
 	settings->setDefault("hud_map_width", "128");
 	settings->setDefault("hud_map_height", "128");

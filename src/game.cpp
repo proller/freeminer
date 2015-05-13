@@ -4415,16 +4415,6 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 			highlight_boxes, screensize, skycolor, flags.show_hud);
 
 	/*
-		Draw map
-	*/
-/*
-	if ((g_settings->getBool("hud_map")) && flags.show_hud)
-	{
-		mapper->drawMap( floatToInt(player->getPosition(), BS) );
-	}
-*/
-
-	/*
 		Profiler graph
 	*/
 	if (flags.show_profiler_graph)
