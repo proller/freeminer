@@ -27,23 +27,17 @@
 #include "irrlichttypes_extrabloated.h"
 #include "client.h"
 #include <map>
-#include <unordered_map>
 #include <string>
 #include <vector>
 
 class gsMapper
 {
 	private:
-		IrrlichtDevice* d_device;
-		Client* d_client;
 		video::ITexture* d_texture;
 		video::ITexture* d_pmarker;
-		ITextureSource *d_tsrc;
-		LocalPlayer* d_player;
-		std::map<v3s16, u16> d_map;
-		std::map<v3s16, u16> d_radar;
+		std::map<v3s16, v3s16> m_minimap;
 		std::vector<video::SColor> d_colorids;
-		std::unordered_map<u16, u16> d_nodeids;
+		std::map<u16, u16> d_nodeids;
 		v3s16 d_origin;
 		u16 d_posx;
 		u16 d_posy;
@@ -57,7 +51,7 @@ class gsMapper
 		s16 d_scanX;
 		s16 d_scanZ;
 		s16 d_cooldown2;
-		//u16 d_texindex;
+		u16 d_texindex;
 		u16 d_colordefs;
 		bool d_above;
 		bool d_tracking;
@@ -65,13 +59,28 @@ class gsMapper
 		bool d_hastex;
 		bool d_hasptex;
 
+		bool m_radar;
+		u16 m_zoom;
+		u16 m_mode;
+		bool m_scan_complete;
+		bool m_scan_started;
+		v3s16 m_pos;
+		u16 m_scan_height;
+		u16 m_scan_height2;
+
 	public:
+		IrrlichtDevice *device;
+		Client *client;
 		gsMapper(IrrlichtDevice *device, Client *client);
+		video::IVideoDriver *driver;
+		LocalPlayer *player;
+		ITextureSource *tsrc;
 		~gsMapper();
 		video::SColor getColorFromId(u16 id);
 		void setMapVis(u16 x, u16 y, u16 w, u16 h, f32 scale, u32 alpha, video::SColor back);
-		void setMapType(bool bAbove, u16 iScan, s16 iSurface, bool bTracking, u16 iBorder);
-		void drawMap(v3s16 position);
+		u16 getMinimapMode();
+		void setMinimapMode(u16 mode);
+		void drawMap(v3s16 pos, ClientMap *map);
 };
 
 #endif

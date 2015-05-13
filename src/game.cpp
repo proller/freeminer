@@ -91,6 +91,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/directiontables.h"
 #include "util/pointedthing.h"
 #include "version.h"
+#include "gsmapper.h"
 
 #include "sound.h"
 
@@ -1307,6 +1308,7 @@ struct KeyCache {
 		KEYMAP_ID_CHAT,
 		KEYMAP_ID_CMD,
 		KEYMAP_ID_CONSOLE,
+		KEYMAP_ID_MINIMAP,
 		KEYMAP_ID_FREEMOVE,
 		KEYMAP_ID_FASTMOVE,
 		KEYMAP_ID_NOCLIP,
@@ -1360,6 +1362,7 @@ void KeyCache::populate()
 	key[KEYMAP_ID_CHAT]         = getKeySetting("keymap_chat");
 	key[KEYMAP_ID_CMD]          = getKeySetting("keymap_cmd");
 	key[KEYMAP_ID_CONSOLE]      = getKeySetting("keymap_console");
+	key[KEYMAP_ID_MINIMAP]      = getKeySetting("keymap_minimap");
 	key[KEYMAP_ID_FREEMOVE]     = getKeySetting("keymap_freemove");
 	key[KEYMAP_ID_FASTMOVE]     = getKeySetting("keymap_fastmove");
 	key[KEYMAP_ID_NOCLIP]       = getKeySetting("keymap_noclip");
@@ -1478,6 +1481,7 @@ struct VolatileRunFlags {
 	bool invert_mouse;
 	bool show_chat;
 	bool show_hud;
+	bool show_minimap;
 	bool force_fog_off;
 	bool show_debug;
 	bool show_profiler_graph;
@@ -1586,6 +1590,7 @@ protected:
 
 	void toggleChat(float *statustext_time, bool *flag);
 	void toggleHud(float *statustext_time, bool *flag);
+	void toggleMinimap(float *statustext_time, bool *flag1, bool *flag2);
 	void toggleFog(float *statustext_time, bool *flag);
 	void toggleDebug(float *statustext_time, bool *show_debug,
 			bool *show_profiler_graph);
@@ -1667,6 +1672,7 @@ private:
 	Sky *sky;                         // Free using ->Drop()
 	Inventory *local_inventory;
 	Hud *hud;
+	gsMapper *mapper;
 
 	/* 'cache'
 	   This class does take ownership/responsibily for cleaning up etc of any of
@@ -1755,10 +1761,9 @@ Game::Game() :
 	clouds(NULL),
 	sky(NULL),
 	local_inventory(NULL),
-	hud(NULL)
-	,
 	playerlist(nullptr),
-	mapper(nullptr)
+	hud(NULL),
+	mapper(NULL)
 {
 	m_cache_doubletap_jump            = g_settings->getBool("doubletap_jump");
 	m_cache_enable_node_highlighting  = g_settings->getBool("enable_node_highlighting");
@@ -1785,6 +1790,7 @@ Game::~Game()
 
 	delete server; // deleted first to stop all server threads
 
+	delete mapper;
 	delete hud;
 	delete local_inventory;
 	delete camera;
@@ -1857,6 +1863,7 @@ void Game::run()
 
 	flags.show_chat = true;
 	flags.show_hud = true;
+	flags.show_minimap = g_settings->getBool("enable_minimap");;
 	flags.show_debug = g_settings->getBool("show_debug");
 	flags.invert_mouse = g_settings->getBool("invert_mouse");
 	flags.first_loop_after_window_activation = true;
@@ -2209,6 +2216,20 @@ bool Game::createClient(const std::string &playername,
 		return false;
 	}
 
+	// create mapper
+	mapper = new  gsMapper(device, client);	
+	
+		// Update mapper elements
+		u16 w = g_settings->getU16("hud_map_width");
+		struct _gsm_color { u32 red; u32 green; u32 blue; } gsm_color;
+		g_settings->getStruct("hud_map_back", "u32,u32,u32",
+			&gsm_color, sizeof(gsm_color) );
+		mapper->setMapVis(800-(w+10),10, w,
+			g_settings->getU16("hud_map_height"),
+			g_settings->getFloat("hud_map_scale"),
+			g_settings->getU16("hud_map_alpha"),
+			video::SColor(0, gsm_color.red, gsm_color.green, gsm_color.blue));
+		mapper->setMinimapMode(0);
 	return true;
 }
 
@@ -2270,6 +2291,7 @@ bool Game::initGui()
 	}
 
 	// Profiler text (size is updated when text is updated)
+
 	guitext_profiler = guienv->addStaticText(
 			L"<Profiler>",
 			core::rect<s32>(0, 0, 0, 0),
@@ -2831,6 +2853,8 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 		client->makeScreenshot(device);
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_TOGGLE_HUD])) {
 		toggleHud(statustext_time, &flags->show_hud);
+	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_MINIMAP])) {
+		toggleMinimap(statustext_time, &flags->show_minimap, &flags->show_hud);
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_TOGGLE_CHAT])) {
 		toggleChat(statustext_time, &flags->show_chat);
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_TOGGLE_FORCE_FOG_OFF])) {
@@ -3129,6 +3153,39 @@ void Game::toggleHud(float *statustext_time, bool *flag)
 	statustext = msg[*flag];
 	if (g_settings->getBool("enable_node_highlighting"))
 		client->setHighlighted(client->getHighlighted(), *flag);
+}
+
+void Game::toggleMinimap(float *statustext_time, bool *flag, bool *show_hud)
+{
+	if (*show_hud && g_settings->getBool("enable_minimap")) {
+		u16 mode = mapper->getMinimapMode();	
+		mode++;
+		if (mode>6) {
+			mode = 0;
+			*flag = false;
+			statustext = L"Minimap hidden";
+		} else if (mode == 1) {
+			*flag = true;
+			statustext = L"Minimap in surface mode, Zoom x1";
+		} else if (mode == 2) {
+			*flag = true;
+			statustext = L"Minimap in surface mode, Zoom x2";
+		} else if (mode == 3) {
+			*flag = true;
+			statustext = L"Minimap in surface mode, Zoom x4";
+		} else if (mode == 4) {
+			*flag = true;
+			statustext = L"Minimap in radar mode, Zoom x1";
+		} else if (mode == 5) {
+			*flag = true;
+			statustext = L"Minimap in radar mode, Zoom x2";
+		} else if (mode == 6) {
+			*flag = true;
+			statustext = L"Minimap in radar mode, Zoom x4";
+		} 
+		*statustext_time = 0;
+		mapper->setMinimapMode(mode);
+	}
 }
 
 
@@ -4444,6 +4501,14 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 			player->movement_fov += dtime*50;
 		if(player->movement_fov > max_fov)
 			player->movement_fov -= dtime*50;
+
+	/*
+			Draw map
+	*/
+	if (flags.show_minimap && flags.show_hud)
+	{
+		mapper->drawMap( floatToInt(player->getPosition(), BS) ,&client->getEnv().getClientMap());
+	}
 
 	/*
 		End scene

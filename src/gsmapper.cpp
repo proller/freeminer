@@ -2,6 +2,7 @@
  * gsmapper.cpp
  * 
  * Copyright 2014 gsmanners <gsmanners@gmail.com>
+ *           2015 RealBadAngel <maciej.kasatkin@o2.pl>  				
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,18 +22,22 @@
  * 
  */
 
+#include "logoutputbuffer.h"
 #include "gsmapper.h"
-#include "map.h"
+#include "clientmap.h"
 #include "nodedef.h"
-#include "client/tile.h"
 #include "util/numeric.h"
 #include "util/string.h"
 #include <math.h>
 
-gsMapper::gsMapper(IrrlichtDevice *device, Client *client):
-	d_device(device),
-	d_client(client)
+gsMapper::gsMapper(IrrlichtDevice *device, Client *client)
 {
+	this->device	= device;
+	this->client	= client;
+	this->driver	= device->getVideoDriver();
+	this->tsrc		= client->getTextureSource();
+	this->player	= client->getEnv().getLocalPlayer();
+
 	d_colorids.clear();
 	d_nodeids.clear();
 
@@ -44,24 +49,22 @@ gsMapper::gsMapper(IrrlichtDevice *device, Client *client):
 	d_nodeids[CONTENT_UNKNOWN] = 2;
 	d_colordefs = 3;
 
+	m_mode = 0;
+	m_zoom = 1;
+	m_radar = false;
+	m_scan_complete = false;
+	m_scan_started = false;
+	m_scan_height = 128;
+	m_scan_height2 = 64;
+
 	d_valid = false;
 	d_hastex = false;
 	d_hasptex = false;
-	d_scanX = 0;
-	d_scanZ = 0;
-	d_cooldown2 = 0;
-	d_map.clear();
-	d_radar.clear();
-
-	d_tsrc = d_client->getTextureSource();
-	d_player = d_client->getEnv().getLocalPlayer();
-
-	d_posx = d_posy = d_width = d_height = d_scale = d_alpha = 0;
+	m_minimap.clear();
 }
 
 gsMapper::~gsMapper()
 {
-	video::IVideoDriver* driver = d_device->getVideoDriver();
 	if (d_hastex)
 	{
 		driver->removeTexture(d_texture);
@@ -84,19 +87,16 @@ gsMapper::~gsMapper()
 video::SColor gsMapper::getColorFromId(u16 id)
 {
 	// check if already in my defs
-	auto i = d_nodeids.find(id);
+	std::map<u16, u16>::iterator i = d_nodeids.find(id);
 	if (i != d_nodeids.end()) {
 		return d_colorids[d_nodeids[id]];
 
 	} else {
 
 		// get the tile image
-		const ContentFeatures &f = d_client->getNodeDefManager()->get(id);
-		video::ITexture *t = d_tsrc->getTexture(f.tiledef[0].name);
-		if (!t)
-			return d_colorids[CONTENT_UNKNOWN];
-
-		video::IVideoDriver *driver = d_device->getVideoDriver();
+		const ContentFeatures &f = client->getNodeDefManager()->get(id);
+		video::ITexture *t = tsrc->getTexture(f.tiledef[0].name);
+		assert(t);
 
 		video::IImage *image = driver->createImage(t, 
 			core::position2d<s32>(0, 0),
@@ -186,13 +186,62 @@ void gsMapper::setMapVis(u16 x, u16 y, u16 w, u16 h, f32 scale, u32 alpha, video
  * entered into a border region.
  */
 
-void gsMapper::setMapType(bool bAbove, u16 iScan, s16 iSurface, bool bTracking, u16 iBorder)
+u16 gsMapper::getMinimapMode()
 {
-	d_above = bAbove;
-	d_scan = iScan;
-	d_surface = iSurface;
-	d_tracking = bTracking;
-	d_border = iBorder;
+	return m_mode;
+}
+
+void gsMapper::setMinimapMode(u16 mode)
+{
+	switch (mode) {	
+		case 1:
+			{
+				m_radar = false;
+				m_zoom = 1;
+				break;
+			}
+		case 2:
+			{
+				m_radar = false;
+				m_zoom = 2;
+				break;
+			}
+		case 3:
+			{
+				m_radar = false;
+				m_zoom = 4;
+				break;
+			}
+		case 4:
+			{
+				m_radar = true;
+				m_zoom = 1;
+				break;
+			}
+		case 5:
+			{
+				m_radar = true;
+				m_zoom = 2;
+				break;
+			}
+		case 6:
+			{
+				m_radar = true;
+				m_zoom = 4;
+				break;
+			}
+		default:
+			mode = 0;
+	}
+	m_mode = mode;
+
+	if (m_radar) {
+		m_scan_height = 16;
+		m_scan_height2 = 8;
+	} else {
+		m_scan_height = 128;
+		m_scan_height2 = 64;
+	}
 }
 
 /*
@@ -204,119 +253,59 @@ void gsMapper::setMapType(bool bAbove, u16 iScan, s16 iSurface, bool bTracking, 
  * with each iteration.
  */
 
-void gsMapper::drawMap(v3s16 position)
+void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 {
-	// width and height in nodes (these don't really need to be exact)
-	s16 nwidth = floor(d_width / d_scale);
-	s16 nheight = floor(d_height / d_scale);
-
-	bool hasChanged = false;
-
-	// check if position is outside the center
-	if (d_valid)
-	{
-		if ( (position.X - d_border) < d_origin.X ||
-			(position.Z - d_border) < d_origin.Z ||
-			(position.X + d_border) > (d_origin.X + nwidth) ||
-			(position.Z + d_border) > (d_origin.Z + nheight) ) d_valid = false;
+	
+	if (!m_scan_started) {
+		m_pos = pos;
+		m_scan_started = true;
 	}
 
-	// recalculate the origin
-	if (!d_valid || d_tracking)
-	{
-		d_origin.X = floor(position.X - (nwidth / 2));
-		d_origin.Y = d_surface;
-		d_origin.Z = floor(position.Z - (nheight / 2));
-		d_valid = true;
-		hasChanged = true;
-	}
+	s16 nwidth = floor(d_width / m_zoom);
+	s16 nheight = floor(d_height / m_zoom);
 
-	// rescan next division of the map
-	Map &map = d_client->getEnv().getMap();
+	v3s16 origin (floor(m_pos.X - (nwidth / 2)), floor(m_pos.Y), floor(m_pos.Z - (nheight / 2)));
+
 	v3s16 p;
 	s16 x = 0;
 	s16 y = 0;
 	s16 z = 0;
 
-	while (z < (nheight / 8) && (z + d_scanZ) < nheight)
+	while (z < nheight)
 	{
-		p.Z = d_origin.Z + z + d_scanZ;
+		p.Z = origin.Z + z;
 		x = 0;
-		while (x < (nwidth / 8) && (x + d_scanX) < nwidth)
+		while ((x < (nwidth / 4)) && ((x + d_scanX) < nwidth))
 		{
-			p.X = d_origin.X + x + d_scanX;
-			bool b = true;
+			p.X = origin.X + x + d_scanX;
 
-			// "above" mode: surface = mid-point for scanning
-			if (d_above)
+			// surface scanner
+			if (!m_radar)
 			{
-				p.Y = d_surface + (d_scan / 2);
-				for (y = 0; y < d_scan; y++)
+				p.Y = origin.Y + m_scan_height2;
+				for (y = 0; y < m_scan_height; y++)
 				{
-					if (b)
-					{
-						MapNode n = map.getNodeTry(p);
-						p.Y--;
-						if (n.param0 != CONTENT_IGNORE && n.param0 != CONTENT_AIR)
+					MapNode n = map->getNodeNoEx(p);
+					p.Y--;
+					if (n.param0 != CONTENT_IGNORE && n.param0 != CONTENT_AIR)
 						{
-							b = false;
-							p.Y = d_surface;
-
-							// check to see if this node is different from the map
-							std::map<v3s16, u16>::iterator i2 = d_map.find(p);
-							if ( i2 == d_map.end() ||
-								(i2 != d_map.end() && n.param0 != d_map[p]) )
-							{
-								hasChanged = true;
-								d_map[p] = n.param0;	// change it
-							}
+							p.Y = 0;
+							m_minimap[p].X = n.param0;
+							m_minimap[p].Y = y;
+						break;
 						}
-					}
 				}
 
-			// not "above" = use the radar for mapping
+			// radar mode
 			} else {
-				p.Y = position.Y + 1;
-				MapNode n = map.getNodeTry(p);
-				bool w = (n.param0 != CONTENT_IGNORE && n.param0 != CONTENT_AIR);
-
-				int count = 0;
-				u16 id = CONTENT_AIR;
-				while (b)
+				p.Y = origin.Y - m_scan_height2;
+				for (y = 0; y < m_scan_height; y++)
 				{
-					if (w)		// wall = scan up for air
-					{
-						p.Y++;
-						n = map.getNodeTry(p);
-						if (n.param0 == CONTENT_AIR)
-							b = false;
-						else
-							id = n.param0;
-
-					} else {	// not wall = scan down for non-air
-						p.Y--;
-						n = map.getNodeTry(p);
-						if (n.param0 != CONTENT_IGNORE && n.param0 != CONTENT_AIR)
-						{
-							id = n.param0;
-							b = false;
-						}
+					MapNode n = map->getNodeNoEx(v3s16(p.X, p.Y + y, p.Z));
+					if (n.param0 == CONTENT_AIR) {
+						m_minimap[v3s16(p.X, 0, p.Z)].Y += 1;
 					}
-					if (b && count++ >= (d_scan / 8)) 
-					{
-						b = false;
-						id = CONTENT_AIR;
-					}
-				}
-
-				p.Y = d_surface;		// the data is always flat
-				std::map<v3s16, u16>::iterator i5 = d_radar.find(p);
-				if ( i5 == d_radar.end() ||
-					(i5 != d_radar.end() && id != d_radar[p]) )
-				{
-					hasChanged = true;
-					d_radar[p] = id;	// change it
-				}
+				}	
 			}
 			x++;
 		}
@@ -324,71 +313,70 @@ void gsMapper::drawMap(v3s16 position)
 	}
 
 	// move the scan block
-	d_scanX += (nwidth / 8);
-	if (d_scanX >= nwidth)
-	{
+	d_scanX += (nwidth / 4);
+	if (d_scanX >= nwidth) {
+		m_scan_complete = true;
+		m_scan_started = false;
 		d_scanX = 0;
-		d_scanZ += (nheight / 8);
-		if (d_scanZ >= nheight)	d_scanZ = 0;
 	}
 
-	video::IVideoDriver *driver = d_device->getVideoDriver();
+	if (m_scan_complete) {
+	// set up the image
+	core::dimension2d<u32> dim(nwidth, nheight);
+	video::IImage *image = driver->createImage(video::ECF_A8R8G8B8, dim);
+	assert(image);
+	for (z = 0; z < nheight; z++) {
+		for (x = 0; x < nwidth; x++) {
 
-	if (hasChanged || !d_hastex)
-	{
-		// set up the image
-		core::dimension2d<u32> dim(nwidth, nheight);
-		video::IImage *image = driver->createImage(video::ECF_A8R8G8B8, dim);
-		assert(image);
+			v3s16 p(origin.X + x, 0, origin.Z + z);
+			u16 i = CONTENT_IGNORE;
+			float factor = 0; 
 
-		bool psum = false;
-		for (z = 0; z < nheight; z++)
-		{
-			for (x = 0; x < nwidth; x++)
-			{
-				p.X = d_origin.X + x;
-				p.Y = d_surface;
-				p.Z = d_origin.Z + z;
-
-				u16 i = CONTENT_IGNORE;
-				if (d_above)
-				{
-					std::map<v3s16, u16>::iterator i3 = d_map.find(p);
-					if (i3 != d_map.end()) i = d_map[p];
-				} else {
-					std::map<v3s16, u16>::iterator i6 = d_radar.find(p);
-					if (i6 != d_radar.end()) i = d_radar[p];
-				}
-
-				video::SColor c = getColorFromId(i);
-				c.setAlpha(d_alpha);
-				image->setPixel(x, nheight - z - 1, c);
-				if (i != CONTENT_IGNORE) psum = true;
+			std::map<v3s16, v3s16>::iterator iter = m_minimap.find(p);
+			if (iter != m_minimap.end()) {
+				i = m_minimap[p].X;
+				factor = m_minimap[p].Y;
 			}
+
+			video::SColor c(240,0,0,0);
+			if (!m_radar) {
+				c = getColorFromId(i);
+				factor = 1.0 + 2.0 * (m_scan_height2-factor) / m_scan_height; 
+				c.setRed(core::clamp(core::round32(c.getRed() * factor), 0, 255));
+				c.setGreen(core::clamp(core::round32(c.getGreen() * factor), 0, 255));
+				c.setBlue(core::clamp(core::round32(c.getBlue() * factor), 0, 255));
+			} else {
+				if (factor > 0) {
+					c.setGreen(core::clamp(core::round32(32 + factor * 8), 0, 255));
+				}	
+			}
+		c.setAlpha(240);
+		image->setPixel(x, nheight - z - 1, c);
+		}
+		}
+	
+		if (d_hastex) {
+			driver->removeTexture(d_texture);
+			d_hastex = false;
 		}
 
-		// image -> texture
-		if (psum && d_cooldown2 == 0)
-		{
-			if (d_hastex)
-			{
-				driver->removeTexture(d_texture);
-				d_hastex = false;
-			}
-			std::string f = "gsmapper__" + itos(d_device->getTimer()->getRealTime());
-			d_texture = driver->addTexture(f.c_str(), image);
-			assert(d_texture);
-			d_hastex = true;
-			d_cooldown2 = 5;	// don't generate too many textures all at once
-		} else {
-			d_cooldown2--;
-			if (d_cooldown2 < 0) d_cooldown2 = 0;
-		}
-
-		image->drop();
-	} 
-
+	m_minimap.clear();
+	std::string f = "gsmapper__" + itos(device->getTimer()->getRealTime());
+	d_texture = driver->addTexture(f.c_str(), image);
+	assert(d_texture);
+	d_hastex = true;
+	image->drop();
+	m_scan_complete = false;
+	}
+	
 	// draw map texture
+	v2u32 screensize = driver->getScreenSize();
+	d_width = 0.1875 * screensize.X;
+	d_height = 0.21875 * screensize.Y;
+
+	d_posx = screensize.X - d_width - 10;
+	d_posy = 10;
+	
 	if (d_hastex) {
 		driver->draw2DImage( d_texture,
 			core::rect<s32>(d_posx, d_posy, d_posx+d_width, d_posy+d_height),
@@ -397,18 +385,18 @@ void gsMapper::drawMap(v3s16 position)
 	}
 
 	// draw local player marker
-	if (d_tsrc->isKnownSourceImage("player_marker0.png"))
+	if (tsrc->isKnownSourceImage("player_marker0.png"))
 	{
-		v3s16 p = floatToInt(d_player->getPosition(), BS);
-		if ( p.X >= d_origin.X && p.X <= (d_origin.X + nwidth) &&
-			p.Z >= d_origin.Z && p.Z <= (d_origin.Z + nheight) )
+		v3s16 p = m_pos;
+		if ( p.X >= origin.X && p.X <= (origin.X + nwidth) &&
+			p.Z >= origin.Z && p.Z <= (origin.Z + nheight) )
 		{
-			f32 y = floor(360 - wrapDegrees_0_360(d_player->getYaw()));
+			f32 y = floor(360 - wrapDegrees_0_360(player->getYaw()));
 			if (y < 0) y = 0;
 			int r = floor(y / 90.0);
 			int a = floor(fmod(y, 90.0) / 10.0);
 			std::string f = "player_marker" + itos(a) + ".png";
-			video::ITexture *pmarker = d_tsrc->getTexture(f);
+			video::ITexture *pmarker = tsrc->getTexture(f);
 			assert(pmarker);
 			v2u32 size = pmarker->getOriginalSize();
 
@@ -449,8 +437,8 @@ void gsMapper::drawMap(v3s16 position)
 				image2->drop();
 			}
 
-			s32 sx = d_posx + floor((p.X - d_origin.X) * d_scale) - (size.X / 2);
-			s32 sy = d_posy + floor((nheight - (p.Z - d_origin.Z)) * d_scale) - (size.Y / 2);
+			s32 sx = d_posx + floor((p.X - origin.X) * m_zoom) - (size.X / 2);
+			s32 sy = d_posy + floor((nheight - (p.Z - origin.Z)) * m_zoom) - (size.Y / 2);
 			driver->draw2DImage( pmarker,
 				core::rect<s32>(sx, sy, sx+size.X, sy+size.Y),
 				core::rect<s32>(0, 0, size.X, size.Y),
