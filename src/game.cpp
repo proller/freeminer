@@ -1709,7 +1709,6 @@ private:
 	//freeminer:
 	GUITable *playerlist;
 	video::SColor console_bg;
-	gsMapper *mapper;
 #if ENABLE_THREADS && HAVE_FUTURE
 	std::future<void> updateDrawList_future;
 #endif
@@ -1761,9 +1760,9 @@ Game::Game() :
 	clouds(NULL),
 	sky(NULL),
 	local_inventory(NULL),
-	playerlist(nullptr),
 	hud(NULL),
 	mapper(NULL)
+	, playerlist(nullptr)
 {
 	m_cache_doubletap_jump            = g_settings->getBool("doubletap_jump");
 	m_cache_enable_node_highlighting  = g_settings->getBool("enable_node_highlighting");
@@ -1790,6 +1789,7 @@ Game::~Game()
 
 	delete server; // deleted first to stop all server threads
 
+	if (mapper)
 	delete mapper;
 	delete hud;
 	delete local_inventory;
@@ -1801,9 +1801,6 @@ Game::~Game()
 	delete nodedef_manager;
 	delete itemdef_manager;
 	delete draw_control;
-
-	if (mapper)
-		delete mapper;
 
 	extendedResourceCleanup();
 }
@@ -2312,28 +2309,6 @@ bool Game::initGui()
 		v3f console_color = g_settings->getV3F("console_color");
 		console_bg = video::SColor(g_settings->getU16("console_alpha"), console_color.X, console_color.Y, console_color.Z);
 	}
-
-	v2u32 screensize = driver->getScreenSize();
-	// create mapper
-	mapper = new gsMapper(device, client);
-	{
-		// Update mapper elements
-		u16 w = g_settings->getU16("hud_map_width");
-		struct _gsm_color { u32 red; u32 green; u32 blue; } gsm_color;
-		g_settings->getStruct("hud_map_back", "u32,u32,u32",
-			&gsm_color, sizeof(gsm_color) );
-		mapper->setMapVis(screensize.X-(w+10),10, w,
-			g_settings->getU16("hud_map_height"),
-			g_settings->getFloat("hud_map_scale"),
-			g_settings->getU16("hud_map_alpha"),
-			video::SColor(0, gsm_color.red, gsm_color.green, gsm_color.blue));
-		mapper->setMapType(g_settings->getBool("hud_map_above"),
-			g_settings->getU16("hud_map_scan"),
-			g_settings->getS16("hud_map_surface"),
-			g_settings->getBool("hud_map_tracking"),
-			g_settings->getU16("hud_map_border"));
-	}
-
 
 	return true;
 }
@@ -4442,10 +4417,12 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 	/*
 		Draw map
 	*/
+/*
 	if ((g_settings->getBool("hud_map")) && flags.show_hud)
 	{
 		mapper->drawMap( floatToInt(player->getPosition(), BS) );
 	}
+*/
 
 	/*
 		Profiler graph
@@ -4505,7 +4482,7 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 	/*
 			Draw map
 	*/
-	if (flags.show_minimap && flags.show_hud)
+	if (flags.show_minimap && flags.show_hud && !flags.headless_optimize)
 	{
 		mapper->drawMap( floatToInt(player->getPosition(), BS) ,&client->getEnv().getClientMap());
 	}

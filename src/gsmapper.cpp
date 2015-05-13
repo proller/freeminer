@@ -30,6 +30,8 @@
 #include "util/string.h"
 #include <math.h>
 
+#include "profiler.h"
+
 gsMapper::gsMapper(IrrlichtDevice *device, Client *client)
 {
 	this->device	= device;
@@ -255,6 +257,9 @@ void gsMapper::setMinimapMode(u16 mode)
 
 void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 {
+
+	ScopeProfiler sp(g_profiler, "MiniMap: draw");
+
 	
 	if (!m_scan_started) {
 		m_pos = pos;
@@ -285,7 +290,7 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 				p.Y = origin.Y + m_scan_height2;
 				for (y = 0; y < m_scan_height; y++)
 				{
-					MapNode n = map->getNodeNoEx(p);
+					MapNode n = map->getNodeTry(p);
 					p.Y--;
 					if (n.param0 != CONTENT_IGNORE && n.param0 != CONTENT_AIR)
 						{
@@ -301,7 +306,7 @@ void gsMapper::drawMap(v3s16 pos, ClientMap *map)
 				p.Y = origin.Y - m_scan_height2;
 				for (y = 0; y < m_scan_height; y++)
 				{
-					MapNode n = map->getNodeNoEx(v3s16(p.X, p.Y + y, p.Z));
+					MapNode n = map->getNodeTry(v3s16(p.X, p.Y + y, p.Z));
 					if (n.param0 == CONTENT_AIR) {
 						m_minimap[v3s16(p.X, 0, p.Z)].Y += 1;
 					}
