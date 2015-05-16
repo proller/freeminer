@@ -76,11 +76,11 @@ endif()
 
 set(CMAKE_REQUIRED_FLAGS "")
 
-if(MSVC)
-	option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 0)
-else()
+#if(MSVC)
+#	option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 0)
+#else()
 	option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 1)
-endif()
+#endif()
 
 if(ENABLE_THREADS)
 	set(ENABLE_THREADS 1)
@@ -361,6 +361,7 @@ endif()
 
 find_package(Lua REQUIRED)
 
+find_package(GMP REQUIRED)
 
 option(ENABLE_LEVELDB "Enable LevelDB backend" TRUE)
 set(USE_LEVELDB FALSE)
@@ -741,6 +742,7 @@ include_directories(
 	${GETTEXT_INCLUDE_DIR}
 	${SOUND_INCLUDE_DIRS}
 	${LUA_INCLUDE_DIR}
+	${GMP_INCLUDE_DIR}
 	${JSON_INCLUDE_DIR}
 	${MSGPACK_INCLUDE_DIR}
 	${PROJECT_SOURCE_DIR}/script
@@ -776,6 +778,7 @@ if(BUILD_CLIENT)
 		${ICONV_LIBRARY}
 		${SOUND_LIBRARIES}
 		${LUA_LIBRARY}
+		${GMP_LIBRARY}
 		${JSON_LIBRARY}
 		${MSGPACK_LIBRARY}
 		${ENET_LIBRARY}
@@ -845,6 +848,7 @@ if(BUILD_SERVER)
 		${LUA_LIBRARY}
 		${MSGPACK_LIBRARY}
 		${ENET_LIBRARY}
+		${GMP_LIBRARY}
 		${PLATFORM_LIBS}
 	)
 	set_target_properties(${PROJECT_NAME}server PROPERTIES
