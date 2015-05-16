@@ -40,6 +40,11 @@ LOCAL_SRC_FILES := deps/libvorbis-libogg-android/libs/$(TARGET_LIBDIR)/libvorbis
 include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
+LOCAL_MODULE := gmp
+LOCAL_SRC_FILES := deps/gmp/usr/lib/libgmp.so
+include $(PREBUILT_SHARED_LIBRARY)
+
+include $(CLEAR_VARS)
 LOCAL_MODULE := ssl
 LOCAL_SRC_FILES := deps/openssl/libssl.a
 include $(PREBUILT_STATIC_LIBRARY)
@@ -119,6 +124,7 @@ LOCAL_C_INCLUDES :=                               \
 		deps/curl/include                         \
 		deps/openal-soft/jni/OpenAL/include       \
 		deps/libvorbis-libogg-android/jni/include \
+		deps/gmp/usr/include                      \
 		deps/leveldb/include                      \
 		deps/sqlite/
 #		deps/libiconv/include                     \
@@ -239,6 +245,7 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/version.cpp                       \
 		jni/src/voxel.cpp                         \
 		jni/src/voxelalgorithms.cpp               \
+		jni/src/util/auth.cpp                     \
 		jni/src/util/base64.cpp                   \
 		jni/src/util/directiontables.cpp          \
 		jni/src/util/numeric.cpp                  \
@@ -246,6 +253,7 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/util/serialize.cpp                \
 		jni/src/util/sha1.cpp                     \
 		jni/src/util/string.cpp                   \
+		jni/src/util/srp.cpp                      \
 		jni/src/util/timetaker.cpp                \
 		jni/src/unittest/test.cpp                 \
 		jni/src/unittest/test_collision.cpp       \
@@ -279,6 +287,8 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/wieldmesh.cpp                     \
 		jni/src/client/clientlauncher.cpp         \
 		jni/src/client/tile.cpp
+
+# intentionally kept out (we already build openssl itself): jni/src/util/sha256.c
 
 # Network
 LOCAL_SRC_FILES +=                                \
@@ -326,7 +336,7 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/script/lua_api/l_vmanip.cpp       \
 		jni/src/script/scripting_game.cpp         \
 		jni/src/script/scripting_mainmenu.cpp
-		
+
 #freetype2 support
 LOCAL_SRC_FILES +=                                \
 		jni/src/cguittfont/xCGUITTFont.cpp
@@ -375,7 +385,7 @@ LOCAL_SRC_FILES +=                                \
 # json
 LOCAL_SRC_FILES += jni/src/json/jsoncpp.cpp
 
-LOCAL_SHARED_LIBRARIES := openal ogg vorbis
+LOCAL_SHARED_LIBRARIES := openal ogg vorbis gmp
 LOCAL_STATIC_LIBRARIES := Irrlicht freetype curl ssl crypto android_native_app_glue $(PROFILER_LIBS)
 
 LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/*.c) $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/netinet/*.c) $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/netinet6/*.c)
