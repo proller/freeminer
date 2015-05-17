@@ -381,9 +381,10 @@ private:
 	void sctp_setup(u16 port = 9899);
 	std::unordered_map<u16, std::string> recv_buf;
 
+/*
 	int sctp_recieve_callback(struct socket *sock, union sctp_sockstore addr, void *data,
                                  size_t datalen, struct sctp_rcvinfo, int flags, void *ulp_info);
-
+*/
 
 };
 

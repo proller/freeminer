@@ -115,6 +115,18 @@ if (SCTP_SO_LOCK_TESTING)
 	add_definitions(-DSCTP_SO_LOCK_TESTING)
 endif()
 
+option(SCTP_EMBEDDED_V6_SCOPE " " 1)
+if (SCTP_EMBEDDED_V6_SCOPE)
+	add_definitions(-DSCTP_EMBEDDED_V6_SCOPE)
+endif()
+
+option(SCTP_KAME " " 0)
+if (SCTP_KAME)
+	add_definitions(-DSCTP_KAME)
+endif()
+
+
+
 add_definitions(-D_GNU_SOURCE)
 
 include_directories(${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/netinet ${PROJECT_SOURCE_DIR}/netinet6 )
