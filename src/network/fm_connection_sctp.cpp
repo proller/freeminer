@@ -44,7 +44,7 @@ namespace con {
 #define BUFFER_SIZE (1<<16)
 
 //very ugly windows hack
-#if defined(_MSC_VER) || defined(__MINGW32__)
+#if defined(_WIN32)
 
 #ifndef WIN32_LEAN_AND_MEAN
 	#define WIN32_LEAN_AND_MEAN
