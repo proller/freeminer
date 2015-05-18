@@ -115,7 +115,7 @@ if (SCTP_SO_LOCK_TESTING)
 	add_definitions(-DSCTP_SO_LOCK_TESTING)
 endif()
 
-option(SCTP_EMBEDDED_V6_SCOPE " " 1)
+option(SCTP_EMBEDDED_V6_SCOPE " " 0)
 if (SCTP_EMBEDDED_V6_SCOPE)
 	add_definitions(-DSCTP_EMBEDDED_V6_SCOPE)
 endif()
