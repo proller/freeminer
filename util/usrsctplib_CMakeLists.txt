@@ -1,3 +1,33 @@
+#
+# Copyright (C) 2015-2015 Oleg Alexeenkov
+#
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+# 3. Neither the name of the project nor the names of its contributors
+#    may be used to endorse or promote products derived from this software
+#    without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE PROJECT OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+#
+
 cmake_minimum_required(VERSION 2.6)
 
 project(usrsctplib)
@@ -26,46 +56,46 @@ add_definitions(-D__Userspace__ "-D__Userspace_os_${CMAKE_SYSTEM_NAME}")
 
 check_struct_has_member("struct sockaddr" "sa_len" "sys/types.h;sys/socket.h" HAVE_SA_LEN)
 if(HAVE_SA_LEN)
-    add_definitions(-DHAVE_SA_LEN)
+	add_definitions(-DHAVE_SA_LEN)
 endif()
 
 check_struct_has_member("struct sockaddr_in" "sin_len" "sys/types.h;netinet/in.h" HAVE_SIN_LEN)
 if(HAVE_SIN_LEN)
-    add_definitions(-DHAVE_SIN_LEN)
+	add_definitions(-DHAVE_SIN_LEN)
 endif()
 
 check_struct_has_member("struct sockaddr_in6" "sin6_len" "sys/types.h;netinet/in.h" HAVE_SIN6_LEN)
 if(HAVE_SIN6_LEN)
-    add_definitions(-DHAVE_SIN6_LEN)
+	add_definitions(-DHAVE_SIN6_LEN)
 endif()
 
 cmake_push_check_state()
 set(CMAKE_REQUIRED_INCLUDES "${CMAKE_SOURCE_DIR}/src/network")
 check_struct_has_member("struct sockaddr_conn" "sconn_len" "usrsctplib/usrsctp.h" HAVE_SCONN_LEN)
 if(HAVE_SCONN_LEN)
-    add_definitions(-DHAVE_SCONN_LEN)
+	add_definitions(-DHAVE_SCONN_LEN)
 endif()
 cmake_pop_check_state()
 
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
-    add_definitions(-U__FreeBSD__)
+	add_definitions(-U__FreeBSD__)
 endif()
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    add_definitions(-U__APPLE__ -D__APPLE_USE_RFC_2292)
+	add_definitions(-U__APPLE__ -D__APPLE_USE_RFC_2292)
 endif()
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "DragonFly")
-    add_definitions(-U__DragonFly__)
+	add_definitions(-U__DragonFly__)
 endif()
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "NetBSD")
-    add_definitions(-U__NetBSD__)
+	add_definitions(-U__NetBSD__)
 endif()
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "OpenBSD")
-    add_definitions(-U__OpenBSD__)
+	add_definitions(-U__OpenBSD__)
 endif()
 
 
@@ -83,7 +113,6 @@ option(INET6 "Support IPv6 " 1)
 if (INET6)
 	add_definitions(-DINET6)
 endif()
-
 
 option(SCTP_SIMPLE_ALLOCATOR " " 1)
 if (SCTP_SIMPLE_ALLOCATOR)
@@ -124,8 +153,6 @@ option(SCTP_KAME " " 0)
 if (SCTP_KAME)
 	add_definitions(-DSCTP_KAME)
 endif()
-
-
 
 add_definitions(-D_GNU_SOURCE)
 
