@@ -135,9 +135,14 @@ struct TextDestNodeMetadata : public TextDest {
 	// This is deprecated I guess? -celeron55
 	void gotText(std::wstring text)
 	{
-		assert(0);
+		std::string ntext = wide_to_narrow(text);
+		infostream << "Submitting 'text' field of node at (" << m_p.X << ","
+			   << m_p.Y << "," << m_p.Z << "): " << ntext << std::endl;
+		StringMap fields;
+		fields["text"] = ntext;
+		m_client->sendNodemetaFields(m_p, "", fields);
 	}
-	void gotText(std::map<std::string, std::string> fields)
+	void gotText(const StringMap &fields)
 	{
 		m_client->sendNodemetaFields(m_p, "", fields);
 	}
@@ -157,7 +162,7 @@ struct TextDestPlayerInventory : public TextDest {
 		m_client = client;
 		m_formname = formname;
 	}
-	void gotText(std::map<std::string, std::string> fields)
+	void gotText(const StringMap &fields)
 	{
 		m_client->sendInventoryFields(m_formname, fields);
 	}
@@ -184,7 +189,7 @@ struct LocalFormspecHandler : public TextDest {
 		errorstream << "LocalFormspecHandler::gotText old style message received" << std::endl;
 	}
 
-	void gotText(std::map<std::string, std::string> fields)
+	void gotText(const StringMap &fields)
 	{
 		if (m_formname == "MT_PAUSE_MENU") {
 			if (fields.find("btn_sound") != fields.end()) {
@@ -226,9 +231,9 @@ struct LocalFormspecHandler : public TextDest {
 
 			if ((fields.find("btn_send") != fields.end()) ||
 					(fields.find("quit") != fields.end())) {
-				if (fields.find("f_text") != fields.end()) {
-					m_client->typeChatMessage(fields["f_text"]);
-				}
+				StringMap::const_iterator it = fields.find("f_text");
+				if (it != fields.end())
+					m_client->typeChatMessage(it->second);
 
 				return;
 			}
@@ -256,12 +261,14 @@ struct LocalFormspecHandler : public TextDest {
 			return;
 		}
 
-		errorstream << "LocalFormspecHandler::gotText unhandled >" << m_formname << "< event" << std::endl;
-		int i = 0;
+		errorstream << "LocalFormspecHandler::gotText unhandled >"
+			<< m_formname << "< event" << std::endl;
 
-		for (std::map<std::string, std::string>::iterator iter = fields.begin();
-				iter != fields.end(); iter++) {
-			errorstream << "\t" << i << ": " << iter->first << "=" << iter->second << std::endl;
+		int i = 0;
+		StringMap::const_iterator it;
+		for (it = fields.begin(); it != fields.end(); ++it) {
+			errorstream << "\t" << i << ": " << it->first
+				<< "=" << it->second << std::endl;
 			i++;
 		}
 	}
@@ -1576,6 +1583,7 @@ protected:
 	void processItemSelection(u16 *new_playeritem);
 
 	void dropSelectedItem();
+	void dropSelectedStack();
 	void openInventory();
 	void openConsole(float height = 0.6, bool close_on_return = false, const std::wstring& input = L"");
 	void toggleFreeMove(float *statustext_time);
@@ -2802,7 +2810,15 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 	//TimeTaker tt("process kybd input", NULL, PRECISION_NANO);
 
 	if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_DROP])) {
-		dropSelectedItem();
+#ifdef __ANDROID__
+		dropSelectedStack();
+#else
+		if (input->isKeyDown(LControlKey) || input->isKeyDown(RControlKey)) {
+			dropSelectedStack();
+		} else {
+			dropSelectedItem();
+		}
+#endif
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_INVENTORY])) {
 		openInventory();
 	} else if (input->wasKeyDown(EscapeKey) || input->wasKeyDown(CancelKey)) {
@@ -2994,13 +3010,22 @@ void Game::processItemSelection(u16 *new_playeritem)
 void Game::dropSelectedItem()
 {
 	IDropAction *a = new IDropAction();
-	a->count = 0;
+	a->count = 1;
 	a->from_inv.setCurrentPlayer();
 	a->from_list = "main";
 	a->from_i = client->getPlayerItem();
 	client->inventoryAction(a);
 }
 
+void Game::dropSelectedStack()
+{
+	IDropAction *a = new IDropAction();
+	a->count = 0;
+	a->from_inv.setCurrentPlayer();
+	a->from_list = "main";
+	a->from_i = client->getPlayerItem();
+	client->inventoryAction(a);
+}
 
 void Game::openInventory()
 {

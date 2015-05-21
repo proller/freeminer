@@ -265,7 +265,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 
 		{
 			std::string reason;
-			if(m_script->on_prejoinplayer(playername, addr_s, reason))
+			if(m_script->on_prejoinplayer(playername, addr_s, &reason))
 			{
 				actionstream<<"Server: Player with the name \""<<playername<<"\" "
 						<<"tried to connect from "<<addr_s<<" "
