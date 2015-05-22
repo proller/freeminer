@@ -1,4 +1,4 @@
-package org.freeminer.freeminermt;
+package org.freeminer.multicraft;
 
 import android.app.Activity;
 import android.app.AlertDialog;

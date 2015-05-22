@@ -1,4 +1,4 @@
-package org.freeminer.freeminermt;
+package org.freeminer.multicraft;
 
 import android.app.NativeActivity;
 import android.content.Intent;
@@ -91,7 +91,7 @@ public class MtNativeActivity extends NativeActivity {
 		// We don't have to load libminetest.so ourselves,
 		// but if we do, we get nicer logcat errors when
 		// loading fails.
-		System.loadLibrary("freeminermt");
+		System.loadLibrary("freeminer");
 	}
 	
 	private int m_MessagReturnCode;

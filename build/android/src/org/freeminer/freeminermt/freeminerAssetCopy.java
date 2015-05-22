@@ -1,4 +1,4 @@
-package org.freeminer.freeminermt;
+package org.freeminer.multicraft;
 
 import java.io.BufferedReader;
 import java.io.File;

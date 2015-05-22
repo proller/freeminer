@@ -7,8 +7,8 @@ if(${CMAKE_VERSION} STREQUAL "2.8.2")
 endif()
 
 # This can be read from ${PROJECT_NAME} after project() is called
-project(freeminermt)
-set(PROJECT_NAME_CAPITALIZED "freeminermt")
+project(multicraft)
+set(PROJECT_NAME_CAPITALIZED "multicraft")
 
 
 # Also remember to set PROTOCOL_VERSION in network/networkprotocol.h when releasing
