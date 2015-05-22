@@ -37,7 +37,7 @@ rootdir=..
 mkdir -p $logdir
 
 mkdir -p worlds/autotest
-echo "gameid = default" > worlds/autotest/world.mt
+echo "gameid = MultiCraft" > worlds/autotest/world.mt
 echo "backend = leveldb" >> worlds/autotest/world.mt
 
 name=tsan

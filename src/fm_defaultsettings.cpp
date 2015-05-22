@@ -380,7 +380,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("disallow_empty_password", "false");
 
 	// Gameplay settings for players on the server
-	settings->setDefault("default_game", "default");
+	settings->setDefault("default_game", "MultiCraft");
 	settings->setDefault("motd", "");
 	settings->setDefault("max_users", "100");
 	settings->setDefault("creative_mode", "false");
