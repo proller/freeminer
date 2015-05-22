@@ -85,7 +85,6 @@ LOCAL_CFLAGS := -D_IRR_ANDROID_PLATFORM_      \
 				-DUSE_MANDELBULBER=1 \
 				-DHAVE_THREAD_LOCAL=1 \
 				-DPROJECT_NAME_C=\"$(PROJECT_NAME_C)\" \
-				-DMINETEST_PROTO=1 \
 				-pipe -fstrict-aliasing
 
 #too slow fmtodo				-DENABLE_THREADS=1 -DHAVE_FUTURE=1 \

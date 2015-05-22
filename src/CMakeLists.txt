@@ -89,7 +89,7 @@ else()
 endif()
 
 
-option(MINETEST_PROTO "Use minetest protocol (Slow and buggy)" 1)
+option(MINETEST_PROTO "Use minetest protocol (Slow and buggy)" 0)
 
 if(MINETEST_PROTO)
 	set(MINETEST_PROTO 1)
