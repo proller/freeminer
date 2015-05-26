@@ -86,6 +86,7 @@ LOCAL_CFLAGS := -D_IRR_ANDROID_PLATFORM_      \
 				-DHAVE_THREAD_LOCAL=1 \
 				-DUSE_SCTP=1 -DINET -DINET6 -DSCTP_WITH_NO_CSUM \
 				-DSCTP_SIMPLE_ALLOCATOR -DSCTP_PROCESS_LEVEL_LOCKS -D__Userspace__ -D__Userspace_os_Linux \
+				-DPROJECT_NAME_C=\"$(PROJECT_NAME_C)\" \
 				-pipe -fstrict-aliasing
 
 #too slow fmtodo				-DENABLE_THREADS=1 -DHAVE_FUTURE=1 \

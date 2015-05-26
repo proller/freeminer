@@ -10,3 +10,6 @@
 [submodule "src/network/usrsctplib"]
 	path = src/network/usrsctplib
 	url = https://chromium.googlesource.com/external/usrsctplib
+[submodule "src/msgpack-c"]
+	path = src/msgpack-c
+	url = https://github.com/msgpack/msgpack-c.git

@@ -6,7 +6,7 @@ OS := $(shell uname)
 # GPROF = 1
 
 # build for build platform
-APP_PLATFORM = android-14
+APP_PLATFORM = android-9
 
 # paths used for timestaps, dependencys, tree config and libs
 PATHCFGFILE = path.cfg
@@ -23,7 +23,9 @@ GAMES_TO_COPY = default MultiCraft_game
 ANDROID_VERSION_CODE = 12
 
 #and for freeminer for skip conflict:
-ANDROID_VERSION_CODE = 16
+ANDROID_VERSION_CODE = 20
+
+PROJECT_NAME_C = freeminer
 
 ################################################################################
 # toolchain config for arm old processors
@@ -115,7 +117,7 @@ OPENSSL_TIMESTAMP = $(OPENSSL_DIR)timestamp
 OPENSSL_TIMESTAMP_INT = $(ROOT)/deps/openssl_timestamp
 OPENSSL_URL = http://www.openssl.org/source/openssl-$(OPENSSL_VERSION).tar.gz
 
-CURL_VERSION = 7.41.0
+CURL_VERSION = 7.42.1
 CURL_DIR = $(ROOT)/deps/curl-$(CURL_VERSION)
 CURL_LIB = $(CURL_DIR)/lib/.libs/libcurl.a
 CURL_TIMESTAMP = $(CURL_DIR)/timestamp
@@ -883,6 +885,7 @@ apk: $(PATHCFGFILE) assets $(IRRLICHT_LIB) $(CURL_LIB) $(GMP_LIB) $(LEVELDB_TARG
 	mkdir -p ${ROOT}/src;                                                      \
 	ndk-build NDK_MODULE_PATH=${NDK_MODULE_PATH}                               \
 	GPROF=${GPROF} APP_ABI=${TARGET_ABI} HAVE_LEVELDB=${HAVE_LEVELDB}          \
+	PROJECT_NAME_C=${PROJECT_NAME_C}                                           \
 	APP_PLATFORM=${APP_PLATFORM}                                               \
 	TARGET_LIBDIR=${TARGET_LIBDIR}                                             \
 	TARGET_CFLAGS+="${TARGET_CFLAGS_ADDON}"                                    \
@@ -917,7 +920,7 @@ envpaths :
 clean_all :
 	@$(MAKE) clean_apk;                                                        \
 	$(MAKE) clean_assets clean_irrlicht clean_leveldb clean_curl clean_openssl \
-	$(MAKE) clean_msgpack clean_iconv                                          \
+	clean_msgpack clean_iconv clean_manifest                                   \
 	clean_openal clean_ogg clean_gmp clean_manifest;                           \
 	sleep 1;                                                                   \
 	$(RM) -r gen libs obj deps bin Debug and_env
