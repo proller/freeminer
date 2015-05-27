@@ -28,18 +28,23 @@ class NetworkPacket
 {
 
 public:
-		NetworkPacket(u8 *data, u32 datasize, u16 peer_id);
 		NetworkPacket(u16 command, u32 datasize, u16 peer_id);
 		NetworkPacket(u16 command, u32 datasize);
+		NetworkPacket(): m_datasize(0), m_read_offset(0), m_command(0),
+				m_peer_id(0) {}
 		~NetworkPacket();
+
+		void putRawPacket(u8 *data, u32 datasize, u16 peer_id);
 
 		// Getters
 		u32 getSize() { return m_datasize; }
 		u16 getPeerId() { return m_peer_id; }
 		u16 getCommand() { return m_command; }
 
-		// Data extractors
+		// Returns a c-string without copying.
+		// A better name for this would be getRawString()
 		char* getString(u32 from_offset);
+		// major difference to putCString(): doesn't write len into the buffer
 		void putRawString(const char* src, u32 len);
 
 		NetworkPacket& operator>>(std::string& dst);
@@ -106,10 +111,12 @@ public:
 		// Temp, we remove SharedBuffer when migration finished
 		Buffer<u8> oldForgePacket();
 private:
+		void checkReadOffset(u32 from_offset);
+
 		template<typename T> void checkDataSize()
 		{
 			if (m_read_offset + sizeof(T) > m_datasize) {
-				m_datasize += sizeof(T);
+				m_datasize = m_read_offset + sizeof(T);
 				m_data.resize(m_datasize);
 			}
 		}

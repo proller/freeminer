@@ -54,6 +54,8 @@ extern std::ostream *derr_con_ptr;
 #define derr_con (*derr_con_ptr)
 
 
+class NetworkPacket;
+
 namespace con
 {
 
@@ -883,7 +885,8 @@ struct ConnectionEvent
 	bool timeout;
 	Address address;
 
-	ConnectionEvent(): type(CONNEVENT_NONE) {}
+	ConnectionEvent(): type(CONNEVENT_NONE), peer_id(0),
+			timeout(false) {}
 
 	std::string describe()
 	{
@@ -1045,7 +1048,7 @@ public:
 	void Connect(Address address);
 	bool Connected();
 	void Disconnect();
-	u32 Receive(u16 &peer_id, SharedBuffer<u8> &data, int timeout = 0);
+	u32 Receive(NetworkPacket* pkt, int timeout = 0);
 	void Send(u16 peer_id, u8 channelnum, NetworkPacket* pkt, bool reliable);
 	u16 GetPeerID() { return m_peer_id; }
 	Address GetPeerAddress(u16 peer_id);

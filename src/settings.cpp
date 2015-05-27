@@ -33,17 +33,14 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <cctype>
 #include <algorithm>
 
-#include "util/lock.h"
-
+static Settings main_settings;
+Settings *g_settings = &main_settings;
+std::string g_settings_path;
 
 Settings::~Settings()
 {
 	clear();
 }
-
-Settings main_settings;
-Settings *g_settings = &main_settings;
-std::string g_settings_path;
 
 /*
 Settings & Settings::operator += (const Settings &other)
@@ -71,10 +68,11 @@ Settings & Settings::operator = (const Settings &other)
 
 bool Settings::checkNameValid(const std::string &name)
 {
-	size_t pos = name.find_first_of("\t\n\v\f\r\b =\"{}#");
-	if (pos != std::string::npos) {
-		errorstream << "Invalid character '" << name[pos]
-			<< "' found in setting name" << std::endl;
+	bool valid = name.find_first_of("=\"{}#") == std::string::npos;
+	if (valid) valid = trim(name) == name;
+	if (!valid) {
+		errorstream << "Invalid setting name \"" << name << "\""
+			<< std::endl;
 		return false;
 	}
 	return true;
@@ -86,7 +84,7 @@ bool Settings::checkValueValid(const std::string &value)
 	if (value.substr(0, 3) == "\"\"\"" ||
 		value.find("\n\"\"\"") != std::string::npos) {
 		errorstream << "Invalid character sequence '\"\"\"' found in"
-			" setting value" << std::endl;
+			" setting value!" << std::endl;
 		return false;
 	}
 	return true;
@@ -95,9 +93,9 @@ bool Settings::checkValueValid(const std::string &value)
 
 std::string Settings::sanitizeName(const std::string &name)
 {
-	std::string n(name);
+	std::string n = trim(name);
 
-	for (const char *s = "\t\n\v\f\r\b =\"{}#"; *s; s++)
+	for (const char *s = "=\"{}#"; *s; s++)
 		n.erase(std::remove(n.begin(), n.end(), *s), n.end());
 
 	return n;
@@ -1036,7 +1034,7 @@ void Settings::doCallbacks(const std::string name)
 
 Json::Value Settings::getJson(const std::string & name, const Json::Value & def) {
 	{
-		try_shared_lock lock(m_mutex);
+		std::lock_guard<std::mutex> lock(m_mutex);
 		if (!m_json[name].empty())
 			return m_json.get(name, def);
 	}
@@ -1066,12 +1064,12 @@ void Settings::setJson(const std::string & name, const Json::Value & value) {
 	if (!value.empty())
 		set(name, json_writer.write( value )); //todo: remove later
 
-	unique_lock lock(m_mutex);
+	std::lock_guard<std::mutex> lock(m_mutex);
 	m_json[name] = value;
 }
 
 bool Settings::toJson(Json::Value &json) const {
-	try_shared_lock lock(m_mutex);
+	std::lock_guard<std::mutex> lock(m_mutex);
 
 	json = m_json;
 

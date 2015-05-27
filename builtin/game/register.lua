@@ -398,7 +398,9 @@ local function make_registration_wrap(reg_fn_name, clear_fn_name)
 
 	local orig_clear_fn = core[clear_fn_name]
 	core[clear_fn_name] = function()
-		list = {}
+		for k in pairs(list) do
+			list[k] = nil
+		end
 		return orig_clear_fn()
 	end
 
@@ -429,6 +431,7 @@ core.registered_on_crafts, core.register_on_craft = make_registration()
 core.registered_craft_predicts, core.register_craft_predict = make_registration()
 core.registered_on_protection_violation, core.register_on_protection_violation = make_registration()
 core.registered_on_item_eats, core.register_on_item_eat = make_registration()
+core.registered_on_punchplayers, core.register_on_punchplayer = make_registration()
 
 minetest.register_on_joinplayer(function(player)
 	if minetest.is_singleplayer() then

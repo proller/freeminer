@@ -165,18 +165,13 @@ void read_object_properties(lua_State *L, int index,
 	lua_pop(L, 1);
 
 	lua_getfield(L, -1, "colors");
-	if(lua_istable(L, -1)){
-		prop->colors.clear();
+	if (lua_istable(L, -1)) {
 		int table = lua_gettop(L);
-		lua_pushnil(L);
-		while(lua_next(L, table) != 0){
-			// key at index -2 and value at index -1
-			if(lua_isstring(L, -1))
-				prop->colors.push_back(readARGB8(L, -1));
-			else
-				prop->colors.push_back(video::SColor(255, 255, 255, 255));
-			// removes value, keeps key for next iteration
-			lua_pop(L, 1);
+		prop->colors.clear();
+		for (lua_pushnil(L); lua_next(L, table); lua_pop(L, 1)) {
+			video::SColor color(255, 255, 255, 255);
+			read_color(L, -1, &color);
+			prop->colors.push_back(color);
 		}
 	}
 	lua_pop(L, 1);
@@ -442,8 +437,7 @@ ContentFeatures read_content_features(lua_State *L, int index)
 	/* Other stuff */
 
 	lua_getfield(L, index, "post_effect_color");
-	if(!lua_isnil(L, -1))
-		f.post_effect_color = readARGB8(L, -1);
+	read_color(L, -1, &f.post_effect_color);
 	lua_pop(L, 1);
 
 	f.param_type = (ContentParamType)getenumfield(L, index, "paramtype",
@@ -1069,14 +1063,21 @@ bool read_noiseparams(lua_State *L, int index, NoiseParams *np)
 	if (!lua_istable(L, index))
 		return false;
 
-	np->offset     = getfloatfield_default(L, index, "offset",     0.0);
-	np->scale      = getfloatfield_default(L, index, "scale",      0.0);
-	np->persist    = getfloatfield_default(L, index, "persist",    0.0);
-	np->lacunarity = getfloatfield_default(L, index, "lacunarity", 2.0);
-	np->seed       = getintfield_default(L,   index, "seed",       0);
-	np->octaves    = getintfield_default(L,   index, "octaves",    0);
+	getfloatfield(L, index, "offset",      np->offset);
+	getfloatfield(L, index, "scale",       np->scale);
+	getfloatfield(L, index, "persist",     np->persist);
+	getfloatfield(L, index, "persistence", np->persist);
+	getfloatfield(L, index, "lacunarity",  np->lacunarity);
+	getintfield(L,   index, "seed",        np->seed);
+	getintfield(L,   index, "octaves",     np->octaves);
 
-	u32 flags = 0, flagmask = 0;
+	//freeminer:
+	getfloatfield(L, index, "farscale",  np->farscale);
+	getfloatfield(L, index, "farspread",  np->farspread);
+	getfloatfield(L, index, "farpersist",  np->farpersist);
+
+	u32 flags    = 0;
+	u32 flagmask = 0;
 	np->flags = getflagsfield(L, index, "flags", flagdesc_noiseparams,
 		&flags, &flagmask) ? flags : NOISE_FLAG_DEFAULTS;
 

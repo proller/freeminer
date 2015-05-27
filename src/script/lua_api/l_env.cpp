@@ -316,7 +316,7 @@ int ModApiEnvMod::l_set_node_level(lua_State *L)
 	GET_ENV_PTR;
 
 	v3s16 pos = read_v3s16(L, 1);
-	u8 level = 1;
+	s16 level = 1;
 	if(lua_isnumber(L, 2))
 		level = lua_tonumber(L, 2);
 	MapNode n = env->getMap().getNodeNoEx(pos);
@@ -337,7 +337,7 @@ int ModApiEnvMod::l_add_node_level(lua_State *L)
 	GET_ENV_PTR;
 
 	v3s16 pos = read_v3s16(L, 1);
-	u8 level = 1;
+	s16 level = 1;
 	bool compress = 0;
 	if(lua_isnumber(L, 2))
 		level = lua_tonumber(L, 2);
@@ -374,6 +374,22 @@ int ModApiEnvMod::l_freeze_melt(lua_State *L)
 	return 1;
 }
 
+// find_nodes_with_meta(pos1, pos2)
+int ModApiEnvMod::l_find_nodes_with_meta(lua_State *L)
+{
+	GET_ENV_PTR;
+
+	std::vector<v3s16> positions = env->getMap().findNodesWithMetadata(
+		check_v3s16(L, 1), check_v3s16(L, 2));
+
+	lua_newtable(L);
+	for (size_t i = 0; i != positions.size(); i++) {
+		push_v3s16(L, positions[i]);
+		lua_rawseti(L, -2, i + 1);
+	}
+
+	return 1;
+}
 
 // get_meta(pos)
 int ModApiEnvMod::l_get_meta(lua_State *L)
@@ -478,10 +494,11 @@ int ModApiEnvMod::l_get_objects_inside_radius(lua_State *L)
 	// Do it
 	v3f pos = checkFloatPos(L, 1);
 	float radius = luaL_checknumber(L, 2) * BS;
-	std::set<u16> ids = env->getObjectsInsideRadius(pos, radius);
+	std::vector<u16> ids;
+	env->getObjectsInsideRadius(ids, pos, radius);
 	ScriptApiBase *script = getScriptApiBase(L);
 	lua_createtable(L, ids.size(), 0);
-	std::set<u16>::const_iterator iter = ids.begin();
+	std::vector<u16>::const_iterator iter = ids.begin();
 	for(u32 i = 0; iter != ids.end(); iter++) {
 		ServerActiveObject *obj = env->getActiveObject(*iter);
 		// Insert object reference into table
@@ -993,6 +1010,7 @@ void ModApiEnvMod::Initialize(lua_State *L, int top)
 	API_FCT(add_node_level);
 	API_FCT(freeze_melt);
 	API_FCT(add_entity);
+	API_FCT(find_nodes_with_meta);
 	API_FCT(get_meta);
 	API_FCT(get_node_timer);
 	API_FCT(get_player_by_name);

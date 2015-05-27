@@ -26,12 +26,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <IMaterialRenderer.h>
 #include <matrix4.h>
 #include "log_types.h"
-#include "main.h" // dout_client, g_settings
 #include "nodedef.h"
 #include "mapblock.h"
 #include "profiler.h"
 #include "settings.h"
-#include "camera.h" // CameraModes
+#include "camera.h"               // CameraModes
 #include "util/mathconstants.h"
 #include <algorithm>
 #include <unordered_map>
@@ -499,7 +498,8 @@ if(visible)
 
 /*
 			// Add to set
-			block->refGrab();
+			//block->refGrab();
+			block->resetUsageTimer();
 			drawlist.set(bp, block);
 */
 
@@ -522,7 +522,6 @@ if(visible)
 
 	if (m_drawlist_last)
 		return;
-
 
 			if (!m_drawlist_last && hw_culling) {
 	//TimeTaker timer_step("ClientMap::updateDrawList OcclusionQueries");
@@ -609,6 +608,8 @@ return;
 	else
 		prefix = "CM: transparent: ";
 
+	//ScopeProfiler sp(g_profiler, "CM::renderMap() " + prefix, SPT_AVG);
+
 	/*
 		Get time for measuring timeout.
 
@@ -626,7 +627,7 @@ return;
 
 	m_camera_mutex.Lock();
 	v3f camera_position = m_camera_position;
-	f32 camera_fov = m_camera_fov;
+	f32 camera_fov = m_camera_fov * 1.1;
 	m_camera_mutex.Unlock();
 
 	/*
@@ -634,22 +635,6 @@ return;
 	*/
 
 	v3s16 cam_pos_nodes = floatToInt(camera_position, BS);
-
-	v3s16 box_nodes_d = m_control.wanted_range * v3s16(1,1,1);
-
-	v3s16 p_nodes_min = cam_pos_nodes - box_nodes_d;
-	v3s16 p_nodes_max = cam_pos_nodes + box_nodes_d;
-
-	// Take a fair amount as we will be dropping more out later
-	// Umm... these additions are a bit strange but they are needed.
-	v3s16 p_blocks_min(
-			p_nodes_min.X / MAP_BLOCKSIZE - 3,
-			p_nodes_min.Y / MAP_BLOCKSIZE - 3,
-			p_nodes_min.Z / MAP_BLOCKSIZE - 3);
-	v3s16 p_blocks_max(
-			p_nodes_max.X / MAP_BLOCKSIZE + 1,
-			p_nodes_max.Y / MAP_BLOCKSIZE + 1,
-			p_nodes_max.Z / MAP_BLOCKSIZE + 1);
 
 	u32 vertex_count = 0;
 	u32 meshbuffer_count = 0;
@@ -679,6 +664,8 @@ return;
 	std::vector<MapBlock::mesh_type> used_meshes; //keep shared_ptr
 	auto drawlist = m_drawlist.load();
 	auto lock = drawlist->lock_shared_rec();
+	used_meshes.reserve(drawlist->size());
+	//g_profiler->add("CM::renderMap()cnt"+ prefix, drawlist->size());
 	for(auto & ir : *drawlist) {
 		auto block = ir.second;
 
@@ -687,7 +674,6 @@ return;
 		auto mapBlockMesh = block->getMesh(mesh_step);
 		if (!mapBlockMesh)
 			continue;
-		used_meshes.emplace_back(mapBlockMesh);
 
 //		smgr->addOctreeSceneNode(mapBlockMesh->getMesh()); //, 0, -1, 1024);
 //		continue;
@@ -699,6 +685,8 @@ return;
 		{
 			continue;
 		}
+
+		used_meshes.emplace_back(mapBlockMesh);
 
 		// Mesh animation
 		{

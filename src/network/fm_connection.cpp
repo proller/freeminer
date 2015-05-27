@@ -21,7 +21,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "network/fm_connection.h"
-#include "main.h"
 #include "serialization.h"
 #include "log.h"
 #include "porting.h"
@@ -31,14 +30,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "settings.h"
 #include "profiler.h"
 
-std::ostream *dout_con_ptr = &dummyout;
-std::ostream *derr_con_ptr = &verbosestream;
-
 namespace con
 {
 
 //very ugly windows hack
-#if defined(_MSC_VER) && defined(ENET_IPV6)
+#if ( defined(_MSC_VER) || defined(__MINGW32__) ) && defined(ENET_IPV6)
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -104,8 +100,12 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	m_peer_id(0),
 	m_bc_peerhandler(peerhandler),
 	m_last_recieved(0),
-	m_last_recieved_warn(0)
+	m_last_recieved_warn(0),
+	timeout_mul(0)
 {
+	timeout_mul = g_settings->getU16("timeout_mul");
+	if (!timeout_mul)
+		timeout_mul = 1;
 	start();
 }
 
@@ -193,6 +193,7 @@ void Connection::receive()
 	if (ret > 0)
 	{
 		m_last_recieved = porting::getTimeMs();
+		m_last_recieved_warn = 0;
 		switch (event.type)
 		{
 		case ENET_EVENT_TYPE_CONNECT:
@@ -242,15 +243,23 @@ void Connection::receive()
 	} else { //0
 		if (m_peers.count(PEER_ID_SERVER)) { //ugly fix. todo: fix enet and remove
 			unsigned int time = porting::getTimeMs();
-			if (time - m_last_recieved > 30000 && m_last_recieved_warn > 20000 && m_last_recieved_warn < 30000) {
+			const unsigned int t1 = 10000, t2 = 20000 * timeout_mul, t3 = 30000 * timeout_mul;
+			if (time - m_last_recieved > t1 && m_last_recieved_warn > t2 && m_last_recieved_warn < t3) {
 				errorstream<<"connection lost [30s], disconnecting."<<std::endl;
-				deletePeer(PEER_ID_SERVER,  false);
+#if defined(__has_feature)
+#if __has_feature(thread_sanitizer) || __has_feature(address_sanitizer)
+				if (0)
+#endif
+#endif
+				{
+					deletePeer(PEER_ID_SERVER,  false);
+				}
 				m_last_recieved_warn = 0;
 				m_last_recieved = 0;
-			} else if (time - m_last_recieved > 20000 && m_last_recieved_warn > 10000 && m_last_recieved_warn < 20000) {
+			} else if (time - m_last_recieved > t2 && m_last_recieved_warn > t1 && m_last_recieved_warn < t2) {
 				errorstream<<"connection lost [20s]!"<<std::endl;
 				m_last_recieved_warn = time - m_last_recieved;
-			} else if (time - m_last_recieved > 10000 && m_last_recieved_warn < 10000) {
+			} else if (time - m_last_recieved > t1 && m_last_recieved_warn < t1) {
 				errorstream<<"connection lost [10s]? ping."<<std::endl;
 				enet_peer_ping(m_peers.get(PEER_ID_SERVER));
 				m_last_recieved_warn = time - m_last_recieved;
@@ -264,9 +273,9 @@ void Connection::serve(Address bind_addr)
 {
 	ENetAddress address;
 #if defined(ENET_IPV6)
-	address.host = in6addr_any;
+	address.host = bind_addr.getAddress6().sin6_addr; // in6addr_any;
 #else
-	address.host = ENET_HOST_ANY;
+	address.host = bind_addr.getAddress().sin_addr.s_addr; // ENET_HOST_ANY;
 #endif
 	address.port = bind_addr.getPort(); // fmtodo
 
@@ -460,7 +469,7 @@ void Connection::Disconnect()
 	putCommand(c);
 }
 
-u32 Connection::Receive(u16 &peer_id, SharedBuffer<u8> &data, int timeout)
+u32 Connection::Receive(NetworkPacket* pkt, int timeout)
 {
 	for(;;){
 		ConnectionEvent e = waitEvent(timeout);
@@ -472,8 +481,10 @@ u32 Connection::Receive(u16 &peer_id, SharedBuffer<u8> &data, int timeout)
 			//throw NoIncomingDataException("No incoming data");
 			return 0;
 		case CONNEVENT_DATA_RECEIVED:
-			peer_id = e.peer_id;
-			data = SharedBuffer<u8>(e.data);
+			if (e.data.getSize() < 2) {
+				continue;
+			}
+			pkt->putRawPacket(*e.data, e.data.getSize(), e.peer_id);
 			return e.data.getSize();
 		case CONNEVENT_PEER_ADDED: {
 			if(m_bc_peerhandler)
@@ -568,10 +579,10 @@ void Connection::DisconnectPeer(u16 peer_id)
 	putCommand(discon);
 }
 
-bool parse_msgpack_packet(unsigned char *data, u32 datasize, MsgpackPacket *packet, int *command, msgpack::unpacked *msg) {
+bool parse_msgpack_packet(char *data, u32 datasize, MsgpackPacket *packet, int *command, msgpack::unpacked *msg) {
 	try {
 		//msgpack::unpacked msg;
-		msgpack::unpack(msg, (char*)data, datasize);
+		msgpack::unpack(msg, data, datasize);
 		msgpack::object obj = msg->get();
 		*packet = obj.as<MsgpackPacket>();
 

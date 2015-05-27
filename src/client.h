@@ -40,7 +40,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "util/thread_pool.h"
 #include "util/unordered_map_hash.h"
-#include "msgpack.h"
+#include "msgpack_fix.h"
 
 #include "network/networkpacket.h"
 
@@ -77,10 +77,10 @@ public:
 	unsigned int addBlock(v3POS p, std::shared_ptr<MeshMakeData> data, bool urgent);
 	std::shared_ptr<MeshMakeData> pop();
 
-	shared_unordered_map<v3s16, bool, v3POSHash, v3POSEqual> m_process;
+	concurrent_unordered_map<v3s16, bool, v3POSHash, v3POSEqual> m_process;
 
 private:
-	shared_map<unsigned int, std::unordered_map<v3POS, std::shared_ptr<MeshMakeData>, v3POSHash, v3POSEqual>> m_queue;
+	concurrent_map<unsigned int, std::unordered_map<v3POS, std::shared_ptr<MeshMakeData>, v3POSHash, v3POSEqual>> m_queue;
 	std::unordered_map<v3POS, unsigned int, v3POSHash, v3POSEqual> m_ranges;
 };
 
@@ -337,6 +337,8 @@ public:
 	void handleCommand_Deprecated(NetworkPacket* pkt);
 	void handleCommand_Hello(NetworkPacket* pkt);
 	void handleCommand_AuthAccept(NetworkPacket* pkt);
+	void handleCommand_AcceptSudoMode(NetworkPacket* pkt);
+	void handleCommand_DenySudoMode(NetworkPacket* pkt);
 	void handleCommand_InitLegacy(NetworkPacket* pkt);
 	void handleCommand_AccessDenied(NetworkPacket* pkt);
 	void handleCommand_RemoveNode(NetworkPacket* pkt);
@@ -377,8 +379,9 @@ public:
 	void handleCommand_OverrideDayNightRatio(NetworkPacket* pkt);
 	void handleCommand_LocalPlayerAnimations(NetworkPacket* pkt);
 	void handleCommand_EyeOffset(NetworkPacket* pkt);
+	void handleCommand_SrpBytesSandB(NetworkPacket* pkt);
 
-	void ProcessData(u8 *data, u32 datasize, u16 sender_peer_id);
+	void ProcessData(NetworkPacket *pkt);
 
 	// Returns true if something was received
 	bool AsyncProcessPacket();
@@ -392,13 +395,13 @@ public:
 	void interact(u8 action, const PointedThing& pointed);
 
 	void sendNodemetaFields(v3s16 p, const std::string &formname,
-			const std::map<std::string, std::string> &fields);
+		const StringMap &fields);
 	void sendInventoryFields(const std::string &formname,
-			const std::map<std::string, std::string> &fields);
+		const StringMap &fields);
 	void sendInventoryAction(InventoryAction *a);
 	void sendChatMessage(const std::string &message);
 	void sendChangePassword(const std::string &oldpassword,
-							const std::string &newpassword);
+		const std::string &newpassword);
 	void sendDamage(u8 damage);
 	void sendBreath(u16 breath);
 	void sendRespawn();
@@ -536,10 +539,20 @@ private:
 	// Send the item number 'item' as player item to the server
 	void sendPlayerItem(u16 item);
 
+	void deleteAuthData();
+	// helper method shared with clientpackethandler
+	static AuthMechanism choseAuthMech(const u32 mechs);
+
 	void sendLegacyInit(const std::string &playerName, const std::string &playerPassword);
+	void sendInit(const std::string &playerName);
+	void startAuth(AuthMechanism chosen_auth_mechanism);
 	void sendDeletedBlocks(std::vector<v3s16> &blocks);
 	void sendGotBlocks(v3s16 block);
 	void sendRemovedSounds(std::vector<s32> &soundList);
+
+	// Helper function
+	inline std::string getPlayerName()
+	{ return m_env.getLocalPlayer()->getName(); }
 
 	float m_packetcounter_timer;
 	float m_connection_reinit_timer;
@@ -565,12 +578,13 @@ private:
 	IrrlichtDevice *m_device;
 	// Server serialization version
 	u8 m_server_ser_ver;
+	// Used version of the protocol with server
+	u8 m_proto_ver;
 	u16 m_playeritem;
 	u16 m_previous_playeritem;
 	bool m_inventory_updated;
 	Inventory *m_inventory_from_server;
 	float m_inventory_from_server_age;
-	std::set<v3s16> m_active_blocks;
 	PacketCounter m_packetcounter;
 	bool m_show_highlighted;
 	// Block mesh animation parameters
@@ -582,10 +596,23 @@ private:
 	//s32 m_daynight_i;
 	//u32 m_daynight_ratio;
 	Queue<std::string> m_chat_queue; // todo: convert to std::queue
+
+	// The authentication methods we can use to enter sudo mode (=change password)
+	u32 m_sudo_auth_methods;
+
 	// The seed returned by the server in TOCLIENT_INIT is stored here
 	u64 m_map_seed;
+
+	// Auth data
+	std::string m_playername;
 	std::string m_password;
 	bool is_simple_singleplayer_game;
+	// If set, this will be sent (and cleared) upon a TOCLIENT_ACCEPT_SUDO_MODE
+	std::string m_new_password;
+	// Usable by auth mechanisms.
+	AuthMechanism m_chosen_auth_mech;
+	void * m_auth_data;
+
 	bool m_access_denied;
 	std::string m_access_denied_reason;
 	Queue<ClientEvent> m_client_event_queue;
@@ -624,7 +651,7 @@ public:
 private:
 
 	// Storage for mesh data for creating multiple instances of the same mesh
-	std::map<std::string, std::string> m_mesh_data;
+	StringMap m_mesh_data;
 
 	// own state
 	LocalClientState m_state;

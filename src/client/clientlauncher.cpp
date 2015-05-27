@@ -17,7 +17,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 */
 
-#include "main.h"
 #include "mainmenumanager.h"
 #include "debug.h"
 #include "clouds.h"
@@ -35,9 +34,23 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "fontengine.h"
 #include "clientlauncher.h"
 
-// A pointer to a global instance of the time getter
-// TODO: why?
-TimeGetter *g_timegetter = NULL;
+/* mainmenumanager.h
+ */
+gui::IGUIEnvironment *guienv = NULL;
+gui::IGUIStaticText *guiroot = NULL;
+MainMenuManager g_menumgr;
+
+bool noMenuActive()
+{
+	return g_menumgr.menuCount() == 0;
+}
+
+// Passed to menus to allow disconnecting and exiting
+MainGameCallback *g_gamecallback = NULL;
+
+
+// Instance of the time getter
+static TimeGetter *g_timegetter = NULL;
 
 u32 getTimeMs()
 {
@@ -81,6 +94,9 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 		return false;
 	}
 
+	// Create time getter
+	g_timegetter = new IrrlichtTimeGetter(device);
+
 	// Speed tests (done after irrlicht is loaded to get timer)
 	if (cmd_args.getFlag("speedtests")) {
 		dstream << "Running speed tests" << std::endl;
@@ -94,7 +110,7 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 		return false;
 	}
 
-	porting::setXorgClassHint(video_driver->getExposedVideoData(), PROJECT_NAME);
+	porting::setXorgClassHint(video_driver->getExposedVideoData(), PROJECT_NAME_C);
 
 	/*
 		This changes the minimum allowed number of vertices in a VBO.
@@ -102,9 +118,6 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 	*/
 	//driver->setMinHardwareBufferVertexCount(50);
 	video_driver->setMinHardwareBufferVertexCount(100);
-
-	// Create time getter
-	g_timegetter = new IrrlichtTimeGetter(device);
 
 	// Create game callback for menus
 	g_gamecallback = new MainGameCallback(device);
@@ -172,7 +185,7 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 	{
 		// Set the window caption
 		const wchar_t *text = wgettext("Main Menu");
-		device->setWindowCaption((narrow_to_wide(PROJECT_NAME) + L" [" + text + L"]").c_str());
+		device->setWindowCaption((narrow_to_wide(PROJECT_NAME_C) + L" [" + text + L"]").c_str());
 		delete[] text;
 
 		try {	// This is used for catching disconnects
@@ -401,12 +414,12 @@ bool ClientLauncher::launch_game(std::string &error_message,
 		return false;
 	}
 
-	if (menudata.name == "")
-		menudata.name = std::string("Guest") + itos(myrand_range(1000, 9999));
+	if (menudata.name.empty())
+		playername = menudata.name = std::string("Guest") + itos(myrand_range(10000, 90000));
 	else
 		playername = menudata.name;
 
-	password = translatePassword(playername, menudata.password);
+	password = menudata.password;
 
 	g_settings->set("name", playername);
 

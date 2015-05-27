@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 2.6)
 
 project(freeminer)
-string(TOLOWER ${PROJECT_NAME} PROJECT_NAME_LOWER)
 
 INCLUDE(CheckIncludeFiles)
 INCLUDE(CheckCXXSourceRuns)
@@ -77,11 +76,11 @@ endif()
 
 set(CMAKE_REQUIRED_FLAGS "")
 
-if(MSVC)
-	option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 0)
-else()
+#if(MSVC)
+#	option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 0)
+#else()
 	option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 1)
-endif()
+#endif()
 
 if(ENABLE_THREADS)
 	set(ENABLE_THREADS 1)
@@ -89,10 +88,14 @@ else()
 	set(ENABLE_THREADS 0)
 endif()
 
+
 option(MINETEST_PROTO "Use minetest protocol (Slow and buggy)" 0)
 if(MINETEST_PROTO)
 	set(MINETEST_PROTO 1)
+	set(USE_ENET 0)
+	message(STATUS "Using minetest compatible networking (slow, some features missing)")
 else()
+	set(USE_ENET 1)
 	set(MINETEST_PROTO 0)
 endif()
 
@@ -147,6 +150,7 @@ else()
 	if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
 		# clang does not understand __extern_always_inline but libc headers use it
 		set(OTHER_FLAGS "${OTHER_FLAGS} \"-D__extern_always_inline=extern __always_inline\"")
+		set(OTHER_FLAGS "${OTHER_FLAGS} -Wsign-compare")
 	endif()
 
 	if(MINGW)
@@ -215,7 +219,7 @@ set(CMAKE_BUILD_TYPE "${CMAKE_BUILD_TYPE}" CACHE STRING
 # Set some random things default to not being visible in the GUI
 mark_as_advanced(EXECUTABLE_OUTPUT_PATH LIBRARY_OUTPUT_PATH)
 
-find_package(MsgPack)
+find_package(MsgPack REQUIRED)
 
 option(ENABLE_CURL "Enable cURL support for fetching media" TRUE)
 set(USE_CURL FALSE)
@@ -230,6 +234,14 @@ else()
 	mark_as_advanced(CLEAR CURL_LIBRARY CURL_INCLUDE_DIR)
 endif()
 
+find_package(Iconv)
+if(ICONV_INCLUDE_DIR)
+set(USE_ICONV 1)
+message(STATUS "iconv.h found: ${ICONV_INCLUDE_DIR}")
+else()
+set(USE_ICONV 0)
+message(STATUS "iconv.h NOT found")
+endif()
 
 if(BUILD_CLIENT)
 OPTION(ENABLE_GETTEXT "Use GetText for internationalization" TRUE)
@@ -254,7 +266,6 @@ else()
 	message(STATUS "GetText disabled.")
 endif()
 
-
 if(BUILD_CLIENT)
 option(ENABLE_SOUND "Enable sound" TRUE)
 else()
@@ -262,7 +273,7 @@ option(ENABLE_SOUND "Enable sound" FALSE)
 endif()
 set(USE_SOUND FALSE)
 
-if(BUILD_CLIENT AND ENABLE_SOUND)
+if(ENABLE_SOUND AND BUILD_CLIENT)
 	# Sound libraries
 	find_package(OpenAL)
 	find_package(Vorbis)
@@ -278,8 +289,7 @@ if(BUILD_CLIENT AND ENABLE_SOUND)
 		set(USE_SOUND TRUE)
 		message(STATUS "Sound enabled.")
 	else()
-		message(FATAL_ERROR "Sound enabled, but cannot be used.\n"
-			"To continue, either fill in the required paths or disable sound. (-DENABLE_SOUND=0)")
+		message(WARNING "Sound enabled, but cannot be used.\n")
 	endif()
 endif()
 
@@ -313,26 +323,33 @@ endif()
 #mark_as_advanced(ENABLE_FREETYPE)
 set(USE_FREETYPE FALSE)
 
+##
+## Note: FindFreetype.cmake seems to have been fixed in recent versions of
+## CMake. If issues persist, re-enable this workaround specificially for the
+## failing platforms.
+##
+#	if(${CMAKE_SYSTEM} MATCHES "FreeBSD")
+#		#PkgConfig not worked. result: /usr/bin/ld: cannot find -lfreetype
+#	elseif(UNIX)
+#		include(FindPkgConfig)
+#		if(PKG_CONFIG_FOUND)
+#			pkg_check_modules(FREETYPE QUIET freetype2)
+#			if(FREETYPE_FOUND)
+#				SET(FREETYPE_PKGCONFIG_FOUND TRUE)
+#				SET(FREETYPE_LIBRARY ${FREETYPE_LIBRARIES})
+#				# Because CMake is idiotic
+#				string(REPLACE ";" " " FREETYPE_CFLAGS_STR ${FREETYPE_CFLAGS})
+#				string(REPLACE ";" " " FREETYPE_LDFLAGS_STR ${FREETYPE_LDFLAGS})
+#			endif(FREETYPE_FOUND)
+#		endif(PKG_CONFIG_FOUND)
+#	endif()
+#	if(NOT FREETYPE_FOUND)
+#		find_package(Freetype)
+#	endif()
+	find_package(Freetype)
 
-	if(${CMAKE_SYSTEM} MATCHES "FreeBSD")
-		#PkgConfig not worked. result: /usr/bin/ld: cannot find -lfreetype
-	elseif(UNIX)
-		include(FindPkgConfig)
-		if(PKG_CONFIG_FOUND)
-			pkg_check_modules(FREETYPE QUIET freetype2)
-			if(FREETYPE_FOUND)
-				SET(FREETYPE_PKGCONFIG_FOUND TRUE)
-				SET(FREETYPE_LIBRARY ${FREETYPE_LIBRARIES})
-				# Because CMake is idiotic
-				string(REPLACE ";" " " FREETYPE_CFLAGS_STR ${FREETYPE_CFLAGS})
-				string(REPLACE ";" " " FREETYPE_LDFLAGS_STR ${FREETYPE_LDFLAGS})
-			endif(FREETYPE_FOUND)
-		endif(PKG_CONFIG_FOUND)
-	endif()
-	if(NOT FREETYPE_FOUND)
-		find_package(Freetype)
-	endif()
 	if(FREETYPE_FOUND)
+		message(STATUS "Freetype enabled.")
 		set(USE_FREETYPE TRUE)
 		set(CGUITTFONT_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cguittfont")
 		set(CGUITTFONT_LIBRARY cguittfont)
@@ -344,6 +361,7 @@ endif()
 
 find_package(Lua REQUIRED)
 
+find_package(GMP REQUIRED)
 
 option(ENABLE_LEVELDB "Enable LevelDB backend" TRUE)
 set(USE_LEVELDB FALSE)
@@ -359,8 +377,8 @@ if(ENABLE_LEVELDB)
 		set(USE_LEVELDB TRUE)
 		message(STATUS "LevelDB backend enabled.")
 		include_directories(${LEVELDB_INCLUDE_DIR} ${SNAPPY_INCLUDE_DIR})
-	else()
-		message(STATUS "LevelDB not found!")
+	elseif (NOT FORCE_LEVELDB)
+		message(WARNING "LevelDB not found! Player data cannot be saved in singleplayer or server")
 	endif()
 endif(ENABLE_LEVELDB)
 
@@ -371,7 +389,7 @@ endif()
 
 set(USE_SQLITE3 0)
 
-OPTION(ENABLE_SQLITE3 "Enable sqlite backend" ON)
+OPTION(ENABLE_SQLITE3 "Enable sqlite backend" TRUE)
 
 if(ENABLE_SQLITE3)
 	find_package(SQLite3)
@@ -386,6 +404,7 @@ if(ENABLE_SQLITE3)
 endif()
 
 if(FORCE_SQLITE3)
+
 	set(USE_SQLITE3 1)
 endif()
 
@@ -413,7 +432,7 @@ find_package(Json REQUIRED)
 set(USE_MANDELBULBER 1)
 #find_package(Mandelbulber)
 
-option(ENABLE_IPV4_DEFAULT "Do not use ipv6 dual socket " OFF)
+option(ENABLE_IPV4_DEFAULT "Do not use ipv6 dual socket " FALSE)
 if(ENABLE_IPV4_DEFAULT)
 	set(USE_IPV4_DEFAULT 1)
 else()
@@ -435,8 +454,10 @@ if(WIN32)
 		# Surpress some useless warnings
 		add_definitions ( /D "_CRT_SECURE_NO_DEPRECATE" /W1 )
 	else() # Probably MinGW = GCC
+		set(PLATFORM_LIBS winmm.lib ${PLATFORM_LIBS})
 	endif()
-	set(PLATFORM_LIBS ws2_32.lib)
+	set(PLATFORM_LIBS ws2_32.lib shlwapi.lib ${PLATFORM_LIBS})
+
 	# Zlib stuff
 	set(ZLIB_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/../../zlib/zlib-1.2.5"
 			CACHE PATH "Zlib include directory")
@@ -513,7 +534,7 @@ add_custom_target(GenerateVersion
 	-D "GENERATE_VERSION_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
 	-D "GENERATE_VERSION_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}"
 	-D "VERSION_STRING=${VERSION_STRING}"
-	-D "VERSION_EXTRA=${VERSION_EXTRA}"
+	-D "DEVELOPMENT_BUILD=${DEVELOPMENT_BUILD}"
 	-P "${CMAKE_SOURCE_DIR}/cmake/Modules/GenerateVersion.cmake"
 	WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -521,9 +542,15 @@ add_custom_target(GenerateVersion
 add_subdirectory(jthread)
 add_subdirectory(network)
 add_subdirectory(script)
+add_subdirectory(unittest)
 add_subdirectory(util)
 
-add_subdirectory(enet)
+
+if(USE_ENET)
+	add_subdirectory(enet)
+	include_directories(${PROJECT_SOURCE_DIR}/enet/include)
+	set(ENET_LIBRARY enet)
+endif()
 
 set(FMcommon_SRCS
 	circuit.cpp
@@ -539,10 +566,6 @@ set(FMcommon_SRCS
 	stat.cpp
 	fm_liquid.cpp
 	fm_map.cpp
-)
-
-set (unittests_SRCS
-	test.cpp
 )
 
 set(common_SRCS
@@ -594,10 +617,12 @@ set(common_SRCS
 	nodemetadata.cpp
 	nodetimer.cpp
 	noise.cpp
+	objdef.cpp
 	object_properties.cpp
 	pathfinder.cpp
 	player.cpp
 	porting.cpp
+	profiler.cpp
 	quicktune.cpp
 	rollback.cpp
 	rollback_interface.cpp
@@ -620,7 +645,7 @@ set(common_SRCS
 	${common_SCRIPT_SRCS}
 	${UTIL_SRCS}
 	${FMcommon_SRCS}
-	${unittests_SRCS}
+	${UNITTEST_SRCS}
 )
 
 
@@ -682,9 +707,11 @@ set(client_SRCS
 	guiFormSpecMenu.cpp
 	guiKeyChangeMenu.cpp
 	guiPasswordChange.cpp
+	guiscalingfilter.cpp
 	guiTable.cpp
 	guiVolumeChange.cpp
 	hud.cpp
+	imagefilters.cpp
 	keycode.cpp
 	localplayer.cpp
 	main.cpp
@@ -716,10 +743,10 @@ include_directories(
 	${GETTEXT_INCLUDE_DIR}
 	${SOUND_INCLUDE_DIRS}
 	${LUA_INCLUDE_DIR}
+	${GMP_INCLUDE_DIR}
 	${JSON_INCLUDE_DIR}
-	${MSGPACK_INCLUDE_DIRS}
+	${MSGPACK_INCLUDE_DIR}
 	${PROJECT_SOURCE_DIR}/script
-	${PROJECT_SOURCE_DIR}/enet/include
 )
 
 if(USE_FREETYPE)
@@ -735,10 +762,10 @@ set(EXECUTABLE_OUTPUT_PATH "${CMAKE_SOURCE_DIR}/bin")
 
 
 if(BUILD_CLIENT)
-	add_executable(${PROJECT_NAME_LOWER} ${client_SRCS})
-	add_dependencies(${PROJECT_NAME_LOWER} GenerateVersion)
+	add_executable(${PROJECT_NAME} ${client_SRCS})
+	add_dependencies(${PROJECT_NAME} GenerateVersion)
 	set(client_LIBS
-		${PROJECT_NAME_LOWER}
+		${PROJECT_NAME}
 		${ZLIB_LIBRARIES}
 		${IRRLICHT_LIBRARY}
 		${OPENGLES2_LIBRARIES}
@@ -752,9 +779,10 @@ if(BUILD_CLIENT)
 		${ICONV_LIBRARY}
 		${SOUND_LIBRARIES}
 		${LUA_LIBRARY}
+		${GMP_LIBRARY}
 		${JSON_LIBRARY}
-		${MSGPACK_LIBRARIES}
-		enet
+		${MSGPACK_LIBRARY}
+		${ENET_LIBRARY}
 		${PLATFORM_LIBS}
 		${CLIENT_PLATFORM_LIBS}
 	)
@@ -776,31 +804,31 @@ if(BUILD_CLIENT)
 	endif()
 	if(USE_CURL)
 		target_link_libraries(
-			${PROJECT_NAME_LOWER}
+			${PROJECT_NAME}
 			${CURL_LIBRARY}
 		)
 	endif()
 	if(USE_FREETYPE)
 		if(FREETYPE_PKGCONFIG_FOUND)
-			set_target_properties(${PROJECT_NAME_LOWER}
+			set_target_properties(${PROJECT_NAME}
 				PROPERTIES
 				COMPILE_FLAGS "${FREETYPE_CFLAGS_STR}"
 			)
 		endif()
 		target_link_libraries(
-			${PROJECT_NAME_LOWER}
+			${PROJECT_NAME}
 			${FREETYPE_LIBRARY}
 			${CGUITTFONT_LIBRARY}
 		)
 	endif()
 	if (USE_LEVELDB AND NOT FORCE_LEVELDB)
-		target_link_libraries(${PROJECT_NAME_LOWER} ${LEVELDB_LIBRARY})
+		target_link_libraries(${PROJECT_NAME} ${LEVELDB_LIBRARY} ${SNAPPY_LIBRARY})
 	endif()
 	if (USE_SQLITE3 AND NOT FORCE_SQLITE3)
 		target_link_libraries(${PROJECT_NAME} ${SQLITE3_LIBRARY})
 	endif()
 	if (USE_REDIS AND NOT FORCE_REDIS)
-		target_link_libraries(${PROJECT_NAME_LOWER} ${REDIS_LIBRARY})
+		target_link_libraries(${PROJECT_NAME} ${REDIS_LIBRARY})
 	endif()
 	if(MSVC)
 		target_link_libraries(${PROJECT_NAME} shlwapi.lib)
@@ -810,38 +838,40 @@ endif(BUILD_CLIENT)
 
 
 if(BUILD_SERVER)
-	add_executable(${PROJECT_NAME_LOWER}server ${server_SRCS})
-	add_dependencies(${PROJECT_NAME_LOWER}server GenerateVersion)
+	add_executable(${PROJECT_NAME}server ${server_SRCS})
+	add_dependencies(${PROJECT_NAME}server GenerateVersion)
 	target_link_libraries(
-		${PROJECT_NAME_LOWER}server
+		${PROJECT_NAME}server
 		${ZLIB_LIBRARIES}
 		${JSON_LIBRARY}
 		${GETTEXT_LIBRARY}
 		${ICONV_LIBRARY}
 		${LUA_LIBRARY}
-		${MSGPACK_LIBRARIES}
-		enet
+		${MSGPACK_LIBRARY}
+		${ENET_LIBRARY}
+		${GMP_LIBRARY}
 		${PLATFORM_LIBS}
 	)
-	set_target_properties(${PROJECT_NAME_LOWER}server PROPERTIES
+	set_target_properties(${PROJECT_NAME}server PROPERTIES
 			COMPILE_DEFINITIONS "SERVER")
 	if (USE_LEVELDB)
-		target_link_libraries(${PROJECT_NAME_LOWER}server ${LEVELDB_LIBRARY} ${SNAPPY_LIBRARY})
-	endif(USE_LEVELDB)
+		target_link_libraries(${PROJECT_NAME}server ${LEVELDB_LIBRARY} ${SNAPPY_LIBRARY})
+	endif()
 	if (USE_SQLITE3)
-		target_link_libraries(${PROJECT_NAME_LOWER}server ${SQLITE3_LIBRARY})
+		target_link_libraries(${PROJECT_NAME}server ${SQLITE3_LIBRARY})
 	endif()
 	if (USE_REDIS)
-		target_link_libraries(${PROJECT_NAME_LOWER}server ${REDIS_LIBRARY})
+		target_link_libraries(${PROJECT_NAME}server ${REDIS_LIBRARY})
 	endif()
 	if(USE_CURL)
 		target_link_libraries(
-			${PROJECT_NAME_LOWER}server
+			${PROJECT_NAME}server
 			${CURL_LIBRARY}
 		)
 	endif()
 	set_target_properties(${PROJECT_NAME}server PROPERTIES COMPILE_DEFINITIONS "SERVER")
 endif(BUILD_SERVER)
+
 
 # Installation
 
@@ -885,7 +915,7 @@ if(WIN32)
 endif()
 
 if(BUILD_CLIENT)
-	install(TARGETS ${PROJECT_NAME_LOWER}
+	install(TARGETS ${PROJECT_NAME}
 		RUNTIME DESTINATION ${BINDIR}
 		LIBRARY DESTINATION ${BINDIR}
 		ARCHIVE DESTINATION ${BINDIR}
@@ -903,8 +933,7 @@ if(BUILD_CLIENT)
 	if(USE_GETTEXT)
 		foreach(LOCALE ${GETTEXT_AVAILABLE_LOCALES})
 			set_mo_paths(MO_BUILD_PATH MO_DEST_PATH ${LOCALE})
-			#set(MO_BUILD_PATH "${MO_BUILD_PATH}/${PROJECT_NAME_LOWER}.mo")
-			set(MO_BUILD_PATH "${MO_BUILD_PATH}/minetest.mo")
+			set(MO_BUILD_PATH "${MO_BUILD_PATH}/${PROJECT_NAME}.mo")
 			install(FILES ${MO_BUILD_PATH} DESTINATION ${MO_DEST_PATH})
 		endforeach()
 	endif()
@@ -925,18 +954,17 @@ if(BUILD_CLIENT)
 endif(BUILD_CLIENT)
 
 if(BUILD_SERVER)
-	install(TARGETS ${PROJECT_NAME_LOWER}server DESTINATION ${BINDIR})
+	install(TARGETS ${PROJECT_NAME}server DESTINATION ${BINDIR})
 endif()
 
 if (USE_GETTEXT)
 	set(MO_FILES)
 
 	foreach(LOCALE ${GETTEXT_AVAILABLE_LOCALES})
-		#set(PO_FILE_PATH "${GETTEXT_PO_PATH}/${LOCALE}/${PROJECT_NAME_LOWER}.po")
+		#set(PO_FILE_PATH "${GETTEXT_PO_PATH}/${LOCALE}/${PROJECT_NAME}.po")
 		set(PO_FILE_PATH "${GETTEXT_PO_PATH}/${LOCALE}/minetest.po")
 		set_mo_paths(MO_BUILD_PATH MO_DEST_PATH ${LOCALE})
-		#set(MO_FILE_PATH "${MO_BUILD_PATH}/${PROJECT_NAME_LOWER}.mo")
-		set(MO_FILE_PATH "${MO_BUILD_PATH}/minetest.mo")
+		set(MO_FILE_PATH "${MO_BUILD_PATH}/${PROJECT_NAME}.mo")
 
 		add_custom_command(OUTPUT ${MO_BUILD_PATH}
 			COMMAND ${CMAKE_COMMAND} -E make_directory ${MO_BUILD_PATH}

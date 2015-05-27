@@ -73,6 +73,13 @@ enum GenNotifyType {
 	NUM_GENNOTIFY_TYPES
 };
 
+// TODO(hmmmm/paramat): make stone type selection dynamic
+enum MgStoneType {
+	STONE,
+	DESERT_STONE,
+	SANDSTONE,
+};
+
 struct GenNotifyEvent {
 	GenNotifyType type;
 	v3s16 pos;
@@ -123,8 +130,9 @@ struct MapgenParams {
 		water_level(1),
 		liquid_pressure(0),
 		flags(MG_TREES | MG_CAVES | MG_LIGHT),
-		np_biome_heat(NoiseParams(15, 30, v3f(500.0, 500.0, 500.0), 5349, 2, 0.5, 2.0)),
-		np_biome_humidity(NoiseParams(50, 50, v3f(500.0, 500.0, 500.0), 842, 3, 0.5, 2.0)),
+		np_biome_heat(NoiseParams(15, 30, v3f(400.0, 400.0, 400.0), 5349, 2, 0.5, 2.0)),
+		//mt: np_biome_heat(NoiseParams(50, 50, v3f(750.0, 750.0, 750.0), 5349, 3, 0.5, 2.0)),
+		np_biome_humidity(NoiseParams(50, 50, v3f(750.0, 750.0, 750.0), 842, 3, 0.5, 2.0)),
 		sparams(NULL)
 	{}
 
@@ -186,38 +194,6 @@ struct MapgenFactory {
 		EmergeManager *emerge) = 0;
 	virtual MapgenSpecificParams *createMapgenParams() = 0;
 	virtual ~MapgenFactory() {}
-};
-
-class GenElement {
-public:
-	virtual ~GenElement() {}
-	u32 id;
-	std::string name;
-};
-
-class GenElementManager {
-public:
-	static const char *ELEMENT_TITLE;
-	static const size_t ELEMENT_LIMIT = -1;
-
-	GenElementManager(IGameDef *gamedef);
-	virtual ~GenElementManager();
-
-	virtual GenElement *create(int type) = 0;
-
-	virtual u32 add(GenElement *elem);
-	virtual GenElement *get(u32 id);
-	virtual GenElement *update(u32 id, GenElement *elem);
-	virtual GenElement *remove(u32 id);
-	virtual void clear();
-
-	virtual GenElement *getByName(const std::string &name);
-
-	INodeDefManager *getNodeDef() { return m_ndef; }
-
-protected:
-	INodeDefManager *m_ndef;
-	std::vector<GenElement *> m_elements;
 };
 
 #endif

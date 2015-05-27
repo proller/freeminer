@@ -1,6 +1,7 @@
 /*
 mapgen.cpp
-Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
+Copyright (C) 2010-2015 kwolekr, Ryan Kwolek <kwolekr@minetest.net>
+Copyright (C) 2010-2015 celeron55, Perttu Ahola <celeron55@gmail.com>
 */
 
 /*
@@ -34,16 +35,15 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "emerge.h"
 #include "content_mapnode.h" // For content_mapnode_get_new_name
 #include "voxelalgorithms.h"
+#include "porting.h"
 #include "profiler.h"
-#include "settings.h" // For g_settings
-#include "main.h" // For g_profiler
+#include "settings.h"
 #include "treegen.h"
 #include "serialization.h"
 #include "util/serialize.h"
+#include "util/numeric.h"
 #include "filesys.h"
 #include "log.h"
-
-const char *GenElementManager::ELEMENT_TITLE = "element";
 
 FlagDesc flagdesc_mapgen[] = {
 	{"trees",    MG_TREES},
@@ -67,6 +67,7 @@ FlagDesc flagdesc_gennotify[] = {
 
 
 ///////////////////////////////////////////////////////////////////////////////
+
 
 Mapgen::Mapgen()
 {
@@ -454,90 +455,7 @@ void GenerateNotifier::getEvents(
 		m_notify_events.clear();
 }
 
-
 ///////////////////////////////////////////////////////////////////////////////
-
-
-GenElementManager::GenElementManager(IGameDef *gamedef)
-{
-	m_ndef = gamedef->getNodeDefManager();
-}
-
-
-GenElementManager::~GenElementManager()
-{
-/*
-	for (size_t i = 0; i != m_elements.size(); i++)
-		delete m_elements[i];
-*/
-}
-
-
-u32 GenElementManager::add(GenElement *elem)
-{
-	size_t nelem = m_elements.size();
-
-	for (size_t i = 0; i != nelem; i++) {
-		if (m_elements[i] == NULL) {
-			elem->id = i;
-			m_elements[i] = elem;
-			return i;
-		}
-	}
-
-	if (nelem >= this->ELEMENT_LIMIT)
-		return -1;
-
-	elem->id = nelem;
-	m_elements.push_back(elem);
-
-	verbosestream << "GenElementManager: added " << this->ELEMENT_TITLE
-		<< " element '" << elem->name << "'" << std::endl;
-
-	return nelem;
-}
-
-
-GenElement *GenElementManager::get(u32 id)
-{
-	return (id < m_elements.size()) ? m_elements[id] : NULL;
-}
-
-
-GenElement *GenElementManager::getByName(const std::string &name)
-{
-	for (size_t i = 0; i != m_elements.size(); i++) {
-		GenElement *elem = m_elements[i];
-		if (elem && name == elem->name)
-			return elem;
-	}
-
-	return NULL;
-}
-
-
-GenElement *GenElementManager::update(u32 id, GenElement *elem)
-{
-	if (id >= m_elements.size())
-		return NULL;
-
-	GenElement *old_elem = m_elements[id];
-	m_elements[id] = elem;
-	return old_elem;
-}
-
-
-GenElement *GenElementManager::remove(u32 id)
-{
-	return update(id, NULL);
-}
-
-
-void GenElementManager::clear()
-{
-	m_elements.clear();
-}
-
 
 void MapgenParams::load(Settings &settings)
 {

@@ -44,6 +44,30 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
+static const char *modified_reason_strings[] = {
+	"initial",
+	"reallocate",
+	"setIsUnderground",
+	"setLightingExpired",
+	"setGenerated",
+	"setNode",
+	"setNodeNoCheck",
+	"setTimestamp",
+	"NodeMetaRef::reportMetadataChange",
+	"clearAllObjects",
+	"Timestamp expired (step)",
+	"addActiveObjectRaw",
+	"removeRemovedObjects/remove",
+	"removeRemovedObjects/deactivate",
+	"Stored list cleared in activateObjects due to overflow",
+	"deactivateFarObjects: Static data moved in",
+	"deactivateFarObjects: Static data moved out",
+	"deactivateFarObjects: Static data changed considerably",
+	"finishBlockMake: expireDayNightDiff"
+	"unknown",
+};
+
+
 /*
 	MapBlock
 */
@@ -56,6 +80,7 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 		m_pos(pos),
 		m_gamedef(gamedef),
 		m_modified(MOD_STATE_CLEAN),
+		m_modified_reason(MOD_REASON_INITIAL),
 		is_underground(false),
 		m_day_night_differs(false),
 		m_generated(false),
@@ -132,6 +157,27 @@ MapNode MapBlock::getNodeParent(v3s16 p, bool *is_valid_position)
 	if (is_valid_position)
 		*is_valid_position = true;
 	return data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X];
+}
+
+std::string MapBlock::getModifiedReasonString()
+{
+	std::string reason;
+
+	const u32 ubound = MYMIN(sizeof(m_modified_reason) * CHAR_BIT,
+		ARRLEN(modified_reason_strings));
+
+	for (u32 i = 0; i != ubound; i++) {
+		if ((m_modified_reason & (1 << i)) == 0)
+			continue;
+
+		reason += modified_reason_strings[i];
+		reason += ", ";
+	}
+
+	if (reason.length() > 2)
+		reason.resize(reason.length() - 2);
+
+	return reason;
 }
 
 /*
@@ -536,7 +582,7 @@ static void correctBlockNodeIds(const NameIdMapping *nimap, MapNode *nodes,
 	}
 }
 
-void MapBlock::serialize(std::ostream &os, u8 version, bool disk)
+void MapBlock::serialize(std::ostream &os, u8 version, bool disk, bool use_content_only)
 {
 	auto lock = lock_shared_rec();
 	if(!ser_ver_supported(version))
@@ -564,6 +610,10 @@ void MapBlock::serialize(std::ostream &os, u8 version, bool disk)
 	}
 
 	writeU8(os, flags);
+
+	// fmtodo: check version and dont pack data if more than 20150427 or 0.4.12.7+
+	if (!disk && use_content_only && content_only != CONTENT_IGNORE)
+		return;
 
 	/*
 		Bulk node data
@@ -667,9 +717,16 @@ bool MapBlock::deSerialize(std::istream &is, u8 version, bool disk)
 	m_generated = (flags & 0x08) ? false : true;
 
 	if (!m_generated) {
-		infostream<<"MapBlock::deSerialize(): deserialize not generated block "<<getPos()<<std::endl;
+		verbosestream<<"MapBlock::deSerialize(): deserialize not generated block "<<getPos()<<std::endl;
 		//if (disk) m_generated = false; else // uncomment if you want convert old buggy map
 		return false;
+	}
+
+	if (!disk && content_only != CONTENT_IGNORE) {
+		auto n = MapNode(content_only);
+		for (u32 i = 0; i < MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; i++)
+			data[i] = n;
+		return true;
 	}
 
 	/*
@@ -791,23 +848,11 @@ void MapBlock::deSerializeNetworkSpecific(std::istream &is)
 #ifndef NDEBUG
 		g_profiler->add("Map: setNode", 1);
 #endif
-		if( (!data) ||   //todo: maybe one length check here:
-			(p.X < 0 || p.X >= MAP_BLOCKSIZE) ||
-			(p.Y < 0 || p.Y >= MAP_BLOCKSIZE) ||
-			(p.Z < 0 || p.Z >= MAP_BLOCKSIZE) )
+		if (!isValidPosition(p.X, p.Y, p.Z))
 			return;
 		auto lock = lock_unique_rec();
-		data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X] = n;
+		data[p.Z*zstride + p.Y*ystride + p.X] = n;
 		raiseModified(MOD_STATE_WRITE_NEEDED);
-	}
-
-	void MapBlock::setNodeNoCheck(v3s16 p, MapNode & n)
-	{
-		if(data == NULL)
-			throw InvalidPositionException("setNodeNoCheck data=NULL");
-		auto lock = lock_unique_rec();
-		data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X] = n;
-		raiseModified(MOD_STATE_WRITE_NEEDED/*, "setNodeNoCheck"*/);
 	}
 
 	void MapBlock::raiseModified(u32 mod)
@@ -1119,7 +1164,7 @@ void MapBlock::deSerialize_pre22(std::istream &is, u8 version, bool disk)
 
 void MapBlock::incrementUsageTimer(float dtime)
 {
-	auto lock = lock_unique_rec();
+	std::lock_guard<std::mutex> lock(m_usage_timer_mutex);
 	m_usage_timer += dtime;
 /*
 #ifndef SERVER

@@ -21,7 +21,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "keycode.h"
-#include "main.h" // For g_settings
 #include "exceptions.h"
 #include "settings.h"
 #include "log.h"
@@ -341,6 +340,11 @@ const char *KeyPress::name() const
 		return m_name.c_str();
 	}
 }
+
+const KeyPress LControlKey("KEY_LCONTROL");
+const KeyPress RControlKey("KEY_RCONTROL");
+const KeyPress LShiftKey("KEY_LSHIFT");
+const KeyPress RShiftKey("KEY_RSHIFT");
 
 const KeyPress EscapeKey("KEY_ESCAPE");
 const KeyPress CancelKey("KEY_CANCEL");

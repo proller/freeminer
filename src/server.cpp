@@ -30,7 +30,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "environment.h"
 #include "map.h"
 #include "jthread/jmutexautolock.h"
-#include "main.h"
 #include "constants.h"
 #include "voxel.h"
 #include "config.h"
@@ -70,7 +69,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "defaultsettings.h"
 //#include "stat.h"
 
-#include "msgpack.h"
+#include <iomanip>
+#include "msgpack_fix.h"
 #include <chrono>
 #include "util/thread_pool.h"
 #include "key_value_storage.h"
@@ -241,6 +241,7 @@ Server::Server(
 	m_liquid_transform_interval = 1.0;
 	m_liquid_send_timer = 0.0;
 	m_liquid_send_interval = 1.0;
+	m_autoexit = 0;
 	maintenance_status = 0;
 	m_print_info_timer = 0.0;
 	m_masterserver_timer = 0.0;
@@ -358,32 +359,38 @@ Server::Server(
 	infostream<<"Server: Initializing Lua"<<std::endl;
 
 	m_script = new GameScripting(this);
-	
-	std::string scriptpath = getBuiltinLuaPath() + DIR_DELIM "init.lua";
 
-	if (!m_script->loadScript(scriptpath))
-		throw ModError("Failed to load and run " + scriptpath);
+	std::string script_path = getBuiltinLuaPath() + DIR_DELIM "init.lua";
 
-	// Print 'em
-	infostream<<"Server: Loading mods: ";
-	for(std::vector<ModSpec>::iterator i = m_mods.begin();
-			i != m_mods.end(); i++){
-		const ModSpec &mod = *i;
-		infostream<<mod.name<<" ";
+	if (!m_script->loadMod(script_path, BUILTIN_MOD_NAME)) {
+		throw ModError("Failed to load and run " + script_path);
 	}
-	infostream<<std::endl;
-	// Load and run "mod" scripts
+
+	// Print mods
+	infostream << "Server: Loading mods: ";
 	for(std::vector<ModSpec>::iterator i = m_mods.begin();
 			i != m_mods.end(); i++){
 		const ModSpec &mod = *i;
-		std::string scriptpath = mod.path + DIR_DELIM + "init.lua";
-		infostream<<"  ["<<padStringRight(mod.name, 12)<<"] [\""
-				<<scriptpath<<"\"]"<<std::endl;
-		bool success = m_script->loadMod(scriptpath, mod.name);
-		if(!success){
-			errorstream<<"Server: Failed to load and run "
-					<<scriptpath<<std::endl;
-			throw ModError("Failed to load and run "+scriptpath);
+		infostream << mod.name << " ";
+	}
+	infostream << std::endl;
+	// Load and run "mod" scripts
+	for (std::vector<ModSpec>::iterator i = m_mods.begin();
+			i != m_mods.end(); i++) {
+		const ModSpec &mod = *i;
+		if (!string_allowed(mod.name, MODNAME_ALLOWED_CHARS)) {
+			errorstream << "Error loading mod \"" << mod.name
+					<< "\": mod_name does not follow naming conventions: "
+					<< "Only chararacters [a-z0-9_] are allowed." << std::endl;
+			throw ModError("Mod \"" + mod.name + "\" does not follow naming conventions.");
+		}
+		std::string script_path = mod.path + DIR_DELIM "init.lua";
+		infostream << "  [" << padStringRight(mod.name, 12) << "] [\""
+				<< script_path << "\"]" << std::endl;
+		if (!m_script->loadMod(script_path, mod.name)) {
+			errorstream << "Server: Failed to load and run "
+					<< script_path << std::endl;
+			throw ModError("Failed to load and run " + script_path);
 		}
 	}
 
@@ -396,10 +403,18 @@ Server::Server(
 	if (!simple_singleplayer_mode)
 		m_nodedef->updateTextures(this);
 
+	// Apply texture overrides from texturepack/override.txt
+	std::string texture_path = g_settings->get("texture_path");
+	if (texture_path != "" && fs::IsDir(texture_path))
+		m_nodedef->applyTextureOverrides(texture_path + DIR_DELIM + "override.txt");
+
 	m_nodedef->setNodeRegistrationStatus(true);
 
 	// Perform pending node name resolutions
-	m_nodedef->runNodeResolverCallbacks();
+	m_nodedef->runNodeResolveCallbacks();
+
+	// init the recipe hashes to speed up crafting
+	m_craftdef->initHashes(this);
 
 	// Initialize Environment
 	m_env = new ServerEnvironment(servermap, m_script, this, m_path_world);
@@ -547,6 +562,9 @@ void Server::start(Address bind_addr)
 #endif
 			<< " cpp="<<__cplusplus<<" \t"
 			<< " cores="<< porting::getNumberOfProcessors()
+#if __ANDROID__
+			<< " android=" << porting::android_version_sdk_int
+#endif
 			<< std::endl;
 	actionstream<<"World at ["<<m_path_world<<"]"<<std::endl;
 	actionstream<<"Server for gameid=\""<<m_gamespec.id
@@ -1265,13 +1283,13 @@ u16 Server::Receive()
 	DSTACK(__FUNCTION_NAME);
 	SharedBuffer<u8> data;
 	u16 peer_id;
-	u32 datasize;
 	u16 received = 0;
 	try {
-		datasize = m_con.Receive(peer_id,data,10);
-		if (!datasize)
-			return 0;
-		ProcessData(*data, datasize, peer_id);
+		NetworkPacket pkt;
+		auto size = m_con.Receive(&pkt, 10);
+		peer_id = pkt.getPeerId();
+		if (size)
+			ProcessData(&pkt);
 		++received;
 	}
 	catch(con::InvalidIncomingDataException &e) {
@@ -1309,16 +1327,16 @@ PlayerSAO* Server::StageTwoClientInit(u16 peer_id)
 		static_cast<RemotePlayer*>(m_env->getPlayer(playername));
 
 	// If failed, cancel
-	if((playersao == NULL) || (player == NULL)) {
-		if(player && player->peer_id != 0) {
-			errorstream<<"Server: "<<playername<<": Failed to emerge player"
-					<<" (player allocated to an another client)"<<std::endl;
+	if ((playersao == NULL) || (player == NULL)) {
+		if (player && player->peer_id != 0) {
+			actionstream << "Server: Failed to emerge player \"" << playername
+					<< "\" (player allocated to an another client)" << std::endl;
 			DenyAccess_Legacy(peer_id, L"Another client is connected with this "
 					L"name. If your client closed unexpectedly, try again in "
 					L"a minute.");
 		} else {
-			errorstream<<"Server: "<<playername<<": Failed to emerge player"
-					<<std::endl;
+			errorstream << "Server: " << playername << ": Failed to emerge player"
+					<< std::endl;
 			DenyAccess_Legacy(peer_id, L"Could not allocate player.");
 		}
 		return NULL;
@@ -1387,13 +1405,14 @@ inline void Server::handleCommand(NetworkPacket* pkt)
 	(this->*opHandle.handler)(pkt);
 }
 
-void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
+void Server::ProcessData(NetworkPacket *pkt)
 {
 	DSTACK(__FUNCTION_NAME);
 	// Environment is locked first.
 	//JMutexAutoLock envlock(m_env_mutex);
 
 	ScopeProfiler sp(g_profiler, "Server::ProcessData");
+	u32 peer_id = pkt->getPeerId();
 
 	try {
 		Address address = getPeerAddress(peer_id);
@@ -1417,18 +1436,13 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		 * respond for some time, your server was overloaded or
 		 * things like that.
 		 */
-		infostream << "Server::ProcessData(): Cancelling: peer "
+		infostream << "Server::ProcessData(): Canceling: peer "
 				<< peer_id << " not found" << std::endl;
 		return;
 	}
 
 	try {
-		if(datasize < 2)
-			return;
-
-		NetworkPacket pkt(data, datasize, peer_id);
-
-		ToServerCommand command = (ToServerCommand) pkt.getCommand();
+		ToServerCommand command = (ToServerCommand) pkt->getCommand();
 
 		// Command must be handled into ToServerCommandHandler
 		if (command >= TOSERVER_NUM_MSG_TYPES) {
@@ -1437,7 +1451,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		}
 
 		if (toServerCommandTable[command].state == TOSERVER_STATE_NOT_CONNECTED) {
-			handleCommand(&pkt);
+			handleCommand(pkt);
 			return;
 		}
 
@@ -1452,7 +1466,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 
 		/* Handle commands related to client startup */
 		if (toServerCommandTable[command].state == TOSERVER_STATE_STARTUP) {
-			handleCommand(&pkt);
+			handleCommand(pkt);
 			return;
 		}
 
@@ -1465,10 +1479,13 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			return;
 		}
 
-		handleCommand(&pkt);
-	}
-	catch(SendFailedException &e) {
+		handleCommand(pkt);
+	} catch (SendFailedException &e) {
 		errorstream << "Server::ProcessData(): SendFailedException: "
+				<< "what=" << e.what()
+				<< std::endl;
+	} catch (PacketError &e) {
+		actionstream << "Server::ProcessData(): PacketError: "
 				<< "what=" << e.what()
 				<< std::endl;
 	}
@@ -1556,7 +1573,7 @@ void Server::setInventoryModified(const InventoryLocation &loc, bool playerSend)
 
 		MapBlock *block = m_env->getMap().getBlockNoCreateNoEx(blockpos);
 		if(block)
-			block->raiseModified(MOD_STATE_WRITE_NEEDED, "inventoryModified");
+			block->raiseModified(MOD_STATE_WRITE_NEEDED, MOD_REASON_REPORT_META_CHANGE);
 
 		setBlockNotSent(blockpos);
 	}
@@ -1679,6 +1696,7 @@ void Server::handlePeerChanges()
 #if MINETEST_PROTO
 void Server::Send(NetworkPacket* pkt)
 {
+	g_profiler->add("Server: Packets sended", 1);
 	m_clients.send(pkt->getPeerId(),
 		clientCommandFactoryTable[pkt->getCommand()].channel,
 		pkt,
@@ -2038,7 +2056,11 @@ void Server::SendPlayerHP(u16 peer_id)
 {
 	DSTACK(__FUNCTION_NAME);
 	PlayerSAO *playersao = getPlayerSAO(peer_id);
-	assert(playersao);
+	// In some rare case, if the player is disconnected
+	// while Lua call l_punch, for example, this can be NULL
+	if (!playersao)
+		return;
+
 	SendHP(peer_id, playersao->getHP());
 	m_script->player_event(playersao,"health_changed");
 
@@ -2133,7 +2155,7 @@ void Server::SendPlayerInventoryFormspec(u16 peer_id)
 
 u32 Server::SendActiveObjectRemoveAdd(u16 peer_id, const std::string &datas)
 {
-	NetworkPacket pkt(TOCLIENT_ACTIVE_OBJECT_REMOVE_ADD, 0, peer_id);
+	NetworkPacket pkt(TOCLIENT_ACTIVE_OBJECT_REMOVE_ADD, datas.size(), peer_id);
 	pkt.putRawString(datas.c_str(), datas.size());
 	Send(&pkt);
 	return pkt.getSize();
@@ -2142,12 +2164,12 @@ u32 Server::SendActiveObjectRemoveAdd(u16 peer_id, const std::string &datas)
 void Server::SendActiveObjectMessages(u16 peer_id, const std::string &datas, bool reliable)
 {
 	NetworkPacket pkt(TOCLIENT_ACTIVE_OBJECT_MESSAGES,
-			0, peer_id);
+			datas.size(), peer_id);
 
 	pkt.putRawString(datas.c_str(), datas.size());
 
 	m_clients.send(pkt.getPeerId(),
-			clientCommandFactoryTable[pkt.getCommand()].channel,
+			reliable ? clientCommandFactoryTable[pkt.getCommand()].channel : 1,
 			&pkt, reliable);
 
 }
@@ -2791,7 +2813,7 @@ void Server::RespawnPlayer(u16 peer_id)
 
 	bool repositioned = m_script->on_respawnplayer(playersao);
 	if(!repositioned){
-		v3f pos = findSpawnPos(m_env->getServerMap());
+		v3f pos = findSpawnPos();
 		// setPos will send the new position to client
 		playersao->setPos(pos);
 	}
@@ -2801,6 +2823,16 @@ void Server::RespawnPlayer(u16 peer_id)
 	stat.add("respawn", playersao->getPlayer()->getName());
 }
 
+#if MINETEST_PROTO
+void Server::DenySudoAccess(u16 peer_id)
+{
+	DSTACK(__FUNCTION_NAME);
+
+	NetworkPacket pkt(TOCLIENT_DENY_SUDO_MODE, 0, peer_id);
+	Send(&pkt);
+}
+#endif
+
 void Server::DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason)
 {
 	DSTACK(__FUNCTION_NAME);
@@ -2808,12 +2840,6 @@ void Server::DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::string 
 	SendAccessDenied(peer_id, reason, custom_reason);
 	m_clients.event(peer_id, CSE_SetDenied);
 	m_con.DisconnectPeer(peer_id);
-}
-
-//fmtodo: remove:
-void Server::DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::wstring &custom_reason)
-{
-    DenyAccess(peer_id, reason, wide_to_narrow(custom_reason));
 }
 
 //fmtodo: remove:
@@ -2827,6 +2853,39 @@ void Server::DenyAccess_Legacy(u16 peer_id, const std::wstring &custom_reason)
 {
     DenyAccess(peer_id, SERVER_ACCESSDENIED_CUSTOM_STRING, wide_to_narrow(custom_reason));
 }
+
+#if MINETEST_PROTO
+void Server::acceptAuth(u16 peer_id, bool forSudoMode)
+{
+	DSTACK(__FUNCTION_NAME);
+
+	if (!forSudoMode) {
+		RemoteClient* client = getClient(peer_id, CS_Invalid);
+
+		NetworkPacket resp_pkt(TOCLIENT_AUTH_ACCEPT, 1 + 6 + 8 + 4, peer_id);
+
+		// Right now, the auth mechs don't change between login and sudo mode.
+		u32 sudo_auth_mechs = client->allowed_auth_mechs;
+		client->allowed_sudo_mechs = sudo_auth_mechs;
+
+		resp_pkt << v3f(0,0,0) << (u64) m_env->getServerMap().getSeed()
+				<< g_settings->getFloat("dedicated_server_step")
+				<< sudo_auth_mechs;
+
+		Send(&resp_pkt);
+		m_clients.event(peer_id, CSE_AuthAccept);
+	} else {
+		NetworkPacket resp_pkt(TOCLIENT_ACCEPT_SUDO_MODE, 1 + 6 + 8 + 4, peer_id);
+
+		// We only support SRP right now
+		u32 sudo_auth_mechs = AUTH_MECHANISM_FIRST_SRP;
+
+		resp_pkt << sudo_auth_mechs;
+		Send(&resp_pkt);
+		m_clients.event(peer_id, CSE_SudoSuccess);
+	}
+}
+#endif
 
 void Server::DeleteClient(u16 peer_id, ClientDeletionReason reason)
 {
@@ -3441,9 +3500,9 @@ IWritableCraftDefManager* Server::getWritableCraftDefManager()
 	return m_craftdef;
 }
 
-const ModSpec* Server::getModSpec(const std::string &modname)
+const ModSpec* Server::getModSpec(const std::string &modname) const
 {
-	for(std::vector<ModSpec>::iterator i = m_mods.begin();
+	for(std::vector<ModSpec>::const_iterator i = m_mods.begin();
 			i != m_mods.end(); i++){
 		const ModSpec &mod = *i;
 		if(mod.name == modname)
@@ -3462,23 +3521,24 @@ std::string Server::getBuiltinLuaPath()
 	return porting::path_share + DIR_DELIM + "builtin";
 }
 
-v3f findSpawnPos(ServerMap &map)
+v3f Server::findSpawnPos()
 {
-	//return v3f(50,50,50)*BS;
+	ServerMap &map = m_env->getServerMap();
+	v3f nodeposf;
+	if (g_settings->getV3FNoEx("static_spawnpoint", nodeposf)) {
+		return nodeposf * BS;
+	}
 
-	v3s16 nodepos;
+	// Default position is static_spawnpoint
+	// We will return it if we don't found a good place
+	v3s16 nodepos(nodeposf.X, nodeposf.Y, nodeposf.Z);
 
-#if 0
-	nodepos = v2s16(0,0);
-	groundheight = 20;
-#endif
-
-#if 1
 	s16 water_level = map.getWaterLevel();
 
+	bool is_good = false;
+
 	// Try to find a good place a few times
-	for(s32 i=0; i<1000; i++)
-	{
+	for(s32 i = 0; i < 1000 && !is_good; i++) {
 		s32 range = 1 + i;
 		// We're going to try to throw the player to this position
 		v2s16 nodepos2d = v2s16(
@@ -3493,7 +3553,7 @@ v3f findSpawnPos(ServerMap &map)
 			continue;
 
 		nodepos = v3s16(nodepos2d.X, groundheight, nodepos2d.Y);
-		bool is_good = false;
+
 		s32 air_count = 0;
 		for (s32 i = 0; i < 10; i++) {
 			v3s16 blockpos = getNodeBlockPos(nodepos);
@@ -3508,13 +3568,7 @@ v3f findSpawnPos(ServerMap &map)
 			}
 			nodepos.Y++;
 		}
-		if(is_good){
-			// Found a good place
-			//infostream<<"Searched through "<<i<<" places."<<std::endl;
-			break;
-		}
 	}
-#endif
 
 	return intToFloat(nodepos, BS);
 }
@@ -3563,7 +3617,7 @@ PlayerSAO* Server::emergePlayer(const char *name, u16 peer_id)
 		// Set player position
 		infostream<<"Server: Finding spawn place for player \""
 				<<name<<"\""<<std::endl;
-		v3f pos = findSpawnPos(m_env->getServerMap());
+		v3f pos = findSpawnPos();
 		player->setPosition(pos);
 
 		// Add player to environment
@@ -3596,6 +3650,7 @@ void dedicated_server_loop(Server &server, bool &kill)
 	IntervalLimiter m_profiler_interval;
 
 	int errors = 0;
+	double run_time = 0;
 	float steplen = g_settings->getFloat("dedicated_server_step");
 	for(;;)
 	{
@@ -3623,6 +3678,13 @@ void dedicated_server_loop(Server &server, bool &kill)
 		{
 			infostream<<"Dedicated server quitting"<<std::endl;
 			break;
+		}
+
+		run_time += steplen; // wrong not real time
+		if (server.m_autoexit && run_time > server.m_autoexit) {
+			actionstream << "Profiler:" << std::fixed << std::setprecision(9) << std::endl;
+			g_profiler->print(actionstream);
+			server.requestShutdown();
 		}
 
 		/*

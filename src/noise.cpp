@@ -114,7 +114,9 @@ u32 PcgRandom::range(u32 bound)
 
 s32 PcgRandom::range(s32 min, s32 max)
 {
-	assert(max >= min);
+	if (max < min)
+		throw PrngException("Invalid range (max < min)");
+
 	u32 bound = max - min + 1;
 	return range(bound) + min;
 }
@@ -145,7 +147,7 @@ s32 PcgRandom::randNormalDist(s32 min, s32 max, int num_trials)
 	s32 accum = 0;
 	for (int i = 0; i != num_trials; i++)
 		accum += range(min, max);
-	return ((float)accum / num_trials) + 0.5f;
+	return myround((float)accum / num_trials);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -459,7 +461,7 @@ float NoisePerlin3D(NoiseParams *np, float x, float y, float z, int seed)
 }
 
 
-Noise::Noise(NoiseParams *np_, int seed, int sx, int sy, int sz)
+Noise::Noise(NoiseParams *np_, int seed, u32 sx, u32 sy, u32 sz)
 {
 	memcpy(&np, np_, sizeof(np));
 	this->seed = seed;
@@ -486,6 +488,13 @@ Noise::~Noise()
 
 void Noise::allocBuffers()
 {
+	if (sx < 1)
+		sx = 1;
+	if (sy < 1)
+		sy = 1;
+	if (sz < 1)
+		sz = 1;
+
 	this->noise_buf = NULL;
 	resizeNoiseBuf(sz > 1);
 
@@ -504,7 +513,7 @@ void Noise::allocBuffers()
 }
 
 
-void Noise::setSize(int sx, int sy, int sz)
+void Noise::setSize(u32 sx, u32 sy, u32 sz)
 {
 	this->sx = sx;
 	this->sy = sy;
@@ -532,19 +541,28 @@ void Noise::setOctaves(int octaves)
 
 void Noise::resizeNoiseBuf(bool is3d)
 {
-	int nlx, nly, nlz;
-	float ofactor;
-
 	//maximum possible spread value factor
-	ofactor = pow(np.lacunarity, np.octaves - 1);
+	float ofactor = (np.lacunarity > 1.0) ?
+		pow(np.lacunarity, np.octaves - 1) :
+		np.lacunarity;
 
-	//noise lattice point count
-	//(int)(sz * spread * ofactor) is # of lattice points crossed due to length
+	// noise lattice point count
+	// (int)(sz * spread * ofactor) is # of lattice points crossed due to length
+	float num_noise_points_x = sx * ofactor / np.spread.X;
+	float num_noise_points_y = sy * ofactor / np.spread.Y;
+	float num_noise_points_z = sz * ofactor / np.spread.Z;
+
+	// protect against obviously invalid parameters
+	if (num_noise_points_x > 1000000000.f ||
+		num_noise_points_y > 1000000000.f ||
+		num_noise_points_z > 1000000000.f)
+		throw InvalidNoiseParamsException();
+
 	// + 2 for the two initial endpoints
 	// + 1 for potentially crossing a boundary due to offset
-	nlx = (int)ceil(sx * ofactor / np.spread.X) + 3;
-	nly = (int)ceil(sy * ofactor / np.spread.Y) + 3;
-	nlz = is3d ? (int)ceil(sz * ofactor / np.spread.Z) + 3 : 1;
+	size_t nlx = (size_t)ceil(num_noise_points_x) + 3;
+	size_t nly = (size_t)ceil(num_noise_points_y) + 3;
+	size_t nlz = is3d ? (size_t)ceil(num_noise_points_z) + 3 : 1;
 
 	delete[] noise_buf;
 	try {
@@ -573,8 +591,9 @@ void Noise::gradientMap2D(
 		int seed)
 {
 	float v00, v01, v10, v11, u, v, orig_u;
-	int index, i, j, x0, y0, noisex, noisey;
-	int nlx, nly;
+	u32 index, i, j, noisex, noisey;
+	u32 nlx, nly;
+	s32 x0, y0;
 
 	bool eased = np.flags & (NOISE_FLAG_DEFAULTS | NOISE_FLAG_EASED);
 	Interp2dFxn interpolate = eased ?
@@ -587,8 +606,8 @@ void Noise::gradientMap2D(
 	orig_u = u;
 
 	//calculate noise point lattice
-	nlx = (int)(u + sx * step_x) + 2;
-	nly = (int)(v + sy * step_y) + 2;
+	nlx = (u32)(u + sx * step_x) + 2;
+	nly = (u32)(v + sy * step_y) + 2;
 	index = 0;
 	for (j = 0; j != nly; j++)
 		for (i = 0; i != nlx; i++)
@@ -638,8 +657,9 @@ void Noise::gradientMap3D(
 	float v000, v010, v100, v110;
 	float v001, v011, v101, v111;
 	float u, v, w, orig_u, orig_v;
-	int index, i, j, k, x0, y0, z0, noisex, noisey, noisez;
-	int nlx, nly, nlz;
+	u32 index, i, j, k, noisex, noisey, noisez;
+	u32 nlx, nly, nlz;
+	s32 x0, y0, z0;
 
 	Interp3dFxn interpolate = (np.flags & NOISE_FLAG_EASED) ?
 		triLinearInterpolation : triLinearInterpolationNoEase;
@@ -654,9 +674,9 @@ void Noise::gradientMap3D(
 	orig_v = v;
 
 	//calculate noise point lattice
-	nlx = (int)(u + sx * step_x) + 2;
-	nly = (int)(v + sy * step_y) + 2;
-	nlz = (int)(w + sz * step_z) + 2;
+	nlx = (u32)(u + sx * step_x) + 2;
+	nly = (u32)(v + sy * step_y) + 2;
+	nlz = (u32)(w + sz * step_z) + 2;
 	index = 0;
 	for (k = 0; k != nlz; k++)
 		for (j = 0; j != nly; j++)

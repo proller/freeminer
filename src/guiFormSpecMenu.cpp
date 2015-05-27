@@ -48,13 +48,13 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "intlGUIEditBox.h"
 #include "scripting_game.h"
 #include "porting.h"
-#include "main.h"
 #include "settings.h"
 #include "client.h"
 #include "fontengine.h"
 #include "util/hex.h"
 #include "util/numeric.h"
 #include "util/string.h" // for parseColorString()
+#include "guiscalingfilter.h"
 
 #define MY_CHECKPOS(a,b)													\
 	if (v_pos.size() != 2) {												\
@@ -1312,8 +1312,10 @@ void GUIFormSpecMenu::parseImageButton(parserData* data,std::string element,
 		}
 
 		e->setUseAlphaChannel(true);
-		e->setImage(texture);
-		e->setPressedImage(pressed_texture);
+		e->setImage(guiScalingImageButton(
+			Environment->getVideoDriver(), texture, geom.X, geom.Y));
+		e->setPressedImage(guiScalingImageButton(
+			Environment->getVideoDriver(), pressed_texture, geom.X, geom.Y));
 		e->setScaleImage(true);
 		e->setNotClipped(noclip);
 		e->setDrawBorder(drawborder);
@@ -1458,8 +1460,8 @@ void GUIFormSpecMenu::parseItemImageButton(parserData* data,std::string element)
 		}
 
 		e->setUseAlphaChannel(true);
-		e->setImage(texture);
-		e->setPressedImage(texture);
+		e->setImage(guiScalingImageButton(Environment->getVideoDriver(), texture, geom.X, geom.Y));
+		e->setPressedImage(guiScalingImageButton(Environment->getVideoDriver(), texture, geom.X, geom.Y));
 		e->setScaleImage(true);
 		spec.ftype = f_Button;
 		rect+=data->basepos-padding;
@@ -2288,7 +2290,7 @@ void GUIFormSpecMenu::drawMenu()
 
 			const video::SColor color(255,255,255,255);
 			const video::SColor colors[] = {color,color,color,color};
-			driver->draw2DImage(texture, rect,
+			draw2DImageFilterScaled(driver, texture, rect,
 				core::rect<s32>(core::position2d<s32>(0,0),
 						core::dimension2di(texture->getOriginalSize())),
 				NULL/*&AbsoluteClippingRect*/, colors, true);
@@ -2338,7 +2340,7 @@ void GUIFormSpecMenu::drawMenu()
 			core::rect<s32> rect = imgrect + spec.pos;
 			const video::SColor color(255,255,255,255);
 			const video::SColor colors[] = {color,color,color,color};
-			driver->draw2DImage(texture, rect,
+			draw2DImageFilterScaled(driver, texture, rect,
 				core::rect<s32>(core::position2d<s32>(0,0),img_origsize),
 				NULL/*&AbsoluteClippingRect*/, colors, true);
 		}
@@ -2367,7 +2369,7 @@ void GUIFormSpecMenu::drawMenu()
 		core::rect<s32> rect = imgrect + spec.pos;
 		const video::SColor color(255,255,255,255);
 		const video::SColor colors[] = {color,color,color,color};
-		driver->draw2DImage(texture, rect,
+		draw2DImageFilterScaled(driver, texture, rect,
 			core::rect<s32>(core::position2d<s32>(0,0),
 					core::dimension2di(texture->getOriginalSize())),
 			NULL/*&AbsoluteClippingRect*/, colors, true);
@@ -2582,7 +2584,7 @@ void GUIFormSpecMenu::acceptInput(FormspecQuitMode quitmode=quit_mode_no)
 {
 	if(m_text_dst)
 	{
-		std::map<std::string, std::string> fields;
+		StringMap fields;
 
 		if (quitmode == quit_mode_accept) {
 			fields["quit"] = "true";
@@ -2716,6 +2718,9 @@ static bool isChild(gui::IGUIElement * tocheck, gui::IGUIElement * parent)
 
 bool GUIFormSpecMenu::preprocessEvent(const SEvent& event)
 {
+
+	GUIModalMenu::preprocessEvent(event);
+
 	// The IGUITabControl renders visually using the skin's selected
 	// font, which we override for the duration of form drawing,
 	// but computes tab hotspots based on how it would have rendered
@@ -2799,6 +2804,10 @@ bool GUIFormSpecMenu::preprocessEvent(const SEvent& event)
 			if (retval) {
 				Environment->setFocus(hovered);
 			}
+		if (porting::android_version_sdk_int >= 18) {
+			// keyboard shown in GUIModalMenu::preprocessEvent
+			//porting::displayKeyboard(true, porting::app_global, porting::jnienv);
+		} else {
 			m_JavaDialogFieldName = getNameByID(hovered->getID());
 			std::string message   = _("Enter ");
 			std::string label     = wide_to_narrow(getLabelByID(hovered->getID()));
@@ -2823,6 +2832,7 @@ bool GUIFormSpecMenu::preprocessEvent(const SEvent& event)
 			porting::showInputDialog(_("ok"), "",
 					wide_to_narrow(((gui::IGUIEditBox*) hovered)->getText()),
 					type);
+		}
 			return retval;
 		}
 	}
@@ -3045,6 +3055,74 @@ bool GUIFormSpecMenu::OnEvent(const SEvent& event)
 			}
 			return true;
 		}
+
+		if (event.KeyInput.PressedDown && kp == getKeySetting("keymap_drop")) {
+
+			// get item
+			ItemSpec s = getItemAtPos(m_pointer);
+			Inventory *inv_s = NULL;
+
+			if(s.isValid())
+			do { // breakable
+				inv_s = m_invmgr->getInventory(s.inventoryloc);
+
+				if(!inv_s) {
+					errorstream << "InventoryMenu: The selected inventory location "
+							<< "\"" << s.inventoryloc.dump() << "\" doesn't exist"
+							<< std::endl;
+					s.i = -1;  // make it invalid again
+					break;
+				}
+
+				InventoryList *list_from = inv_s->getList(s.listname);
+				if(list_from == NULL) {
+					verbosestream << "InventoryMenu: The selected inventory list \""
+							<< s.listname << "\" does not exist" << std::endl;
+					s.i = -1;  // make it invalid again
+					break;
+				}
+
+				if((u32)s.i >= list_from->getSize()) {
+					infostream << "InventoryMenu: The selected inventory list \""
+							<< s.listname<<"\" is too small (i=" << s.i << ", size="
+							<< list_from->getSize() << ")" << std::endl;
+					s.i = -1;  // make it invalid again
+					break;
+				}
+
+				ItemStack stack_from = list_from->getItem(s.i);
+				if(stack_from.count<=0)
+					break;
+
+				u32 drop_amount = 0;
+
+				if (event.KeyInput.Control) {
+					// if drop key + ctrl = drop full stack
+					drop_amount = stack_from.count;
+				} else {
+					// if drop key without ctrl = drop one item
+					drop_amount = 1;
+				}
+
+				// Send IACTION_DROP
+
+				// Check how many items can be dropped
+				drop_amount = stack_from.count = MYMIN(drop_amount, stack_from.count);
+				if(drop_amount == 0 || drop_amount > stack_from.count)
+					break;
+
+				infostream << "Handing IACTION_DROP to manager" << std::endl;
+
+				IDropAction *a = new IDropAction();
+				a->count = drop_amount;
+				a->from_inv = s.inventoryloc;
+				a->from_list = s.listname;
+				a->from_i = s.i;
+				m_invmgr->inventoryAction(a);
+
+			} while(0);
+		}
+
 
 	}
 

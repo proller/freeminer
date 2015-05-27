@@ -36,6 +36,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "strfnd.h"
 #include "network/clientopcodes.h"
 #include "util/serialize.h"
+#include "util/srp.h"
 
 void Client::handleCommand_Deprecated(NetworkPacket* pkt)
 {
@@ -49,27 +50,67 @@ void Client::handleCommand_Hello(NetworkPacket* pkt)
 	if (pkt->getSize() < 1)
 		return;
 
-	u8 deployed;
-	*pkt >> deployed;
+	u8 serialization_ver;
+	u16 proto_ver;
+	u16 compression_mode;
+	u32 auth_mechs;
+	std::string username_legacy; // for case insensitivity
+	*pkt >> serialization_ver >> compression_mode >> proto_ver
+		>> auth_mechs >> username_legacy;
+
+	// Chose an auth method we support
+	AuthMechanism chosen_auth_mechanism = choseAuthMech(auth_mechs);
 
 	infostream << "Client: TOCLIENT_HELLO received with "
-			"deployed=" << ((int)deployed & 0xff) << std::endl;
+			<< "serialization_ver=" << serialization_ver
+			<< ", auth_mechs=" << auth_mechs
+			<< ", compression_mode=" << compression_mode
+			<< ". Doing auth with mech " << chosen_auth_mechanism << std::endl;
 
-	if (!ser_ver_supported(deployed)) {
+	if (!ser_ver_supported(serialization_ver)) {
 		infostream << "Client: TOCLIENT_HELLO: Server sent "
 				<< "unsupported ser_fmt_ver"<< std::endl;
 		return;
 	}
 
-	m_server_ser_ver = deployed;
+	m_server_ser_ver = serialization_ver;
+	m_proto_ver = proto_ver;
 
-	// @ TODO auth to server
+	//TODO verify that username_legacy matches sent username, only
+	// differs in casing (make both uppercase and compare)
+	// This is only neccessary though when we actually want to add casing support
+
+	if (m_chosen_auth_mech != AUTH_MECHANISM_NONE) {
+		// we recieved a TOCLIENT_HELLO while auth was already going on
+		errorstream << "Client: TOCLIENT_HELLO while auth was already going on"
+			<< "(chosen_mech=" << m_chosen_auth_mech << ")." << std::endl;
+		if ((m_chosen_auth_mech == AUTH_MECHANISM_SRP)
+				|| (m_chosen_auth_mech == AUTH_MECHANISM_LEGACY_PASSWORD)) {
+			srp_user_delete((SRPUser *) m_auth_data);
+			m_auth_data = 0;
+		}
+	}
+
+	// Authenticate using that method, or abort if there wasn't any method found
+	if (chosen_auth_mechanism != AUTH_MECHANISM_NONE) {
+		startAuth(chosen_auth_mechanism);
+	} else {
+		m_chosen_auth_mech = AUTH_MECHANISM_NONE;
+		m_access_denied = true;
+		m_access_denied_reason = "Unknown";
+		m_con.Disconnect();
+	}
+
 }
 
 void Client::handleCommand_AuthAccept(NetworkPacket* pkt)
 {
+	m_chosen_auth_mech = AUTH_MECHANISM_NONE;
+	deleteAuthData();
+
 	v3f playerpos;
-	*pkt >> playerpos >> m_map_seed >> m_recommended_send_interval;
+	*pkt >> playerpos >> m_map_seed >> m_recommended_send_interval
+		>> m_sudo_auth_methods;
 
 	playerpos -= v3f(0, BS / 2, 0);
 
@@ -88,7 +129,28 @@ void Client::handleCommand_AuthAccept(NetworkPacket* pkt)
 
 	m_state = LC_Init;
 }
+void Client::handleCommand_AcceptSudoMode(NetworkPacket* pkt)
+{
+	m_chosen_auth_mech = AUTH_MECHANISM_NONE;
+	deleteAuthData();
 
+	m_password = m_new_password;
+
+	verbosestream << "Client: Recieved TOCLIENT_ACCEPT_SUDO_MODE." << std::endl;
+
+	// send packet to actually set the password
+	startAuth(AUTH_MECHANISM_FIRST_SRP);
+
+	// reset again
+	m_chosen_auth_mech = AUTH_MECHANISM_NONE;
+}
+void Client::handleCommand_DenySudoMode(NetworkPacket* pkt)
+{
+	m_chat_queue.push("Password change denied. Password NOT changed.");
+	// reset everything and be sad
+	deleteAuthData();
+	m_chosen_auth_mech = AUTH_MECHANISM_NONE;
+}
 void Client::handleCommand_InitLegacy(NetworkPacket* pkt)
 {
 	if (pkt->getSize() < 1)
@@ -107,6 +169,7 @@ void Client::handleCommand_InitLegacy(NetworkPacket* pkt)
 	}
 
 	m_server_ser_ver = deployed;
+	m_proto_ver = deployed;
 
 	// Get player position
 	v3s16 playerpos_s16(0, BS * 2 + BS * 20, 0);
@@ -155,9 +218,7 @@ void Client::handleCommand_AccessDenied(NetworkPacket* pkt)
 		u8 denyCode = SERVER_ACCESSDENIED_UNEXPECTED_DATA;
 		*pkt >> denyCode;
 		if (denyCode == SERVER_ACCESSDENIED_CUSTOM_STRING) {
-			std::wstring wide_reason;
-			*pkt >> wide_reason;
-			m_access_denied_reason = wide_to_narrow(wide_reason);
+			*pkt >> m_access_denied_reason;
 		}
 		else if (denyCode < SERVER_ACCESSDENIED_MAX) {
 			m_access_denied_reason = accessDeniedStrings[denyCode];
@@ -253,8 +314,9 @@ void Client::handleCommand_BlockData(NetworkPacket* pkt)
 	/*
 		Add it to mesh update queue and set it to be acknowledged after update.
 	*/
-	//addUpdateMeshTaskWithEdge(p, true);
 	updateMeshTimestampWithEdge(p);
+	if (getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p) <= 1)
+		addUpdateMeshTaskWithEdge(p);
 
 	sendGotBlocks(p);
 }
@@ -350,7 +412,6 @@ void Client::handleCommand_ChatMessage(NetworkPacket* pkt)
 void Client::handleCommand_ActiveObjectRemoveAdd(NetworkPacket* pkt)
 {
 	/*
-		u16 command
 		u16 count of removed objects
 		for all removed objects {
 			u16 id
@@ -364,30 +425,34 @@ void Client::handleCommand_ActiveObjectRemoveAdd(NetworkPacket* pkt)
 		}
 	*/
 
-	// Read removed objects
-	u8 type;
-	u16 removed_count, added_count, id;
+	try {
+		u8 type;
+		u16 removed_count, added_count, id;
 
-	*pkt >> removed_count;
+		// Read removed objects
+		*pkt >> removed_count;
 
-	for (u16 i = 0; i < removed_count; i++) {
-		*pkt >> id;
-		m_env.removeActiveObject(id);
-	}
+		for (u16 i = 0; i < removed_count; i++) {
+			*pkt >> id;
+			m_env.removeActiveObject(id);
+		}
 
-	// Read added objects
-	*pkt >> added_count;
+		// Read added objects
+		*pkt >> added_count;
 
-	for (u16 i = 0; i < added_count; i++) {
-		*pkt >> id >> type;
-		m_env.addActiveObject(id, type, pkt->readLongString());
+		for (u16 i = 0; i < added_count; i++) {
+			*pkt >> id >> type;
+			m_env.addActiveObject(id, type, pkt->readLongString());
+		}
+	} catch (PacketError &e) {
+		infostream << "handleCommand_ActiveObjectRemoveAdd: " << e.what()
+				<< ". The packet is unreliable, ignoring" << std::endl;
 	}
 }
 
 void Client::handleCommand_ActiveObjectMessages(NetworkPacket* pkt)
 {
 	/*
-		u16 command
 		for all objects
 		{
 			u16 id
@@ -401,21 +466,27 @@ void Client::handleCommand_ActiveObjectMessages(NetworkPacket* pkt)
 	// Throw them in an istringstream
 	std::istringstream is(datastring, std::ios_base::binary);
 
-	while(is.eof() == false) {
-		is.read(buf, 2);
-		u16 id = readU16((u8*)buf);
-		if (is.eof())
-			break;
-		is.read(buf, 2);
-		size_t message_size = readU16((u8*)buf);
-		std::string message;
-		message.reserve(message_size);
-		for (u32 i = 0; i < message_size; i++) {
-			is.read(buf, 1);
-			message.append(buf, 1);
+	try {
+		while(is.eof() == false) {
+			is.read(buf, 2);
+			u16 id = readU16((u8*)buf);
+			if (is.eof())
+				break;
+			is.read(buf, 2);
+			size_t message_size = readU16((u8*)buf);
+			std::string message;
+			message.reserve(message_size);
+			for (u32 i = 0; i < message_size; i++) {
+				is.read(buf, 1);
+				message.append(buf, 1);
+			}
+			// Pass on to the environment
+			m_env.processActiveObjectMessage(id, message);
 		}
-		// Pass on to the environment
-		m_env.processActiveObjectMessage(id, message);
+	// Packet could be unreliable then ignore it
+	} catch (PacketError &e) {
+		infostream << "handleCommand_ActiveObjectMessages: " << e.what()
+					<< ". The packet is unreliable, ignoring" << std::endl;
 	}
 }
 
@@ -1113,5 +1184,37 @@ void Client::handleCommand_EyeOffset(NetworkPacket* pkt)
 	*pkt >> player->eye_offset_first >> player->eye_offset_third;
 }
 
+void Client::handleCommand_SrpBytesSandB(NetworkPacket* pkt)
+{
+	if ((m_chosen_auth_mech != AUTH_MECHANISM_LEGACY_PASSWORD)
+			&& (m_chosen_auth_mech != AUTH_MECHANISM_SRP)) {
+		errorstream << "Client: Recieved SRP S_B login message,"
+			<< " but wasn't supposed to (chosen_mech="
+			<< m_chosen_auth_mech << ")." << std::endl;
+		return;
+	}
+
+	char *bytes_M = 0;
+	size_t len_M = 0;
+	SRPUser *usr = (SRPUser *) m_auth_data;
+	std::string s;
+	std::string B;
+	*pkt >> s >> B;
+
+	infostream << "Client: Recieved TOCLIENT_SRP_BYTES_S_B." << std::endl;
+
+	srp_user_process_challenge(usr, (const unsigned char *) s.c_str(), s.size(),
+		(const unsigned char *) B.c_str(), B.size(),
+		(unsigned char **) &bytes_M, &len_M);
+
+	if ( !bytes_M ) {
+		errorstream << "Client: SRP-6a S_B safety check violation!" << std::endl;
+		return;
+	}
+
+	NetworkPacket resp_pkt(TOSERVER_SRP_BYTES_M, 0);
+	resp_pkt << std::string(bytes_M, len_M);
+	Send(&resp_pkt);
+}
 
 #endif

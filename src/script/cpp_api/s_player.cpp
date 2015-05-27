@@ -22,6 +22,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "cpp_api/s_player.h"
 #include "cpp_api/s_internal.h"
+#include "common/c_converter.h"
+#include "common/c_content.h"
 #include "util/string.h"
 
 void ScriptApiPlayer::on_newplayer(ServerActiveObject *player)
@@ -48,6 +50,28 @@ void ScriptApiPlayer::on_dieplayer(ServerActiveObject *player)
 	script_run_callbacks(L, 1, RUN_CALLBACKS_MODE_FIRST);
 }
 
+bool ScriptApiPlayer::on_punchplayer(ServerActiveObject *player,
+		ServerActiveObject *hitter,
+		float time_from_last_punch,
+		const ToolCapabilities *toolcap,
+		v3f dir,
+		s16 damage)
+{
+	SCRIPTAPI_PRECHECKHEADER
+	// Get core.registered_on_punchplayers
+	lua_getglobal(L, "core");
+	lua_getfield(L, -1, "registered_on_punchplayers");
+	// Call callbacks
+	objectrefGetOrCreate(L, player);
+	objectrefGetOrCreate(L, hitter);
+	lua_pushnumber(L, time_from_last_punch);
+	push_tool_capabilities(L, *toolcap);
+	push_v3f(L, dir);
+	lua_pushnumber(L, damage);
+	script_run_callbacks(L, 6, RUN_CALLBACKS_MODE_OR);
+	return lua_toboolean(L, -1);
+}
+
 bool ScriptApiPlayer::on_respawnplayer(ServerActiveObject *player)
 {
 	SCRIPTAPI_PRECHECKHEADER
@@ -62,7 +86,10 @@ bool ScriptApiPlayer::on_respawnplayer(ServerActiveObject *player)
 	return positioning_handled_by_some;
 }
 
-bool ScriptApiPlayer::on_prejoinplayer(std::string name, std::string ip, std::string &reason)
+bool ScriptApiPlayer::on_prejoinplayer(
+	const std::string &name,
+	const std::string &ip,
+	std::string *reason)
 {
 	SCRIPTAPI_PRECHECKHEADER
 
@@ -73,7 +100,7 @@ bool ScriptApiPlayer::on_prejoinplayer(std::string name, std::string ip, std::st
 	lua_pushstring(L, ip.c_str());
 	script_run_callbacks(L, 2, RUN_CALLBACKS_MODE_OR);
 	if (lua_isstring(L, -1)) {
-		reason.assign(lua_tostring(L, -1));
+		reason->assign(lua_tostring(L, -1));
 		return true;
 	}
 	return false;
@@ -121,7 +148,7 @@ void ScriptApiPlayer::on_cheat(ServerActiveObject *player,
 
 void ScriptApiPlayer::on_playerReceiveFields(ServerActiveObject *player,
 		const std::string &formname,
-		const std::map<std::string, std::string> &fields)
+		const StringMap &fields)
 {
 	SCRIPTAPI_PRECHECKHEADER
 
@@ -135,17 +162,19 @@ void ScriptApiPlayer::on_playerReceiveFields(ServerActiveObject *player,
 	lua_pushstring(L, formname.c_str());
 	// param 3
 	lua_newtable(L);
-	for(std::map<std::string, std::string>::const_iterator
-			i = fields.begin(); i != fields.end(); i++){
-		const std::string &name = i->first;
-		const std::string &value = i->second;
+	StringMap::const_iterator it;
+	for (it = fields.begin(); it != fields.end(); ++it) {
+		const std::string &name = it->first;
+		const std::string &value = it->second;
 		lua_pushstring(L, name.c_str());
 		lua_pushlstring(L, value.c_str(), value.size());
 		lua_settable(L, -3);
 	}
 	script_run_callbacks(L, 3, RUN_CALLBACKS_MODE_OR_SC);
 }
-ScriptApiPlayer::~ScriptApiPlayer() {
+
+ScriptApiPlayer::~ScriptApiPlayer()
+{
 }
 
 

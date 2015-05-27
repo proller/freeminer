@@ -8,7 +8,7 @@ endif()
 
 # This can be read from ${PROJECT_NAME} after project() is called
 project(freeminer)
-string(TOLOWER ${PROJECT_NAME} PROJECT_NAME_LOWER)
+set(PROJECT_NAME_CAPITALIZED "freeminer")
 
 
 # Also remember to set PROTOCOL_VERSION in network/networkprotocol.h when releasing
@@ -16,14 +16,15 @@ set(VERSION_MAJOR 0)
 set(VERSION_MINOR 4)
 set(VERSION_PATCH 12)
 set(VERSION_TWEAK 6)
-set(VERSION_PATCH_ORIG ${VERSION_PATCH})
 set(VERSION_EXTRA "" CACHE STRING "Stuff to append to version string")
+
+# Change to false for releases
+set(DEVELOPMENT_BUILD TRUE)
 
 set(VERSION_STRING "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}.${VERSION_TWEAK}")
 if(VERSION_EXTRA)
 	set(VERSION_STRING ${VERSION_STRING}-${VERSION_EXTRA})
-else()
-	# Comment the following line during release
+elseif(DEVELOPMENT_BUILD)
 	set(VERSION_STRING "${VERSION_STRING}-dev")
 endif()
 
@@ -40,7 +41,6 @@ set(RUN_IN_PLACE ${DEFAULT_RUN_IN_PLACE} CACHE BOOL
 
 
 set(BUILD_CLIENT TRUE CACHE BOOL "Build client")
-set(BUILD_SERVER FALSE CACHE BOOL "Build server")
 if(WIN32 OR APPLE)
 	# win32 broken! http://forum.freeminer.org/threads/building-errors.182/#post-1852
 	#if( ${CMAKE_SYSTEM_VERSION} VERSION_LESS 6.0 )
@@ -81,11 +81,11 @@ if(WIN32)
 	set(EXAMPLE_CONF_DIR ".")
 	set(LOCALEDIR "locale")
 elseif(APPLE)
-	set(BUNDLE_NAME ${PROJECT_NAME_LOWER}.app)
+	set(BUNDLE_NAME ${PROJECT_NAME}.app)
 	set(BUNDLE_PATH "${BUNDLE_NAME}")
 	set(BINDIR ${BUNDLE_NAME}/Contents/MacOS)
 	set(SHAREDIR ${BUNDLE_NAME}/Contents/Resources)
-	set(DOCDIR "${SHAREDIR}/${PROJECT_NAME_LOWER}")
+	set(DOCDIR "${SHAREDIR}/${PROJECT_NAME}")
 	set(EXAMPLE_CONF_DIR ${DOCDIR})
 	set(LOCALEDIR "${SHAREDIR}/locale")
 elseif(UNIX) # Linux, BSD etc
@@ -100,15 +100,15 @@ elseif(UNIX) # Linux, BSD etc
 		set(ICONDIR "unix/icons")
 		set(LOCALEDIR "locale")
 	else()
-		set(SHAREDIR "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME_LOWER}")
+		set(SHAREDIR "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}")
 		set(BINDIR "${CMAKE_INSTALL_PREFIX}/bin")
-		set(DOCDIR "${CMAKE_INSTALL_PREFIX}/share/doc/${PROJECT_NAME_LOWER}")
+		set(DOCDIR "${CMAKE_INSTALL_PREFIX}/share/doc/${PROJECT_NAME}")
 		set(MANDIR "${CMAKE_INSTALL_PREFIX}/share/man")
 		set(EXAMPLE_CONF_DIR ${DOCDIR})
 		set(XDG_APPS_DIR "${CMAKE_INSTALL_PREFIX}/share/applications")
 		set(APPDATADIR "${CMAKE_INSTALL_PREFIX}/share/appdata")
 		set(ICONDIR "${CMAKE_INSTALL_PREFIX}/share/icons")
-		set(LOCALEDIR "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME_LOWER}/locale")
+		set(LOCALEDIR "${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/locale")
 	endif()
 endif()
 

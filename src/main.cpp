@@ -33,11 +33,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "irrlicht.h" // createDevice
 
-#include "main.h"
 #include "mainmenumanager.h"
 #include "irrlichttypes_extrabloated.h"
 #include "debug.h"
-#include "test.h"
+#include "unittest/test.h"
 #include "server.h"
 #include "filesys.h"
 #include "version.h"
@@ -58,7 +57,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "client/clientlauncher.h"
 #endif
 
+#if USE_ENET
+// todo: move to connection
 #include "enet/enet.h"
+#endif
 
 #ifdef HAVE_TOUCHSCREENGUI
 #include "touchscreengui.h"
@@ -110,26 +112,6 @@ static bool migrate_database(const GameParams &game_params, const Settings &cmd_
 
 /**********************************************************************/
 
-#ifndef SERVER
-/*
-	Random stuff
-*/
-
-/* mainmenumanager.h */
-
-gui::IGUIEnvironment* guienv = NULL;
-gui::IGUIStaticText *guiroot = NULL;
-MainMenuManager g_menumgr;
-
-bool noMenuActive()
-{
-	return (g_menumgr.menuCount() == 0);
-}
-
-// Passed to menus to allow disconnecting and exiting
-MainGameCallback *g_gamecallback = NULL;
-#endif
-
 /*
 	gettime.h implementation
 */
@@ -175,11 +157,13 @@ int main(int argc, char *argv[])
 {
 	int retval = 0;
 
+#if USE_ENET
 	if (enet_initialize() != 0) {
 		std::cerr << "enet failed to initialize\n";
 		return EXIT_FAILURE;
 	}
 	atexit(enet_deinitialize);
+#endif
 
 	debug_set_exception_handler();
 
@@ -332,9 +316,9 @@ static void set_allowed_options(OptionList *allowed_options)
 			_("Set gameid (\"--gameid list\" prints available ones)"))));
 	allowed_options->insert(std::make_pair("migrate", ValueSpec(VALUETYPE_STRING,
 			_("Migrate from current map backend to another (Only works when using freeminerserver or with --server)"))));
-#ifndef SERVER
 	allowed_options->insert(std::make_pair("autoexit", ValueSpec(VALUETYPE_STRING,
 			_("Exit after X seconds"))));
+#ifndef SERVER
 	allowed_options->insert(std::make_pair("videomodes", ValueSpec(VALUETYPE_FLAG,
 			_("Show available video modes"))));
 	allowed_options->insert(std::make_pair("speedtests", ValueSpec(VALUETYPE_FLAG,
@@ -381,7 +365,7 @@ static void print_allowed_options(const OptionList &allowed_options)
 
 static void print_version()
 {
-	dstream << PROJECT_NAME " " << g_version_hash << std::endl;
+	dstream << PROJECT_NAME_C " " << g_version_hash << std::endl;
 #ifndef SERVER
 	dstream << "Using Irrlicht " << IRRLICHT_SDK_VERSION << std::endl;
 #endif
@@ -864,9 +848,10 @@ static bool run_dedicated_server(const GameParams &game_params, const Settings &
 	Address bind_addr(0, 0, 0, 0, game_params.socket_port);
 
 	if (g_settings->getBool("ipv6_server")) {
-		bind_addr.setAddress((IPv6AddressBytes*) NULL);
+		bind_addr.setAddress(in6addr_any);
 	}
 	try {
+		if (!bind_str.empty())
 		bind_addr.Resolve(bind_str.c_str());
 	} catch (ResolveError &e) {
 		infostream << "Resolving bind address \"" << bind_str
@@ -889,6 +874,10 @@ static bool run_dedicated_server(const GameParams &game_params, const Settings &
 			game_params.game_spec, false, bind_addr.isIPv6());
 
 	server.start(bind_addr);
+
+	int autoexit_ = 0;
+	cmd_args.getS32NoEx("autoexit", autoexit_);
+	server.m_autoexit = autoexit_;
 
 	// Run server
 	bool &kill = *porting::signal_handler_killstatus();

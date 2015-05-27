@@ -27,6 +27,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "socket.h"
 #include "exceptions.h"
 #include "constants.h"
+#include "network/networkpacket.h"
 #include "util/pointer.h"
 #include "util/container.h"
 #include "util/thread.h"
@@ -36,10 +37,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <map>
 
 #include "enet/enet.h"
-#include "msgpack.h"
+#include "../msgpack_fix.h"
 #include "util/msgpack_serialize.h"
 #include "util/thread_pool.h"
-#include "util/lock.h"
+#include "util/concurrent_map.h"
+#include "util/concurrent_unordered_map.h"
 
 #define CHANNEL_COUNT 3
 
@@ -317,7 +319,7 @@ public:
 	void Connect(Address address);
 	bool Connected();
 	void Disconnect();
-	u32 Receive(u16 &peer_id, SharedBuffer<u8> &data, int timeout = 1);
+	u32 Receive(NetworkPacket* pkt, int timeout = 1);
 	void SendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable);
 	void Send(u16 peer_id, u8 channelnum, SharedBuffer<u8> data, bool reliable);
 	void Send(u16 peer_id, u8 channelnum, const msgpack::sbuffer &buffer, bool reliable);
@@ -351,24 +353,25 @@ private:
 	ENetPeer *m_peer;
 	u16 m_peer_id;
 
-	shared_map<u16, ENetPeer*> m_peers;
-	shared_unordered_map<u16, Address> m_peers_address;
+	concurrent_map<u16, ENetPeer*> m_peers;
+	concurrent_unordered_map<u16, Address> m_peers_address;
 	//JMutex m_peers_mutex;
 
 	// Backwards compatibility
 	PeerHandler *m_bc_peerhandler;
 	unsigned int m_last_recieved;
-	int m_last_recieved_warn;
+	unsigned int m_last_recieved_warn;
 
 	void SetPeerID(u16 id){ m_peer_id = id; }
 	u32 GetProtocolID(){ return m_protocol_id; }
 	void PrintInfo(std::ostream &out);
 	void PrintInfo();
 	std::string getDesc();
+	unsigned int timeout_mul;
 };
 
 
-bool parse_msgpack_packet(unsigned char *data, u32 datasize, MsgpackPacket *packet, int *command, msgpack::unpacked *msg);
+bool parse_msgpack_packet(char *data, u32 datasize, MsgpackPacket *packet, int *command, msgpack::unpacked *msg);
 } // namespace
 
 #endif

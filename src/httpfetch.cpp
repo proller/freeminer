@@ -35,7 +35,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "log.h"
 #include "util/container.h"
 #include "version.h"
-#include "main.h"
 #include "settings.h"
 #include "util/thread_pool.h"
 
@@ -51,7 +50,7 @@ HTTPFetchRequest::HTTPFetchRequest()
 	connect_timeout = timeout;
 	multipart = false;
 
-	useragent = std::string(PROJECT_NAME "/") + g_version_hash + " (" + porting::get_sysinfo() + ")";
+	useragent = std::string(PROJECT_NAME_C "/") + g_version_hash + " (" + porting::get_sysinfo() + ")";
 }
 
 
@@ -282,8 +281,7 @@ HTTPFetchOngoing::HTTPFetchOngoing(HTTPFetchRequest request_, CurlHandlePool *po
 	// Set POST (or GET) data
 	if (request.multipart) {
 		curl_httppost *last = NULL;
-		for (std::map<std::string, std::string>::iterator it =
-					request.post_fields.begin();
+		for (StringMap::iterator it = request.post_fields.begin();
 				it != request.post_fields.end(); ++it) {
 			curl_formadd(&post, &last,
 					CURLFORM_NAMELENGTH, it->first.size(),
@@ -298,10 +296,8 @@ HTTPFetchOngoing::HTTPFetchOngoing(HTTPFetchRequest request_, CurlHandlePool *po
 	} else if (!request.post_fields.empty()) {
 		curl_easy_setopt(curl, CURLOPT_POST, 1);
 		std::string str;
-		for (std::map<std::string, std::string>::iterator it =
-					request.post_fields.begin();
-				it != request.post_fields.end();
-				++it) {
+		for (StringMap::iterator it = request.post_fields.begin();
+				it != request.post_fields.end(); ++it) {
 			if (str != "")
 				str += "&";
 			str += urlencode(it->first);

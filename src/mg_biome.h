@@ -23,20 +23,21 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef MG_BIOME_HEADER
 #define MG_BIOME_HEADER
 
-#include "mapgen.h"
+#include "objdef.h"
+#include "nodedef.h"
 
-struct NoiseParams;
+#include "mapgen.h"
 
 enum BiomeType
 {
-	BIOME_TYPE_NORMAL,
-	BIOME_TYPE_LIQUID,
-	BIOME_TYPE_NETHER,
-	BIOME_TYPE_AETHER,
-	BIOME_TYPE_FLAT
+	BIOME_NORMAL,
+	BIOME_LIQUID,
+	BIOME_NETHER,
+	BIOME_AETHER,
+	BIOME_FLAT
 };
 
-class Biome : public GenElement, public NodeResolver {
+class Biome : public ObjDef, public NodeResolver {
 public:
 	u32 flags;
 
@@ -45,8 +46,9 @@ public:
 	content_t c_stone;
 	content_t c_water_top;
 	content_t c_water;
-	content_t c_ice;
+	content_t c_river_water;
 	content_t c_dust;
+
 
 	s16 depth_top;
 	s16 depth_filler;
@@ -57,23 +59,31 @@ public:
 	float heat_point;
 	float humidity_point;
 
+	//freeminer:
+	content_t c_ice;
 	content_t c_top_cold;
-	virtual void resolveNodeNames(NodeResolveInfo *nri);
+
+	virtual void resolveNodeNames();
 };
 
-class BiomeManager : public GenElementManager {
+class BiomeManager : public ObjDefManager {
 public:
-	static const char *ELEMENT_TITLE;
-	static const size_t ELEMENT_LIMIT = 0x100;
+	static const char *OBJECT_TITLE;
 
 	BiomeManager(IGameDef *gamedef);
-	~BiomeManager();
+	virtual ~BiomeManager();
 
-	Biome *create(int btt)
+	const char *getObjectTitle() const
+	{
+		return "biome";
+	}
+
+	static Biome *create(BiomeType type)
 	{
 		return new Biome;
 	}
 
+	//freeminer:
 	u32 year_days;
 	s32 weather_heat_season;
 	s32 weather_heat_width;
@@ -89,11 +99,14 @@ public:
 	s16 calcBlockHeat(v3s16 p, uint64_t seed, float timeofday, float totaltime, bool use_weather = 1);
 	s16 calcBlockHumidity(v3s16 p, uint64_t seed, float timeofday, float totaltime, bool use_weather = 1);
 
-	void clear();
+	virtual void clear();
 
 	void calcBiomes(s16 sx, s16 sy, float *heat_map, float *humidity_map,
 		s16 *height_map, u8 *biomeid_map);
 	Biome *getBiome(float heat, float humidity, s16 y);
+
+private:
+	IGameDef *m_gamedef;
 };
 
 #endif

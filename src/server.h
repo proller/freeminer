@@ -41,7 +41,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <list>
 #include <map>
 #include <vector>
-#include "util/lock.h"
 #include "stat.h"
 
 #define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
@@ -74,11 +73,6 @@ enum ClientDeletionReason {
 	CDR_TIMEOUT,
 	CDR_DENY
 };
-
-/*
-	Some random functions
-*/
-v3f findSpawnPos(ServerMap &map);
 
 class MapEditEventIgnorer
 {
@@ -212,7 +206,6 @@ public:
 	void handleCommand_Null(NetworkPacket* pkt) {};
 	void handleCommand_Deprecated(NetworkPacket* pkt);
 	void handleCommand_Init(NetworkPacket* pkt);
-	void handleCommand_Auth(NetworkPacket* pkt);
 	void handleCommand_Init_Legacy(NetworkPacket* pkt);
 	void handleCommand_Init2(NetworkPacket* pkt);
 	void handleCommand_RequestMedia(NetworkPacket* pkt);
@@ -232,8 +225,11 @@ public:
 	void handleCommand_RemovedSounds(NetworkPacket* pkt);
 	void handleCommand_NodeMetaFields(NetworkPacket* pkt);
 	void handleCommand_InventoryFields(NetworkPacket* pkt);
+	void handleCommand_FirstSrp(NetworkPacket* pkt);
+	void handleCommand_SrpBytesA(NetworkPacket* pkt);
+	void handleCommand_SrpBytesM(NetworkPacket* pkt);
 
-	void ProcessData(u8 *data, u32 datasize, u16 peer_id);
+	void ProcessData(NetworkPacket *pkt);
 
 	void Send(NetworkPacket* pkt);
 
@@ -317,9 +313,6 @@ public:
 	// Envlock and conlock should be locked when using scriptapi
 	GameScripting *getScriptIface(){ return m_script; }
 
-	//TODO: determine what (if anything) should be locked to access EmergeManager
-	EmergeManager *getEmergeManager(){ return m_emerge; }
-
 	// actions: time-reversed list
 	// Return value: success/failure
 	bool rollbackRevertActions(const std::list<RollbackAction> &actions,
@@ -338,15 +331,16 @@ public:
 	virtual scene::ISceneManager* getSceneManager();
 	virtual IRollbackManager *getRollbackManager() { return m_enable_rollback_recording ? m_rollback : nullptr; }
 
+	virtual EmergeManager *getEmergeManager() { return m_emerge; }
 
 	IWritableItemDefManager* getWritableItemDefManager();
 	IWritableNodeDefManager* getWritableNodeDefManager();
 	IWritableCraftDefManager* getWritableCraftDefManager();
 
-	const ModSpec* getModSpec(const std::string &modname);
+	const ModSpec* getModSpec(const std::string &modname) const;
 	void getModNames(std::vector<std::string> &modlist);
 	std::string getBuiltinLuaPath();
-	inline std::string getWorldPath()
+	inline std::string getWorldPath() const
 			{ return m_path_world; }
 
 	inline bool isSingleplayer()
@@ -385,11 +379,13 @@ public:
 	void peerAdded(u16 peer_id);
 	void deletingPeer(u16 peer_id, bool timeout);
 
-	void DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::wstring &custom_reason=NULL);
+	void DenySudoAccess(u16 peer_id);
+	void DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason="");
 
 	//fmtodo: remove:
-	void DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason);
 	void DenyAccess(u16 peer_id, const std::string &reason);
+
+	void acceptAuth(u16 peer_id, bool forSudoMode);
 	void DenyAccess_Legacy(u16 peer_id, const std::wstring &reason);
 
 	bool getClientConInfo(u16 peer_id, con::rtt_stat_type type,float* retval);
@@ -507,6 +503,8 @@ private:
 	};
 	void DeleteClient(u16 peer_id, ClientDeletionReason reason);
 	void UpdateCrafting(Player *player);
+
+	v3f findSpawnPos();
 
 	// When called, connection mutex should be locked
 	RemoteClient* getClient(u16 peer_id,ClientState state_min=CS_Active);
@@ -707,8 +705,9 @@ private:
 
 	// freeminer:
 public:
-	//shared_map<v3POS, MapBlock*> m_modified_blocks;
-	//shared_map<v3POS, MapBlock*> m_lighting_modified_blocks;
+	int m_autoexit;
+	//concurrent_map<v3POS, MapBlock*> m_modified_blocks;
+	//concurrent_map<v3POS, MapBlock*> m_lighting_modified_blocks;
 	bool m_more_threads;
 	void deleteDetachedInventory(const std::string &name);
 	void maintenance_start();

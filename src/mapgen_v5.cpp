@@ -80,35 +80,27 @@ MapgenV5::MapgenV5(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 	//// Resolve nodes to be used
 	INodeDefManager *ndef = emerge->ndef;
 
-	c_stone           = ndef->getId("mapgen_stone");
-	c_dirt            = ndef->getId("mapgen_dirt");
-	c_dirt_with_grass = ndef->getId("mapgen_dirt_with_grass");
-	c_sand            = ndef->getId("mapgen_sand");
-	c_water_source    = ndef->getId("mapgen_water_source");
-	c_lava_source     = ndef->getId("mapgen_lava_source");
-	c_gravel          = ndef->getId("mapgen_gravel");
-	c_cobble          = ndef->getId("mapgen_cobble");
-	c_ice             = ndef->getId("default:ice");
-	c_desert_stone    = ndef->getId("mapgen_desert_stone");
-	c_mossycobble     = ndef->getId("mapgen_mossycobble");
-	c_sandbrick       = ndef->getId("mapgen_sandstonebrick");
-	c_stair_cobble    = ndef->getId("mapgen_stair_cobble");
-	c_stair_sandstone = ndef->getId("mapgen_stair_sandstone");
+	c_stone                = ndef->getId("mapgen_stone");
+	c_water_source         = ndef->getId("mapgen_water_source");
+	c_lava_source          = ndef->getId("mapgen_lava_source");
+	c_desert_stone         = ndef->getId("mapgen_desert_stone");
+	c_ice                  = ndef->getId("mapgen_ice");
+	c_sandstone            = ndef->getId("mapgen_sandstone");
+
+	c_cobble               = ndef->getId("mapgen_cobble");
+	c_stair_cobble         = ndef->getId("mapgen_stair_cobble");
+	c_mossycobble          = ndef->getId("mapgen_mossycobble");
+	c_sandstonebrick       = ndef->getId("mapgen_sandstonebrick");
+	c_stair_sandstonebrick = ndef->getId("mapgen_stair_sandstonebrick");
+
 	if (c_ice == CONTENT_IGNORE)
 		c_ice = CONTENT_AIR;
 	if (c_mossycobble == CONTENT_IGNORE)
 		c_mossycobble = c_cobble;
-	if (c_sandbrick == CONTENT_IGNORE)
-		c_sandbrick = c_desert_stone;
 	if (c_stair_cobble == CONTENT_IGNORE)
 		c_stair_cobble = c_cobble;
-	if (c_stair_sandstone == CONTENT_IGNORE)
-		c_stair_sandstone = c_sandbrick;
 
 	//freeminer:
-	c_dirt_with_snow  = ndef->getId("mapgen_dirt_with_snow");
-	if (c_dirt_with_snow == CONTENT_IGNORE)
-		c_dirt_with_snow = c_dirt;
 	float_islands = sp->float_islands;
 	noise_float_islands1  = new Noise(&sp->np_float_islands1, seed, csize.X, csize.Y, csize.Z);
 	noise_float_islands2  = new Noise(&sp->np_float_islands2, seed, csize.X, csize.Y, csize.Z);
@@ -116,7 +108,12 @@ MapgenV5::MapgenV5(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 
 	noise_layers          = new Noise(&sp->np_layers,         seed, csize.X, csize.Y, csize.Z);
 	layers_init(emerge, sp->paramsj);
+	//===
 
+	if (c_sandstonebrick == CONTENT_IGNORE)
+		c_sandstonebrick = c_sandstone;
+	if (c_stair_sandstonebrick == CONTENT_IGNORE)
+		c_stair_sandstonebrick = c_sandstone;
 }
 
 
@@ -212,7 +209,7 @@ int MapgenV5::getGroundLevelAtPoint(v2s16 p)
 		f = 0.01;
 	else if (f >= 1.0)
 		f *= 1.6;
-	float h = water_level + NoisePerlin2D(&noise_height->np, p.X, p.Y, seed);
+	float h = NoisePerlin2D(&noise_height->np, p.X, p.Y, seed);
 
 	s16 search_top = water_level + 15;
 	s16 search_base = water_level;
@@ -281,7 +278,7 @@ void MapgenV5::makeChunk(BlockMakeData *data)
 		noise_humidity->result, heightmap, biomemap);
 
 	// Actually place the biome-specific nodes
-	bool desert_stone = generateBiomes(noise_heat->result, noise_humidity->result);
+	MgStoneType stone_type = generateBiomes(noise_heat->result, noise_humidity->result);
 
 	// Generate caves
 	if ((flags & MG_CAVES) && (stone_surface_max_y >= node_min.Y))
@@ -294,27 +291,37 @@ void MapgenV5::makeChunk(BlockMakeData *data)
 		dp.np_rarity  = nparams_dungeon_rarity;
 		dp.np_density = nparams_dungeon_density;
 		dp.np_wetness = nparams_dungeon_wetness;
-		dp.c_water = c_water_source;
-		if (desert_stone) {
-			dp.c_cobble  = c_sandbrick;
-			dp.c_moss    = c_sandbrick; // should make this 'cracked sandstone' later
-			dp.c_stair   = c_stair_sandstone;
-
-			dp.diagonal_dirs = true;
-			dp.mossratio  = 0.0;
-			dp.holesize   = v3s16(2, 3, 2);
-			dp.roomsize   = v3s16(2, 5, 2);
-			dp.notifytype = GENNOTIFY_TEMPLE;
-		} else {
-			dp.c_cobble  = c_cobble;
-			dp.c_moss    = c_mossycobble;
-			dp.c_stair   = c_stair_cobble;
+		dp.c_water    = c_water_source;
+		if (stone_type == STONE) {
+			dp.c_cobble = c_cobble;
+			dp.c_moss   = c_mossycobble;
+			dp.c_stair  = c_stair_cobble;
 
 			dp.diagonal_dirs = false;
-			dp.mossratio  = 3.0;
-			dp.holesize   = v3s16(1, 2, 1);
-			dp.roomsize   = v3s16(0, 0, 0);
-			dp.notifytype = GENNOTIFY_DUNGEON;
+			dp.mossratio     = 3.0;
+			dp.holesize      = v3s16(1, 2, 1);
+			dp.roomsize      = v3s16(0, 0, 0);
+			dp.notifytype    = GENNOTIFY_DUNGEON;
+		} else if (stone_type == DESERT_STONE) {
+			dp.c_cobble = c_desert_stone;
+			dp.c_moss   = c_desert_stone;
+			dp.c_stair  = c_desert_stone;
+
+			dp.diagonal_dirs = true;
+			dp.mossratio     = 0.0;
+			dp.holesize      = v3s16(2, 3, 2);
+			dp.roomsize      = v3s16(2, 5, 2);
+			dp.notifytype    = GENNOTIFY_TEMPLE;
+		} else if (stone_type == SANDSTONE) {
+			dp.c_cobble = c_sandstonebrick;
+			dp.c_moss   = c_sandstonebrick;
+			dp.c_stair  = c_sandstonebrick;
+
+			dp.diagonal_dirs = false;
+			dp.mossratio     = 0.0;
+			dp.holesize      = v3s16(2, 2, 2);
+			dp.roomsize      = v3s16(2, 0, 2);
+			dp.notifytype    = GENNOTIFY_DUNGEON;
 		}
 
 		DungeonGen dgen(this, &dp);
@@ -361,7 +368,7 @@ void MapgenV5::calculateNoise()
 		noise_cave2->perlinMap3D(x, y, z);
 	}
 
-	if (node_max.Y >= water_level) {
+	if (node_max.Y >= BIOMEGEN_BASE_V5) {
 		noise_filler_depth->perlinMap2D(x, z);
 		noise_heat->perlinMap2D(x, z);
 		noise_humidity->perlinMap2D(x, z);
@@ -431,87 +438,96 @@ int MapgenV5::generateBaseTerrain()
 }
 
 
-bool MapgenV5::generateBiomes(float *heat_map, float *humidity_map)
+MgStoneType MapgenV5::generateBiomes(float *heat_map, float *humidity_map)
 {
-	if (node_max.Y < water_level)
-		return false;
+	if (node_max.Y < BIOMEGEN_BASE_V5)
+		return STONE;
 
 	v3s16 em = vm->m_area.getExtent();
 	u32 index = 0;
-	bool desert_stone = false;
+	MgStoneType stone_type = STONE;
 
 	for (s16 z = node_min.Z; z <= node_max.Z; z++)
 	for (s16 x = node_min.X; x <= node_max.X; x++, index++) {
 		Biome *biome = NULL;
-		s16 dfiller = 0;
-		s16 y0_top = 0;
-		s16 y0_filler = 0;
-		s16 depth_water_top = 0;
+		u16 depth_top = 0;
+		u16 base_filler = 0;
+		u16 depth_water_top = 0;
+		u32 vi = vm->m_area.index(x, node_max.Y, z);
 
-		s16 nplaced = 0;
-		u32 i = vm->m_area.index(x, node_max.Y, z);
+		// Check node at base of mapchunk above, either a node of a previously
+		// generated mapchunk or if not, a node of overgenerated base terrain.
+		content_t c_above = vm->m_data[vi + em.X].getContent();
+		bool air_above = c_above == CONTENT_AIR;
 
-		content_t c_above = vm->m_data[i + em.X].getContent();
-		bool have_air = c_above == CONTENT_AIR;
+		// If there is air above enable top/filler placement, otherwise force nplaced to
+		// stone level by setting a number that will exceed any possible filler depth.
+		u16 nplaced = (air_above) ? 0 : (u16)-1;
 
 		for (s16 y = node_max.Y; y >= node_min.Y; y--) {
-			content_t c = vm->m_data[i].getContent();
+			content_t c = vm->m_data[vi].getContent();
 
-			if (c != CONTENT_IGNORE && c != CONTENT_AIR && (y == node_max.Y || have_air)) {
-				biome           = bmgr->getBiome(heat_map[index], humidity_map[index], y);
-				dfiller         = biome->depth_filler + noise_filler_depth->result[index];
-				y0_top          = biome->depth_top;
-				y0_filler       = biome->depth_top + dfiller;
+			// Biome is only (re)calculated for each stone/water upper surface found
+			// below air while working downwards. The chosen biome then remains in
+			// effect for all nodes below until the next biome recalculation.
+			// Biome is (re)calculated when a stone/water node is either: detected
+			// below an air node, or, is at column top and might be underground
+			// or underwater and therefore might not be below air.
+			if (c != CONTENT_AIR && (y == node_max.Y || air_above)) {
+				biome = bmgr->getBiome(heat_map[index], humidity_map[index], y);
+				depth_top = biome->depth_top;
+				base_filler = MYMAX(depth_top + biome->depth_filler
+						+ noise_filler_depth->result[index], 0);
 				depth_water_top = biome->depth_water_top;
 
+				// Detect stone type for dungeons during every biome calculation.
+				// This is more efficient than detecting per-node and will not
+				// miss any desert stone or sandstone biomes.
 				if (biome->c_stone == c_desert_stone)
-					desert_stone = true;
+					stone_type = DESERT_STONE;
+				else if (biome->c_stone == c_sandstone)
+					stone_type = SANDSTONE;
 			}
 
-			if (c == c_stone && have_air) {
-				content_t c_below = vm->m_data[i - em.X].getContent();
+			if (c == c_stone) {
+				content_t c_below = vm->m_data[vi - em.X].getContent();
 
-				if (c_below != CONTENT_AIR) {
-					if (nplaced < y0_top) {
-						vm->m_data[i] = MapNode(biome->c_top);
-						nplaced++;
-					} else if (nplaced < y0_filler && nplaced >= y0_top) {
-						vm->m_data[i] = MapNode(biome->c_filler);
-						nplaced++;
-					} else if (c == c_stone) {
-						have_air = false;
-						nplaced  = 0;
-						vm->m_data[i] = MapNode(biome->c_stone);
-					} else {
-						have_air = false;
-						nplaced  = 0;
-					}
-				} else if (c == c_stone) {
-					have_air = false;
-					nplaced = 0;
-					vm->m_data[i] = MapNode(biome->c_stone);
+				// If the node below isn't solid, make this node stone, so that
+				// any top/filler nodes above are structurally supported.
+				// This is done by aborting the cycle of top/filler placement
+				// immediately by forcing nplaced to stone level.
+				if (c_below == CONTENT_AIR || c_below == c_water_source)
+					nplaced = (u16)-1;
+
+				if (nplaced < depth_top) {
+					vm->m_data[vi] = MapNode(biome->c_top);
+					nplaced++;
+				} else if (nplaced < base_filler) {
+					vm->m_data[vi] = MapNode(biome->c_filler);
+					nplaced++;
+				} else {
+					vm->m_data[vi] = MapNode(biome->c_stone);
 				}
-			} else if (c == c_stone) {
-				have_air = false;
-				nplaced = 0;
-				vm->m_data[i] = MapNode(biome->c_stone);
+
+				air_above = false;
 			} else if (c == c_water_source) {
-				have_air = true;
-				nplaced = 0;
-				if (y > water_level - depth_water_top)
-					vm->m_data[i] = MapNode(biome->c_water_top);
-				else
-					vm->m_data[i] = MapNode(biome->c_water);
+				vm->m_data[vi] = MapNode((y > (s32)(water_level - depth_water_top)) ?
+						biome->c_water_top : biome->c_water);
+				nplaced = 0;  // Enable top/filler placement for next surface
+				air_above = false;  // Biome is not recalculated underwater
 			} else if (c == CONTENT_AIR) {
-				have_air = true;
-				nplaced = 0;
+				nplaced = 0;  // Enable top/filler placement for next surface
+				air_above = true;  // Biome will be recalculated at next surface
+			} else {  // Possible various nodes overgenerated from neighbouring mapchunks
+				nplaced = (u16)-1;  // Disable top/filler placement
+				air_above = false;
 			}
 
-			vm->m_area.add_y(em, i, -1);
+			vm->m_area.add_y(em, vi, -1);
 		}
 	}
 
-	return desert_stone;
+	return stone_type;
 }
 
 
@@ -524,18 +540,19 @@ void MapgenV5::generateCaves(int max_stone_y)
 		for (s16 y=node_min.Y - 1; y<=node_max.Y + 1; y++) {
 			u32 i = vm->m_area.index(node_min.X, y, z);
 			for (s16 x=node_min.X; x<=node_max.X; x++, i++, index++, index2d++) {
-				Biome *biome = (Biome *)bmgr->get(biomemap[index2d]);
-				content_t c = vm->m_data[i].getContent();
-				if (c == CONTENT_AIR
-						|| (y <= water_level
-						&& c != biome->c_stone
-						&& c != c_stone))
-					continue;
-
 				float d1 = contour(noise_cave1->result[index]);
 				float d2 = contour(noise_cave2->result[index]);
-				if (d1*d2 > 0.125)
+				if (d1*d2 > 0.125) {
+					Biome *biome = (Biome *)bmgr->getRaw(biomemap[index2d]);
+					content_t c = vm->m_data[i].getContent();
+					if (!ndef->get(c).is_ground_content || c == CONTENT_AIR ||
+							(y <= water_level &&
+							c != biome->c_stone &&
+							c != c_stone))
+						continue;
+
 					vm->m_data[i] = MapNode(CONTENT_AIR);
+				}
 			}
 			index2d -= ystride;
 		}
@@ -546,7 +563,7 @@ void MapgenV5::generateCaves(int max_stone_y)
 		return;
 
 	PseudoRandom ps(blockseed + 21343);
-	u32 bruises_count = (ps.range(1, 5) == 1) ? ps.range(1, 2) : 0;
+	u32 bruises_count = (ps.range(1, 4) == 1) ? ps.range(1, 2) : 0;
 	for (u32 i = 0; i < bruises_count; i++) {
 		CaveV5 cave(this, &ps);
 		cave.makeCave(node_min, node_max, max_stone_y);
@@ -564,7 +581,7 @@ void MapgenV5::dustTopNodes()
 
 	for (s16 z = node_min.Z; z <= node_max.Z; z++)
 	for (s16 x = node_min.X; x <= node_max.X; x++, index++) {
-		Biome *biome = (Biome *)bmgr->get(biomemap[index]);
+		Biome *biome = (Biome *)bmgr->getRaw(biomemap[index]);
 
 		if (biome->c_dust == CONTENT_IGNORE)
 			continue;

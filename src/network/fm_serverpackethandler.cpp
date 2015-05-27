@@ -26,7 +26,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "content_abm.h"
 #include "content_sao.h"
 #include "emerge.h"
-#include "main.h"
 #include "nodedef.h"
 #include "player.h"
 #include "rollback_interface.h"
@@ -43,16 +42,20 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "profiler.h"
 #include "ban.h"
 
+#include "../util/auth.h"
+
 
 //todo: split as in serverpackethandler.cpp
 
-void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
+void Server::ProcessData(NetworkPacket *pkt)
 {
 	DSTACK(__FUNCTION_NAME);
 	// Environment is locked first.
 	//JMutexAutoLock envlock(m_env_mutex);
 
 	ScopeProfiler sp(g_profiler, "Server::ProcessData");
+
+	auto peer_id = pkt->getPeerId();
 
 	std::string addr_s;
 	try{
@@ -86,13 +89,16 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 	try
 	{
 
+	auto datasize = pkt->getSize();
+
 	if(datasize < 2)
 		return;
 
 	int command;
-	std::map<int, msgpack::object> packet;
+	MsgpackPacket packet;
 	msgpack::unpacked msg;
-	if (!con::parse_msgpack_packet(data, datasize, &packet, &command, &msg)) {
+	if (!con::parse_msgpack_packet(pkt->getString(0), datasize, &packet, &command, &msg)) {
+		verbosestream<<"Server: Ignoring broken packet from " <<addr_s<<" (peer_id="<<peer_id<<")"<<std::endl;
 		return;
 	}
 
@@ -123,7 +129,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		// First byte after command is maximum supported
 		// serialization version
 		u8 client_max;
-		packet[TOSERVER_INIT_FMT].convert(&client_max);
+		packet[TOSERVER_INIT_LEGACY_FMT].convert(&client_max);
 		u8 our_max = SER_FMT_VER_HIGHEST_READ;
 		// Use the highest version supported by both
 		int deployed = std::min(client_max, our_max);
@@ -152,9 +158,13 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		*/
 
 		u16 min_net_proto_version = 0;
-		packet[TOSERVER_INIT_PROTOCOL_VERSION_MIN].convert(&min_net_proto_version);
+		packet[TOSERVER_INIT_LEGACY_PROTOCOL_VERSION_MIN].convert(&min_net_proto_version);
 		u16 max_net_proto_version = min_net_proto_version;
-		packet[TOSERVER_INIT_PROTOCOL_VERSION_MAX].convert(&max_net_proto_version);
+		packet[TOSERVER_INIT_LEGACY_PROTOCOL_VERSION_MAX].convert(&max_net_proto_version);
+
+		if (packet.count(TOSERVER_INIT_LEGACY_PROTOCOL_VERSION_FM)) {
+			packet[TOSERVER_INIT_LEGACY_PROTOCOL_VERSION_FM].convert(&client->net_proto_version_fm);
+		}
 
 		// Start with client's maximum version
 		u16 net_proto_version = max_net_proto_version;
@@ -225,7 +235,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 
 		// Get player name
 		std::string playername;
-		packet[TOSERVER_INIT_NAME].convert(&playername);
+		packet[TOSERVER_INIT_LEGACY_NAME].convert(&playername);
 
 		if(playername.empty())
 		{
@@ -253,7 +263,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 
 		{
 			std::string reason;
-			if(m_script->on_prejoinplayer(playername, addr_s, reason))
+			if(m_script->on_prejoinplayer(playername, addr_s, &reason))
 			{
 				actionstream<<"Server: Player with the name \""<<playername<<"\" "
 						<<"tried to connect from "<<addr_s<<" "
@@ -269,7 +279,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 
 		// Get password
 		std::string given_password;
-		packet[TOSERVER_INIT_PASSWORD].convert(&given_password);
+		packet[TOSERVER_INIT_LEGACY_PASSWORD].convert(&given_password);
 
 		if(!base64_is_valid(given_password.c_str())){
 			actionstream<<"Server: "<<playername
@@ -352,7 +362,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			Answer with a TOCLIENT_INIT
 		*/
 		{
-			MSGPACK_PACKET_INIT(TOCLIENT_INIT, 4);
+			MSGPACK_PACKET_INIT(TOCLIENT_INIT_LEGACY, 5);
 			PACK(TOCLIENT_INIT_DEPLOYED, deployed);
 			PACK(TOCLIENT_INIT_SEED, m_env->getServerMap().getSeed());
 			PACK(TOCLIENT_INIT_STEP, g_settings->getFloat("dedicated_server_step"));
@@ -364,9 +374,11 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			m_emerge->params.save(params);
 			PACK(TOCLIENT_INIT_MAP_PARAMS, params);
 
+			PACK(TOCLIENT_INIT_PROTOCOL_VERSION_FM, SERVER_PROTOCOL_VERSION_FM);
+
 			// Send as reliable
 			m_clients.send(peer_id, 0, buffer, true);
-			m_clients.event(peer_id, CSE_Init);
+			m_clients.event(peer_id, CSE_InitLegacy);
 		}
 
 		return;
@@ -484,11 +496,18 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			m_con.DisconnectPeer(peer_id);
 			return;
 		}
+		int version_patch = 0, version_tweak = 0;
+		if (packet.count(TOSERVER_CLIENT_READY_VERSION_PATCH))
+			version_patch = packet[TOSERVER_CLIENT_READY_VERSION_PATCH].as<int>();
+		if (packet.count(TOSERVER_CLIENT_READY_VERSION_TWEAK))
+			version_tweak = packet[TOSERVER_CLIENT_READY_VERSION_TWEAK].as<int>();
+		if (version_tweak) {} //no warn todo remove
 		m_clients.setClientVersion(
 			peer_id,
 			packet[TOSERVER_CLIENT_READY_VERSION_MAJOR].as<int>(),
 			packet[TOSERVER_CLIENT_READY_VERSION_MINOR].as<int>(),
-			0, // packet[TOSERVER_CLIENT_READY_VERSION_PATCH].as<int>(), TODO
+			version_patch,
+			//version_tweak,
 			packet[TOSERVER_CLIENT_READY_VERSION_STRING].as<std::string>()
 		);
 		m_clients.event(peer_id, CSE_SetClientReady);
@@ -538,6 +557,8 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		player->setYaw(modulo360f(packet[TOSERVER_PLAYERPOS_YAW].as<f32>()));
 		u32 keyPressed = packet[TOSERVER_PLAYERPOS_KEY_PRESSED].as<u32>();
 		player->keyPressed = keyPressed;
+		{
+		std::lock_guard<std::mutex> lock(player->control_mutex);
 		player->control.up = (bool)(keyPressed&1);
 		player->control.down = (bool)(keyPressed&2);
 		player->control.left = (bool)(keyPressed&4);
@@ -547,7 +568,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		player->control.sneak = (bool)(keyPressed&64);
 		player->control.LMB = (bool)(keyPressed&128);
 		player->control.RMB = (bool)(keyPressed&256);
-
+		}
 		auto old_pos = playersao->m_last_good_position;
 		if(playersao->checkMovementCheat()){
 			// Call callbacks
@@ -565,8 +586,10 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			auto uptime = m_uptime.get();
 			if (!obj->m_uptime_last)  // not very good place, but minimum modifications
 				obj->m_uptime_last = uptime - 0.1;
-			obj->step(uptime - obj->m_uptime_last, true); //todo: maybe limit count per time
-			obj->m_uptime_last = uptime;
+			if (uptime - obj->m_uptime_last > 0.5) {
+				obj->step(uptime - obj->m_uptime_last, true); //todo: maybe limit count per time
+				obj->m_uptime_last = uptime;
+			}
 		}
 
 		/*infostream<<"Server::ProcessData(): Moved player "<<peer_id<<" to "
@@ -615,8 +638,8 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 			ma->from_inv.applyCurrentPlayer(player->getName());
 			ma->to_inv.applyCurrentPlayer(player->getName());
 
-			setInventoryModified(ma->from_inv);
-			setInventoryModified(ma->to_inv);
+			setInventoryModified(ma->from_inv, false);
+			setInventoryModified(ma->to_inv, false);
 
 			bool from_inv_is_current_player =
 				(ma->from_inv.type == InventoryLocation::PLAYER) &&
@@ -673,7 +696,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 
 			da->from_inv.applyCurrentPlayer(player->getName());
 
-			setInventoryModified(da->from_inv);
+			setInventoryModified(da->from_inv, false);
 
 			/*
 				Disable dropping items out of craftpreview
@@ -704,7 +727,7 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 
 			ca->craft_inv.applyCurrentPlayer(player->getName());
 
-			setInventoryModified(ca->craft_inv);
+			setInventoryModified(ca->craft_inv, false);
 
 			//bool craft_inv_is_current_player =
 			//	(ca->craft_inv.type == InventoryLocation::PLAYER) &&
@@ -725,6 +748,9 @@ void Server::ProcessData(u8 *data, u32 datasize, u16 peer_id)
 		a->apply(this, playersao, this);
 		// Eat the action
 		delete a;
+
+		SendInventory(playersao);
+
 	}
 	else if(command == TOSERVER_CHAT_MESSAGE)
 	{

@@ -36,6 +36,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "settings.h"
 #include "emerge.h"
+#include "profiler.h"
 
 
 // TODO! split to packethandlers
@@ -44,20 +45,19 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 /*
 	sender_peer_id given to this shall be quaranteed to be a valid peer
 */
-void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
+void Client::ProcessData(NetworkPacket *pkt) {
 	DSTACK(__FUNCTION_NAME);
 
-	// Ignore packets that don't even fit a command
-	if (datasize < 2) {
-		m_packetcounter.add(60000);
-		return;
-	}
+	ScopeProfiler sp(g_profiler, "Client::ProcessData");
+
+	auto datasize = pkt->getSize();
+	auto sender_peer_id = pkt->getPeerId();
 
 	int command;
 	MsgpackPacket packet;
 	msgpack::unpacked msg;
 
-	if (!con::parse_msgpack_packet(data, datasize, &packet, &command, &msg)) {
+	if (!con::parse_msgpack_packet(pkt->getString(0), datasize, &packet, &command, &msg)) {
 		// invalid packet
 		return;
 	}
@@ -81,7 +81,7 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 
 	//infostream<<"Client received command="<<(int)command<<std::endl;
 
-	if(command == TOCLIENT_INIT)
+	if(command == TOCLIENT_INIT_LEGACY)
 	{
 		u8 deployed;
 		packet[TOCLIENT_INIT_DEPLOYED].convert(&deployed);
@@ -118,6 +118,9 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 			m_localserver->getEmergeManager()->params.load(settings);
 		}
 
+		//if (packet.count(TOCLIENT_INIT_PROTOCOL_VERSION_FM))
+		//	packet[TOCLIENT_INIT_PROTOCOL_VERSION_FM].convert( not used );
+
 		// Reply to server
 		MSGPACK_PACKET_INIT(TOSERVER_INIT2, 0);
 		m_con.Send(PEER_ID_SERVER, 1, buffer, true);
@@ -151,7 +154,8 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 	// there's no sane reason why we shouldn't have a player and
 	// almost everyone needs a player reference
 	Player *player = m_env.getLocalPlayer();
-	assert(player != NULL);
+	if(!player)
+		return;
 
 	if(command == TOCLIENT_REMOVENODE)
 	{
@@ -171,6 +175,7 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 		v3s16 p = packet[TOCLIENT_BLOCKDATA_POS].as<v3s16>();
 		s8 step = 1;
 		packet[TOCLIENT_BLOCKDATA_STEP].convert(&step);
+
 		if (step == 1) {
 
 		std::istringstream istr(packet[TOCLIENT_BLOCKDATA_DATA].as<std::string>(), std::ios_base::binary);
@@ -182,17 +187,15 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 		if (new_block)
 			block = new MapBlock(&m_env.getMap(), p, this);
 
+		if (packet.count(TOCLIENT_BLOCKDATA_CONTENT_ONLY))
+			block->content_only = packet[TOCLIENT_BLOCKDATA_CONTENT_ONLY].as<content_t>();
+
 		block->deSerialize(istr, ser_version, false);
 		s32 h; // for convert to atomic
 		packet[TOCLIENT_BLOCKDATA_HEAT].convert(&h);
 		block->heat = h;
 		packet[TOCLIENT_BLOCKDATA_HUMIDITY].convert(&h);
 		block->humidity = h;
-
-
-		if (packet.count(TOCLIENT_BLOCKDATA_CONTENT_ONLY))
-			block->content_only = packet[TOCLIENT_BLOCKDATA_CONTENT_ONLY].as<content_t>();
-
 
 		if (m_localserver != NULL) {
 			m_localserver->getMap().saveBlock(block);
@@ -206,8 +209,10 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 			//Add it to mesh update queue and set it to be acknowledged after update.
 		*/
 		//infostream<<"Adding mesh update task for received block "<<p<<std::endl;
-		if (!block->content_only || block->content_only != CONTENT_AIR) {
-			updateMeshTimestampWithEdge(p);
+		updateMeshTimestampWithEdge(p);
+		if (block->content_only != CONTENT_IGNORE && block->content_only != CONTENT_AIR) {
+			if (getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p) <= 1)
+				addUpdateMeshTaskWithEdge(p);
 		}
 
 /*
@@ -226,7 +231,8 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 		std::string datastring = packet[TOCLIENT_INVENTORY_DATA].as<std::string>();
 		std::istringstream is(datastring, std::ios_base::binary);
 		Player *player = m_env.getLocalPlayer();
-		assert(player != NULL);
+		if(!player)
+			return;
 
 		player->inventory.deSerialize(is);
 
@@ -295,7 +301,9 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 	else if(command == TOCLIENT_HP)
 	{
 		Player *player = m_env.getLocalPlayer();
-		assert(player != NULL);
+		if(!player)
+			return;
+
 		u8 oldhp = player->hp;
 		u8 hp = packet[TOCLIENT_HP_HP].as<u8>();
 		player->hp = hp;
@@ -317,7 +325,9 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 	else if(command == TOCLIENT_MOVE_PLAYER)
 	{
 		Player *player = m_env.getLocalPlayer();
-		assert(player != NULL);
+		if(!player)
+			return;
+
 		v3f pos = packet[TOCLIENT_MOVE_PLAYER_POS].as<v3f>();
 		f32 pitch = packet[TOCLIENT_MOVE_PLAYER_PITCH].as<f32>();
 		f32 yaw = packet[TOCLIENT_MOVE_PLAYER_YAW].as<f32>();
@@ -599,8 +609,8 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 	}
 	else if(command == TOCLIENT_HUDADD)
 	{
-		std::string datastring((char *)&data[2], datasize - 2);
-		std::istringstream is(datastring, std::ios_base::binary);
+		//std::string datastring((char *)&data[2], datasize - 2);
+		//std::istringstream is(datastring, std::ios_base::binary);
 
 		u32 id, number, item, dir;
 		u8 type;
@@ -686,7 +696,8 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 	else if(command == TOCLIENT_HUD_SET_FLAGS)
 	{
 		Player *player = m_env.getLocalPlayer();
-		assert(player != NULL);
+		if(!player)
+			return;
 
 		u32 flags = packet[TOCLIENT_HUD_SET_FLAGS_FLAGS].as<u32>();
 		u32 mask = packet[TOCLIENT_HUD_SET_FLAGS_MASK].as<u32>();
@@ -753,7 +764,8 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 	else if(command == TOCLIENT_LOCAL_PLAYER_ANIMATIONS)
 	{
 		LocalPlayer *player = m_env.getLocalPlayer();
-		assert(player != NULL);
+		if(!player)
+			return;
 
 		packet[TOCLIENT_LOCAL_PLAYER_ANIMATIONS_IDLE].convert(&player->local_animations[0]);
 		packet[TOCLIENT_LOCAL_PLAYER_ANIMATIONS_WALK].convert(&player->local_animations[1]);
@@ -764,7 +776,8 @@ void Client::ProcessData(u8 *data, u32 datasize, u16 sender_peer_id) {
 	else if(command == TOCLIENT_EYE_OFFSET)
 	{
 		LocalPlayer *player = m_env.getLocalPlayer();
-		assert(player != NULL);
+		if(!player)
+			return;
 
 		packet[TOCLIENT_EYE_OFFSET_FIRST].convert(&player->eye_offset_first);
 		packet[TOCLIENT_EYE_OFFSET_THIRD].convert(&player->eye_offset_third);

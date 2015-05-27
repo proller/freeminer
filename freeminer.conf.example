@@ -118,7 +118,7 @@
 #    Disable for speed or for different looks.
 #smooth_lighting = true
 #    Adjust the gamma encoding for the light tables. Valid values are in the range
-#    1.1 to 3.0 (inclusive); lower numbers are brighter.  This setting is for the
+#    1.0 to 3.0 (inclusive); lower numbers are brighter.  This setting is for the
 #    client only and is ignored by the server
 #display_gamma = 1.8
 # Path to texture directory. All textures are first searched from here.
@@ -144,6 +144,9 @@
 #    Enable/disable clouds
 #enable_clouds = true
 #cloud_height = 120
+#    Radius of cloud area stated in number of 64 node cloud squares.
+#    Values larger than 26 will start to produce sharp cutoffs at cloud area corners.
+#cloud_radius = 12
 #enable_3d_clouds = true
 #    Use a cloud animation for the main menu background
 #menu_clouds = true
@@ -174,6 +177,19 @@
 #crosshair_alpha = 255
 #    Scale gui by a user specified value
 #gui_scaling = 1.0
+#    Use a nearest-neighbor-anti-alias filter to scale the GUI.
+#    This will smooth over some of the rough edges, and blend
+#    pixels when scaling down, at the cost of blurring some
+#    edge pixels when images are scaled by non-integer sizes.
+#gui_scaling_filter = false
+#    When gui_scaling_filter is true, all GUI images need to be
+#    filtered in software, but some images are generated directly
+#    to hardware (e.g. render-to-texture for nodes in inventory).
+#    When gui_scaling_filter_txr2img is true, copy those images
+#    from hardware to software for scaling.  When false, fall back
+#    to the old scaling method, for video drivers that don't
+#    propery support downloading textures back from hardware.
+#gui_scaling_filter_txr2img = true
 #    Sensitivity multiplier
 #mouse_sensitivity = 0.2
 #    Sound settings
@@ -287,17 +303,6 @@
 #fallback_font_size = 15
 #fallback_font_shadow = 1
 #fallback_font_shadow_alpha = 128
-#    Override language. When no value is provided (default) system language is used.
-#    Check "locale" directory for the list of available translations.
-#language =
-#main_menu_script =
-#main_menu_game_mgr = 0
-#main_menu_mod_mgr = 1
-#modstore_download_url = https://forum.minetest.net/media/
-#modstore_listmods_url = https://forum.minetest.net/mmdb/mods/
-#modstore_details_url  = https://forum.minetest.net/mmdb/mod/*/
-#    Makes DirectX work with LuaJIT. Disable if it causes troubles.
-#high_precision_fpu = true
 
 #
 #    Server stuff
@@ -398,9 +403,6 @@
 #    Controls length of day/night cycle.
 #    72=20min, 360=4min, 1=24hour, 0=day/night/whatever stays unchanged.
 #time_speed = 72
-#    Length of year in days for seasons change.
-#    With default time_speed 365 days = 5 real days for year, 30 days = 10 real hours.
-#year_days = 30
 #server_unload_unused_data_timeout = 29
 #    Maximum number of statically stored objects in a block
 #max_objects_per_block = 49
@@ -439,12 +441,24 @@
 #    try reducing it, but don't reduce it to a number below double of targeted
 #    client number.
 #max_packets_per_iteration = 1024
+
 #    Enable/disable IPv6
 #enable_ipv6 = true
 #    Enable/disable running an IPv6 server.  An IPv6 server may be restricted
 #    to IPv6 clients, depending on system configuration.
 #    Ignored if bind_address is set.
 #ipv6_server = false
+#main_menu_script =
+#main_menu_game_mgr = 0
+#main_menu_mod_mgr = 1
+#modstore_download_url = https://forum.minetest.net/media/
+#modstore_listmods_url = https://forum.minetest.net/mmdb/mods/
+#modstore_details_url  = https://forum.minetest.net/mmdb/mod/*/
+#    Makes DirectX work with LuaJIT. Disable if it causes troubles.
+#high_precision_fpu = true
+#    Override language. When no value is provided (default) system language is used.
+#    Check "locale" directory for the list of available translations.
+#language =
 
 #
 #    Physics stuff
@@ -478,21 +492,28 @@
 #    Global map generation attributes.  Currently supported: trees, caves, flat, dungeons, light.
 #    Flags that are not specified in the flag string are not modified from the default.
 #    To explicitly turn off a flag, prepend "no" to the beginning, e.g. nolight.
-#mg_flags = trees, caves
-#    Map generation attributes specific to Mapgen V6.
-#    Currently supported: biomeblend, jungles, mudflow.
-#mgv6_spflags = biomeblend, jungles, mudflow
-#    Controls size of deserts and beaches in Mapgen V6
-#mgv6_freq_desert = 0.45
-#mgv6_freq_beach = 0.15
+#mg_flags = trees, caves, dungeons, light
 #    Enable/disable floating dungeons and dungeon slices
 #enable_floating_dungeons = true
+
+#    Map generation attributes specific to Mapgen V6.
+#    Currently supported: jungles, biomeblend, mudflow, snowbiomes.
+#    When snowbiomes are enabled jungles are enabled and the jungles flag is ignored.
+#mgv6_spflags = jungles, biomeblend, mudflow, snowbiomes
+#    Controls size of deserts and beaches in Mapgen V6
+#    When snowbiomes are enabled 'mgv6_freq_desert' is ignored.
+#mgv6_freq_desert = 0.45
+#mgv6_freq_beach = 0.15
+
+#    Map generation attributes specific to Mapgen V7.
+#    Currently supported: mountains, ridges.
+#mgv7_spflags = mountains, ridges
 
 #    Perlin noise attributes for different map generation parameters.
 #    Noise parameters can be specified as a set of positional values:
 #    Offset, scale, (spread factors), seed offset, number of octaves, persistence, lacunarity.
 #mgv6_np_terrain_base = -4, 20, (250, 250, 250), 82341, 5, 0.6, 2.0
-#    Or the new group format can be used instead:
+#    Or the new group format can be used instead, for example:
 #mgv6_np_terrain_base = {
 #    offset      = -4
 #    scale       = 20
@@ -506,6 +527,10 @@
 #    Only the group format supports noise flags which are needed for eased noise.
 #    Mgv5 uses eased noise for np_ground so this is shown in group format,
 #    other noise parameters are shown in positional format to save space.
+
+#    Noise parameters for biome API temperature and humidity
+#mg_biome_np_heat = 50, 50, (750, 750, 750), 5349, 3, 0.5, 2.0
+#mg_biome_np_humidity = 50, 50, (750, 750, 750), 842, 3, 0.5, 2.0
 
 #mgv5_np_filler_depth = 0, 1, (150, 150, 150), 261, 4, 0.7, 2.0
 #mgv5_np_factor = 0, 1, (250, 250, 250), 920381, 3, 0.45, 2.0
@@ -523,28 +548,25 @@
 #    flags       = "eased"
 #}
 
-#mgv6_spflags = biomeblend, jungles, mudflow
 #mgv6_np_terrain_base = -4, 20, (250, 250, 250), 82341, 5, 0.6, 2.0
 #mgv6_np_terrain_higher = 20, 16, (500, 500, 500), 85039, 5, 0.6, 2.0
 #mgv6_np_steepness = 0.85, 0.5, (125, 125, 125), -932, 5, 0.7, 2.0
 #mgv6_np_height_select = 0.5, 1, (250, 250, 250), 4213, 5, 0.69, 2.0
 #mgv6_np_mud = 4, 2, (200, 200, 200), 91013, 3, 0.55, 2.0
 #mgv6_np_beach = 0, 1, (250, 250, 250), 59420, 3, 0.50, 2.0
-#mgv6_np_biome = 0, 1, (250, 250, 250), 9130, 3, 0.50, 2.0
+#mgv6_np_biome = 0, 1, (500, 500, 500), 9130, 3, 0.50, 2.0
 #mgv6_np_cave = 6, 6, (250, 250, 250), 34329, 3, 0.50, 2.0
-#mgv6_np_humidity = 0.5, 0.5, (500, 500, 500), 72384, 4, 0.66, 2.0
+#mgv6_np_humidity = 0.5, 0.5, (500, 500, 500), 72384, 3, 0.50, 2.0
 #mgv6_np_trees = 0, 1, (125, 125, 125), 2, 4, 0.66, 2.0
 #mgv6_np_apple_trees = 0, 1, (100, 100, 100), 342902, 3, 0.45, 2.0
 
-#mgv7_spflags = mountains, ridges
-
-#mgv7_np_terrain_base = 4, 70, (300, 300, 300), 82341, 6, 0.7, 2.0
+#mgv7_np_terrain_base = 4, 70, (600, 600, 600), 82341, 6, 0.7, 2.0
 #mgv7_np_terrain_alt = 4, 25, (600, 600, 600), 5934, 5, 0.6, 2.0
 #mgv7_np_terrain_persist = 0.6, 0.1, (500, 500, 500), 539, 3, 0.6, 2.0
-#mgv7_np_height_select = -0.5, 1, (250, 250, 250), 4213, 5, 0.69, 2.0
+#mgv7_np_height_select = -12, 24, (500, 500, 500), 4213, 6, 0.69, 2.0
 #mgv7_np_filler_depth = 0, 1.2, (150, 150, 150), 261, 4, 0.7, 2.0
-#mgv7_np_mount_height = 100, 30, (500, 500, 500), 72449, 4, 0.6, 2.0
-#mgv7_np_ridge_uwater = 0, 1, (500, 500, 500), 85039, 4, 0.6, 2.0
+#mgv7_np_mount_height = 184, 72, (500, 500, 500), 72449, 4, 0.6, 2.0
+#mgv7_np_ridge_uwater = 0, 1, (1000, 1000, 1000), 85039, 5, 0.6, 2.0
 #mgv7_np_mountain = -0.6, 1, (250, 350, 250), 5333, 5, 0.68, 2.0
 #mgv7_np_ridge = 0, 1, (100, 100, 100), 6467, 4, 0.75, 2.0
 #mgv7_np_cave1 = 0, 12, (100, 100, 100), 52534, 4, 0.5, 2.0
@@ -684,3 +706,10 @@
 # Animation range for model when walking and digging
 #animation_wd_start = 200
 #animation_wd_stop = 219
+
+#    Prevent mods from doing insecure things like running shell commands.
+#secure.enable_security = false
+#    Comma-separated list of trusted mods that are allowed to access insecure
+#    functions even when mod security is on (via request_insecure_environment()).
+#secure.trusted_mods =
+
