@@ -359,32 +359,38 @@ Server::Server(
 	infostream<<"Server: Initializing Lua"<<std::endl;
 
 	m_script = new GameScripting(this);
-	
-	std::string scriptpath = getBuiltinLuaPath() + DIR_DELIM "init.lua";
 
-	if (!m_script->loadScript(scriptpath))
-		throw ModError("Failed to load and run " + scriptpath);
+	std::string script_path = getBuiltinLuaPath() + DIR_DELIM "init.lua";
 
-	// Print 'em
-	infostream<<"Server: Loading mods: ";
-	for(std::vector<ModSpec>::iterator i = m_mods.begin();
-			i != m_mods.end(); i++){
-		const ModSpec &mod = *i;
-		infostream<<mod.name<<" ";
+	if (!m_script->loadMod(script_path, BUILTIN_MOD_NAME)) {
+		throw ModError("Failed to load and run " + script_path);
 	}
-	infostream<<std::endl;
-	// Load and run "mod" scripts
+
+	// Print mods
+	infostream << "Server: Loading mods: ";
 	for(std::vector<ModSpec>::iterator i = m_mods.begin();
 			i != m_mods.end(); i++){
 		const ModSpec &mod = *i;
-		std::string scriptpath = mod.path + DIR_DELIM + "init.lua";
-		infostream<<"  ["<<padStringRight(mod.name, 12)<<"] [\""
-				<<scriptpath<<"\"]"<<std::endl;
-		bool success = m_script->loadMod(scriptpath, mod.name);
-		if(!success){
-			errorstream<<"Server: Failed to load and run "
-					<<scriptpath<<std::endl;
-			throw ModError("Failed to load and run "+scriptpath);
+		infostream << mod.name << " ";
+	}
+	infostream << std::endl;
+	// Load and run "mod" scripts
+	for (std::vector<ModSpec>::iterator i = m_mods.begin();
+			i != m_mods.end(); i++) {
+		const ModSpec &mod = *i;
+		if (!string_allowed(mod.name, MODNAME_ALLOWED_CHARS)) {
+			errorstream << "Error loading mod \"" << mod.name
+					<< "\": mod_name does not follow naming conventions: "
+					<< "Only chararacters [a-z0-9_] are allowed." << std::endl;
+			throw ModError("Mod \"" + mod.name + "\" does not follow naming conventions.");
+		}
+		std::string script_path = mod.path + DIR_DELIM "init.lua";
+		infostream << "  [" << padStringRight(mod.name, 12) << "] [\""
+				<< script_path << "\"]" << std::endl;
+		if (!m_script->loadMod(script_path, mod.name)) {
+			errorstream << "Server: Failed to load and run "
+					<< script_path << std::endl;
+			throw ModError("Failed to load and run " + script_path);
 		}
 	}
 
@@ -396,6 +402,11 @@ Server::Server(
 
 	if (!simple_singleplayer_mode)
 		m_nodedef->updateTextures(this);
+
+	// Apply texture overrides from texturepack/override.txt
+	std::string texture_path = g_settings->get("texture_path");
+	if (texture_path != "" && fs::IsDir(texture_path))
+		m_nodedef->applyTextureOverrides(texture_path + DIR_DELIM + "override.txt");
 
 	m_nodedef->setNodeRegistrationStatus(true);
 
@@ -551,6 +562,9 @@ void Server::start(Address bind_addr)
 #endif
 			<< " cpp="<<__cplusplus<<" \t"
 			<< " cores="<< porting::getNumberOfProcessors()
+#if __ANDROID__
+			<< " android=" << porting::android_version_sdk_int
+#endif
 			<< std::endl;
 	actionstream<<"World at ["<<m_path_world<<"]"<<std::endl;
 	actionstream<<"Server for gameid=\""<<m_gamespec.id
@@ -1313,16 +1327,16 @@ PlayerSAO* Server::StageTwoClientInit(u16 peer_id)
 		static_cast<RemotePlayer*>(m_env->getPlayer(playername));
 
 	// If failed, cancel
-	if((playersao == NULL) || (player == NULL)) {
-		if(player && player->peer_id != 0) {
-			errorstream<<"Server: "<<playername<<": Failed to emerge player"
-					<<" (player allocated to an another client)"<<std::endl;
+	if ((playersao == NULL) || (player == NULL)) {
+		if (player && player->peer_id != 0) {
+			actionstream << "Server: Failed to emerge player \"" << playername
+					<< "\" (player allocated to an another client)" << std::endl;
 			DenyAccess_Legacy(peer_id, L"Another client is connected with this "
 					L"name. If your client closed unexpectedly, try again in "
 					L"a minute.");
 		} else {
-			errorstream<<"Server: "<<playername<<": Failed to emerge player"
-					<<std::endl;
+			errorstream << "Server: " << playername << ": Failed to emerge player"
+					<< std::endl;
 			DenyAccess_Legacy(peer_id, L"Could not allocate player.");
 		}
 		return NULL;
@@ -1466,9 +1480,12 @@ void Server::ProcessData(NetworkPacket *pkt)
 		}
 
 		handleCommand(pkt);
-	}
-	catch(SendFailedException &e) {
+	} catch (SendFailedException &e) {
 		errorstream << "Server::ProcessData(): SendFailedException: "
+				<< "what=" << e.what()
+				<< std::endl;
+	} catch (PacketError &e) {
+		actionstream << "Server::ProcessData(): PacketError: "
 				<< "what=" << e.what()
 				<< std::endl;
 	}
@@ -1556,7 +1573,7 @@ void Server::setInventoryModified(const InventoryLocation &loc, bool playerSend)
 
 		MapBlock *block = m_env->getMap().getBlockNoCreateNoEx(blockpos);
 		if(block)
-			block->raiseModified(MOD_STATE_WRITE_NEEDED, "inventoryModified");
+			block->raiseModified(MOD_STATE_WRITE_NEEDED, MOD_REASON_REPORT_META_CHANGE);
 
 		setBlockNotSent(blockpos);
 	}
@@ -2806,6 +2823,16 @@ void Server::RespawnPlayer(u16 peer_id)
 	stat.add("respawn", playersao->getPlayer()->getName());
 }
 
+#if MINETEST_PROTO
+void Server::DenySudoAccess(u16 peer_id)
+{
+	DSTACK(__FUNCTION_NAME);
+
+	NetworkPacket pkt(TOCLIENT_DENY_SUDO_MODE, 0, peer_id);
+	Send(&pkt);
+}
+#endif
+
 void Server::DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason)
 {
 	DSTACK(__FUNCTION_NAME);
@@ -2826,6 +2853,39 @@ void Server::DenyAccess_Legacy(u16 peer_id, const std::wstring &custom_reason)
 {
     DenyAccess(peer_id, SERVER_ACCESSDENIED_CUSTOM_STRING, wide_to_narrow(custom_reason));
 }
+
+#if MINETEST_PROTO
+void Server::acceptAuth(u16 peer_id, bool forSudoMode)
+{
+	DSTACK(__FUNCTION_NAME);
+
+	if (!forSudoMode) {
+		RemoteClient* client = getClient(peer_id, CS_Invalid);
+
+		NetworkPacket resp_pkt(TOCLIENT_AUTH_ACCEPT, 1 + 6 + 8 + 4, peer_id);
+
+		// Right now, the auth mechs don't change between login and sudo mode.
+		u32 sudo_auth_mechs = client->allowed_auth_mechs;
+		client->allowed_sudo_mechs = sudo_auth_mechs;
+
+		resp_pkt << v3f(0,0,0) << (u64) m_env->getServerMap().getSeed()
+				<< g_settings->getFloat("dedicated_server_step")
+				<< sudo_auth_mechs;
+
+		Send(&resp_pkt);
+		m_clients.event(peer_id, CSE_AuthAccept);
+	} else {
+		NetworkPacket resp_pkt(TOCLIENT_ACCEPT_SUDO_MODE, 1 + 6 + 8 + 4, peer_id);
+
+		// We only support SRP right now
+		u32 sudo_auth_mechs = AUTH_MECHANISM_FIRST_SRP;
+
+		resp_pkt << sudo_auth_mechs;
+		Send(&resp_pkt);
+		m_clients.event(peer_id, CSE_SudoSuccess);
+	}
+}
+#endif
 
 void Server::DeleteClient(u16 peer_id, ClientDeletionReason reason)
 {
@@ -3440,9 +3500,9 @@ IWritableCraftDefManager* Server::getWritableCraftDefManager()
 	return m_craftdef;
 }
 
-const ModSpec* Server::getModSpec(const std::string &modname)
+const ModSpec* Server::getModSpec(const std::string &modname) const
 {
-	for(std::vector<ModSpec>::iterator i = m_mods.begin();
+	for(std::vector<ModSpec>::const_iterator i = m_mods.begin();
 			i != m_mods.end(); i++){
 		const ModSpec &mod = *i;
 		if(mod.name == modname)

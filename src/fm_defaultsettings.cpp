@@ -44,6 +44,14 @@ const bool win32 =
 #endif
     ;
 
+const bool android =
+#if defined(__ANDROID__)
+    true
+#else
+    false
+#endif
+    ;
+
 void set_default_settings(Settings *settings) {
 	//
 	// Client and server
@@ -134,7 +142,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("keymap_inventory", "KEY_KEY_I");
 	settings->setDefault("keymap_special1", "KEY_KEY_E");
 	settings->setDefault("keymap_chat", "KEY_KEY_T");
-	settings->setDefault("keymap_msg", "@");
+	//settings->setDefault("keymap_msg", "@");
 	settings->setDefault("keymap_cmd", "/");
 #if IRRLICHT_VERSION_10000  >= 10703
 	settings->setDefault("keymap_console", "KEY_OEM_3");
@@ -255,6 +263,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("enable_clouds", "true");
 	settings->setDefault("enable_3d_clouds", "true");
 	settings->setDefault("cloud_height", "300");
+	settings->setDefault("cloud_radius", "36");
 	settings->setDefault("new_style_water", "false");
 	settings->setDefault("opaque_water", "false");
 	settings->setDefault("connected_glass", "false");
@@ -300,6 +309,7 @@ void set_default_settings(Settings *settings) {
 
 	// Weather
 	settings->setDefault("weather", "true");
+	settings->setDefault("weather_biome", "false");
 	settings->setDefault("weather_heat_season", "30");
 	settings->setDefault("weather_heat_daily", "8");
 	settings->setDefault("weather_heat_width", "3000");
@@ -372,6 +382,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("server_url", "");
 	settings->setDefault("enable_remote_media_server", "true");
 	settings->setDefault("remote_media", "");
+	settings->setDefault("timeout_mul", android ? "10" : "1");
 
 	// Check when player joins
 	settings->setDefault("strict_protocol_version_checking", "false");
@@ -423,18 +434,21 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("emergequeue_limit_generate", ""); // autodetect from number of cpus
 	settings->setDefault("emergequeue_limit_total", ""); // autodetect from number of cpus
 	settings->setDefault("num_emerge_threads", "");
+	settings->setDefault("secure.enable_security", "false");
+	settings->setDefault("secure.trusted_mods", "");
+
 	// Storage
 	settings->setDefault("server_map_save_interval", "300");
 	settings->setDefault("sqlite_synchronous", "1");
 	settings->setDefault("save_generated_block", "true");
 	// IPv6
-#if ENET_IPV6
+#if (ENET_IPV6 || MINETEST_PROTO)
 	settings->setDefault("enable_ipv6", "true");
 #else
 	settings->setDefault("enable_ipv6", "false");
 #endif
 
-#if !defined(_WIN32) && !USE_IPV4_DEFAULT && ENET_IPV6
+#if !USE_IPV4_DEFAULT && (ENET_IPV6 || MINETEST_PROTO)
 	settings->setDefault("ipv6_server", "true"); // problems on all windows versions (unable to play in local game)
 #else
 	settings->setDefault("ipv6_server", "false");

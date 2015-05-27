@@ -26,8 +26,22 @@ extern "C" {
 }
 
 #include "util/numeric.h"
+#include "util/string.h"
 #include "common/c_converter.h"
 #include "constants.h"
+
+
+#define CHECK_TYPE(index, name, type) do { \
+		int t = lua_type(L, (index)); \
+		if (t != (type)) { \
+			throw LuaError(std::string("Invalid ") + (name) + \
+				" (expected " + lua_typename(L, (type)) + \
+				" got " + lua_typename(L, t) + ")."); \
+		} \
+	} while(0)
+#define CHECK_POS_COORD(name) CHECK_TYPE(-1, "position coordinate '" name "'", LUA_TNUMBER)
+#define CHECK_POS_TAB(index) CHECK_TYPE(index, "position", LUA_TTABLE)
+
 
 void push_v3f(lua_State *L, v3f p)
 {
@@ -52,7 +66,7 @@ void push_v2f(lua_State *L, v2f p)
 v2s16 read_v2s16(lua_State *L, int index)
 {
 	v2s16 p;
-	luaL_checktype(L, index, LUA_TTABLE);
+	CHECK_POS_TAB(index);
 	lua_getfield(L, index, "x");
 	p.X = lua_tonumber(L, -1);
 	lua_pop(L, 1);
@@ -65,12 +79,14 @@ v2s16 read_v2s16(lua_State *L, int index)
 v2s16 check_v2s16(lua_State *L, int index)
 {
 	v2s16 p;
-	luaL_checktype(L, index, LUA_TTABLE);
+	CHECK_POS_TAB(index);
 	lua_getfield(L, index, "x");
-	p.X = luaL_checknumber(L, -1);
+	CHECK_POS_COORD("x");
+	p.X = lua_tonumber(L, -1);
 	lua_pop(L, 1);
 	lua_getfield(L, index, "y");
-	p.Y = luaL_checknumber(L, -1);
+	CHECK_POS_COORD("y");
+	p.Y = lua_tonumber(L, -1);
 	lua_pop(L, 1);
 	return p;
 }
@@ -78,7 +94,7 @@ v2s16 check_v2s16(lua_State *L, int index)
 v2s32 read_v2s32(lua_State *L, int index)
 {
 	v2s32 p;
-	luaL_checktype(L, index, LUA_TTABLE);
+	CHECK_POS_TAB(index);
 	lua_getfield(L, index, "x");
 	p.X = lua_tonumber(L, -1);
 	lua_pop(L, 1);
@@ -91,7 +107,7 @@ v2s32 read_v2s32(lua_State *L, int index)
 v2f read_v2f(lua_State *L, int index)
 {
 	v2f p;
-	luaL_checktype(L, index, LUA_TTABLE);
+	CHECK_POS_TAB(index);
 	lua_getfield(L, index, "x");
 	p.X = lua_tonumber(L, -1);
 	lua_pop(L, 1);
@@ -104,12 +120,14 @@ v2f read_v2f(lua_State *L, int index)
 v2f check_v2f(lua_State *L, int index)
 {
 	v2f p;
-	luaL_checktype(L, index, LUA_TTABLE);
+	CHECK_POS_TAB(index);
 	lua_getfield(L, index, "x");
-	p.X = luaL_checknumber(L, -1);
+	CHECK_POS_COORD("x");
+	p.X = lua_tonumber(L, -1);
 	lua_pop(L, 1);
 	lua_getfield(L, index, "y");
-	p.Y = luaL_checknumber(L, -1);
+	CHECK_POS_COORD("y");
+	p.Y = lua_tonumber(L, -1);
 	lua_pop(L, 1);
 	return p;
 }
@@ -117,7 +135,7 @@ v2f check_v2f(lua_State *L, int index)
 v3f read_v3f(lua_State *L, int index)
 {
 	v3f pos;
-	luaL_checktype(L, index, LUA_TTABLE);
+	CHECK_POS_TAB(index);
 	lua_getfield(L, index, "x");
 	pos.X = lua_tonumber(L, -1);
 	lua_pop(L, 1);
@@ -133,17 +151,33 @@ v3f read_v3f(lua_State *L, int index)
 v3f check_v3f(lua_State *L, int index)
 {
 	v3f pos;
-	luaL_checktype(L, index, LUA_TTABLE);
+	CHECK_POS_TAB(index);
 	lua_getfield(L, index, "x");
-	pos.X = luaL_checknumber(L, -1);
+	CHECK_POS_COORD("x");
+	pos.X = lua_tonumber(L, -1);
 	lua_pop(L, 1);
 	lua_getfield(L, index, "y");
-	pos.Y = luaL_checknumber(L, -1);
+	CHECK_POS_COORD("y");
+	pos.Y = lua_tonumber(L, -1);
 	lua_pop(L, 1);
 	lua_getfield(L, index, "z");
-	pos.Z = luaL_checknumber(L, -1);
+	CHECK_POS_COORD("z");
+	pos.Z = lua_tonumber(L, -1);
 	lua_pop(L, 1);
 	return pos;
+}
+
+void push_ARGB8(lua_State *L, video::SColor color)
+{
+	lua_newtable(L);
+	lua_pushnumber(L, color.getAlpha());
+	lua_setfield(L, -2, "a");
+	lua_pushnumber(L, color.getRed());
+	lua_setfield(L, -2, "r");
+	lua_pushnumber(L, color.getGreen());
+	lua_setfield(L, -2, "g");
+	lua_pushnumber(L, color.getBlue());
+	lua_setfield(L, -2, "b");
 }
 
 void pushFloatPos(lua_State *L, v3f p)
@@ -182,13 +216,31 @@ v3s16 check_v3s16(lua_State *L, int index)
 	return floatToInt(pf, 1.0);
 }
 
-video::SColor readARGB8(lua_State *L, int index)
+bool read_color(lua_State *L, int index, video::SColor *color)
+{
+	if (lua_istable(L, index)) {
+		*color = read_ARGB8(L, index);
+	} else if (lua_isnumber(L, index)) {
+		color->set(lua_tonumber(L, index));
+	} else if (lua_isstring(L, index)) {
+		video::SColor parsed_color;
+		if (!parseColorString(lua_tostring(L, index), parsed_color, true))
+			return false;
+
+		*color = parsed_color;
+	} else {
+		return false;
+	}
+
+	return true;
+}
+
+video::SColor read_ARGB8(lua_State *L, int index)
 {
 	video::SColor color(0);
-	luaL_checktype(L, index, LUA_TTABLE);
+	CHECK_TYPE(index, "ARGB color", LUA_TTABLE);
 	lua_getfield(L, index, "a");
-	if(lua_isnumber(L, -1))
-		color.setAlpha(lua_tonumber(L, -1));
+	color.setAlpha(lua_isnumber(L, -1) ? lua_tonumber(L, -1) : 0xFF);
 	lua_pop(L, 1);
 	lua_getfield(L, index, "r");
 	color.setRed(lua_tonumber(L, -1));
@@ -315,6 +367,19 @@ bool getintfield(lua_State *L, int table,
 }
 
 bool getintfield(lua_State *L, int table,
+		const char *fieldname, u8 &result)
+{
+	lua_getfield(L, table, fieldname);
+	bool got = false;
+	if(lua_isnumber(L, -1)){
+		result = lua_tonumber(L, -1);
+		got = true;
+	}
+	lua_pop(L, 1);
+	return got;
+}
+
+bool getintfield(lua_State *L, int table,
 		const char *fieldname, u16 &result)
 {
 	lua_getfield(L, table, fieldname);
@@ -381,9 +446,11 @@ std::string checkstringfield(lua_State *L, int table,
 		const char *fieldname)
 {
 	lua_getfield(L, table, fieldname);
-	std::string s = luaL_checkstring(L, -1);
+	CHECK_TYPE(-1, std::string("field \"") + fieldname + '"', LUA_TSTRING);
+	size_t len;
+	const char *s = lua_tolstring(L, -1, &len);
 	lua_pop(L, 1);
-	return s;
+	return std::string(s, len);
 }
 
 std::string getstringfield_default(lua_State *L, int table,
@@ -446,10 +513,6 @@ void setboolfield(lua_State *L, int table,
 }
 
 
-
-
-
-
 v2s16 read_v2POS(lua_State *L, int index) {
 	v2POS p;
 	luaL_checktype(L, index, LUA_TTABLE);
@@ -484,3 +547,95 @@ v3POS check_v3POS(lua_State *L, int index) {
 	return floatToInt(pf, 1.0);
 }
 
+////
+//// Array table slices
+////
+
+size_t write_array_slice_float(
+	lua_State *L,
+	int table_index,
+	float *data,
+	v3u16 data_size,
+	v3u16 slice_offset,
+	v3u16 slice_size)
+{
+	v3u16 pmin, pmax(data_size);
+
+	if (slice_offset.X > 0) {
+		slice_offset.X--;
+		pmin.X = slice_offset.X;
+		pmax.X = MYMIN(slice_offset.X + slice_size.X, data_size.X);
+	}
+
+	if (slice_offset.Y > 0) {
+		slice_offset.Y--;
+		pmin.Y = slice_offset.Y;
+		pmax.Y = MYMIN(slice_offset.Y + slice_size.Y, data_size.Y);
+	}
+
+	if (slice_offset.Z > 0) {
+		slice_offset.Z--;
+		pmin.Z = slice_offset.Z;
+		pmax.Z = MYMIN(slice_offset.Z + slice_size.Z, data_size.Z);
+	}
+
+	const u32 ystride = data_size.X;
+	const u32 zstride = data_size.X * data_size.Y;
+
+	u32 elem_index = 1;
+	for (u32 z = pmin.Z; z != pmax.Z; z++)
+	for (u32 y = pmin.Y; y != pmax.Y; y++)
+	for (u32 x = pmin.X; x != pmax.X; x++) {
+		u32 i = z * zstride + y * ystride + x;
+		lua_pushnumber(L, data[i]);
+		lua_rawseti(L, table_index, elem_index);
+		elem_index++;
+	}
+
+	return elem_index - 1;
+}
+
+
+size_t write_array_slice_u16(
+	lua_State *L,
+	int table_index,
+	u16 *data,
+	v3u16 data_size,
+	v3u16 slice_offset,
+	v3u16 slice_size)
+{
+	v3u16 pmin, pmax(data_size);
+
+	if (slice_offset.X > 0) {
+		slice_offset.X--;
+		pmin.X = slice_offset.X;
+		pmax.X = MYMIN(slice_offset.X + slice_size.X, data_size.X);
+	}
+
+	if (slice_offset.Y > 0) {
+		slice_offset.Y--;
+		pmin.Y = slice_offset.Y;
+		pmax.Y = MYMIN(slice_offset.Y + slice_size.Y, data_size.Y);
+	}
+
+	if (slice_offset.Z > 0) {
+		slice_offset.Z--;
+		pmin.Z = slice_offset.Z;
+		pmax.Z = MYMIN(slice_offset.Z + slice_size.Z, data_size.Z);
+	}
+
+	const u32 ystride = data_size.X;
+	const u32 zstride = data_size.X * data_size.Y;
+
+	u32 elem_index = 1;
+	for (u32 z = pmin.Z; z != pmax.Z; z++)
+	for (u32 y = pmin.Y; y != pmax.Y; y++)
+	for (u32 x = pmin.X; x != pmax.X; x++) {
+		u32 i = z * zstride + y * ystride + x;
+		lua_pushinteger(L, data[i]);
+		lua_rawseti(L, table_index, elem_index);
+		elem_index++;
+	}
+
+	return elem_index - 1;
+}

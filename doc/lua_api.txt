@@ -782,29 +782,26 @@ Schematic specifier
 --------------------
 A schematic specifier identifies a schematic by either a filename to a
 Minetest Schematic file (`.mts`) or through raw data supplied through Lua,
-in the form of a table.  This table must specify two fields:
+in the form of a table.  This table specifies the following fields:
 
-* The `size` field is a 3D vector containing the dimensions of the provided schematic.
-* The `data` field is a flat table of MapNodes making up the schematic,
-  in the order of `[z [y [x]]]`.
+* The `size` field is a 3D vector containing the dimensions of the provided schematic. (required)
+* The `yslice_prob` field is a table of {ypos, prob} which sets the `ypos`th vertical slice
+  of the schematic to have a `prob / 256 * 100` chance of occuring. (default: 255)
+* The `data` field is a flat table of MapNode tables making up the schematic,
+  in the order of `[z [y [x]]]`. (required)
+  Each MapNode table contains:
+  * `name`: the name of the map node to place (required)
+  * `prob` (alias `param1`): the probability of this node being placed (default: 255)
+  * `param2`: the raw param2 value of the node being placed onto the map (default: 0)
+  * `force_place`: boolean representing if the node should forcibly overwrite any
+     previous contents (default: false)
 
-**Important**: The default value for `param1` in MapNodes here is `255`,
-which represents "always place".
-
-In the bulk `MapNode` data, `param1`, instead of the typical light values,
-instead represents the probability of that node appearing in the structure.
-
-When passed to `minetest.create_schematic`, probability is an integer value
-ranging from `0` to `255`:
-
-* A probability value of `0` means that node will never appear (0% chance).
-* A probability value of `255` means the node will always appear (100% chance).
-* If the probability value `p` is greater than `0`, then there is a
-  `(p / 256 * 100)`% chance that node will appear when the schematic is
+About probability values:
+* A probability value of `0` or `1` means that node will never appear (0% chance).
+* A probability value of `254` or `255` means the node will always appear (100% chance).
+* If the probability value `p` is greater than `1`, then there is a
+  `(p / 256 * 100)` percent chance that node will appear when the schematic is
   placed on the map.
-
-**Important note**: Node aliases cannot be used for a raw schematic provided
-  when registering as a decoration.
 
 
 Schematic attributes
@@ -1610,6 +1607,16 @@ To specify the value of the alpha channel, append `#AA` to the end of the color 
 (e.g. `colorname#08`). For named colors the hexadecimal string representing the alpha
 value must (always) be two hexadecimal digits.
 
+`ColorSpec`
+-----------
+A ColorSpec specifies a 32-bit color.  It can be written in either:
+table form, each element ranging from 0..255 (a, if absent, defaults to 255):
+    `colorspec = {a=255, r=0, g=255, b=0}`
+numerical form, the raw integer value of an ARGB8 quad:
+    `colorspec = 0xFF00FF00`
+or string form, a ColorString (defined above):
+    `colorspec = "green"`
+
 Vector helpers
 --------------
 
@@ -1677,36 +1684,41 @@ Helper functions
     * Useful for storing custom data
 * `minetest.is_singleplayer()`
 * `minetest.features`
-    * table containing API feature flags: `{foo=true, bar=true}`
+    * Table containing API feature flags: `{foo=true, bar=true}`
 * `minetest.has_feature(arg)`: returns `boolean, missing_features`
     * `arg`: string or table in format `{foo=true, bar=true}`
     * `missing_features`: `{foo=true, bar=true}`
-* `minetest.get_player_information(playername)`
-    * table containing information about player peer.
-
-Example of `minetest.get_player_information` return value:
-
-    {
-        address = "127.0.0.1",     -- IP address of client
-        ip_version = 4,            -- IPv4 / IPv6
-        min_rtt = 0.01,            -- minimum round trip time
-        max_rtt = 0.2,             -- maximum round trip time
-        avg_rtt = 0.02,            -- average round trip time
-        min_jitter = 0.01,         -- minimum packet time jitter
-        max_jitter = 0.5,          -- maximum packet time jitter
-        avg_jitter = 0.03,         -- average packet time jitter
-        connection_uptime = 200,   -- seconds since client connected
-
-        -- following information is available on debug build only!!!
-        -- DO NOT USE IN MODS
-        --ser_vers = 26,             -- serialization version used by client
-        --prot_vers = 23,            -- protocol version used by client
-        --major = 0,                 -- major version number
-        --minor = 4,                 -- minor version number
-        --patch = 10,                -- patch version number
-        --vers_string = "0.4.9-git", -- full version string
-        --state = "Active"           -- current client state
-    }
+* `minetest.get_player_information(player_name)`: returns a table containing
+  information about player. Example return value:
+        {
+            address = "127.0.0.1",     -- IP address of client
+            ip_version = 4,            -- IPv4 / IPv6
+            min_rtt = 0.01,            -- minimum round trip time
+            max_rtt = 0.2,             -- maximum round trip time
+            avg_rtt = 0.02,            -- average round trip time
+            min_jitter = 0.01,         -- minimum packet time jitter
+            max_jitter = 0.5,          -- maximum packet time jitter
+            avg_jitter = 0.03,         -- average packet time jitter
+            connection_uptime = 200,   -- seconds since client connected
+    
+            -- following information is available on debug build only!!!
+            -- DO NOT USE IN MODS
+            --ser_vers = 26,             -- serialization version used by client
+            --prot_vers = 23,            -- protocol version used by client
+            --major = 0,                 -- major version number
+            --minor = 4,                 -- minor version number
+            --patch = 10,                -- patch version number
+            --vers_string = "0.4.9-git", -- full version string
+            --state = "Active"           -- current client state
+        }
+* `minetest.mkdir(path)`: returns success.
+    * Creates a directory specified by `path`, creating parent directories
+      if they don't exist.
+* `minetest.get_dir_list(path, [is_dir])`: returns list of entry names
+    * is_dir is one of:
+      * nil: return all entries,
+      * true: return only subdirectory names, or
+      * false: return only file names.
 
 ### Logging
 * `minetest.debug(line)`
@@ -1763,6 +1775,16 @@ Call these functions only at load time!
      * Called after a new player has been created
 * `minetest.register_on_dieplayer(func(ObjectRef))`
      * Called when a player dies
+* `minetest.register_on_punchplayer(func(player, hitter, time_from_last_punch, tool_capabilities, dir, damage))`
+     * Called when a player is punched
+     * `player` - ObjectRef - Player that was punched
+     * `hitter` - ObjectRef - Player that hit
+     * `time_from_last_punch`: Meant for disallowing spamming of clicks (can be nil)
+     * `tool_capabilities`: capability table of used tool (can be nil)
+     * `dir`: unit vector of direction of punch. Always defined. Points from
+       the puncher to the punched.
+     * `damage` - number that represents the damage calculated by the engine
+     * should return `true` to prevent the default damage mechanism
 * `minetest.register_on_respawnplayer(func(ObjectRef))`
      * Called when player is to be respawned
      * Called _before_ repositioning of player occurs
@@ -1818,8 +1840,12 @@ Call these functions only at load time!
 
 ### Setting-related
 * `minetest.setting_set(name, value)`
+    * Setting names can't contain whitespace or any of `="{}#`.
+    * Setting values can't contain the sequence `\n"""`.
+    * Setting names starting with "secure." can't be set.
 * `minetest.setting_get(name)`: returns string or `nil`
 * `minetest.setting_setbool(name, value)`
+    * See documentation on `setting_set` for restrictions.
 * `minetest.setting_getbool(name)`: returns boolean or `nil`
 * `minetest.setting_get_pos(name)`: returns position or nil
 * `minetest.setting_save()`, returns `nil`, save all settings to config file
@@ -1871,6 +1897,8 @@ and `minetest.auth_reload` call the authetification handler.
 * `minetest.punch_node(pos)`
     * Punch node with the same effects that a player would cause
 
+* `minetest.find_nodes_with_meta(pos1, pos2)`
+    * Get a table of positions of nodes that have metadata within a region {pos1, pos2}
 * `minetest.get_meta(pos)`
     * Get a `NodeMetaRef` at that position
 * `minetest.get_node_timer(pos)`
@@ -2176,17 +2204,10 @@ These functions return the leftover itemstack.
     * "mts" - a string containing the binary MTS data used in the MTS file format
     * "lua" - a string containing Lua code representing the schematic in table format
     * `options` is a table containing the following optional parameters:
-    * If `use_comments` is true and `format` is "lua", the Lua code generated will have (X, Z)
+    * If `lua_use_comments` is true and `format` is "lua", the Lua code generated will have (X, Z)
     * position comments for every X row generated in the schematic data for easier reading.
-    * If `register_after_load` is true, then `schematic`, if not yet loaded, will be registered
-    * after loading and persist in memory.
-    * node_resolve_method can be one of either "none", "direct", or "deferred" (default: "none")
-    * This sets the way method by with node names are mapped to their content IDs, if loaded:
-    * "none" performs no node resolution and preserves all node names from the schematic definition
-    * "direct" performs an immediate lookup of content ID, given all the nodes that have been
-    * registered up to this point in script execution
-    * "deferred" pends node resolution until after the script registration phase has ended
-    * In practice, it is recommended to use "none" in nearly all use cases.
+    * If `lua_num_indent_spaces` is a nonzero number and `format` is "lua", the Lua code generated
+    * will use that number of spaces as indentation instead of a tab character.
 
 ### Misc.
 * `minetest.get_connected_players()`: returns list of `ObjectRefs`
@@ -2198,6 +2219,10 @@ These functions return the leftover itemstack.
     * Get rating of a group of an item. (`0` means: not in group)
 * `minetest.get_node_group(name, group)`: returns a rating
     * Deprecated: An alias for the former.
+* `minetest.raillike_group(name)`: returns a rating
+    * Returns rating of the connect_to_raillike group corresponding to name
+    * If name is not yet the name of a connect_to_raillike group, a new group id
+    * is created, with that name
 * `minetest.get_content_id(name)`: returns an integer
     * Gets the internal content ID of `name`
 * `minetest.get_name_from_content_id(content_id)`: returns a string
@@ -2272,32 +2297,35 @@ These functions return the leftover itemstack.
           the floor or ceiling
         * The first four options are mutually-exclusive; the last in the list takes
           precedence over the first.
-
-
-
 * `minetest.rotate_node(itemstack, placer, pointed_thing)`
-     * calls `rotate_and_place()` with infinitestacks set according to the state of
+    * calls `rotate_and_place()` with infinitestacks set according to the state of
        the creative mode setting, and checks for "sneak" to set the `invert_wall`
        parameter.
 
 * `minetest.forceload_block(pos)`
     * forceloads the position `pos`.
     * returns `true` if area could be forceloaded
+    * Please note that forceloaded areas are saved when the server restarts.
 
 * `minetest.forceload_free_block(pos)`
     * stops forceloading the position `pos`
 
-Please note that forceloaded areas are saved when the server restarts.
+* `minetest.request_insecure_environment()`: returns an environment containing
+  insecure functions if the calling mod has been listed as trusted in the
+  `secure.trusted_mods` setting or security is disabled, otherwise returns `nil`.
+    * Only works at init time.
+    * **DO NOT ALLOW ANY OTHER MODS TO ACCESS THE RETURNED ENVIRONMENT, STORE IT IN
+      A LOCAL VARIABLE!**
 
-minetest.global_exists(name)
-^ Checks if a global variable has been set, without triggering a warning.
+* `minetest.global_exists(name)`
+    * Checks if a global variable has been set, without triggering a warning.
 
 ### Global objects
 * `minetest.env`: `EnvRef` of the server environment and world.
     * Any function in the minetest namespace can be called using the syntax
      `minetest.env:somefunction(somearguments)`
      instead of `minetest.somefunction(somearguments)`
-   * Deprecated, but support is not to be dropped soon
+    * Deprecated, but support is not to be dropped soon
 
 ### Global tables
 * `minetest.registered_items`
@@ -2395,6 +2423,7 @@ This is basically a reference to a C++ `ServerActiveObject`
     * `position`: `{x=num, y=num, z=num}` (relative)
     * `rotation`: `{x=num, y=num, z=num}`
 * `set_properties(object property table)`
+* `is_player()`: returns true for players, false otherwise
 
 ##### LuaEntitySAO-only (no-op for other objects)
 * `setvelocity({x=num, y=num, z=num})`
@@ -2412,7 +2441,6 @@ This is basically a reference to a C++ `ServerActiveObject`
 * `get_luaentity()`
 
 ##### Player-only (no-op for other objects)
-* `is_player()`: true for players, false for others
 * `get_player_name()`: returns `""` if is not a player
 * `get_look_dir()`: get camera direction as a unit vector
 * `get_look_pitch()`: pitch in radians
@@ -2463,7 +2491,7 @@ This is basically a reference to a C++ `ServerActiveObject`
     * `name`: `"breath"` or `"health"`
     * `hud_definition`: definition to replace builtin definition
 * `set_sky(bgcolor, type, {texture names})`
-    * `bgcolor`: `{r=0...255, g=0...255, b=0...255}` or `nil`, defaults to white
+    * `bgcolor`: ColorSpec, defaults to white
     * Available types:
         * `"regular"`: Uses 0 textures, `bgcolor` ignored
         * `"skybox"`: Uses 6 textures, `bgcolor` used
@@ -2486,6 +2514,17 @@ This is basically a reference to a C++ `ServerActiveObject`
 * `set_eye_offset({x=0,y=0,z=0},{x=0,y=0,z=0})`: defines offset value for camera per player
     * in first person view
     * in third person view (max. values `{x=-10/10,y=-10,15,z=-5/5}`)
+* `get_nametag_attributes()`
+    * returns a table with the attributes of the nametag of the player
+    * {
+        color = {a=0..255, r=0..255, g=0..255, b=0..255},
+      }
+* `set_nametag_attributes(attributes)`
+    * sets the attributes of the nametag of the player
+    * `attributes`:
+      {
+        color = ColorSpec,
+      }
 
 ### `InvRef`
 An `InvRef` is a reference to an inventory.
@@ -2601,14 +2640,30 @@ Format of `size` is `{x=dimx, y=dimy, z=dimz}`.  The `z` conponent is ommitted
 for 2D noise, and it must be must be larger than 1 for 3D noise (otherwise
 `nil` is returned).
 
+For each of the functions with an optional `buffer` parameter:  If `buffer` is not
+nil, this table will be used to store the result instead of creating a new table.
+
+
 #### Methods
 * `get2dMap(pos)`: returns a `<size.x>` times `<size.y>` 2D array of 2D noise
   with values starting at `pos={x=,y=}`
 * `get3dMap(pos)`: returns a `<size.x>` times `<size.y>` times `<size.z>` 3D array
   of 3D noise with values starting at `pos={x=,y=,z=}`
-* `get2dMap_flat(pos)`: returns a flat `<size.x * size.y>` element array of 2D noise
+* `get2dMap_flat(pos, buffer)`: returns a flat `<size.x * size.y>` element array of 2D noise
   with values starting at `pos={x=,y=}`
-* `get3dMap_flat(pos)`: Same as `get2dMap_flat`, but 3D noise
+* `get3dMap_flat(pos, buffer)`: Same as `get2dMap_flat`, but 3D noise
+* `calc2dMap(pos)`: Calculates the 2d noise map starting at `pos`.  The result is stored internally.
+* `calc3dMap(pos)`: Calculates the 3d noise map starting at `pos`.  The result is stored internally.
+* `getMapSlice(slice_offset, slice_size, buffer)`: In the form of an array, returns a slice of the
+  most recently computed noise results.  The result slice begins at coordinates `slice_offset` and
+  takes a chunk of `slice_size`.
+  E.g. to grab a 2-slice high horizontal 2d plane of noise starting at buffer offset y = 20:
+  `noisevals = noise:getMapSlice({y=20}, {y=2})`
+  It is important to note that `slice_offset` offset coordinates begin at 1, and are relative to
+  the starting position of the most recently calculated noise.
+  To grab a single vertical column of noise starting at map coordinates x = 1023, y=1000, z = 1000:
+  `noise:calc3dMap({x=1000, y=1000, z=1000})`
+  `noisevals = noise:getMapSlice({x=24, z=1}, {x=1, z=1})`
 
 ### `VoxelManip`
 An interface to the `MapVoxelManipulator` for Lua.
@@ -2626,8 +2681,9 @@ The map will be pre-loaded if two positions are passed to either.
   the `VoxelManip` at that position
 * `set_node_at(pos, node)`: Sets a specific `MapNode` in the `VoxelManip` at
   that position
-* `get_data()`: Gets the data read into the `VoxelManip` object
-    * returns raw node data is in the form of an array of node content IDs
+* `get_data(buffer)`: Gets the data read into the `VoxelManip` object
+    * returns raw node data in the form of an array of node content IDs
+    * if the param `buffer` is present, this table will be used to store the result instead
 * `set_data(data)`: Sets the data contents of the `VoxelManip` object
 * `update_map()`: Update map after writing chunk back to map.
     * To be used only by `VoxelManip` objects created by the mod itself;
@@ -2994,7 +3050,7 @@ Definition tables
         ^ List can be shortened to needed length ]]
         alpha = 255,
         use_texture_alpha = false, -- Use texture's alpha channel
-        post_effect_color = {a=0, r=0, g=0, b=0}, -- If player is inside node
+        post_effect_color = "green#0F", -- If player is inside node, see "ColorSpec"
         paramtype = "none", -- See "Nodes" --[[
         ^ paramtype = "light" allows light to propagate from or through the node with light value
         ^ falling by 1 per node. This line is essential for a light source node to spread its light. ]]

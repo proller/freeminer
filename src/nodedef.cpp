@@ -39,6 +39,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "exceptions.h"
 #include "debug.h"
 #include "gamedef.h"
+#include <fstream> // Used in applyTextureOverrides()
 
 /*
 	NodeBox
@@ -328,7 +329,7 @@ void ContentFeatures::reset()
 	circuit_element_delay = 0;
 }
 
-void ContentFeatures::serialize(std::ostream &os, u16 protocol_version)
+void ContentFeatures::serialize(std::ostream &os, u16 protocol_version) const
 {
 	if(protocol_version < 24){
 		//serializeOld(os, protocol_version);
@@ -605,10 +606,11 @@ public:
 	virtual content_t set(const std::string &name, const ContentFeatures &def);
 	virtual content_t allocateDummy(const std::string &name);
 	virtual void updateAliases(IItemDefManager *idef);
+	virtual void applyTextureOverrides(const std::string &override_filepath);
 	virtual void updateTextures(IGameDef *gamedef,
-	/*argument: */void (*progress_callback)(void *progress_args, u32 progress, u32 max_progress),
-	/*argument: */void *progress_callback_args);
-	void serialize(std::ostream &os, u16 protocol_version);
+		void (*progress_cbk)(void *progress_args, u32 progress, u32 max_progress),
+		void *progress_cbk_args);
+	void serialize(std::ostream &os, u16 protocol_version) const;
 	void deSerialize(std::istream &is);
 	void msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const;
 	void msgpack_unpack(msgpack::object o);
@@ -616,9 +618,10 @@ public:
 	inline virtual bool getNodeRegistrationStatus() const;
 	inline virtual void setNodeRegistrationStatus(bool completed);
 
-	virtual void pendNodeResolve(NodeResolver *nr, NodeResolveMethod how);
+	virtual void pendNodeResolve(NodeResolver *nr);
 	virtual bool cancelNodeResolveCallback(NodeResolver *nr);
 	virtual void runNodeResolveCallbacks();
+	virtual void resetNodeResolveState();
 
 private:
 	void addNameIdMapping(content_t i, std::string name);
@@ -684,8 +687,7 @@ void CNodeDefManager::clear()
 	m_group_to_items.clear();
 	m_next_id = 0;
 
-	m_node_registration_complete = false;
-	m_pending_resolve_callbacks.clear();
+	resetNodeResolveState();
 
 	u32 initial_length = 0;
 	initial_length = MYMAX(initial_length, CONTENT_UNKNOWN + 1);
@@ -911,7 +913,7 @@ content_t CNodeDefManager::set(const std::string &name, const ContentFeatures &d
 			j = m_group_to_items.find(group_name);
 		if (j == m_group_to_items.end()) {
 			m_group_to_items[group_name].push_back(
-					std::make_pair(id, i->second));
+				std::make_pair(id, i->second));
 		} else {
 			GroupItems &items = j->second;
 			items.push_back(std::make_pair(id, i->second));
@@ -941,7 +943,66 @@ void CNodeDefManager::updateAliases(IItemDefManager *idef)
 		content_t id;
 		if (m_name_id_mapping.getId(convert_to, id)) {
 			m_name_id_mapping_with_aliases.insert(
-					std::make_pair(name, id));
+				std::make_pair(name, id));
+		}
+	}
+}
+
+void CNodeDefManager::applyTextureOverrides(const std::string &override_filepath)
+{
+	infostream << "CNodeDefManager::applyTextureOverrides(): Applying "
+		"overrides to textures from " << override_filepath << std::endl;
+
+	std::ifstream infile(override_filepath.c_str());
+	std::string line;
+	int line_c = 0;
+	while (std::getline(infile, line)) {
+		line_c++;
+		if (trim(line) == "")
+			continue;
+		std::vector<std::string> splitted = str_split(line, ' ');
+		if (splitted.size() != 3) {
+			errorstream << override_filepath
+				<< ":" << line_c << " Could not apply texture override \""
+				<< line << "\": Syntax error" << std::endl;
+			continue;
+		}
+
+		content_t id;
+		if (!getId(splitted[0], id)) {
+			errorstream << override_filepath
+				<< ":" << line_c << " Could not apply texture override \""
+				<< line << "\": Unknown node \""
+				<< splitted[0] << "\"" << std::endl;
+			continue;
+		}
+
+		ContentFeatures &nodedef = m_content_features[id];
+
+		if (splitted[1] == "top")
+			nodedef.tiledef[0].name = splitted[2];
+		else if (splitted[1] == "bottom")
+			nodedef.tiledef[1].name = splitted[2];
+		else if (splitted[1] == "right")
+			nodedef.tiledef[2].name = splitted[2];
+		else if (splitted[1] == "left")
+			nodedef.tiledef[3].name = splitted[2];
+		else if (splitted[1] == "back")
+			nodedef.tiledef[4].name = splitted[2];
+		else if (splitted[1] == "front")
+			nodedef.tiledef[5].name = splitted[2];
+		else if (splitted[1] == "all" || splitted[1] == "*")
+			for (int i = 0; i < 6; i++)
+				nodedef.tiledef[i].name = splitted[2];
+		else if (splitted[1] == "sides")
+			for (int i = 2; i < 6; i++)
+				nodedef.tiledef[i].name = splitted[2];
+		else {
+			errorstream << override_filepath
+				<< ":" << line_c << " Could not apply texture override \""
+				<< line << "\": Unknown node side \""
+				<< splitted[1] << "\"" << std::endl;
+			continue;
 		}
 	}
 }
@@ -1219,7 +1280,7 @@ void CNodeDefManager::fillTileAttribs(ITextureSource *tsrc, TileSpec *tile,
 }
 #endif
 
-void CNodeDefManager::serialize(std::ostream &os, u16 protocol_version)
+void CNodeDefManager::serialize(std::ostream &os, u16 protocol_version) const
 {
 	writeU8(os, 1); // version
 	u16 count = 0;
@@ -1228,7 +1289,7 @@ void CNodeDefManager::serialize(std::ostream &os, u16 protocol_version)
 		if (i == CONTENT_IGNORE || i == CONTENT_AIR
 				|| i == CONTENT_UNKNOWN)
 			continue;
-		ContentFeatures *f = &m_content_features[i];
+		const ContentFeatures *f = &m_content_features[i];
 		if (f->name == "")
 			continue;
 		writeU16(os2, i);
@@ -1375,23 +1436,13 @@ inline void CNodeDefManager::setNodeRegistrationStatus(bool completed)
 }
 
 
-void CNodeDefManager::pendNodeResolve(NodeResolver *nr, NodeResolveMethod how)
+void CNodeDefManager::pendNodeResolve(NodeResolver *nr)
 {
 	nr->m_ndef = this;
-
-	switch (how) {
-	case NODE_RESOLVE_NONE:
-		break;
-	case NODE_RESOLVE_DIRECT:
+	if (m_node_registration_complete)
 		nr->nodeResolveInternal();
-		break;
-	case NODE_RESOLVE_DEFERRED:
-		if (m_node_registration_complete)
-			nr->nodeResolveInternal();
-		else
-			m_pending_resolve_callbacks.push_back(nr);
-		break;
-	}
+	else
+		m_pending_resolve_callbacks.push_back(nr);
 }
 
 
@@ -1423,11 +1474,19 @@ void CNodeDefManager::runNodeResolveCallbacks()
 }
 
 
+void CNodeDefManager::resetNodeResolveState()
+{
+	m_node_registration_complete = false;
+	m_pending_resolve_callbacks.clear();
+}
+
+
 ////
 //// NodeResolver
 ////
 
-NodeResolver::NodeResolver() {
+NodeResolver::NodeResolver()
+{
 	m_ndef            = NULL;
 	m_nodenames_idx   = 0;
 	m_nnlistsizes_idx = 0;
@@ -1458,25 +1517,12 @@ void NodeResolver::nodeResolveInternal()
 }
 
 
-const std::string &NodeResolver::getNodeName(content_t c) const
-{
-	if (m_nodenames.size() == 0) {
-		return m_ndef->get(c).name;
-	} else {
-		if (c < m_nodenames.size())
-			return m_nodenames[c];
-		else
-			return m_ndef->get(CONTENT_UNKNOWN).name;
-	}
-}
-
-
 bool NodeResolver::getIdFromNrBacklog(content_t *result_out,
 	const std::string &node_alt, content_t c_fallback)
 {
 	if (m_nodenames_idx == m_nodenames.size()) {
 		*result_out = c_fallback;
-		errorstream << "Resolver: no more nodes in list" << std::endl;
+		errorstream << "NodeResolver: no more nodes in list" << std::endl;
 		return false;
 	}
 

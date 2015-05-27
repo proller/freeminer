@@ -25,6 +25,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "mapgen.h"
 #include "mapgen_indev.h"
+
+#define BIOMEGEN_BASE_V7 -192
+
 /////////////////// Mapgen V7 flags
 #define MGV7_MOUNTAINS   0x01
 #define MGV7_RIDGES      0x02
@@ -95,23 +98,19 @@ public:
 
 	//freeminer:
 	s16 float_islands;
-	content_t c_dirt_with_snow;
 
 	content_t c_stone;
-	content_t c_dirt;
-	content_t c_dirt_with_grass;
-	content_t c_sand;
 	content_t c_water_source;
 	content_t c_lava_source;
-	content_t c_ice;
-	content_t c_gravel;
-	content_t c_cobble;
-	content_t c_desert_sand;
 	content_t c_desert_stone;
-	content_t c_mossycobble;
-	content_t c_sandbrick;
+	content_t c_ice;
+	content_t c_sandstone;
+
+	content_t c_cobble;
 	content_t c_stair_cobble;
-	content_t c_stair_sandstone;
+	content_t c_mossycobble;
+	content_t c_sandstonebrick;
+	content_t c_stair_sandstonebrick;
 
 	MapgenV7(int mapgenid, MapgenParams *params, EmergeManager *emerge);
 	~MapgenV7();
@@ -132,7 +131,7 @@ public:
 	int generateMountainTerrain(int ymax);
 	void generateRidgeTerrain();
 
-	bool generateBiomes(float *heat_map, float *humidity_map);
+	MgStoneType generateBiomes(float *heat_map, float *humidity_map);
 	void dustTopNodes();
 
 	//void addTopNodes();

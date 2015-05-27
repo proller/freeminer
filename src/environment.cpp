@@ -364,6 +364,7 @@ ServerEnvironment::ServerEnvironment(ServerMap *map,
 {
 	m_game_time = 0;
 	m_use_weather = g_settings->getBool("weather");
+	m_use_weather_biome = g_settings->getBool("weather_biome");
 
 	if (!m_key_value_storage.db)
 		errorstream << "Cant open KV storage: "<< m_key_value_storage.error << std::endl;
@@ -1009,7 +1010,7 @@ void ServerEnvironment::clearAllObjects()
 			if(block){
 				block->m_static_objects.remove(id);
 				block->raiseModified(MOD_STATE_WRITE_NEEDED,
-						"clearAllObjects");
+						MOD_REASON_CLEAR_ALL_OBJECTS);
 				obj->m_static_exists = false;
 			}
 		}
@@ -1062,7 +1063,8 @@ void ServerEnvironment::clearAllObjects()
 			i != loaded_blocks.end(); ++i) {
 		v3s16 p = *i;
 		MapBlock *block = m_map->getBlockNoCreateNoEx(p);
-		assert(block != NULL);
+		if (!block)
+			continue;
 		block->refGrab();
 	}
 
@@ -1088,7 +1090,7 @@ void ServerEnvironment::clearAllObjects()
 			block->m_static_objects.m_stored.clear();
 			block->m_static_objects.m_active.clear();
 			block->raiseModified(MOD_STATE_WRITE_NEEDED,
-					"clearAllObjects");
+				MOD_REASON_CLEAR_ALL_OBJECTS);
 			num_objs_cleared += num_stored + num_active;
 			num_blocks_cleared++;
 		}
@@ -1309,7 +1311,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 /*
 			if(block->getTimestamp() > block->getDiskTimestamp() + 60)
 				block->raiseModified(MOD_STATE_WRITE_AT_UNLOAD,
-						"Timestamp older than 60s (step)");
+					MOD_REASON_BLOCK_EXPIRED);
 */
 
 			// Run node timers
@@ -1485,7 +1487,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		/*
 			Remove objects that satisfy (m_removed && m_known_by_count==0)
 		*/
-		removeRemovedObjects();
+		removeRemovedObjects(max_cycle_ms);
 	}
 }
 
@@ -1498,8 +1500,9 @@ int ServerEnvironment::analyzeBlocks(float dtime, unsigned int max_cycle_ms) {
 		std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> active_blocks_list;
 		//auto active_blocks_list = m_active_blocks.m_list;
 		{
-			auto lock = m_active_blocks.m_list.lock_shared_rec();
-			active_blocks_list = m_active_blocks.m_list;
+			auto lock = m_active_blocks.m_list.try_lock_shared_rec();
+			if (lock->owns_lock())
+				active_blocks_list = m_active_blocks.m_list;
 		}
 
 		for(auto i = active_blocks_list.begin(); i != active_blocks_list.end(); ++i)
@@ -1757,8 +1760,8 @@ void ServerEnvironment::getRemovedActiveObjects(v3s16 pos, s16 radius,
 		ServerActiveObject *object = getActiveObject(id);
 
 		if(object == NULL){
-			infostream<<"ServerEnvironment::getRemovedActiveObjects():"
-					<<" object in current_objects is NULL"<<std::endl;
+			//infostream<<"ServerEnvironment::getRemovedActiveObjects():"
+			//		<<" object in current_objects is NULL"<<std::endl;
 			removed_objects.insert(id);
 			continue;
 		}
@@ -1863,7 +1866,7 @@ u16 ServerEnvironment::addActiveObjectRaw(ServerActiveObject *object,
 
 			if(set_changed)
 				block->raiseModified(MOD_STATE_WRITE_NEEDED,
-						"addActiveObjectRaw");
+					MOD_REASON_ADD_ACTIVE_OBJECT_RAW);
 		} else {
 			v3s16 p = floatToInt(objectpos, BS);
 			errorstream<<"ServerEnvironment::addActiveObjectRaw(): "
@@ -1878,7 +1881,7 @@ u16 ServerEnvironment::addActiveObjectRaw(ServerActiveObject *object,
 /*
 	Remove objects that satisfy (m_removed && m_known_by_count==0)
 */
-void ServerEnvironment::removeRemovedObjects()
+void ServerEnvironment::removeRemovedObjects(unsigned int max_cycle_ms)
 {
 	TimeTaker timer("ServerEnvironment::removeRemovedObjects()");
 	std::list<u16> objects_to_remove;
@@ -1899,6 +1902,7 @@ void ServerEnvironment::removeRemovedObjects()
 		}
 	}
 
+	u32 end_ms = porting::getTimeMs() + max_cycle_ms;
 	if (objects.size())
 	for (auto & obj : objects)
 	{
@@ -1923,7 +1927,7 @@ void ServerEnvironment::removeRemovedObjects()
 			if (block) {
 				block->m_static_objects.remove(id);
 				block->raiseModified(MOD_STATE_WRITE_NEEDED,
-						"removeRemovedObjects/remove");
+					MOD_REASON_REMOVE_OBJECTS_REMOVE);
 				obj->m_static_exists = false;
 			} else {
 				infostream<<"Failed to emerge block from which an object to "
@@ -1948,7 +1952,7 @@ void ServerEnvironment::removeRemovedObjects()
 					block->m_static_objects.m_stored.push_back(i->second);
 					block->m_static_objects.m_active.erase(id);
 					block->raiseModified(MOD_STATE_WRITE_NEEDED,
-							"removeRemovedObjects/deactivate");
+						MOD_REASON_REMOVE_OBJECTS_DEACTIVATE);
 				}
 			} else {
 				infostream<<"Failed to emerge block from which an object to "
@@ -1969,6 +1973,9 @@ void ServerEnvironment::removeRemovedObjects()
 
 		// Id to be removed from m_active_objects
 		objects_to_remove.push_back(id);
+
+		if (porting::getTimeMs() > end_ms)
+			break;
 	}
 
 	if (!objects_to_remove.empty()) {
@@ -2041,8 +2048,7 @@ void ServerEnvironment::activateObjects(MapBlock *block, u32 dtime_s)
 		// Clear stored list
 		block->m_static_objects.m_stored.clear();
 		block->raiseModified(MOD_STATE_WRITE_NEEDED,
-				"stored list cleared in activateObjects due to "
-				"large amount of objects");
+			MOD_REASON_TOO_MANY_OBJECTS);
 		return;
 	}
 
@@ -2185,7 +2191,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 			block->m_static_objects.insert(id, s_obj);
 			obj->m_static_block = blockpos_o;
 			block->raiseModified(MOD_STATE_WRITE_NEEDED,
-					"deactivateFarObjects: Static data moved in");
+				MOD_REASON_STATIC_DATA_ADDED);
 
 			// Delete from block where object was located
 			block = m_map->emergeBlock(old_static_block, false);
@@ -2198,7 +2204,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 			}
 			block->m_static_objects.remove(id);
 			block->raiseModified(MOD_STATE_WRITE_NEEDED,
-					"deactivateFarObjects: Static data moved out");
+				MOD_REASON_STATIC_DATA_REMOVED);
 			continue;
 		}
 
@@ -2267,8 +2273,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 					// Only mark block as modified if data changed considerably
 					if(shall_be_written)
 						block->raiseModified(MOD_STATE_WRITE_NEEDED,
-								"deactivateFarObjects: Static data "
-								"changed considerably");
+							MOD_REASON_STATIC_DATA_CHANGED);
 				}
 			}
 
@@ -2314,8 +2319,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 					// Only mark block as modified if data changed considerably
 					if(shall_be_written)
 						block->raiseModified(MOD_STATE_WRITE_NEEDED,
-								"deactivateFarObjects: Static data "
-								"changed considerably");
+							MOD_REASON_STATIC_DATA_CHANGED);
 
 					obj->m_static_exists = true;
 					obj->m_static_block = block->getPos();
@@ -2976,7 +2980,7 @@ void ClientEnvironment::processActiveObjectMessage(u16 id,
 	ClientActiveObject* obj = getActiveObject(id);
 	if(obj == NULL)
 	{
-		infostream<<"ClientEnvironment::processActiveObjectMessage():"
+		verbosestream<<"ClientEnvironment::processActiveObjectMessage():"
 				<<" got message for id="<<id<<", which doesn't exist."
 				<<std::endl;
 		return;

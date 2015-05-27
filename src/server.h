@@ -206,7 +206,6 @@ public:
 	void handleCommand_Null(NetworkPacket* pkt) {};
 	void handleCommand_Deprecated(NetworkPacket* pkt);
 	void handleCommand_Init(NetworkPacket* pkt);
-	void handleCommand_Auth(NetworkPacket* pkt);
 	void handleCommand_Init_Legacy(NetworkPacket* pkt);
 	void handleCommand_Init2(NetworkPacket* pkt);
 	void handleCommand_RequestMedia(NetworkPacket* pkt);
@@ -226,6 +225,9 @@ public:
 	void handleCommand_RemovedSounds(NetworkPacket* pkt);
 	void handleCommand_NodeMetaFields(NetworkPacket* pkt);
 	void handleCommand_InventoryFields(NetworkPacket* pkt);
+	void handleCommand_FirstSrp(NetworkPacket* pkt);
+	void handleCommand_SrpBytesA(NetworkPacket* pkt);
+	void handleCommand_SrpBytesM(NetworkPacket* pkt);
 
 	void ProcessData(NetworkPacket *pkt);
 
@@ -335,10 +337,10 @@ public:
 	IWritableNodeDefManager* getWritableNodeDefManager();
 	IWritableCraftDefManager* getWritableCraftDefManager();
 
-	const ModSpec* getModSpec(const std::string &modname);
+	const ModSpec* getModSpec(const std::string &modname) const;
 	void getModNames(std::vector<std::string> &modlist);
 	std::string getBuiltinLuaPath();
-	inline std::string getWorldPath()
+	inline std::string getWorldPath() const
 			{ return m_path_world; }
 
 	inline bool isSingleplayer()
@@ -377,11 +379,13 @@ public:
 	void peerAdded(u16 peer_id);
 	void deletingPeer(u16 peer_id, bool timeout);
 
+	void DenySudoAccess(u16 peer_id);
 	void DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason="");
 
 	//fmtodo: remove:
 	void DenyAccess(u16 peer_id, const std::string &reason);
 
+	void acceptAuth(u16 peer_id, bool forSudoMode);
 	void DenyAccess_Legacy(u16 peer_id, const std::wstring &reason);
 
 	bool getClientConInfo(u16 peer_id, con::rtt_stat_type type,float* retval);

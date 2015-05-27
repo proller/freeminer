@@ -1520,14 +1520,13 @@ u32 Map::timerUpdate(float uptime, float unload_timeout,
 			auto lock = block->try_lock_unique_rec();
 			if (!lock->owns_lock())
 				continue;
-			if(block->refGet() == 0 && block->getUsageTimer() > unload_timeout)
+			if(block->getUsageTimer() > unload_timeout) // block->refGet() <= 0 &&
 			{
 				v3s16 p = block->getPos();
 				//infostream<<" deleting block p="<<p<<" ustimer="<<block->getUsageTimer() <<" to="<< unload_timeout<<" inc="<<(uptime - block->m_uptime_timer_last)<<" state="<<block->getModified()<<std::endl;
 				// Save if modified
-				if (block->getModified() != MOD_STATE_CLEAN && save_before_unloading)
-				{
-					//modprofiler.add(block->getModifiedReason(), 1);
+				if (block->getModified() != MOD_STATE_CLEAN && save_before_unloading) {
+					//modprofiler.add(block->getModifiedReasonString(), 1);
 					if(!save_started++)
 						beginSave();
 					if (!saveBlock(block))
@@ -1664,12 +1663,12 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 	if (g_settings->getBool("liquid_real"))
 		return Map::transformLiquidsReal(m_server, max_cycle_ms);
 
+	u32 end_ms = porting::getTimeMs() + max_cycle_ms;
+
 	INodeDefManager *nodemgr = m_gamedef->ndef();
 
 	DSTACK(__FUNCTION_NAME);
 	//TimeTaker timer("transformLiquids()");
-
-	//JMutexAutoLock lock(m_transforming_liquid_mutex);
 
 	u32 loopcount = 0;
 	u32 initial_size = transforming_liquid_size();
@@ -1683,10 +1682,8 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 	// List of MapBlocks that will require a lighting update (due to lava)
 	//std::map<v3s16, MapBlock*> lighting_modified_blocks;
 
-	u32 end_ms = porting::getTimeMs() + max_cycle_ms;
-
 	u32 liquid_loop_max = g_settings->getS32("liquid_loop_max");
-	//u32 loop_max = liquid_loop_max;
+	u32 loop_max = liquid_loop_max;
 
 #if 0
 
@@ -1708,16 +1705,16 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 	while(transforming_liquid_size() != 0)
 	{
 		// This should be done here so that it is done when continue is used
-		if(loopcount >= initial_size || porting::getTimeMs() > end_ms)
+		if(loopcount >= initial_size || loopcount >= loop_max || porting::getTimeMs() > end_ms)
 			break;
 		loopcount++;
 
 		/*
 			Get a queued transforming liquid node
 		*/
-		v3s16 p0 = transforming_liquid_pop();
+		v3POS p0 = transforming_liquid_pop();
 
-		MapNode n0 = getNodeTry(p0);
+		MapNode n0 = getNodeNoEx(p0);
 
 		/*
 			Collect information about current node
@@ -1727,11 +1724,11 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 		LiquidType liquid_type = nodemgr->get(n0).liquid_type;
 		switch (liquid_type) {
 			case LIQUID_SOURCE:
-				liquid_level = n0.getLevel(nodemgr);
+				liquid_level = LIQUID_LEVEL_SOURCE;
 				liquid_kind = nodemgr->getId(nodemgr->get(n0).liquid_alternative_flowing);
 				break;
 			case LIQUID_FLOWING:
-				liquid_level = n0.getLevel(nodemgr);
+				liquid_level = (n0.param2 & LIQUID_LEVEL_MASK);
 				liquid_kind = n0.getContent();
 				break;
 			case LIQUID_NONE:
@@ -1767,7 +1764,7 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 					break;
 			}
 			v3s16 npos = p0 + dirs[i];
-			NodeNeighbor nb(getNodeTry(npos), nt, npos);
+			NodeNeighbor nb(getNodeNoEx(npos), nt, npos);
 			switch (nodemgr->get(nb.n.getContent()).liquid_type) {
 				case LIQUID_NONE:
 					if (nb.n.getContent() == CONTENT_AIR) {
@@ -1811,10 +1808,11 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 					break;
 			}
 		}
+
 		u16 level_max = nodemgr->get(liquid_kind).getMaxLevel(); // source level
 		if (level_max <= 1)
 			continue;
-		level_max -= 1; // source - 1 = max flowing level
+
 		/*
 			decide on the type (and possibly level) of the current node
 		 */
@@ -1830,23 +1828,22 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 			// liquid_kind will be set to either the flowing alternative of the node (if it's a liquid)
 			// or the flowing alternative of the first of the surrounding sources (if it's air), so
 			// it's perfectly safe to use liquid_kind here to determine the new node content.
-			//new_node_content = nodemgr->getId(nodemgr->get(liquid_kind).liquid_alternative_source);
-			//new_node_content = liquid_kind;
-			//max_node_level = level_max + 1;
-			new_node_level = level_max + 1;
+			new_node_content = nodemgr->getId(nodemgr->get(liquid_kind).liquid_alternative_source);
 		} else if (num_sources >= 1 && sources[0].t != NEIGHBOR_LOWER) {
 			// liquid_kind is set properly, see above
-			//new_node_content = liquid_kind;
-			new_node_level = level_max;
+			new_node_content = liquid_kind;
+			max_node_level = new_node_level = LIQUID_LEVEL_MAX;
+			if (new_node_level < (LIQUID_LEVEL_MAX+1-range))
+				new_node_content = CONTENT_AIR;
 		} else {
 			// no surrounding sources, so get the maximum level that can flow into this node
 			for (u16 i = 0; i < num_flows; i++) {
-				u8 nb_liquid_level = (flows[i].n.getLevel(nodemgr));
+				u8 nb_liquid_level = (flows[i].n.param2 & LIQUID_LEVEL_MASK);
 				switch (flows[i].t) {
 					case NEIGHBOR_UPPER:
 						if (nb_liquid_level + WATER_DROP_BOOST > max_node_level) {
-							max_node_level = level_max;
-							if (nb_liquid_level + WATER_DROP_BOOST < level_max)
+							max_node_level = LIQUID_LEVEL_MAX;
+							if (nb_liquid_level + WATER_DROP_BOOST < LIQUID_LEVEL_MAX)
 								max_node_level = nb_liquid_level + WATER_DROP_BOOST;
 						} else if (nb_liquid_level > max_node_level)
 							max_node_level = nb_liquid_level;
@@ -1861,10 +1858,9 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 						break;
 				}
 			}
+
 			u8 viscosity = nodemgr->get(liquid_kind).liquid_viscosity;
 			if (viscosity > 1 && max_node_level != liquid_level) {
-				if (liquid_level < 0)
-					liquid_level = 0;
 				// amount to gain, limited by viscosity
 				// must be at least 1 in absolute value
 				s8 level_inc = max_node_level - liquid_level;
@@ -1878,29 +1874,36 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 					must_reflow.push_back(p0);
 			} else
 				new_node_level = max_node_level;
+
+			if (max_node_level >= (LIQUID_LEVEL_MAX+1-range))
+				new_node_content = liquid_kind;
+			else
+				new_node_content = CONTENT_AIR;
+
 		}
-		new_node_content = liquid_kind;
+
+		if (!new_node_level && nodemgr->get(n0.getContent()).liquid_type == LIQUID_FLOWING)
+			new_node_content = CONTENT_AIR;
+
+		//if (liquid_level == new_node_level || new_node_level < 0)
+		//	continue;
 
 		/*
 			check if anything has changed. if not, just continue with the next node.
 		 */
-/*
 		if (new_node_content == n0.getContent() && (nodemgr->get(n0.getContent()).liquid_type != LIQUID_FLOWING ||
 										 ((n0.param2 & LIQUID_LEVEL_MASK) == (u8)new_node_level &&
 										 ((n0.param2 & LIQUID_FLOW_DOWN_MASK) == LIQUID_FLOW_DOWN_MASK)
 										 == flowing_down)))
-*/
-		if (liquid_level == new_node_level || new_node_level < 0)
 			continue;
 
-//errorstream << " was="<<(int)liquid_level<<" new="<< (int)new_node_level<< " ncon="<< (int)new_node_content << " flodo="<<(int)flowing_down<< " lmax="<<level_max<< " nameNE="<<nodemgr->get(new_node_content).name<<" nums="<<(int)num_sources<<" wasname="<<nodemgr->get(n0).name<<std::endl;
+		//errorstream << " was="<<(int)liquid_level<<" new="<< (int)new_node_level<< " ncon="<< (int)new_node_content << " flodo="<<(int)flowing_down<< " lmax="<<level_max<< " nameNE="<<nodemgr->get(new_node_content).name<<" nums="<<(int)num_sources<<" wasname="<<nodemgr->get(n0).name<<std::endl;
 
 		/*
 			update the current node
 		 */
 		MapNode n00 = n0;
 		//bool flow_down_enabled = (flowing_down && ((n0.param2 & LIQUID_FLOW_DOWN_MASK) != LIQUID_FLOW_DOWN_MASK));
-/*
 		if (nodemgr->get(new_node_content).liquid_type == LIQUID_FLOWING) {
 			// set level to last 3 bits, flowing down bit to 4th bit
 			n0.param2 = (flowing_down ? LIQUID_FLOW_DOWN_MASK : 0x00) | (new_node_level & LIQUID_LEVEL_MASK);
@@ -1908,11 +1911,7 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 			// set the liquid level and flow bit to 0
 			n0.param2 = ~(LIQUID_LEVEL_MASK | LIQUID_FLOW_DOWN_MASK);
 		}
-*/
 		n0.setContent(new_node_content);
-		n0.setLevel(nodemgr, new_node_level); // set air, flowing, source depend on level
-		if (nodemgr->get(n0).liquid_type == LIQUID_FLOWING)
-			n0.param2 |= (flowing_down ? LIQUID_FLOW_DOWN_MASK : 0x00);
 
 		// Find out whether there is a suspect for this action
 		std::string suspect;
@@ -1934,14 +1933,14 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 			m_gamedef->rollback()->reportAction(action);
 		} else {
 			// Set node
-			try{
+			try {
 				setNode(p0, n0);
 			}
-			catch(InvalidPositionException &e)
-			{
-				infostream<<"transformLiquids: setNode() failed:"<<PP(p0)<<":"<<e.what()<<std::endl;
+			catch(InvalidPositionException &e) {
+				infostream<<"transformLiquids: setNode() failed:"<<p0<<":"<<e.what()<<std::endl;
 			}
 		}
+
 		v3s16 blockpos = getNodeBlockPos(p0);
 		MapBlock *block = getBlockNoCreateNoEx(blockpos);
 		if(block != NULL) {
@@ -2035,6 +2034,47 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 	g_profiler->add("Server: liquids processed", loopcount);
 
 	return ret;
+}
+
+std::vector<v3s16> Map::findNodesWithMetadata(v3s16 p1, v3s16 p2)
+{
+	std::vector<v3s16> positions_with_meta;
+
+	sortBoxVerticies(p1, p2);
+	v3s16 bpmin = getNodeBlockPos(p1);
+	v3s16 bpmax = getNodeBlockPos(p2);
+
+	VoxelArea area(p1, p2);
+
+	for (s16 z = bpmin.Z; z <= bpmax.Z; z++)
+	for (s16 y = bpmin.Y; y <= bpmax.Y; y++)
+	for (s16 x = bpmin.X; x <= bpmax.X; x++) {
+		v3s16 blockpos(x, y, z);
+
+		MapBlock *block = getBlockNoCreateNoEx(blockpos);
+		if (!block) {
+			verbosestream << "Map::getNodeMetadata(): Need to emerge "
+				<< PP(blockpos) << std::endl;
+			block = emergeBlock(blockpos, false);
+		}
+		if (!block) {
+			infostream << "WARNING: Map::getNodeMetadata(): Block not found"
+				<< std::endl;
+			continue;
+		}
+
+		v3s16 p_base = blockpos * MAP_BLOCKSIZE;
+		std::vector<v3s16> keys = block->m_node_metadata.getAllKeys();
+		for (size_t i = 0; i != keys.size(); i++) {
+			v3s16 p(keys[i] + p_base);
+			if (!area.contains(p))
+				continue;
+
+			positions_with_meta.push_back(p);
+		}
+	}
+
+	return positions_with_meta;
 }
 
 NodeMetadata *Map::getNodeMetadata(v3s16 p)
@@ -2396,8 +2436,6 @@ void ServerMap::finishBlockMake(BlockMakeData *data,
 			<<blockpos_requested.Y<<","
 			<<blockpos_requested.Z<<")"<<std::endl;*/
 
-	m_mapgen_process.erase(blockpos_min);
-
 	v3s16 extra_borders(1,1,1);
 
 	bool enable_mapgen_debug_info = m_emerge->mapgen_debug_info;
@@ -2500,8 +2538,7 @@ void ServerMap::finishBlockMake(BlockMakeData *data,
 
 		if (g_settings->getBool("save_generated_block"))
 		block->raiseModified(MOD_STATE_WRITE_NEEDED,
-				"finishBlockMake expireDayNightDiff");
-
+			MOD_REASON_EXPIRE_DAYNIGHTDIFF);
 	}
 
 	/*
@@ -2570,6 +2607,8 @@ void ServerMap::finishBlockMake(BlockMakeData *data,
 	if(!block) {
 		errorstream<<"finishBlockMake(): created NULL block at "<<PP(blockpos_requested)<<std::endl;
 	}
+
+	m_mapgen_process.erase(blockpos_min);
 
 }
 
@@ -2795,7 +2834,8 @@ s32 ServerMap::save(ModifiedState save_level, bool breakable)
 					save_started = true;
 				}
 
-				//modprofiler.add(block->getModifiedReason(), 1);
+				//modprofiler.add(block->getModifiedReasonString(), 1);
+
 				auto lock = breakable ? block->try_lock_unique_rec() : block->lock_unique_rec();
 				if (!lock->owns_lock())
 					continue;
