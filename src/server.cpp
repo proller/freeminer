@@ -400,9 +400,6 @@ Server::Server(
 	// Apply item aliases in the node definition manager
 	m_nodedef->updateAliases(m_itemdef);
 
-	if (!simple_singleplayer_mode)
-		m_nodedef->updateTextures(this);
-
 	// Apply texture overrides from texturepack/override.txt
 	std::string texture_path = g_settings->get("texture_path");
 	if (texture_path != "" && fs::IsDir(texture_path))
@@ -454,6 +451,10 @@ Server::Server(
 
 	m_liquid_transform_interval = g_settings->getFloat("liquid_update");
 	m_liquid_send_interval = g_settings->getFloat("liquid_send");
+
+	if (!simple_singleplayer_mode)
+		m_nodedef->updateTextures(this);
+
 }
 
 Server::~Server()
@@ -3198,24 +3199,46 @@ bool Server::hudSetHotbarItemcount(Player *player, s32 hotbar_itemcount) {
 	if (hotbar_itemcount <= 0 || hotbar_itemcount > HUD_HOTBAR_ITEMCOUNT_MAX)
 		return false;
 
+	player->setHotbarItemcount(hotbar_itemcount);
 	std::ostringstream os(std::ios::binary);
 	writeS32(os, hotbar_itemcount);
 	SendHUDSetParam(player->peer_id, HUD_PARAM_HOTBAR_ITEMCOUNT, os.str());
 	return true;
 }
 
+s32 Server::hudGetHotbarItemcount(Player *player) {
+	if (!player)
+		return 0;
+	return player->getHotbarItemcount();
+}
+
 void Server::hudSetHotbarImage(Player *player, std::string name) {
 	if (!player)
 		return;
 
+	player->setHotbarImage(name);
 	SendHUDSetParam(player->peer_id, HUD_PARAM_HOTBAR_IMAGE, name);
+}
+
+std::string Server::hudGetHotbarImage(Player *player) {
+	if (!player)
+		return "";
+	return player->getHotbarImage();
 }
 
 void Server::hudSetHotbarSelectedImage(Player *player, std::string name) {
 	if (!player)
 		return;
 
+	player->setHotbarSelectedImage(name);
 	SendHUDSetParam(player->peer_id, HUD_PARAM_HOTBAR_SELECTED_IMAGE, name);
+}
+
+std::string Server::hudGetHotbarSelectedImage(Player *player) {
+	if (!player)
+		return "";
+
+	return player->getHotbarSelectedImage();
 }
 
 bool Server::setLocalPlayerAnimations(Player *player, v2s32 animation_frames[4], f32 frame_speed)
@@ -3223,6 +3246,7 @@ bool Server::setLocalPlayerAnimations(Player *player, v2s32 animation_frames[4],
 	if (!player)
 		return false;
 
+	player->setLocalAnimations(animation_frames, frame_speed);
 	SendLocalPlayerAnimations(player->peer_id, animation_frames, frame_speed);
 	return true;
 }
@@ -3232,6 +3256,8 @@ bool Server::setPlayerEyeOffset(Player *player, v3f first, v3f third)
 	if (!player)
 		return false;
 
+	player->eye_offset_first = first;
+	player->eye_offset_third = third;
 	SendEyeOffset(player->peer_id, first, third);
 	return true;
 }
@@ -3242,6 +3268,7 @@ bool Server::setSky(Player *player, const video::SColor &bgcolor,
 	if (!player)
 		return false;
 
+	player->setSky(bgcolor, type, params);
 	SendSetSky(player->peer_id, bgcolor, type, params);
 	return true;
 }
@@ -3252,6 +3279,7 @@ bool Server::overrideDayNightRatio(Player *player, bool do_override,
 	if (!player)
 		return false;
 
+	player->overrideDayNightRatio(do_override, ratio);
 	SendOverrideDayNightRatio(player->peer_id, do_override, ratio);
 	return true;
 }

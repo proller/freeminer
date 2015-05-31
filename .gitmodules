@@ -10,3 +10,6 @@
 [submodule "games/MultiCraft_game"]
 	path = games/MultiCraft_game
 	url = https://github.com/MultiCraftProject/MultiCraft_game.git
+[submodule "src/msgpack-c"]
+	path = src/msgpack-c
+	url = https://github.com/msgpack/msgpack-c.git

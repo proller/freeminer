@@ -14,14 +14,15 @@ port=63000
 confdir=`pwd`
 config=$confdir/freeminer.bot.conf
 #config=$confdir/freeminer.headless.conf
+world=$confdir/world
 
-run_opts="--worldname autotest --port $port --go --config $config --autoexit $time"
+run_opts="--world $world --port $port --go --config $config --autoexit $time"
 
 logdir=`pwd`/logs_`date +%Y-%m-%d-%H-%M`
 
 make="nice make -j $(nproc || sysctl -n hw.ncpu || echo 2)"
 
-clang_version="-3.5"
+clang_version="-3.6"
 clang="-DCMAKE_CXX_COMPILER=`which clang++$clang_version` -DCMAKE_C_COMPILER=`which clang$clang_version`"
 # -DLOCK_PROFILE=1
 
@@ -36,9 +37,9 @@ mv src/cmake_config.h src/cmake_config.backup
 rootdir=..
 mkdir -p $logdir
 
-mkdir -p worlds/autotest
-echo "gameid = MultiCraft" > worlds/autotest/world.mt
-echo "backend = leveldb" >> worlds/autotest/world.mt
+mkdir -p $world
+echo "gameid = MultiCraft" > $world/world.mt
+echo "backend = leveldb" >> $world/world.mt
 
 name=tsan
 echo $name =============
