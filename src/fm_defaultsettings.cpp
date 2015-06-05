@@ -503,7 +503,7 @@ void set_default_settings(Settings *settings) {
 
 	settings->setDefault("more_threads", win32 ? "false" : "true");
 
-#if !defined(SERVER) && defined(_MSC_VER)
+#if !defined(SERVER) && defined(_WIN32)
 	settings->setDefault("console_enabled", debug ? "true" : "false");
 #endif
 
@@ -556,6 +556,10 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("farmesh_step", "1");
 	settings->setDefault("new_style_leaves", "false");
 	settings->setDefault("autojump", "1");
+
+	char lang[3] = {};
+	AConfiguration_getLanguage(porting::app_global->config, lang);
+	settings->setDefault("language", lang);
 
 #else
 	settings->setDefault("screen_dpi", "72");
