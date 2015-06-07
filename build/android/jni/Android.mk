@@ -64,6 +64,12 @@ LOCAL_MODULE := msgpack
 LOCAL_SRC_FILES := deps/msgpack/libmsgpack.a
 include $(PREBUILT_STATIC_LIBRARY)
 
+ifeq ($(USE_LUAJIT), 1)
+include $(CLEAR_VARS)
+LOCAL_MODULE := luajit
+LOCAL_SRC_FILES := deps/luajit/src/libluajit.a
+include $(PREBUILT_STATIC_LIBRARY)
+endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := freeminer
@@ -86,6 +92,7 @@ LOCAL_CFLAGS := -D_IRR_ANDROID_PLATFORM_      \
 				-DHAVE_THREAD_LOCAL=1 \
 				-DUSE_SCTP=1 -DINET -DINET6 -DSCTP_WITH_NO_CSUM \
 				-DSCTP_SIMPLE_ALLOCATOR -DSCTP_PROCESS_LEVEL_LOCKS -D__Userspace__ -D__Userspace_os_Linux \
+				-DUSE_GETTEXT=1 \
 				-DPROJECT_NAME_C=\"$(PROJECT_NAME_C)\" \
 				-pipe -fstrict-aliasing
 
@@ -115,9 +122,9 @@ LOCAL_C_INCLUDES :=                               \
 		jni/src/network/usrsctplib                \
 		deps/msgpack/include                      \
 		deps/msgpack/src                          \
+		deps/gettext                              \
 		jni/src jni/src/sqlite                    \
 		jni/src/script                            \
-		jni/src/lua/src                           \
 		jni/src/json                              \
 		jni/src/cguittfont                        \
 		deps/irrlicht/include                     \
@@ -129,6 +136,12 @@ LOCAL_C_INCLUDES :=                               \
 		deps/leveldb/include                      \
 		deps/sqlite/
 #		deps/libiconv/include                     \
+
+ifeq ($(USE_LUAJIT), 1)
+LOCAL_C_INCLUDES += deps/luajit/src
+else
+LOCAL_C_INCLUDES += jni/src/lua/src
+endif
 
 
 LOCAL_SRC_FILES :=                                \
@@ -344,6 +357,7 @@ LOCAL_SRC_FILES +=                                \
 LOCAL_SRC_FILES +=                                \
 		jni/src/cguittfont/xCGUITTFont.cpp
 
+ifneq ($(USE_LUAJIT), 1)
 # lua
 LOCAL_SRC_FILES +=                                \
 		jni/src/lua/src/lapi.c                    \
@@ -376,6 +390,7 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/lua/src/lvm.c                     \
 		jni/src/lua/src/lzio.c                    \
 		jni/src/lua/src/print.c
+endif
 
 # sqlite
 LOCAL_SRC_FILES += deps/sqlite/sqlite3.c
@@ -395,7 +410,12 @@ LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/*.c) $(wi
 
 #LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/jni/src/enet/*.c)
 
+LOCAL_SRC_FILES += deps/gettext/internal/libintl.cpp
+
 LOCAL_STATIC_LIBRARIES += msgpack
+ifeq ($(USE_LUAJIT), 1)
+LOCAL_STATIC_LIBRARIES += luajit
+endif
 # iconv
 
 ifeq ($(HAVE_LEVELDB), 1)

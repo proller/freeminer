@@ -530,6 +530,7 @@ function tabbuilder.tab_multiplayer()
 		"pwdfield[12.9,10.4;3.45,0.5;te_pwd;" .. fgettext("Password") ..(selected_server.playerpassword and (";"..selected_server.playerpassword) or "").. "]" ..
 		"textarea[7.35,6.5;8.8,2.5;;"
 	if menu.fav_selected ~= nil and
+		menu.favorites[menu.fav_selected] ~= nil and
 		menu.favorites[menu.fav_selected].description ~= nil then
 		retval = retval ..
 			core.formspec_escape(menu.favorites[menu.fav_selected].description,true)
@@ -859,7 +860,7 @@ function tabbuilder.tab_texture_packs()
 			"textlist[7.1,0.25;7.5,5.0;TPs;"
 
 	local current_texture_path = core.setting_get("texture_path")
-	local list = filter_texture_pack_list(core.get_dirlist(core.get_texturepath(), true))
+	local list = filter_texture_pack_list(core.get_dir_list(core.get_texturepath(), true))
 	local index = tonumber(core.setting_get("mainmenu_last_selected_TP"))
 
 	if index == nil then index = 1 end
@@ -903,7 +904,7 @@ function tabbuilder.handle_texture_pack_buttons(fields)
 			local index = core.get_textlist_index("TPs")
 			core.setting_set("mainmenu_last_selected_TP",
 				index)
-			local list = filter_texture_pack_list(core.get_dirlist(core.get_texturepath(), true))
+			local list = filter_texture_pack_list(core.get_dir_list(core.get_texturepath(), true))
 			local current_index = core.get_textlist_index("TPs")
 			if current_index ~= nil and #list >= current_index then
 				local new_path = core.get_texturepath()..DIR_DELIM..list[current_index]
