@@ -102,11 +102,14 @@ ScriptApiBase::ScriptApiBase()
 	lua_pushstring(m_luastack, porting::getPlatformName());
 	lua_setglobal(m_luastack, "PLATFORM");
 
+	// m_secure gets set to true inside
+	// ScriptApiSecurity::initializeSecurity(), if neccessary.
+	// Default to false otherwise
+	m_secure = false;
+
 	m_server = NULL;
 	m_environment = NULL;
 	m_guiengine = NULL;
-
-	m_secure = false;
 }
 
 ScriptApiBase::~ScriptApiBase()
@@ -163,6 +166,11 @@ void ScriptApiBase::realityCheck()
 void ScriptApiBase::scriptError()
 {
 	throw LuaError(lua_tostring(m_luastack, -1));
+}
+
+void ScriptApiBase::scriptErrorNoEx()
+{
+	errorstream<<"lua exception: " << lua_tostring(m_luastack, -1) << std::endl;
 }
 
 void ScriptApiBase::stackDump(std::ostream &o)

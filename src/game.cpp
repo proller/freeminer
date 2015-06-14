@@ -1228,7 +1228,8 @@ static void show_pause_menu(GUIFormSpecMenu **cur_formspec,
 	LocalFormspecHandler *txt_dst = new LocalFormspecHandler("MT_PAUSE_MENU");
 
 	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device,  fs_src, txt_dst, NULL);
-	(*cur_formspec)->setFocus("btn_continue");
+	std::string con("btn_continue");
+	(*cur_formspec)->setFocus(con);
 	(*cur_formspec)->doPause = true;
 }
 
@@ -1747,6 +1748,11 @@ private:
 	bool m_cache_enable_fog;
 	f32  m_cache_mouse_sensitivity;
 	f32  m_repeat_right_click_time;
+
+#ifdef __ANDROID__
+	bool m_cache_hold_aux1;
+#endif
+
 };
 
 Game::Game() :
@@ -1786,8 +1792,12 @@ Game::Game() :
 	m_repeat_right_click_time         = g_settings->getFloat("repeat_rightclick_time");
 
 	m_cache_mouse_sensitivity = rangelim(m_cache_mouse_sensitivity, 0.001, 100.0);
-}
 
+#ifdef __ANDROID__
+	m_cache_hold_aux1 = false;	// This is initialised properly later
+#endif
+
+}
 
 /****************************************************************************
  Game Public
@@ -1927,6 +1937,11 @@ void Game::run()
 
 	double run_time = 0;
 	set_light_table(g_settings->getFloat("display_gamma"));
+
+#ifdef __ANDROID__
+	m_cache_hold_aux1 = g_settings->getBool("fast_move")
+			&& client->checkPrivilege("fast");
+#endif
 
 	while (device->run() && !(*kill || g_gamecallback->shutdown_requested)) {
 
@@ -2875,7 +2890,7 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_CINEMATIC])) {
 		toggleCinematic(statustext_time);
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_SCREENSHOT])) {
-		client->makeScreenshot(device);
+		client->makeScreenshot();
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_TOGGLE_HUD])) {
 		toggleHud(statustext_time, &flags->show_hud);
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_TOGGLE_CHAT])) {
@@ -3137,8 +3152,14 @@ void Game::toggleFast(float *statustext_time)
 	*statustext_time = 0;
 	statustext = msg[fast_move];
 
-	if (fast_move && !client->checkPrivilege("fast"))
+	bool has_fast_privs = client->checkPrivilege("fast");
+
+	if (fast_move && !has_fast_privs)
 		statustext += L" (note: no 'fast' privilege)";
+
+#ifdef __ANDROID__
+	m_cache_hold_aux1 = fast_move && has_fast_privs;
+#endif
 }
 
 
@@ -3404,11 +3425,15 @@ void Game::updatePlayerControl(const CameraOrientation &cam)
 		);
 
 #ifdef ANDROID
-	/* For Android, invert the meaning of holding down the fast button (i.e.
-	 * holding down the fast button -- if there is one -- means walk)
+	/* For Android, simulate holding down AUX1 (fast move) if the user has
+	 * the fast_move setting toggled on. If there is an aux1 key defined for
+	 * Android then its meaning is inverted (i.e. holding aux1 means walk and
+	 * not fast)
 	 */
-	control.aux1 = control.aux1 ^ true;
-	keypress_bits ^= ((u32)(1U << 5));
+	if (m_cache_hold_aux1) {
+		control.aux1 = control.aux1 ^ true;
+		keypress_bits ^= ((u32)(1U << 5));
+	}
 #endif
 
 	client->setPlayerControl(control);

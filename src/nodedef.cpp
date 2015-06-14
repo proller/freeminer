@@ -876,8 +876,10 @@ content_t CNodeDefManager::allocateId()
 content_t CNodeDefManager::set(const std::string &name, const ContentFeatures &def)
 {
 	// Pre-conditions
-	assert(name != "");
-	assert(name == def.name);
+	if (name == "")
+		return CONTENT_IGNORE;
+	if (name != def.name)
+		return CONTENT_IGNORE;
 
 	// Don't allow redefining ignore (but allow air and unknown)
 	if (name == "ignore") {
@@ -895,7 +897,8 @@ content_t CNodeDefManager::set(const std::string &name, const ContentFeatures &d
 				"limit reached" << std::endl;
 			return CONTENT_IGNORE;
 		}
-		assert(id != CONTENT_IGNORE);
+		if (id == CONTENT_IGNORE)
+			return CONTENT_IGNORE;
 		addNameIdMapping(id, name);
 	}
 	m_content_features[id] = def;
@@ -925,7 +928,8 @@ content_t CNodeDefManager::set(const std::string &name, const ContentFeatures &d
 
 content_t CNodeDefManager::allocateDummy(const std::string &name)
 {
-	assert(name != "");	// Pre-condition
+	if (name == "")
+		return CONTENT_IGNORE;
 	ContentFeatures f;
 	f.name = name;
 	return set(name, f);
@@ -1015,6 +1019,7 @@ void CNodeDefManager::updateTextures(IGameDef *gamedef,
 	infostream << "CNodeDefManager::updateTextures(): Updating "
 		"textures in node definitions" << std::endl;
 
+	bool server = !progress_callback;
 	ITextureSource *tsrc = !gamedef ? nullptr : gamedef->tsrc();
 	IShaderSource *shdsrc = !gamedef ? nullptr : gamedef->getShaderSource();
 	scene::ISceneManager* smgr = !gamedef ? nullptr : gamedef->getSceneManager();
@@ -1089,6 +1094,7 @@ void CNodeDefManager::updateTextures(IGameDef *gamedef,
 		case NDT_GLASSLIKE_FRAMED_OPTIONAL:
 			f->solidness = 0;
 			f->visual_solidness = 1;
+			if (!server)
 			f->drawtype = connected_glass ? NDT_GLASSLIKE_FRAMED : NDT_GLASSLIKE;
 			break;
 		case NDT_ALLFACES:
@@ -1097,10 +1103,12 @@ void CNodeDefManager::updateTextures(IGameDef *gamedef,
 			break;
 		case NDT_ALLFACES_OPTIONAL:
 			if (new_style_leaves) {
+				if (!server) 
 				f->drawtype = NDT_ALLFACES;
 				f->solidness = 0;
 				f->visual_solidness = 1;
 			} else {
+				if (!server)
 				f->drawtype = NDT_NORMAL;
 				f->solidness = 2;
 				for (u32 i = 0; i < 6; i++)
