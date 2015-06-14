@@ -25,6 +25,11 @@ LOCAL_SRC_FILES := deps/freetype2-android/Android/obj/local/$(TARGET_ARCH_ABI)/l
 include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
+LOCAL_MODULE := iconv
+LOCAL_SRC_FILES := deps/libiconv/obj/local/$(TARGET_ARCH_ABI)/libiconv.a
+include $(PREBUILT_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
 LOCAL_MODULE := openal
 LOCAL_SRC_FILES := deps/openal-soft/libs/$(TARGET_LIBDIR)/libopenal.so
 include $(PREBUILT_SHARED_LIBRARY)
@@ -54,16 +59,17 @@ LOCAL_MODULE := crypto
 LOCAL_SRC_FILES := deps/openssl/libcrypto.a
 include $(PREBUILT_STATIC_LIBRARY)
 
-#include $(CLEAR_VARS)
-#LOCAL_MODULE := iconv
-#LOCAL_SRC_FILES := deps/libiconv/lib/.libs/libiconv.a
-#include $(PREBUILT_STATIC_LIBRARY)
-
 include $(CLEAR_VARS)
 LOCAL_MODULE := msgpack
 LOCAL_SRC_FILES := deps/msgpack/libmsgpack.a
 include $(PREBUILT_STATIC_LIBRARY)
 
+ifeq ($(USE_LUAJIT), 1)
+include $(CLEAR_VARS)
+LOCAL_MODULE := luajit
+LOCAL_SRC_FILES := deps/luajit/src/libluajit.a
+include $(PREBUILT_STATIC_LIBRARY)
+endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := freeminer
@@ -84,6 +90,7 @@ LOCAL_CFLAGS := -D_IRR_ANDROID_PLATFORM_      \
 				-DHAS_INET_PTON=1 -DHAS_INET_NTOP=1 -DHAS_GETHOSTBYNAME_R=1 -DHAS_GETADDRINFO=1 -DHAS_GETNAMEINFO=1 -DHAS_FCNTL=1 -DHAS_POLL=1 -DHAS_MSGHDR_FLAGS=1 \
 				-DUSE_MANDELBULBER=1 \
 				-DHAVE_THREAD_LOCAL=1 \
+				-DUSE_GETTEXT=1 \
 				-DPROJECT_NAME_C=\"$(PROJECT_NAME_C)\" \
 				-pipe -fstrict-aliasing
 
@@ -112,12 +119,13 @@ LOCAL_C_INCLUDES :=                               \
 		jni/src/enet/include                      \
 		deps/msgpack/include                      \
 		deps/msgpack/src                          \
+		deps/gettext                              \
 		jni/src jni/src/sqlite                    \
 		jni/src/script                            \
-		jni/src/lua/src                           \
 		jni/src/json                              \
 		jni/src/cguittfont                        \
 		deps/irrlicht/include                     \
+		deps/libiconv/include                     \
 		deps/freetype2-android/include            \
 		deps/curl/include                         \
 		deps/openal-soft/jni/OpenAL/include       \
@@ -125,7 +133,12 @@ LOCAL_C_INCLUDES :=                               \
 		deps/gmp/usr/include                      \
 		deps/leveldb/include                      \
 		deps/sqlite/
-#		deps/libiconv/include                     \
+
+ifeq ($(USE_LUAJIT), 1)
+LOCAL_C_INCLUDES += deps/luajit/src
+else
+LOCAL_C_INCLUDES += jni/src/lua/src
+endif
 
 
 LOCAL_SRC_FILES :=                                \
@@ -136,7 +149,6 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/fmbitset.cpp                      \
 		jni/src/fm_liquid.cpp                     \
 		jni/src/fm_map.cpp                        \
-		jni/src/intlGUIEditBox.cpp                \
 		jni/src/key_value_storage.cpp             \
 		jni/src/log_types.cpp                     \
 		jni/src/ban.cpp                           \
@@ -186,6 +198,7 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/httpfetch.cpp                     \
 		jni/src/hud.cpp                           \
 		jni/src/imagefilters.cpp                  \
+		jni/src/intlGUIEditBox.cpp                \
 		jni/src/inventory.cpp                     \
 		jni/src/inventorymanager.cpp              \
 		jni/src/itemdef.cpp                       \
@@ -341,6 +354,7 @@ LOCAL_SRC_FILES +=                                \
 LOCAL_SRC_FILES +=                                \
 		jni/src/cguittfont/xCGUITTFont.cpp
 
+ifneq ($(USE_LUAJIT), 1)
 # lua
 LOCAL_SRC_FILES +=                                \
 		jni/src/lua/src/lapi.c                    \
@@ -373,6 +387,7 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/lua/src/lvm.c                     \
 		jni/src/lua/src/lzio.c                    \
 		jni/src/lua/src/print.c
+endif
 
 # sqlite
 LOCAL_SRC_FILES += deps/sqlite/sqlite3.c
@@ -386,12 +401,16 @@ LOCAL_SRC_FILES +=                                \
 LOCAL_SRC_FILES += jni/src/json/jsoncpp.cpp
 
 LOCAL_SHARED_LIBRARIES := openal ogg vorbis gmp
-LOCAL_STATIC_LIBRARIES := Irrlicht freetype curl ssl crypto android_native_app_glue $(PROFILER_LIBS)
+LOCAL_STATIC_LIBRARIES := Irrlicht iconv freetype curl ssl crypto android_native_app_glue $(PROFILER_LIBS)
 
 LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/jni/src/enet/*.c)
 
+LOCAL_SRC_FILES += deps/gettext/internal/libintl.cpp
+
 LOCAL_STATIC_LIBRARIES += msgpack
-# iconv
+ifeq ($(USE_LUAJIT), 1)
+LOCAL_STATIC_LIBRARIES += luajit
+endif
 
 ifeq ($(HAVE_LEVELDB), 1)
 	LOCAL_STATIC_LIBRARIES += LevelDB
