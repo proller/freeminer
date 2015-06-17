@@ -515,7 +515,7 @@ handle_association_change_event(const struct sctp_assoc_change *sac) {
 	if ((sac->sac_state == SCTP_CANT_STR_ASSOC) ||
 	        (sac->sac_state == SCTP_SHUTDOWN_COMP) ||
 	        (sac->sac_state == SCTP_COMM_LOST)) {
-		exit(0);
+		// exit(0);
 	}
 	return;
 }
@@ -813,7 +813,6 @@ void Connection::sock_setup(u16 peer_id, struct socket *sock) {
 			perror("setsockopt SCTP_REUSE_PORT");
 		}
 	*/
-
 
 }
 
