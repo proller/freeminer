@@ -72,6 +72,30 @@ include $(PREBUILT_STATIC_LIBRARY)
 endif
 
 include $(CLEAR_VARS)
+LOCAL_MODULE := enet
+LOCAL_C_INCLUDES := jni/src/enet/include
+LOCAL_SRC_FILES := $(wildcard $(LOCAL_PATH)/jni/src/enet/*.c)
+include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := usrsctplib
+LOCAL_C_INCLUDES := jni/src/network/usrsctplib
+LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/*.c) $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/netinet/*.c) $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/netinet6/*.c)
+include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := jsoncpp
+LOCAL_C_INCLUDES := jni/src/jsoncpp/include
+LOCAL_SRC_FILES := $(wildcard $(LOCAL_PATH)/jni/src/jsoncpp/src/lib_json/*.cpp)
+include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := gettext
+LOCAL_C_INCLUDES := deps/gettext
+LOCAL_SRC_FILES := $(wildcard deps/gettext/internal/*.cpp)
+include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
 LOCAL_MODULE := freeminer
 
 LOCAL_CPP_FEATURES += exceptions
@@ -125,7 +149,7 @@ LOCAL_C_INCLUDES :=                               \
 		deps/gettext                              \
 		jni/src jni/src/sqlite                    \
 		jni/src/script                            \
-		jni/src/json                              \
+		jni/src/jsoncpp/include                   \
 		jni/src/cguittfont                        \
 		deps/irrlicht/include                     \
 		deps/libiconv/include                     \
@@ -143,8 +167,7 @@ else
 LOCAL_C_INCLUDES += jni/src/lua/src
 endif
 
-
-LOCAL_SRC_FILES :=                                \
+LOCAL_SRC_FILES +=                                \
 		jni/src/gsmapper.cpp                      \
 		jni/src/guiTextInputMenu.cpp              \
 		jni/src/FMColoredString.cpp               \
@@ -400,19 +423,13 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/jthread/pthread/jevent.cpp        \
 		jni/src/jthread/pthread/jsemaphore.cpp
 
-# json
-LOCAL_SRC_FILES += jni/src/json/jsoncpp.cpp
-
 LOCAL_SHARED_LIBRARIES := openal ogg vorbis gmp
 LOCAL_STATIC_LIBRARIES := Irrlicht iconv freetype curl ssl crypto android_native_app_glue $(PROFILER_LIBS)
 
-LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/*.c) $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/netinet/*.c) $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/netinet6/*.c)
+#freeminer:
+LOCAL_STATIC_LIBRARIES += msgpack jsoncpp gettext
+LOCAL_STATIC_LIBRARIES += usrsctplib
 
-#LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/jni/src/enet/*.c)
-
-LOCAL_SRC_FILES += deps/gettext/internal/libintl.cpp
-
-LOCAL_STATIC_LIBRARIES += msgpack
 ifeq ($(USE_LUAJIT), 1)
 LOCAL_STATIC_LIBRARIES += luajit
 endif
