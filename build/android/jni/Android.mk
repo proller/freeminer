@@ -24,10 +24,12 @@ LOCAL_MODULE := freetype
 LOCAL_SRC_FILES := deps/freetype2-android/Android/obj/local/$(TARGET_ARCH_ABI)/libfreetype2-static.a
 include $(PREBUILT_STATIC_LIBRARY)
 
+ifdef NOT_USED_ICONV
 include $(CLEAR_VARS)
 LOCAL_MODULE := iconv
 LOCAL_SRC_FILES := deps/libiconv/obj/local/$(TARGET_ARCH_ABI)/libiconv.a
 include $(PREBUILT_STATIC_LIBRARY)
+endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := openal
@@ -71,17 +73,23 @@ LOCAL_SRC_FILES := deps/luajit/src/libluajit.a
 include $(PREBUILT_STATIC_LIBRARY)
 endif
 
+ifeq ($(USE_ENET), 1)
 include $(CLEAR_VARS)
 LOCAL_MODULE := enet
 LOCAL_C_INCLUDES := jni/src/enet/include
 LOCAL_SRC_FILES := $(wildcard $(LOCAL_PATH)/jni/src/enet/*.c)
 include $(BUILD_STATIC_LIBRARY)
+endif
 
+ifeq ($(USE_SCTP), 1)
 include $(CLEAR_VARS)
 LOCAL_MODULE := usrsctplib
+LOCAL_CFLAGS += -DUSE_SCTP=1 -DINET -DINET6 -DSCTP_WITH_NO_CSUM
+LOCAL_CFLAGS += -DSCTP_SIMPLE_ALLOCATOR -DSCTP_PROCESS_LEVEL_LOCKS -D__Userspace__ -D__Userspace_os_Linux
 LOCAL_C_INCLUDES := jni/src/network/usrsctplib
 LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/*.c) $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/netinet/*.c) $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctplib/netinet6/*.c)
 include $(BUILD_STATIC_LIBRARY)
+endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := jsoncpp
@@ -114,8 +122,6 @@ LOCAL_CFLAGS := -D_IRR_ANDROID_PLATFORM_      \
 				-DHAS_INET_PTON=1 -DHAS_INET_NTOP=1 -DHAS_GETHOSTBYNAME_R=1 -DHAS_GETADDRINFO=1 -DHAS_GETNAMEINFO=1 -DHAS_FCNTL=1 -DHAS_POLL=1 -DHAS_MSGHDR_FLAGS=1 \
 				-DUSE_MANDELBULBER=1 \
 				-DHAVE_THREAD_LOCAL=1 \
-				-DUSE_SCTP=1 -DINET -DINET6 -DSCTP_WITH_NO_CSUM \
-				-DSCTP_SIMPLE_ALLOCATOR -DSCTP_PROCESS_LEVEL_LOCKS -D__Userspace__ -D__Userspace_os_Linux \
 				-DUSE_GETTEXT=1 \
 				-DPROJECT_NAME_C=\"$(PROJECT_NAME_C)\" \
 				-pipe -fstrict-aliasing
@@ -142,8 +148,6 @@ LOCAL_CFLAGS += -fno-stack-protector
 endif
 
 LOCAL_C_INCLUDES :=                               \
-		jni/src/enet/include                      \
-		jni/src/network/usrsctplib                \
 		deps/msgpack/include                      \
 		deps/msgpack/src                          \
 		deps/gettext                              \
@@ -428,7 +432,22 @@ LOCAL_STATIC_LIBRARIES := Irrlicht iconv freetype curl ssl crypto android_native
 
 #freeminer:
 LOCAL_STATIC_LIBRARIES += msgpack jsoncpp gettext
+
+
+ifeq ($(USE_SCTP), 1)
+LOCAL_CFLAGS += -DUSE_SCTP=1 -DINET -DINET6 -DSCTP_WITH_NO_CSUM
+LOCAL_CFLAGS += -DSCTP_SIMPLE_ALLOCATOR -DSCTP_PROCESS_LEVEL_LOCKS -D__Userspace__ -D__Userspace_os_Linux
+LOCAL_C_INCLUDES += jni/src/network/usrsctplib
 LOCAL_STATIC_LIBRARIES += usrsctplib
+else
+ifeq ($(USE_ENET), 1)
+LOCAL_C_INCLUDES += jni/src/enet/include
+LOCAL_STATIC_LIBRARIES += enet
+else
+LOCAL_CFLAGS += -DMINETEST_PROTO=1
+endif
+endif
+
 
 ifeq ($(USE_LUAJIT), 1)
 LOCAL_STATIC_LIBRARIES += luajit
