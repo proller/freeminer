@@ -1171,7 +1171,8 @@ minetest.register_node("default:chest", {
 		meta:set_string("formspec",
 				"size[8,9]"..
 				"list[current_name;main;0,0;8,4;]"..
-				"list[current_player;main;0,5;8,4;]")
+				"list[current_player;main;0,5;8,4;]" ..
+				"listring[]")
 		meta:set_string("infotext", "Chest")
 		local inv = meta:get_inventory()
 		inv:set_size("main", 8*4)
@@ -1210,7 +1211,8 @@ minetest.register_node("default:chest_locked", {
 		meta:set_string("formspec",
 				"size[8,9]"..
 				"list[current_name;main;0,0;8,4;]"..
-				"list[current_player;main;0,5;8,4;]")
+				"list[current_player;main;0,5;8,4;]" ..
+				"listring[]")
 		meta:set_string("infotext", "Locked Chest")
 		meta:set_string("owner", "")
 		local inv = meta:get_inventory()
@@ -1274,7 +1276,11 @@ default.furnace_inactive_formspec =
 	"list[current_name;fuel;2,3;1,1;]"..
 	"list[current_name;src;2,1;1,1;]"..
 	"list[current_name;dst;5,1;2,2;]"..
-	"list[current_player;main;0,5;8,4;]"
+	"list[current_player;main;0,5;8,4;]" ..
+	"listring[current_name;dst]" ..
+	"listring[current_player;main]" ..
+	"listring[current_name;src]" ..
+	"listring[current_player;main]"
 
 minetest.register_node("default:furnace", {
 	description = "Furnace",
@@ -1411,7 +1417,11 @@ minetest.register_abm({
 				"list[current_name;fuel;2,3;1,1;]"..
 				"list[current_name;src;2,1;1,1;]"..
 				"list[current_name;dst;5,1;2,2;]"..
-				"list[current_player;main;0,5;8,4;]")
+				"list[current_player;main;0,5;8,4;]" ..
+				"listring[current_name;dst]" ..
+				"listring[current_player;main]" ..
+				"listring[current_name;src]" ..
+				"listring[current_player;main]")
 			return
 		end
 
@@ -1674,8 +1684,10 @@ minetest.register_abm({
 	interval = 10,
 	chance = 50,
 	action = function(pos, node)
-		local is_soil = minetest.registered_nodes[minetest.get_node({x=pos.x, y=pos.y-1, z=pos.z}).name].groups.soil
-		if is_soil == nil or is_soil == 0 then return end
+		if minetest.get_item_group(minetest.get_node(
+			{x = pos.x, y = pos.y - 1, z = pos.z}).name, "soil") == 0 then
+			return
+		end
 		print("A sapling grows into a tree at "..minetest.pos_to_string(pos))
 		local vm = minetest.get_voxel_manip()
 		local minp, maxp = vm:read_from_map({x=pos.x-16, y=pos.y, z=pos.z-16}, {x=pos.x+16, y=pos.y+16, z=pos.z+16})
