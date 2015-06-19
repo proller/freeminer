@@ -24,10 +24,12 @@ LOCAL_MODULE := freetype
 LOCAL_SRC_FILES := deps/freetype2-android/Android/obj/local/$(TARGET_ARCH_ABI)/libfreetype2-static.a
 include $(PREBUILT_STATIC_LIBRARY)
 
+ifdef NOT_USED_ICONV
 include $(CLEAR_VARS)
 LOCAL_MODULE := iconv
 LOCAL_SRC_FILES := deps/libiconv/obj/local/$(TARGET_ARCH_ABI)/libiconv.a
 include $(PREBUILT_STATIC_LIBRARY)
+endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := openal
@@ -70,6 +72,26 @@ LOCAL_MODULE := luajit
 LOCAL_SRC_FILES := deps/luajit/src/libluajit.a
 include $(PREBUILT_STATIC_LIBRARY)
 endif
+
+ifeq ($(USE_ENET), 1)
+include $(CLEAR_VARS)
+LOCAL_MODULE := enet
+LOCAL_C_INCLUDES := jni/src/enet/include
+LOCAL_SRC_FILES := $(wildcard $(LOCAL_PATH)/jni/src/enet/*.c)
+include $(BUILD_STATIC_LIBRARY)
+endif
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := jsoncpp
+LOCAL_C_INCLUDES := jni/src/jsoncpp/include
+LOCAL_SRC_FILES := $(wildcard $(LOCAL_PATH)/jni/src/jsoncpp/src/lib_json/*.cpp)
+include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := gettext
+LOCAL_C_INCLUDES := deps/gettext
+LOCAL_SRC_FILES := $(wildcard deps/gettext/internal/*.cpp)
+include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := freeminer
@@ -116,13 +138,12 @@ LOCAL_CFLAGS += -fno-stack-protector
 endif
 
 LOCAL_C_INCLUDES :=                               \
-		jni/src/enet/include                      \
 		deps/msgpack/include                      \
 		deps/msgpack/src                          \
 		deps/gettext                              \
 		jni/src jni/src/sqlite                    \
 		jni/src/script                            \
-		jni/src/json                              \
+		jni/src/jsoncpp/include                   \
 		jni/src/cguittfont                        \
 		deps/irrlicht/include                     \
 		deps/libiconv/include                     \
@@ -140,8 +161,7 @@ else
 LOCAL_C_INCLUDES += jni/src/lua/src
 endif
 
-
-LOCAL_SRC_FILES :=                                \
+LOCAL_SRC_FILES +=                                \
 		jni/src/gsmapper.cpp                      \
 		jni/src/guiTextInputMenu.cpp              \
 		jni/src/FMColoredString.cpp               \
@@ -397,17 +417,19 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/jthread/pthread/jevent.cpp        \
 		jni/src/jthread/pthread/jsemaphore.cpp
 
-# json
-LOCAL_SRC_FILES += jni/src/json/jsoncpp.cpp
-
 LOCAL_SHARED_LIBRARIES := openal ogg vorbis gmp
 LOCAL_STATIC_LIBRARIES := Irrlicht iconv freetype curl ssl crypto android_native_app_glue $(PROFILER_LIBS)
 
-LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/jni/src/enet/*.c)
+#freeminer:
+LOCAL_STATIC_LIBRARIES += msgpack jsoncpp gettext
 
-LOCAL_SRC_FILES += deps/gettext/internal/libintl.cpp
+ifeq ($(USE_ENET), 1)
+LOCAL_C_INCLUDES += jni/src/enet/include
+LOCAL_STATIC_LIBRARIES += enet
+else
+LOCAL_CFLAGS += -DMINETEST_PROTO=1
+endif
 
-LOCAL_STATIC_LIBRARIES += msgpack
 ifeq ($(USE_LUAJIT), 1)
 LOCAL_STATIC_LIBRARIES += luajit
 endif

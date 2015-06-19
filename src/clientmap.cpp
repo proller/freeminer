@@ -723,7 +723,7 @@ return;
 		{
 			//JMutexAutoLock lock(block->mesh_mutex);
 
-			scene::SMesh *mesh = mapBlockMesh->getMesh();
+			auto *mesh = mapBlockMesh->getMesh();
 			if (!mesh)
 				continue;
 
