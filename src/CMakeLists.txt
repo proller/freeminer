@@ -713,6 +713,7 @@ set(client_SRCS
 	guiVolumeChange.cpp
 	hud.cpp
 	imagefilters.cpp
+	intlGUIEditBox.cpp
 	keycode.cpp
 	localplayer.cpp
 	main.cpp

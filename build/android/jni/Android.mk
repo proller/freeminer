@@ -24,6 +24,13 @@ LOCAL_MODULE := freetype
 LOCAL_SRC_FILES := deps/freetype2-android/Android/obj/local/$(TARGET_ARCH_ABI)/libfreetype2-static.a
 include $(PREBUILT_STATIC_LIBRARY)
 
+ifdef NOT_USED_ICONV
+include $(CLEAR_VARS)
+LOCAL_MODULE := iconv
+LOCAL_SRC_FILES := deps/libiconv/obj/local/$(TARGET_ARCH_ABI)/libiconv.a
+include $(PREBUILT_STATIC_LIBRARY)
+endif
+
 include $(CLEAR_VARS)
 LOCAL_MODULE := openal
 LOCAL_SRC_FILES := deps/openal-soft/libs/$(TARGET_LIBDIR)/libopenal.so
@@ -54,11 +61,6 @@ LOCAL_MODULE := crypto
 LOCAL_SRC_FILES := deps/openssl/libcrypto.a
 include $(PREBUILT_STATIC_LIBRARY)
 
-#include $(CLEAR_VARS)
-#LOCAL_MODULE := iconv
-#LOCAL_SRC_FILES := deps/libiconv/lib/.libs/libiconv.a
-#include $(PREBUILT_STATIC_LIBRARY)
-
 include $(CLEAR_VARS)
 LOCAL_MODULE := msgpack
 LOCAL_SRC_FILES := deps/msgpack/libmsgpack.a
@@ -70,6 +72,26 @@ LOCAL_MODULE := luajit
 LOCAL_SRC_FILES := deps/luajit/src/libluajit.a
 include $(PREBUILT_STATIC_LIBRARY)
 endif
+
+ifeq ($(USE_ENET), 1)
+include $(CLEAR_VARS)
+LOCAL_MODULE := enet
+LOCAL_C_INCLUDES := jni/src/enet/include
+LOCAL_SRC_FILES := $(wildcard $(LOCAL_PATH)/jni/src/enet/*.c)
+include $(BUILD_STATIC_LIBRARY)
+endif
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := jsoncpp
+LOCAL_C_INCLUDES := jni/src/jsoncpp/include
+LOCAL_SRC_FILES := $(wildcard $(LOCAL_PATH)/jni/src/jsoncpp/src/lib_json/*.cpp)
+include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := gettext
+LOCAL_C_INCLUDES := deps/gettext
+LOCAL_SRC_FILES := $(wildcard deps/gettext/internal/*.cpp)
+include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := freeminer
@@ -116,15 +138,15 @@ LOCAL_CFLAGS += -fno-stack-protector
 endif
 
 LOCAL_C_INCLUDES :=                               \
-		jni/src/enet/include                      \
 		deps/msgpack/include                      \
 		deps/msgpack/src                          \
 		deps/gettext                              \
 		jni/src jni/src/sqlite                    \
 		jni/src/script                            \
-		jni/src/json                              \
+		jni/src/jsoncpp/include                   \
 		jni/src/cguittfont                        \
 		deps/irrlicht/include                     \
+		deps/libiconv/include                     \
 		deps/freetype2-android/include            \
 		deps/curl/include                         \
 		deps/openal-soft/jni/OpenAL/include       \
@@ -132,7 +154,6 @@ LOCAL_C_INCLUDES :=                               \
 		deps/gmp/usr/include                      \
 		deps/leveldb/include                      \
 		deps/sqlite/
-#		deps/libiconv/include                     \
 
 ifeq ($(USE_LUAJIT), 1)
 LOCAL_C_INCLUDES += deps/luajit/src
@@ -140,8 +161,7 @@ else
 LOCAL_C_INCLUDES += jni/src/lua/src
 endif
 
-
-LOCAL_SRC_FILES :=                                \
+LOCAL_SRC_FILES +=                                \
 		jni/src/gsmapper.cpp                      \
 		jni/src/guiTextInputMenu.cpp              \
 		jni/src/FMColoredString.cpp               \
@@ -149,7 +169,6 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/fmbitset.cpp                      \
 		jni/src/fm_liquid.cpp                     \
 		jni/src/fm_map.cpp                        \
-		jni/src/intlGUIEditBox.cpp                \
 		jni/src/key_value_storage.cpp             \
 		jni/src/log_types.cpp                     \
 		jni/src/ban.cpp                           \
@@ -199,6 +218,7 @@ LOCAL_SRC_FILES :=                                \
 		jni/src/httpfetch.cpp                     \
 		jni/src/hud.cpp                           \
 		jni/src/imagefilters.cpp                  \
+		jni/src/intlGUIEditBox.cpp                \
 		jni/src/inventory.cpp                     \
 		jni/src/inventorymanager.cpp              \
 		jni/src/itemdef.cpp                       \
@@ -397,21 +417,22 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/jthread/pthread/jevent.cpp        \
 		jni/src/jthread/pthread/jsemaphore.cpp
 
-# json
-LOCAL_SRC_FILES += jni/src/json/jsoncpp.cpp
-
 LOCAL_SHARED_LIBRARIES := openal ogg vorbis gmp
-LOCAL_STATIC_LIBRARIES := Irrlicht freetype curl ssl crypto android_native_app_glue $(PROFILER_LIBS)
+LOCAL_STATIC_LIBRARIES := Irrlicht iconv freetype curl ssl crypto android_native_app_glue $(PROFILER_LIBS)
 
-LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/jni/src/enet/*.c)
+#freeminer:
+LOCAL_STATIC_LIBRARIES += msgpack jsoncpp gettext
 
-LOCAL_SRC_FILES += deps/gettext/internal/libintl.cpp
+ifeq ($(USE_ENET), 1)
+LOCAL_C_INCLUDES += jni/src/enet/include
+LOCAL_STATIC_LIBRARIES += enet
+else
+LOCAL_CFLAGS += -DMINETEST_PROTO=1
+endif
 
-LOCAL_STATIC_LIBRARIES += msgpack
 ifeq ($(USE_LUAJIT), 1)
 LOCAL_STATIC_LIBRARIES += luajit
 endif
-# iconv
 
 ifeq ($(HAVE_LEVELDB), 1)
 	LOCAL_STATIC_LIBRARIES += LevelDB

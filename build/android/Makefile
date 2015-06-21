@@ -57,6 +57,7 @@ COMPILER_VERSION = 4.9
 #COMPILER_VERSION = clang3.5
 HAVE_LEVELDB = 1
 USE_LUAJIT = 1
+USE_ENET = 1
 
 ################################################################################
 # toolchain config for little endian mips
@@ -137,6 +138,13 @@ FREETYPE_LIB = $(FREETYPE_DIR)/Android/obj/local/$(TARGET_ABI)/libfreetype2-stat
 FREETYPE_TIMESTAMP = $(FREETYPE_DIR)timestamp
 FREETYPE_TIMESTAMP_INT = $(ROOT)/deps/freetype_timestamp
 FREETYPE_URL_GIT = https://github.com/cdave1/freetype2-android
+
+ICONV_VERSION = 1.14
+ICONV_DIR = $(ROOT)/deps/libiconv/
+ICONV_LIB = $(ICONV_DIR)/iconv.so
+ICONV_TIMESTAMP = $(ICONV_DIR)timestamp
+ICONV_TIMESTAMP_INT = $(ROOT)/deps/iconv_timestamp
+ICONV_URL_HTTP = http://ftp.gnu.org/pub/gnu/libiconv/libiconv-$(ICONV_VERSION).tar.gz
 
 SQLITE3_FOLDER = sqlite-amalgamation-3080704
 SQLITE3_URL = http://www.sqlite.org/2014/$(SQLITE3_FOLDER).zip
@@ -408,12 +416,6 @@ freetype_download :
 		git clone ${FREETYPE_URL_GIT} || exit 1;                               \
 	fi
 
-$(IRRLICHT_TIMESTAMP) : irrlicht_download
-	@LAST_MODIF=$$(find ${IRRLICHT_DIR} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${IRRLICHT_TIMESTAMP};                                           \
-	fi
-
 freetype : $(FREETYPE_LIB)
 
 $(FREETYPE_LIB) : $(FREETYPE_TIMESTAMP)
@@ -446,6 +448,64 @@ $(FREETYPE_LIB) : $(FREETYPE_TIMESTAMP)
 clean_freetype :
 	$(RM) -rf ${FREETYPE_DIR}
 
+$(ICONV_TIMESTAMP) : iconv_download
+	@LAST_MODIF=$$(find ${ICONV_DIR} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
+	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
+		touch ${ICONV_TIMESTAMP};                                           \
+	fi
+
+iconv_download :
+	@if [ ! -d ${ICONV_DIR} ] ; then                                        \
+		echo "iconv sources missing, downloading...";                       \
+		mkdir -p ${ROOT}/deps;                                                 \
+		cd ${ROOT}/deps;                                                               \
+		wget -O libiconv-${ICONV_VERSION}.tar.gz ${ICONV_URL_HTTP} || exit 1;                                    \
+		tar -xzf libiconv-${ICONV_VERSION}.tar.gz || exit 1;                     \
+		rm libiconv-${ICONV_VERSION}.tar.gz;                                     \
+		ln -s libiconv-${ICONV_VERSION} libiconv;                                      \
+		cd ${ICONV_DIR};                                                                   \
+		patch -p1 < ${ROOT}/libiconv_android.patch;                                                     \
+		patch -p1 < ${ROOT}/libiconv_android_mk.patch;                                                     \
+		patch -p1 < ${ROOT}/libiconv_stdio.patch;                                                     \
+		cd jni;                                                                       \
+		ln -s .. src;                                                                         \
+	fi
+
+iconv : $(ICONV_LIB)
+
+$(ICONV_LIB) : $(ICONV_TIMESTAMP)
+	@REFRESH=0;                                                                \
+	if [ ! -e ${ICONV_TIMESTAMP_INT} ] ; then                               \
+		REFRESH=1;                                                             \
+	fi;                                                                        \
+	if [ ! -e ${ICONV_LIB} ] ; then                                         \
+		REFRESH=1;                                                             \
+	fi;                                                                        \
+	if [ ${ICONV_TIMESTAMP} -nt ${ICONV_TIMESTAMP_INT} ] ; then          \
+		REFRESH=1;                                                             \
+	fi;                                                                        \
+	if [ $$REFRESH -ne 0 ] ; then                                              \
+	mkdir -p ${ICONV_DIR};                                                  \
+	export PATH=$$PATH:${SDKFOLDER}/platform-tools:${ANDROID_NDK};             \
+	echo "changed timestamp for iconv detected building...";                \
+	cd ${ICONV_DIR};                                            \
+	./configure;                                            \
+	make;                                            \
+	export NDK_PROJECT_PATH=${ICONV_DIR};                                \
+	ndk-build NDEBUG=${NDEBUG} NDK_MODULE_PATH=${NDK_MODULE_PATH}              \
+	APP_PLATFORM=${APP_PLATFORM} APP_ABI=${TARGET_ABI}                         \
+	TARGET_CFLAGS+="${TARGET_CFLAGS_ADDON}"                                    \
+	TARGET_LDFLAGS+="${TARGET_LDFLAGS_ADDON}"                                  \
+	TARGET_CXXFLAGS+="${TARGET_CXXFLAGS_ADDON}" || exit 1;                     \
+	touch ${ICONV_TIMESTAMP};                                               \
+	touch ${ICONV_TIMESTAMP_INT};                                           \
+	else                                                                       \
+		echo "nothing to be done for iconv";                                \
+	fi
+
+clean_iconv :
+	$(RM) -rf ${ICONV_DIR}
+
 #Note: Texturehack patch is required for gpu's not supporting color format
 #      correctly. Known bad GPU:
 #      -geforce on emulator
@@ -461,6 +521,12 @@ irrlicht_download :
 		patch -p1 < ../../irrlicht-touchcount.patch || exit 1;                 \
 		patch -p1 < ../../irrlicht-back_button.patch || exit 1;                \
 		patch -p1 < ../../irrlicht-texturehack.patch || exit 1;                \
+	fi
+
+$(IRRLICHT_TIMESTAMP) : irrlicht_download
+	@LAST_MODIF=$$(find ${IRRLICHT_DIR} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
+	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
+		touch ${IRRLICHT_TIMESTAMP};                                           \
 	fi
 
 irrlicht : $(IRRLICHT_LIB)
@@ -559,7 +625,7 @@ clean_curl :
 
 curl_binary:
 	@if [ ! -d "deps/curl-${CURL_VERSION_BINARY}" ] ; then                     \
-		echo "curl sources missing, downloading...";                           \
+		echo "curl binary missing, downloading...";                           \
 		mkdir -p ${ROOT}/deps;                                                 \
 		cd deps;                                                               \
 		wget http://curl.haxx.se/gknw.net/7.34.0/dist-android/curl-7.34.0-rtmp-ssh2-ssl-zlib-static-bin-android.tar.gz || exit 1;\
@@ -640,47 +706,14 @@ clean_sqlite3:
 
 $(ASSETS_TIMESTAMP) : $(IRRLICHT_LIB)
 	@mkdir -p ${ROOT}/deps;                                                     \
-	LAST_MODIF=$$(find ${ROOT}/../../builtin -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../builtin/timestamp;                                 \
-		touch ${ASSETS_TIMESTAMP};                                             \
-		echo builtin changed $$LAST_MODIF;                                     \
-	fi;                                                                        \
-	LAST_MODIF=$$(find ${ROOT}/../../client -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../client/timestamp;                                  \
-		touch ${ASSETS_TIMESTAMP};                                             \
-	fi;                                                                        \
-	LAST_MODIF=$$(find ${ROOT}/../../doc -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../doc/timestamp;                                     \
-		touch ${ASSETS_TIMESTAMP};                                             \
-	fi;                                                                        \
-	LAST_MODIF=$$(find ${ROOT}/../../fonts -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../fonts/timestamp;                                   \
-		touch ${ASSETS_TIMESTAMP};                                             \
-	fi;                                                                        \
-	LAST_MODIF=$$(find ${ROOT}/../../games -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../games/timestamp;                                   \
-		touch ${ASSETS_TIMESTAMP};                                             \
-	fi;                                                                        \
-	LAST_MODIF=$$(find ${ROOT}/../../mods -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../mods/timestamp;                                    \
-		touch ${ASSETS_TIMESTAMP};                                             \
-	fi;                                                                        \
-	LAST_MODIF=$$(find ${ROOT}/../../po -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../po/timestamp;                                      \
-		touch ${ASSETS_TIMESTAMP};                                             \
-	fi;                                                                        \
-	LAST_MODIF=$$(find ${ROOT}/../../textures -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../textures/timestamp;                                \
-		touch ${ASSETS_TIMESTAMP};                                             \
-	fi;                                                                        \
+	for DIRNAME in {builtin,client,doc,fonts,games,mods,po,textures}; do        \
+		LAST_MODIF=$$(find ${ROOT}/../../${DIRNAME} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
+		if [ $$(basename $$LAST_MODIF) != "timestamp" ]; then               \
+			touch ${ROOT}/../../$DIRNAME/timestamp;                     \
+			touch ${ASSETS_TIMESTAMP};                                  \
+			echo ${DIRNAME} changed $$LAST_MODIF;                       \
+		fi;                                                                 \
+	done;                                                                       \
 	LAST_MODIF=$$(find ${IRRLICHT_DIR}/media -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
 	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
 		touch ${IRRLICHT_DIR}/media/timestamp;                                 \
@@ -810,70 +843,6 @@ $(MSGPACK_TARGET): $(MSGPACK_TIMESTAMP)
 clean_msgpack :
 	$(RM) -rf deps/msgpack
 
-
-ICONV_VERSION = 1.14
-ICONV_DIR = $(ROOT)/deps/libiconv/
-ICONV_LIB = $(ICONV_DIR)/lib/.libs/libiconv.a
-ICONV_TIMESTAMP = $(ICONV_DIR)timestamp
-ICONV_TIMESTAMP_INT = $(ROOT)/deps/iconv_timestamp
-ICONV_FILE=libiconv-$(ICONV_VERSION).tar.gz
-ICONV_URL=http://ftp.gnu.org/pub/gnu/libiconv/$(ICONV_FILE)
-
-$(ICONV_TIMESTAMP) : iconv_download
-	@LAST_MODIF=$$(find ${ICONV_DIR} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ICONV_TIMESTAMP};                                              \
-	fi
-
-iconv_download :
-	@if [ ! -d ${ICONV_DIR} ] ; then                                           \
-		echo "iconv sources missing, downloading...";                          \
-		mkdir -p ${ROOT}/deps;                                                 \
-		cd ${ROOT}/deps ;                                                      \
-		[ -f $(ICONV_FILE) ] || wget ${ICONV_URL} -O $(ICONV_FILE) || exit 1;                          \
-		tar -xzf $(ICONV_FILE);                                                \
-		mv libiconv-$(ICONV_VERSION) ${ICONV_DIR};                             \
-		cd ${ICONV_DIR};                                                       \
-		patch -p1 < ../../iconv.patch;                                         \
-	fi
-
-iconv : $(ICONV_LIB)
-
-$(ICONV_LIB): $(ICONV_TIMESTAMP)
-	@REFRESH=0;                                                                \
-	if [ ! -e ${ICONV_TIMESTAMP_INT} ] ; then                                  \
-		REFRESH=1;                                                             \
-	fi;                                                                        \
-	if [ ${ICONV_TIMESTAMP} -nt ${ICONV_TIMESTAMP_INT} ] ; then                \
-		REFRESH=1;                                                             \
-	fi;                                                                        \
-	if [ $$REFRESH -ne 0 ] ; then                                              \
-	export PATH=$${PATH}:${SDKFOLDER}/platform-tools:${ANDROID_NDK};           \
-	echo "changed timestamp for iconv detected building...";                   \
-	cd $(ICONV_DIR);                                                           \
-	export CROSS_PREFIX=${CROSS_PREFIX};                                       \
-	export TOOLCHAIN=/tmp/ndk-${TARGET_HOST}-iconv;                            \
-	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
-	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
-	--install-dir=$${TOOLCHAIN};                                               \
-	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
-	export CC=${CROSS_PREFIX}gcc;                                              \
-	export CXX=${CROSS_PREFIX}g++;                                             \
-	export TARGET_OS=OS_ANDROID_CROSSCOMPILE;                                  \
-	export CPPFLAGS="$${CPPFLAGS} ${TARGET_CFLAGS_ADDON}";                     \
-	export CFLAGS="$${CFLAGS} ${TARGET_CFLAGS_ADDON}";                         \
-	export LDFLAGS="$${LDFLAGS} ${TARGET_LDFLAGS_ADDON}";                      \
-	./configure --host=${TARGET_HOST} --disable-shared --enable-static;        \
-	$(MAKE) -j${PARALLEL} -s || exit 1;                                        \
-	touch ${ICONV_TIMESTAMP};                                                  \
-	touch ${ICONV_TIMESTAMP_INT};                                              \
-	else                                                                       \
-		echo "nothing to be done for iconv";                                   \
-	fi
-	
-clean_iconv :
-	$(RM) -rf $(ICONV_DIR)
-
 GETTEXT_DIR = $(ROOT)/deps/gettext/
 GETTEXT_LIB = $(GETTEXT_DIR)libintl.a
 GETTEXT_TIMESTAMP = $(GETTEXT_DIR)timestamp
@@ -998,6 +967,7 @@ locale:
 #==== end of freeminer libs
 
 
+# $(ICONV_LIB)
 apk: $(PATHCFGFILE) assets $(IRRLICHT_LIB) $(CURL_LIB) $(GMP_LIB) $(LEVELDB_TARGET)       \
 	$(OPENAL_LIB) $(OGG_LIB) prep_srcdir $(ROOT)/jni/src/android_version.h     \
 	$(MSGPACK_TARGET) $(GETTEXT_LIB) $(LUAJIT_TARGET) \
@@ -1009,6 +979,7 @@ apk: $(PATHCFGFILE) assets $(IRRLICHT_LIB) $(CURL_LIB) $(GMP_LIB) $(LEVELDB_TARG
 	ndk-build NDK_MODULE_PATH=${NDK_MODULE_PATH}                               \
 	GPROF=${GPROF} APP_ABI=${TARGET_ABI} HAVE_LEVELDB=${HAVE_LEVELDB}          \
 	USE_LUAJIT=${USE_LUAJIT} \
+	USE_ENET=${USE_ENET} \
 	PROJECT_NAME_C=${PROJECT_NAME_C} \
 	APP_PLATFORM=${APP_PLATFORM}                                               \
 	TARGET_LIBDIR=${TARGET_LIBDIR}                                             \
@@ -1043,8 +1014,8 @@ envpaths :
 
 clean_all :
 	@$(MAKE) clean_apk;                                                        \
-	$(MAKE) clean_assets clean_irrlicht clean_leveldb clean_curl clean_openssl \
-	clean_msgpack clean_iconv clean_gettext clean_luajit \
+	$(MAKE) clean_assets clean_iconv clean_irrlicht clean_leveldb clean_curl clean_openssl \
+	clean_msgpack clean_gettext clean_luajit \
 	clean_openal clean_ogg clean_gmp clean_manifest;                           \
 	sleep 1;                                                                   \
 	$(RM) -r gen libs obj deps bin Debug and_env
