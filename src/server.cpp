@@ -1098,6 +1098,10 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 		Profiler prof;
 
 		u32 end_ms = porting::getTimeMs() + max_cycle_ms;
+#if !ENABLE_THREADS
+		auto lock = m_env->getMap().m_nothread_locker.lock_shared_rec();
+		if (lock->owns_lock())
+#endif
 		while(m_unsent_map_edit_queue.size() != 0)
 		{
 			auto event = std::unique_ptr<MapEditEvent>(m_unsent_map_edit_queue.pop_front());
@@ -1505,8 +1509,10 @@ void Server::onMapEditEvent(MapEditEvent *event)
 	//infostream<<"Server::onMapEditEvent()"<<std::endl;
 	if(m_ignore_map_edit_events)
 		return;
+/* thread unsafe
 	if(m_ignore_map_edit_events_area.contains(event->getArea()))
 		return;
+*/
 	MapEditEvent *e = event->clone();
 	m_unsent_map_edit_queue.push(e);
 }
@@ -2980,7 +2986,8 @@ void Server::UpdateCrafting(Player* player)
 	ItemStack preview;
 	InventoryLocation loc;
 	loc.setPlayer(player->getName());
-	getCraftingResult(&player->inventory, preview, false, this);
+	std::vector<ItemStack> output_replacements;
+	getCraftingResult(&player->inventory, preview, output_replacements, false, this);
 	m_env->getScriptIface()->item_CraftPredict(preview, player->getPlayerSAO(), (&player->inventory)->getList("craft"), loc);
 
 	// Put the new preview in
