@@ -410,11 +410,12 @@ bool EmergeThread::popBlockEmerge(v3s16 *pos, u8 *flags)
 bool EmergeThread::getBlockOrStartGen(v3s16 p, MapBlock **b,
 	BlockMakeData *data, bool allow_gen)
 {
-	MapBlock *block;
-	{
 #if !ENABLE_THREADS
 	auto lock = map->m_nothread_locker.lock_unique_rec();
 #endif
+
+	MapBlock *block;
+	{
 
 	//envlock: usually takes <=1ms, sometimes 90ms or ~400ms to acquire
 	//JMutexAutoLock envlock(m_server->m_env_mutex);
@@ -514,9 +515,11 @@ void *EmergeThread::Thread()
 
 					// Ignore map edit events, they will not need to be sent
 					// to anybody because the block hasn't been sent to anybody
+/* thread unsafe
 					MapEditEventAreaIgnorer
 						ign(&m_server->m_ignore_map_edit_events_area,
 						VoxelArea(minp, maxp));
+*/
 					try {  // takes about 90ms with -O1 on an e3-1230v2
 						m_server->getScriptIface()->environment_OnGenerated(
 								minp, maxp, mapgen->blockseed);

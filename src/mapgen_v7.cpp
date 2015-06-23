@@ -67,8 +67,10 @@ MapgenV7::MapgenV7(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 	this->ystride = csize.X;
 	this->zstride = csize.X * (csize.Y + 2);
 
-	this->biomemap  = new u8[csize.X * csize.Z];
-	this->heightmap = new s16[csize.X * csize.Z];
+	this->biomemap        = new u8[csize.X * csize.Z];
+	this->heightmap       = new s16[csize.X * csize.Z];
+	this->heatmap         = NULL;
+	this->humidmap        = NULL;
 	this->ridge_heightmap = new s16[csize.X * csize.Z];
 
 	MapgenV7Params *sp = (MapgenV7Params *)params->sparams;
@@ -171,17 +173,17 @@ MapgenV7Params::MapgenV7Params()
 	np_layers          = NoiseParams(500,  500, v3f(100, 50,  100), 3663,  5, 0.6, 2.0, NOISE_FLAG_DEFAULTS, 1,   5,   0.5);
 //----------
 
-	np_terrain_base    = NoiseParams(4,    70,  v3f(600,  600,  600),  82341, 6, 0.7,  2.0);
-	np_terrain_alt     = NoiseParams(4,    25,  v3f(600,  600,  600),  5934,  5, 0.6,  2.0);
-	np_terrain_persist = NoiseParams(0.6,  0.1, v3f(500,  500,  500),  539,   3, 0.6,  2.0);
-	np_height_select   = NoiseParams(-12,  24,  v3f(500,  500,  500),  4213,  6, 0.69, 2.0);
-	np_filler_depth    = NoiseParams(0,    1.2, v3f(150,  150,  150),  261,   4, 0.7,  2.0);
-	np_mount_height    = NoiseParams(184,  72,  v3f(500,  500,  500),  72449, 4, 0.6,  2.0);
-	np_ridge_uwater    = NoiseParams(0,    1,   v3f(1000, 1000, 1000), 85039, 5, 0.6,  2.0);
-	np_mountain        = NoiseParams(-0.6, 1,   v3f(250,  350,  250),  5333,  5, 0.68, 2.0);
-	np_ridge           = NoiseParams(0,    1,   v3f(100,  100,  100),  6467,  4, 0.75, 2.0);
-	np_cave1           = NoiseParams(0,    12,  v3f(100,  100,  100),  52534, 4, 0.5,  2.0);
-	np_cave2           = NoiseParams(0,    12,  v3f(100,  100,  100),  10325, 4, 0.5,  2.0);
+	np_terrain_base    = NoiseParams(4,    70,   v3f(600,  600,  600),  82341, 5, 0.6,  2.0);
+	np_terrain_alt     = NoiseParams(4,    25,   v3f(600,  600,  600),  5934,  5, 0.6,  2.0);
+	np_terrain_persist = NoiseParams(0.6,  0.12, v3f(2000, 2000, 2000), 539,   3, 0.5,  2.0);
+	np_height_select   = NoiseParams(-12,  24,   v3f(500,  500,  500),  4213,  6, 0.69, 2.0);
+	np_filler_depth    = NoiseParams(0,    1.2,  v3f(150,  150,  150),  261,   4, 0.7,  2.0);
+	np_mount_height    = NoiseParams(184,  72,   v3f(1000, 1000, 1000), 72449, 3, 0.5,  2.0);
+	np_ridge_uwater    = NoiseParams(0,    1,    v3f(1000, 1000, 1000), 85039, 5, 0.6,  2.0);
+	np_mountain        = NoiseParams(-0.6, 1,    v3f(250,  350,  250),  5333,  5, 0.68, 2.0);
+	np_ridge           = NoiseParams(0,    1,    v3f(100,  100,  100),  6467,  4, 0.75, 2.0);
+	np_cave1           = NoiseParams(0,    12,   v3f(100,  100,  100),  52534, 4, 0.5,  2.0);
+	np_cave2           = NoiseParams(0,    12,   v3f(100,  100,  100),  10325, 4, 0.5,  2.0);
 }
 
 
@@ -430,6 +432,9 @@ void MapgenV7::calculateNoise()
 		noise_heat->result[i] += noise_heat_blend->result[i];
 		noise_humidity->result[i] += noise_humidity_blend->result[i];
 	}
+
+	heatmap = noise_heat->result;
+	humidmap = noise_humidity->result;
 	//printf("calculateNoise: %dus\n", t.stop());
 }
 

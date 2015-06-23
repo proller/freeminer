@@ -1180,6 +1180,12 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	 */
 	m_circuit.update(dtime);
 
+#if !ENABLE_THREADS
+		auto lockmap = m_map->m_nothread_locker.try_lock_unique_rec();
+		if (!lockmap->owns_lock())
+			return;
+#endif
+
 	/*
 		Manage active block list
 	*/
@@ -2405,7 +2411,7 @@ ClientEnvironment::ClientEnvironment(ClientMap *map, scene::ISceneManager *smgr,
 	m_move_max_loop(10)
 {
 	char zero = 0;
-	memset(m_attachements, zero, sizeof(m_attachements));
+	memset(attachement_parent_ids, zero, sizeof(attachement_parent_ids));
 }
 
 ClientEnvironment::~ClientEnvironment()
@@ -2841,6 +2847,15 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 void ClientEnvironment::addSimpleObject(ClientSimpleObject *simple)
 {
 	m_simple_objects.push_back(simple);
+}
+
+GenericCAO* ClientEnvironment::getGenericCAO(u16 id)
+{
+	ClientActiveObject *obj = getActiveObject(id);
+	if (obj && obj->getType() == ACTIVEOBJECT_TYPE_GENERIC)
+		return (GenericCAO*) obj;
+	else
+		return NULL;
 }
 
 ClientActiveObject* ClientEnvironment::getActiveObject(u16 id)

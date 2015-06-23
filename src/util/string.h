@@ -37,7 +37,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #define TOSTRING(x) STRINGIFY(x)
 
 // Checks whether a byte is an inner byte for an utf-8 multibyte sequence
-#define IS_UTF8_MULTB_INNER(x) (((unsigned char)x >= 0x80) && ((unsigned char)x <= 0xc0))
+#define IS_UTF8_MULTB_INNER(x) (((unsigned char)x >= 0x80) && ((unsigned char)x < 0xc0))
 
 typedef std::map<std::string, std::string> StringMap;
 
@@ -442,10 +442,12 @@ inline std::string wrap_rows(const std::string &from,
 
 	size_t character_idx = 0;
 	for (size_t i = 0; i < from.size(); i++) {
-		if (character_idx > 0 && character_idx % row_len == 0)
-			to += '\n';
-		if (!IS_UTF8_MULTB_INNER(from[i]))
+		if (!IS_UTF8_MULTB_INNER(from[i])) {
+			// Wrap string after last inner byte of char
+			if (character_idx > 0 && character_idx % row_len == 0)
+				to += '\n';
 			character_idx++;
+		}
 		to += from[i];
 	}
 
