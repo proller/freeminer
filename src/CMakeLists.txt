@@ -683,7 +683,6 @@ endif()
 
 set(FMclient_SRCS
 	FMColoredString.cpp
-	gsmapper.cpp
 	guiTextInputMenu.cpp
 	intlGUIEditBox.cpp
 	FMStaticText.cpp
@@ -731,6 +730,7 @@ set(client_SRCS
 	main.cpp
 	mapblock_mesh.cpp
 	mesh.cpp
+	minimap.cpp
 	particles.cpp
 	shader.cpp
 	sky.cpp
