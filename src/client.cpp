@@ -39,6 +39,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "porting.h"
 #include "mapblock_mesh.h"
 #include "mapblock.h"
+#include "minimap.h"
 #include "settings.h"
 #include "profiler.h"
 #include "gettext.h"
@@ -133,29 +134,18 @@ std::shared_ptr<MeshMakeData> MeshUpdateQueue::pop()
 	MeshUpdateThread
 */
 
-void * MeshUpdateThread::Thread()
+void MeshUpdateThread::enqueueUpdate(v3s16 p, std::shared_ptr<MeshMakeData> data,
+		bool urgent)
 {
-	ThreadStarted();
+	m_queue_in.addBlock(p, data, urgent);
+	deferUpdate();
+}
 
-	log_register_thread("MeshUpdateThread" + itos(id));
-
-	DSTACK(__FUNCTION_NAME);
-
-	BEGIN_DEBUG_EXCEPTION_HANDLER
-
-	porting::setThreadName(("MeshUpdateThread" + itos(id)).c_str());
-	porting::setThreadPriority(30);
-
-	while(!StopRequested())
-	{
-
+void MeshUpdateThread::doUpdate()
+{
+	std::shared_ptr<MeshMakeData> q;
+	while ((q = m_queue_in.pop())) {
 		try {
-		auto q = m_queue_in.pop();
-		if(!q)
-		{
-			sleep_ms(3);
-			continue;
-		}
 		m_queue_in.m_process.set(q->m_blockpos, 1);
 
 		ScopeProfiler sp(g_profiler, "Client: Mesh making " + itos(q->step));
@@ -181,10 +171,6 @@ void * MeshUpdateThread::Thread()
 		}
 
 	}
-
-	END_DEBUG_EXCEPTION_HANDLER(errorstream)
-
-	return NULL;
 }
 
 /*
@@ -216,7 +202,7 @@ Client::Client(
 	m_nodedef(nodedef),
 	m_sound(sound),
 	m_event(event),
-	m_mesh_update_thread(this),
+	m_mesh_update_thread(),
 	m_env(
 		new ClientMap(this, this, control,
 			device->getSceneManager()->getRootSceneNode(),
@@ -259,6 +245,9 @@ Client::Client(
 {
 	// Add local player
 	m_env.addPlayer(new LocalPlayer(this, playername));
+
+	m_mapper = new Mapper(device, this);
+	//m_cache_save_interval = g_settings->getU16("server_map_save_interval");
 
 	m_cache_smooth_lighting = g_settings->getBool("smooth_lighting");
 	m_cache_enable_shaders  = g_settings->getBool("enable_shaders");
@@ -540,15 +529,21 @@ void Client::step(float dtime)
 		*/
 		{
 
-		while(!m_mesh_update_thread.m_queue_out.empty_try()) {
+		while (!m_mesh_update_thread.m_queue_out.empty_try()) {
 			num_processed_meshes++;
 			MeshUpdateResult r = m_mesh_update_thread.m_queue_out.pop_frontNoEx();
 			if (!r.mesh)
 				continue;
 			auto block = m_env.getMap().getBlock(r.p);
+			MinimapMapblock *minimap_mapblock = nullptr;
 			if(block) {
 				block->setMesh(r.mesh);
+				if (r.mesh) {
+					minimap_mapblock = r.mesh->getMinimapMapblock();
+					r.mesh->m_minimap_mapblock = nullptr;
+				}
 			}
+			m_mapper->addBlock(r.p, minimap_mapblock);
 			if (porting::getTimeMs() > end_ms) {
 				break;
 			}
@@ -895,6 +890,7 @@ void Client::ProcessData(NetworkPacket *pkt)
 	if (command >= TOCLIENT_NUM_MSG_TYPES) {
 		infostream << "Client: Ignoring unknown command "
 			<< command << std::endl;
+		return;
 	}
 
 	/*
@@ -1653,9 +1649,10 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent, int step)
 	}
 
 	// Add task to queue
-	unsigned int qsize = m_mesh_update_thread.m_queue_in.addBlock(p, data, urgent);
-	draw_control.block_overflow = qsize > 1000; // todo: depend on mesh make speed
-
+	//unsigned int qsize = 
+	//m_mesh_update_thread.m_queue_in.addBlock(p, data, urgent);
+	m_mesh_update_thread.enqueueUpdate(p, data, urgent);
+	//draw_control.block_overflow = qsize > 1000; // todo: depend on mesh make speed
 }
 
 void Client::addUpdateMeshTaskWithEdge(v3POS blockpos, bool urgent)

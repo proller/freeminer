@@ -304,11 +304,9 @@ Server::Server(
 	m_mods = modconf.getMods();
 	std::vector<ModSpec> unsatisfied_mods = modconf.getUnsatisfiedMods();
 	// complain about mods with unsatisfied dependencies
-	if(!modconf.isConsistent())
-	{
+	if(!modconf.isConsistent()) {
 		for(std::vector<ModSpec>::iterator it = unsatisfied_mods.begin();
-			it != unsatisfied_mods.end(); ++it)
-		{
+			it != unsatisfied_mods.end(); ++it) {
 			ModSpec mod = *it;
 			errorstream << "mod \"" << mod.name << "\" has unsatisfied dependencies: ";
 			for(std::set<std::string>::iterator dep_it = mod.unsatisfied_depends.begin();
@@ -324,8 +322,7 @@ Server::Server(
 	std::vector<std::string> names = worldmt_settings.getNames();
 	std::set<std::string> load_mod_names;
 	for(std::vector<std::string>::iterator it = names.begin();
-		it != names.end(); ++it)
-	{
+		it != names.end(); ++it) {
 		std::string name = *it;
 		if(name.compare(0,9,"load_mod_")==0 && worldmt_settings.getBool(name))
 			load_mod_names.insert(name.substr(9));
@@ -337,8 +334,7 @@ Server::Server(
 	for(std::vector<ModSpec>::iterator it = unsatisfied_mods.begin();
 			it != unsatisfied_mods.end(); ++it)
 		load_mod_names.erase((*it).name);
-	if(!load_mod_names.empty())
-	{
+	if(!load_mod_names.empty()) {
 		errorstream << "The following mods could not be found:";
 		for(std::set<std::string>::iterator it = load_mod_names.begin();
 			it != load_mod_names.end(); ++it)
@@ -361,15 +357,16 @@ Server::Server(
 	m_script = new GameScripting(this);
 
 	std::string script_path = getBuiltinLuaPath() + DIR_DELIM "init.lua";
+	std::string error_msg;
 
-	if (!m_script->loadMod(script_path, BUILTIN_MOD_NAME)) {
-		throw ModError("Failed to load and run " + script_path);
-	}
+	if (!m_script->loadMod(script_path, BUILTIN_MOD_NAME, &error_msg))
+		throw ModError("Failed to load and run " + script_path
+				+ "\nError from Lua:\n" + error_msg);
 
 	// Print mods
 	infostream << "Server: Loading mods: ";
 	for(std::vector<ModSpec>::iterator i = m_mods.begin();
-			i != m_mods.end(); i++){
+			i != m_mods.end(); i++) {
 		const ModSpec &mod = *i;
 		infostream << mod.name << " ";
 	}
@@ -379,18 +376,21 @@ Server::Server(
 			i != m_mods.end(); i++) {
 		const ModSpec &mod = *i;
 		if (!string_allowed(mod.name, MODNAME_ALLOWED_CHARS)) {
-			errorstream << "Error loading mod \"" << mod.name
+			std::ostringstream err;
+			err << "Error loading mod \"" << mod.name
 					<< "\": mod_name does not follow naming conventions: "
 					<< "Only chararacters [a-z0-9_] are allowed." << std::endl;
-			throw ModError("Mod \"" + mod.name + "\" does not follow naming conventions.");
+			errorstream << err.str().c_str();
+			throw ModError(err.str());
 		}
 		std::string script_path = mod.path + DIR_DELIM "init.lua";
 		infostream << "  [" << padStringRight(mod.name, 12) << "] [\""
 				<< script_path << "\"]" << std::endl;
-		if (!m_script->loadMod(script_path, mod.name)) {
+		if (!m_script->loadMod(script_path, mod.name, &error_msg)) {
 			errorstream << "Server: Failed to load and run "
 					<< script_path << std::endl;
-			throw ModError("Failed to load and run " + script_path);
+			throw ModError("Failed to load and run " + script_path
+					+ "\nError from Lua:\n" + error_msg);
 		}
 	}
 
@@ -485,16 +485,11 @@ Server::~Server()
 	stop();
 	delete m_thread;
 
-	if (m_liquid)
-		delete m_liquid;
-	if (m_sendblocks)
-		delete m_sendblocks;
-	if (m_map_thread)
-		delete m_map_thread;
-	if(m_abmthread)
-		delete m_abmthread;
-	if(m_envthread)
-		delete m_envthread;
+	delete m_liquid;
+	delete m_sendblocks;
+	delete m_map_thread;
+	delete m_abmthread;
+	delete m_envthread;
 
 	// stop all emerge threads before deleting players that may have
 	// requested blocks to be emerged
@@ -1456,6 +1451,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 		if (command >= TOSERVER_NUM_MSG_TYPES) {
 			infostream << "Server: Ignoring unknown command "
 					 << command << std::endl;
+			return;
 		}
 
 		if (toServerCommandTable[command].state == TOSERVER_STATE_NOT_CONNECTED) {
@@ -1512,8 +1508,10 @@ void Server::onMapEditEvent(MapEditEvent *event)
 	//infostream<<"Server::onMapEditEvent()"<<std::endl;
 	if(m_ignore_map_edit_events)
 		return;
+/* thread unsafe
 	if(m_ignore_map_edit_events_area.contains(event->getArea()))
 		return;
+*/
 	MapEditEvent *e = event->clone();
 	m_unsent_map_edit_queue.push(e);
 }

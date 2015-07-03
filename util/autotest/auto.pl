@@ -1,18 +1,31 @@
 #!/usr/bin/perl
+
+# install:
+# sudo apt-get install valgrind clang
+
 our $help = qq{
 #simple task
 $0 valgrind_massif
 
 # run one task with headless config
-$0 gdb --options_add=headless
+$0 --options_add=headless gdb
+
+# pass options to app
+$0 -num_emerge_threads=1 tsan
 
 #run all tasks except interactive
 $0 all
+
+#manual play with gdb trace if segfault
+$0 play_gdb
+
+#normal play
+$0 play
 };
 
 no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 use strict;
-use 5.16.0;
+use 5.14.0;
 use Data::Dumper;
 use Cwd;
 use POSIX ();
@@ -28,32 +41,36 @@ BEGIN {
 }
 
 our $root_path = $script_path . '../../';
-our $config    = {
-    address         => '::1',
-    port            => 60001,
-    clients_num     => 5,
-    autoexit        => 600,
-    clang_version   => "-3.6",
-    root_prefix     => $root_path . 'auto_',
-    root_path       => $root_path,
-    world           => $script_path . 'world',
-    config          => $script_path . 'auto.json',
-    logdir          => $script_path . POSIX::strftime("%Y-%m-%dT%H-%M-%S", localtime()),
-    runner          => 'nice ',
-    name            => 'bot',
-    go              => '--go',
-    gameid          => 'default',
-    tsan_opengl_fix => 1,
-    options_display => ($ENV{DISPLAY} ? '' : 'headless'),
-    cmake_minetest  => '-DMINETEST_PROTO=1',
-    cmake_nothreads => '-DENABLE_THREADS=0 -DHAVE_THREAD_LOCAL=0 -DHAVE_FUTURE=0',
+my $logdir_add = (@ARGV == 1 and $ARGV[0] =~ /^\w+$/) ? '.' . $ARGV[0] : '';
+our $config = {
+    address           => '::1',
+    port              => 60001,
+    clients_num       => 5,
+    autoexit          => 600,
+    clang_version     => "-3.6",
+    root_prefix       => $root_path . 'auto_',
+    root_path         => $root_path,
+    world             => $script_path . 'world',
+    config            => $script_path . 'auto.json',
+    logdir            => $script_path . 'logs.' . POSIX::strftime("%Y-%m-%dT%H-%M-%S", localtime()) . $logdir_add,
+    runner            => 'nice ',
+    name              => 'bot',
+    go                => '--go',
+    gameid            => 'default',
+    tsan_opengl_fix   => 1,
+    options_display   => ($ENV{DISPLAY} ? '' : 'headless'),
+    options_bot       => 'bot_random',
+    cmake_minetest    => '-DMINETEST_PROTO=1',
+    cmake_nothreads   => '-DENABLE_THREADS=0 -DHAVE_THREAD_LOCAL=0 -DHAVE_FUTURE=0',
+    cmake_nothreads_a => '-DENABLE_THREADS=0 -DHAVE_THREAD_LOCAL=1 -DHAVE_FUTURE=0',
+    valgrind_tools    => [qw(memcheck exp-sgcheck exp-dhat   cachegrind callgrind massif exp-bbv)],
     #cgroup => '4G',
     #cmake_add     => '', # '-DIRRLICHT_INCLUDE_DIR=~/irrlicht/include -DIRRLICHT_LIBRARY=~/irrlicht/lib/Linux/libIrrlicht.a',
     #make_add     => '',
     #run_add       => '',
 };
 
-map { /-*(\w+)(?:=(.*))/ and $config->{$1} = $2; } grep {/^-/} @ARGV;
+map { /^--(\w+)(?:=(.*))/ and $config->{$1} = $2; } @ARGV;
 $config->{cgroup} = '4G' if $config->{cgroup} eq 1;
 
 our $g = {};
@@ -62,8 +79,6 @@ our $options = {
     default => {
         name                     => 'autotest',
         enable_sound             => 0,
-        random_input             => 1,
-        continuous_forward       => 1,
         autojump                 => 1,
         respawn_auto             => 1,
         disable_anticheat        => 1,
@@ -72,6 +87,13 @@ our $options = {
         enable_mapgen_debug_info => 1,
         profiler_print_interval  => 100000,
         default_game             => $config->{gameid},
+    },
+    bot_random => {
+        random_input       => 1,
+        continuous_forward => 1,
+    },
+    bot_forward => {
+        continuous_forward => 1,
     },
     headless => {
         video_driver     => 'null',
@@ -85,6 +107,8 @@ our $options = {
         video_driver => 'software',
     },
 };
+
+map { /^-(\w+)(?:=(.*))/ and $options->{opt}{$1} = $2; } @ARGV;
 
 our $commands = {
     prepare => sub {
@@ -135,20 +159,29 @@ qq{$config->{runner} @_ ./freeminer --name $config->{name}$_ --go --address $con
         sy
 qq{asan_symbolize$config->{clang_version} < $config->{logdir}/autotest.$g->{task_name}.err.log | c++filt > $config->{logdir}/autotest.$g->{task_name}.err.symb.log};
     },
-    cgroup => sub { return 0 unless $config->{cgroup}; sy qq(sudo sh -c "mkdir /sys/fs/cgroup/memory/0; echo $$ > /sys/fs/cgroup/memory/0/tasks; echo $config->{cgroup} > /sys/fs/cgroup/memory/0/memory.limit_in_bytes"); },
-    #fail => '',
+    cgroup => sub {
+        return 0 unless $config->{cgroup};
+        sy
+qq(sudo sh -c "mkdir /sys/fs/cgroup/memory/0; echo $$ > /sys/fs/cgroup/memory/0/tasks; echo $config->{cgroup} > /sys/fs/cgroup/memory/0/memory.limit_in_bytes");
+    },
+    fail => sub {
+        warn 'fail:', join ' ', @_;
+    },
 };
 
 our $tasks = {
-    normal => ['prepare', 'cmake',       'make',],
-    clang  => ['prepare', 'cmake_clang', 'make',],
-    tsan   => [
+    build_normal => [{build_name => 'normal'}, 'prepare', 'cmake', 'make',],
+    build_debug => [{build_name => 'debug'}, 'prepare', ['cmake_clang', qw(-DENABLE_LUAJIT=0 -DDEBUG=1)], 'make',],
+    build_nothreads => [{build_name => 'nothreads'}, 'prepare', ['cmake_clang', $config->{cmake_nothreads}], 'make',],
+    run_single => ['run_single'],
+    clang => ['prepare', 'cmake_clang', 'make',],
+    tsan  => [
         'prepare',
         ['cmake_clang', qw(-DBUILD_SERVER=0 -DENABLE_LUAJIT=0 -DSANITIZE_THREAD=1 -DDEBUG=1)],
-        'make',
-        'cgroup',
+        'make', 'cgroup',
         sub {
             local $config->{options_display} = 'software' if $config->{tsan_opengl_fix} and !$config->{options_display};
+            local $config->{runner} = $config->{runner} . " env TSAN_OPTIONS=second_deadlock_stack=1 ";
             commands_run('run_single');
         },
     ],
@@ -156,25 +189,31 @@ our $tasks = {
         local $config->{cmake_int} = $config->{cmake_int} . $config->{cmake_nothreads};
         task_run('tsan');
     },
+    tsannta => sub {
+        local $config->{cmake_int} = $config->{cmake_int} . $config->{cmake_nothreads_a};
+        task_run('tsan');
+    },
     asan => [
         'prepare', ['cmake_clang', qw(-DBUILD_SERVER=0 -DENABLE_LUAJIT=0 -DSANITIZE_ADDRESS=1 -DDEBUG=1)], 'make', 'run_single',
         'symbolize',
     ],
+    asannta => sub {
+        local $config->{cmake_int} = $config->{cmake_int} . $config->{cmake_nothreads_a};
+        task_run('asan');
+    },
     msan => [
         'prepare', ['cmake_clang', qw(-DBUILD_SERVER=0 -DENABLE_LUAJIT=0 -DSANITIZE_MEMORY=1 -DDEBUG=1)], 'make', 'run_single', 'symbolize',
     ],
     debug => ['prepare', ['cmake_clang', qw(-DBUILD_SERVER=0 -DENABLE_LUAJIT=0 -DDEBUG=1)], 'make', 'run_single',],
-    nothreads => [
-        'prepare',
-        ['cmake_clang', qw(-DBUILD_SERVER=0), $config->{cmake_nothreads}], 'make', 'run_single',
-    ], (
+    nothreads => [\'build_nothreads', 'run_single',],    #'
+    (
         map {
-            'valgrind_'
-              . $_ => [
-                {build_name => 'debug'}, 'prepare', ['cmake', qw(-DBUILD_SERVER=0 -DENABLE_LUAJIT=0 -DDEBUG=1)], 'make',
+            'valgrind_' . $_ => [
+                #{build_name => 'debug'}, 'prepare', ['cmake', qw(-DBUILD_SERVER=0 -DENABLE_LUAJIT=0 -DDEBUG=1)], 'make',
+                \'build_debug',                          #'
                 ['valgrind', '--tool=' . $_],
               ],
-        } qw(memcheck exp-sgcheck exp-dhat   cachegrind callgrind massif exp-bbv)
+        } @{$config->{valgrind_tools}}
     ),
 
     minetest => ['prepare', ['cmake', $config->{cmake_minetest}], 'make', 'run_single',],
@@ -182,7 +221,6 @@ our $tasks = {
     minetest_tsannt => sub { local $config->{cmake_int} = $config->{cmake_int} . $config->{cmake_minetest}; task_run('tsannt'); },
     minetest_asan   => sub { local $config->{cmake_int} = $config->{cmake_int} . $config->{cmake_minetest}; task_run('asan'); },
     stress => [{build_name => 'normal'}, 'prepare', 'cmake', 'make', 'server', 'clients',],
-    ui => [sub { return 1 if $config->{all_run}; local $config->{go} = undef; task_run('valgrind_memcheck'); }],
     debug_mapgen =>
       [{build_name => 'debug'}, sub { local $config->{world} = "$config->{logdir}/world_$g->{task_name}"; task_run('debug'); }],
     gdb => [
@@ -192,6 +230,14 @@ our $tasks = {
             task_run('debug');
           }
     ],
+
+    play_task => sub { return 1 if $config->{all_run}; local $config->{go} = undef; $config->{options_bot} = undef; task_run($_) for @_; },
+
+    (
+        map { 'play_' . $_ => [[\'play_task', $_]] } qw(gdb tsan asan msan asannta nothreads),
+        map { 'valgrind_' . $_ } @{$config->{valgrind_tools}}
+    ),    #'
+    play => [[\'play_task', 'build_normal', 'run_single']],    #'
 };
 
 sub dmp (@) { say +(join ' ', (caller)[0 .. 5]), ' ', Data::Dumper::Dumper \@_ }
@@ -219,7 +265,7 @@ sub array (@) {
 
 sub options_make(@) {
     my $r;
-    @_ = ('default', $config->{options_display}, $config->{options_add}) unless @_;
+    @_ = ('default', $config->{options_display}, $config->{options_bot}, $config->{options_add}, 'opt') unless @_;
     for my $name (array @_) {
         $r->{$_} = $options->{$name}{$_} for keys %{$options->{$name}};
     }
@@ -228,6 +274,7 @@ sub options_make(@) {
 
 sub command_run(@) {
     my $cmd = shift;
+    #say "command_run $cmd";
     if ('CODE' eq ref $cmd) {
         return $cmd->(@_);
     } elsif ('HASH' eq ref $cmd) {
@@ -247,7 +294,10 @@ sub command_run(@) {
 
 sub commands_run(@) {
     my $name = shift;
-    if ('ARRAY' eq ref $commands->{$name}) {
+    #say "commands_run $name";
+    if ('SCALAR' eq ref $name) {
+        task_run($$name, @_);
+    } elsif ('ARRAY' eq ref $commands->{$name}) {
         for (@{$commands->{$name}}) {
             command_run $_, @_;
         }
@@ -269,7 +319,7 @@ sub task_run(@) {
             my $r = commands_run(array $command, @_);
             if ($r) {
                 warn("command returned $r");
-                commands_run('fail');
+                commands_run('fail', $name, array $command, @_);
                 return 1;
             }
         }
@@ -285,8 +335,9 @@ sub task_start(@) {
     task_run($name, @_);
 }
 
-my $task_run = @ARGV ? [grep { !/^-/ } @ARGV] : [qw(tsan asan tsannt  valgrind_memcheck minetest_tsan minetest_tsannt minetest_asan)];
-if ($task_run->[0] ~~ 'all') {
+my $task_run = [grep { !/^-/ } @ARGV];
+$task_run = [qw(tsan asan tsannt tsannta valgrind_memcheck minetest_tsan minetest_tsannt minetest_asan)] unless @$task_run;
+if ('all' ~~ $task_run) {
     $task_run = [sort keys %$tasks];
     $config->{all_run} = 1;
 }

@@ -265,8 +265,16 @@
 #    Lower is darker, Higher is lighter. The valid range of values for this
 #    setting is 0.25 to 4.0 inclusive. If the value is out of range it will be
 #    set to the nearest valid value.
-#enable_mesh_cache = true
+#enable_mesh_cache = false
 #    Enables caching of facedir rotated meshes
+
+#enable_minimap = true
+#    Enables minimap
+#minimap_shape_round = true
+#    true - round shape, false - square
+#minimap_double_scan_height = true
+#    true = 256, false = 128
+#    useable to make minimap smoother on slower machines
 
 #    The time in seconds it takes between repeated
 #    right clicks when holding the right mouse button.
@@ -536,9 +544,9 @@
 #    other noise parameters are shown in positional format to save space.
 
 #    Noise parameters for biome API temperature, humidity and biome blend
-#mg_biome_np_heat = 50, 50, (750, 750, 750), 5349, 3, 0.5, 2.0
+#mg_biome_np_heat = 50, 50, (1000, 1000, 1000), 5349, 3, 0.5, 2.0
 #mg_biome_np_heat_blend = 0, 1.5, (8, 8, 8), 13, 2, 1.0, 2.0
-#mg_biome_np_humidity = 50, 50, (750, 750, 750), 842, 3, 0.5, 2.0
+#mg_biome_np_humidity = 50, 50, (1000, 1000, 1000), 842, 3, 0.5, 2.0
 #mg_biome_np_humidity_blend = 0, 1.5, (8, 8, 8), 90003, 2, 1.0, 2.0
 
 #mgv5_np_filler_depth = 0, 1, (150, 150, 150), 261, 4, 0.7, 2.0

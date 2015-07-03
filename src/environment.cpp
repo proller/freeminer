@@ -631,6 +631,7 @@ void ServerEnvironment::loadMeta()
 				wider_unknown_count++;
 				continue;
 			}
+			auto lock = block2->m_static_objects.m_active.lock_shared_rec();
 			wider += block2->m_static_objects.m_active.size()
 					+ block2->m_static_objects.m_stored.size();
 		}
@@ -1600,6 +1601,7 @@ bool isFreeServerActiveObjectId(u16 id,
 u16 getFreeServerActiveObjectId(
 		maybe_concurrent_map<u16, ServerActiveObject*> &objects)
 {
+	auto lock = objects.lock_unique_rec();
 	//try to reuse id's as late as possible
 	static u16 last_used_id = 0;
 	u16 startid = last_used_id;
@@ -1867,8 +1869,11 @@ u16 ServerEnvironment::addActiveObjectRaw(ServerActiveObject *object,
 		MapBlock *block = m_map->emergeBlock(blockpos);
 		if(block){
 			block->m_static_objects.m_active.set(object->getId(), s_obj);
+			{
+			auto lock = object->lock_unique_rec();
 			object->m_static_exists = true;
 			object->m_static_block = blockpos;
+			}
 
 			if(set_changed)
 				block->raiseModified(MOD_STATE_WRITE_NEEDED,
@@ -2036,6 +2041,8 @@ void ServerEnvironment::activateObjects(MapBlock *block, u32 dtime_s)
 	if(block == NULL)
 		return;
 
+	//auto lock = block->m_static_objects.m_active.lock_unique_rec();
+
 	// Ignore if no stored objects (to not set changed flag)
 	if(block->m_static_objects.m_stored.empty())
 		return;
@@ -2173,15 +2180,22 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 		// The block in which the object resides in
 		v3s16 blockpos_o = getNodeBlockPos(floatToInt(objectpos, BS));
 
+		v3POS static_block;
+		{
+			auto lock = obj->try_lock_unique();
+			if (!lock->owns_lock())
+				continue;
+			static_block = obj->m_static_block;
+		}
 		// If object's static data is stored in a deactivated block and object
 		// is actually located in an active block, re-save to the block in
 		// which the object is actually located in.
 		if(!force_delete &&
 				obj->m_static_exists &&
-				!m_active_blocks.contains(obj->m_static_block) &&
+				!m_active_blocks.contains(static_block) &&
 				 m_active_blocks.contains(blockpos_o))
 		{
-			v3s16 old_static_block = obj->m_static_block;
+			v3s16 old_static_block = static_block;
 
 			// Save to block where object is located
 			MapBlock *block = m_map->emergeBlock(blockpos_o, false);

@@ -511,11 +511,18 @@ else()
 	else()
 		set(PLATFORM_LIBS -lrt ${PLATFORM_LIBS})
 	endif(APPLE)
-	#set(CLIENT_PLATFORM_LIBS -lXxf86vm)
+
 	# This way Xxf86vm is found on OpenBSD too
 	find_library(XXF86VM_LIBRARY Xxf86vm)
 	mark_as_advanced(XXF86VM_LIBRARY)
 	set(CLIENT_PLATFORM_LIBS ${CLIENT_PLATFORM_LIBS} ${XXF86VM_LIBRARY})
+
+	# Prefer local iconv if installed
+	find_library(ICONV_LIBRARY iconv)
+	mark_as_advanced(ICONV_LIBRARY)
+	if (ICONV_LIBRARY)
+		set(PLATFORM_LIBS ${PLATFORM_LIBS} ${ICONV_LIBRARY})
+	endif()
 endif()
 
 check_include_files(endian.h HAVE_ENDIAN_H)
@@ -671,7 +678,6 @@ endif()
 
 set(FMclient_SRCS
 	FMColoredString.cpp
-	gsmapper.cpp
 	guiTextInputMenu.cpp
 	intlGUIEditBox.cpp
 	FMStaticText.cpp
@@ -719,6 +725,7 @@ set(client_SRCS
 	main.cpp
 	mapblock_mesh.cpp
 	mesh.cpp
+	minimap.cpp
 	particles.cpp
 	shader.cpp
 	sky.cpp
@@ -778,7 +785,6 @@ if(BUILD_CLIENT)
 		${PNG_LIBRARIES}
 		${X11_LIBRARIES}
 		${GETTEXT_LIBRARY}
-		${ICONV_LIBRARY}
 		${SOUND_LIBRARIES}
 		${LUA_LIBRARY}
 		${GMP_LIBRARY}
@@ -791,13 +797,11 @@ if(BUILD_CLIENT)
 	if(STATIC_BUILD AND USE_GETTEXT)
 		target_link_libraries(
 			${PROJECT_NAME}
-			${ICONV_LIBRARY}
 		)
 	endif()
 	if(APPLE)
 		target_link_libraries(
 			${client_LIBS}
-			${ICONV_LIBRARY}
 		)
 	else()
 		target_link_libraries(
@@ -847,7 +851,6 @@ if(BUILD_SERVER)
 		${ZLIB_LIBRARIES}
 		${JSON_LIBRARY}
 		${GETTEXT_LIBRARY}
-		${ICONV_LIBRARY}
 		${LUA_LIBRARY}
 		${MSGPACK_LIBRARY}
 		${ENET_LIBRARY}
