@@ -745,23 +745,24 @@ assets : $(ASSETS_TIMESTAMP) locale
 	if [ $$REFRESH -ne 0 ] ; then                                              \
 	echo "assets changed, refreshing...";                                      \
 	$(MAKE) clean_assets;                                                       \
-	mkdir -p ${ROOT}/assets/freeminer;                                          \
-	cp ${ROOT}/../../freeminer.conf.example ${ROOT}/assets/freeminer;           \
-	cp ${ROOT}/../../README.md ${ROOT}/assets/freeminer;                        \
-	cp -r ${ROOT}/../../builtin ${ROOT}/assets/freeminer;                       \
-	cp -r ${ROOT}/../../client ${ROOT}/assets/freeminer;                        \
-	cp -r ${ROOT}/../../doc ${ROOT}/assets/freeminer;                           \
-	cp -r ${ROOT}/../../fonts ${ROOT}/assets/freeminer;                         \
-	mkdir ${ROOT}/assets/freeminer/games;                                       \
+	mkdir -p ${ROOT}/assets/freeminer; \
+	cp ${ROOT}/../../freeminer.conf.example ${ROOT}/assets/freeminer; \
+	cp -r ${ROOT}/worlds ${ROOT}/assets/freeminer; \
+	cp ${ROOT}/../../README.md ${ROOT}/assets/freeminer; \
+	cp -r ${ROOT}/../../builtin ${ROOT}/assets/freeminer; \
+	cp -r ${ROOT}/../../client ${ROOT}/assets/freeminer; \
+	#cp -r ${ROOT}/../../doc ${ROOT}/assets/freeminer; \
+	cp -r ${ROOT}/../../fonts ${ROOT}/assets/freeminer; \
+	mkdir ${ROOT}/assets/freeminer/games; \
 	for game in ${GAMES_TO_COPY};                                              \
 	do                                                                         \
-	    cp -r ${ROOT}/../../games/$$game ${ROOT}/assets/freeminer/games/;       \
+	    cp -r ${ROOT}/../../games/$$game ${ROOT}/assets/freeminer/games/; \
 	done;                                                                      \
-	cp -r ${ROOT}/../../mods ${ROOT}/assets/freeminer;                          \
-	cp -r ${ROOT}/cmake/locale ${ROOT}/assets/freeminer;                        \
-	cp -r ${ROOT}/../../textures ${ROOT}/assets/freeminer;                      \
+	cp -r ${ROOT}/../../mods ${ROOT}/assets/freeminer; \
+	cp -r ${ROOT}/cmake/locale ${ROOT}/assets/freeminer; \
+	cp -r ${ROOT}/../../textures ${ROOT}/assets/freeminer; \
 	mkdir -p ${ROOT}/assets/freeminer/media;                                    \
-	cp -r ${IRRLICHT_DIR}/media/Shaders ${ROOT}/assets/freeminer/media;         \
+	cp -r ${IRRLICHT_DIR}/media/Shaders ${ROOT}/assets/freeminer/media; \
 	cd ${ROOT}/assets ||  exit 1;                                              \
 	find . -name "timestamp" -exec rm {} \; ;                                  \
 	find . -name "favoriteservers.json" -exec rm {} \; ;                       \
@@ -770,8 +771,9 @@ assets : $(ASSETS_TIMESTAMP) locale
 	find . -type d -path "*.git" -exec rm -rf {} \; ;                          \
 	find . -type d -path "*.svn" -exec rm -rf {} \; ;                          \
 	find . -type f -path "*.gitignore" -exec rm -rf {} \; ;                    \
+	find . \( -name "lucida_sans_*" -o -name "mono_dejavu_sans_*" -o -name "README.txt" -o -name "game_api.txt" -o -name ".git*" \) -exec rm {} \; ; \
 	ls -R | grep ":$$" | sed -e 's/:$$//' -e 's/\.//' -e 's/^\///' > "index.txt"; \
-	find freeminer >"filelist.txt";                                             \
+	find freeminer >"filelist.txt"; \
 	cp ${ROOT}/${ASSETS_TIMESTAMP} ${ROOT}/${ASSETS_TIMESTAMP}.old;            \
 	else                                                                       \
 		echo "nothing to be done for assets";                                  \

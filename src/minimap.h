@@ -96,7 +96,6 @@ public:
 
 	bool addBlock(v3s16 pos, MinimapMapblock *data);
 
-	// blocking!!
 	QueuedMinimapUpdate *pop();
 
 	u32 size()
@@ -110,11 +109,16 @@ private:
 	JMutex m_mutex;
 };
 
-class MinimapUpdateThread : public thread_pool
+class MinimapUpdateThread : public UpdateThread
 {
 private:
-	JSemaphore m_queue_sem;
 	MinimapUpdateQueue m_queue;
+	std::map<v3s16, MinimapMapblock *> m_blocks_cache;
+
+protected:
+	const char *getName()
+	{ return "MinimapUpdateThread"; }
+	virtual void doUpdate();
 
 public:
 	MinimapUpdateThread(IrrlichtDevice *device, Client *client)
@@ -131,15 +135,11 @@ public:
 	video::SColor getColorFromId(u16 id);
 
 	void enqueue_Block(v3s16 pos, MinimapMapblock *data);
-	void forceUpdate();
 	IrrlichtDevice *device;
 	Client *client;
 	video::IVideoDriver *driver;
 	ITextureSource *tsrc;
-	void Stop();
-	void *Thread();
 	MinimapData *data;
-	std::map<v3s16, MinimapMapblock *> m_blocks_cache;
 };
 
 class Mapper
