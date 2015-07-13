@@ -1363,7 +1363,7 @@ PlayerSAO* Server::StageTwoClientInit(u16 peer_id)
 	SendInventory(playersao);
 
 	// Send HP
-	SendPlayerHPOrDie(peer_id, playersao->getHP() == 0);
+	SendPlayerHPOrDie(playersao);
 
 	// Send Breath
 	SendPlayerBreath(peer_id);
@@ -1431,7 +1431,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 					<< ban_name << std::endl;
 			// This actually doesn't seem to transfer to the client
 			DenyAccess_Legacy(peer_id, L"Your ip is banned. Banned name was "
-					+ narrow_to_wide(ban_name));
+					+ utf8_to_wide(ban_name));
 			return;
 		}
 	}
@@ -1734,7 +1734,24 @@ void Server::SendMovement(u16 peer_id)
 
 	Send(&pkt);
 }
+#endif
 
+void Server::SendPlayerHPOrDie(PlayerSAO *playersao)
+{
+	if (!g_settings->getBool("enable_damage"))
+		return;
+
+	u16 peer_id   = playersao->getPeerID();
+	bool is_alive = playersao->getHP() > 0;
+
+	if (is_alive)
+		SendPlayerHP(peer_id);
+	else
+		DiePlayer(peer_id);
+}
+
+
+#if MINETEST_PROTO
 void Server::SendHP(u16 peer_id, u8 hp)
 {
 	DSTACK(__FUNCTION_NAME);
