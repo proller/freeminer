@@ -157,20 +157,23 @@ void Client::handleCommand_InitLegacy(NetworkPacket* pkt)
 	if (pkt->getSize() < 1)
 		return;
 
-	u8 deployed;
-	*pkt >> deployed;
+	u8 server_ser_ver;
+	*pkt >> server_ser_ver;
 
 	infostream << "Client: TOCLIENT_INIT_LEGACY received with "
-			"deployed=" << ((int)deployed & 0xff) << std::endl;
+		"server_ser_ver=" << ((int)server_ser_ver & 0xff) << std::endl;
 
-	if (!ser_ver_supported(deployed)) {
+	if (!ser_ver_supported(server_ser_ver)) {
 		infostream << "Client: TOCLIENT_INIT_LEGACY: Server sent "
 				<< "unsupported ser_fmt_ver"<< std::endl;
 		return;
 	}
 
-	m_server_ser_ver = deployed;
-	m_proto_ver = deployed;
+	m_server_ser_ver = server_ser_ver;
+
+	// We can be totally wrong with this guess
+	// but we only need some value < 25.
+	m_proto_ver = 24;
 
 	// Get player position
 	v3s16 playerpos_s16(0, BS * 2 + BS * 20, 0);
@@ -231,7 +234,7 @@ void Client::handleCommand_AccessDenied(NetworkPacket* pkt)
 		if (pkt->getSize() >= 2) {
 			std::wstring wide_reason;
 			*pkt >> wide_reason;
-			m_access_denied_reason = wide_to_narrow(wide_reason);
+			m_access_denied_reason = wide_to_utf8(wide_reason);
 		}
 	}
 }
@@ -461,33 +464,23 @@ void Client::handleCommand_ActiveObjectMessages(NetworkPacket* pkt)
 			string message
 		}
 	*/
-	char buf[6];
-	// Get all data except the command number
 	std::string datastring(pkt->getString(0), pkt->getSize());
-	// Throw them in an istringstream
 	std::istringstream is(datastring, std::ios_base::binary);
 
 	try {
-		while(is.eof() == false) {
-			is.read(buf, 2);
-			u16 id = readU16((u8*)buf);
-			if (is.eof())
+		while (is.good()) {
+			u16 id = readU16(is);
+			if (!is.good())
 				break;
-			is.read(buf, 2);
-			size_t message_size = readU16((u8*)buf);
-			std::string message;
-			message.reserve(message_size);
-			for (u32 i = 0; i < message_size; i++) {
-				is.read(buf, 1);
-				message.append(buf, 1);
-			}
+
+			std::string message = deSerializeString(is);
+
 			// Pass on to the environment
 			m_env.processActiveObjectMessage(id, message);
 		}
-	// Packet could be unreliable then ignore it
-	} catch (PacketError &e) {
-		infostream << "handleCommand_ActiveObjectMessages: " << e.what()
-					<< ". The packet is unreliable, ignoring" << std::endl;
+	} catch (SerializationError &e) {
+		errorstream << "Client::handleCommand_ActiveObjectMessages: "
+			<< "caught SerializationError: " << e.what() << std::endl;
 	}
 }
 

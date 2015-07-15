@@ -38,6 +38,17 @@ local function singleplayer_refresh_gamebar()
 					core.set_topleft_text(gamemgr.games[j].name)
 					core.setting_set("menu_last_game",gamemgr.games[j].id)
 					menudata.worldlist:set_filtercriteria(gamemgr.games[j].id)
+					local index = filterlist.get_current_index(menudata.worldlist,
+						tonumber(core.setting_get("mainmenu_last_selected_world")))
+					if not index or index < 1 then
+						local selected = core.get_textlist_index("sp_worlds")
+						if selected ~= nil and selected < #menudata.worldlist:get_list() then
+							index = selected
+						else
+							index = #menudata.worldlist:get_list()
+						end
+					end
+					menu_worldmt_legacy(index)
 					return true
 				end
 			end
@@ -144,12 +155,14 @@ local function main_button_handler(this, fields, name, tabdata)
 		world_doubleclick or
 		fields["key_enter"] then
 		local selected = core.get_textlist_index("sp_worlds")
+		gamedata.selected_world = menudata.worldlist:get_raw_index(selected)
 		
-		if selected ~= nil then
-			gamedata.selected_world = menudata.worldlist:get_raw_index(selected)
-			gamedata.singleplayer   = true
-			
+		if selected ~= nil and gamedata.selected_world ~= 0 then
+			gamedata.singleplayer = true
 			core.start()
+		else
+			gamedata.errormessage =
+				fgettext("No world created or selected!")
 		end
 		return true
 	end
