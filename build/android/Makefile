@@ -23,7 +23,7 @@ GAMES_TO_COPY = MultiCraft_game
 ANDROID_VERSION_CODE = 12
 
 #and for freeminer for skip conflict:
-ANDROID_VERSION_CODE = 25
+ANDROID_VERSION_CODE = 26
 
 PROJECT_NAME_C = multicraft
 
