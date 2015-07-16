@@ -2452,6 +2452,9 @@ int Server::SendBlocks(float dtime)
 		MapBlock *block = NULL;
 		try
 		{
+#if !ENABLE_THREADS
+			auto lock = m_env->getServerMap().m_nothread_locker.lock_shared_rec();
+#endif
 			block = m_env->getMap().getBlockNoCreate(q.pos);
 		}
 		catch(InvalidPositionException &e)
