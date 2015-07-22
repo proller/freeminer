@@ -16,3 +16,6 @@
 [submodule "src/network/usrsctp"]
 	path = src/network/usrsctp
 	url = https://github.com/sctplab/usrsctp.git
+[submodule "build/android/jni/android-ifaddrs"]
+	path = build/android/jni/android-ifaddrs
+	url = https://github.com/kmackay/android-ifaddrs.git
