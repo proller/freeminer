@@ -36,7 +36,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <list>
 #include <map>
 
-//#include "network/usrsctplib/usrsctp.h"
+//#include "network/usrsctp/usrsctplib/usrsctp.h"
 #include "../msgpack_fix.h"
 #include "util/msgpack_serialize.h"
 #include "util/thread_pool.h"

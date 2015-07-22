@@ -26,7 +26,7 @@ https://chromium.googlesource.com/external/webrtc/+/master/talk/media/sctp/sctpd
 */
 
 #include "network/fm_connection_sctp.h"
-#include "network/usrsctplib/usrsctp.h"
+#include "network/usrsctp/usrsctplib/usrsctp.h"
 #include "serialization.h"
 #include "log.h"
 #include "porting.h"
@@ -275,7 +275,7 @@ void Connection::sctp_setup(u16 port) {
 	//usrsctp_init(0, nullptr, debug_printf);
 	usrsctp_init(port, nullptr, debug_printf);
 
-#ifdef SCTP_DEBUG
+#if SCTP_DEBUG
 	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
 	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
 #endif
