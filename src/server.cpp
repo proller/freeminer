@@ -474,10 +474,13 @@ Server::~Server()
 		// Execute script shutdown hooks
 		m_script->on_shutdown();
 
-		infostream<<"Server: Saving players"<<std::endl;
+		infostream << "Server: Saving players" << std::endl;
 		m_env->saveLoadedPlayers();
 
-		infostream<<"Server: Saving environment metadata"<<std::endl;
+		infostream << "Server: Kicking players" << std::endl;
+		m_env->kickAllPlayers(g_settings->get("kick_msg_shutdown"));
+
+		infostream << "Server: Saving environment metadata" << std::endl;
 		m_env->saveMeta();
 	}
 
@@ -622,10 +625,16 @@ void Server::step(float dtime)
 	// Assert if fatal error occurred in thread
 	std::string async_err = m_async_fatal_error.get();
 	if(async_err != "") {
-		errorstream << "UNRECOVERABLE error occurred. Stopping server. "
-				<< "Please fix the following error:" << std::endl
-				<< async_err << std::endl;
-		//assert(false);
+		if (m_simple_singleplayer_mode) {
+			//throw ServerError(async_err);
+		}
+		else {
+			//m_env->kickAllPlayers(g_settings->get("kick_msg_crash"));
+			errorstream << "UNRECOVERABLE error occurred. Stopping server. "
+					<< "Please fix the following error:" << std::endl
+					<< async_err << std::endl;
+			//FATAL_ERROR(async_err.c_str());
+		}
 	}
 }
 

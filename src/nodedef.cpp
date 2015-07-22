@@ -225,12 +225,8 @@ void TileDef::msgpack_unpack(msgpack::object o)
 	packet[TILEDEF_ANIMATION_ASPECT_H].convert(&animation.aspect_h);
 	packet[TILEDEF_ANIMATION_LENGTH].convert(&animation.length);
 	packet[TILEDEF_BACKFACE_CULLING].convert(&backface_culling);
-
-	if (packet.count(TILEDEF_TILEABLE_VERTICAL))
-		packet[TILEDEF_TILEABLE_VERTICAL].convert(&tileable_vertical);
-	if (packet.count(TILEDEF_TILEABLE_HORIZONTAL))
-		packet[TILEDEF_TILEABLE_HORIZONTAL].convert(&tileable_horizontal);
-
+	packet_convert_safe(packet, TILEDEF_TILEABLE_VERTICAL, &tileable_vertical);
+	packet_convert_safe(packet, TILEDEF_TILEABLE_HORIZONTAL, &tileable_horizontal);
 }
 
 /*
@@ -1063,6 +1059,7 @@ void CNodeDefManager::updateTextures(IGameDef *gamedef,
 
 #ifndef SERVER
 		// minimap pixel color - the average color of a texture
+		if (tsrc)
 		if (enable_minimap && f->tiledef[0].name != "")
 			f->minimap_color = tsrc->getTextureAverageColor(f->tiledef[0].name);
 #endif
@@ -1277,7 +1274,9 @@ void CNodeDefManager::fillTileAttribs(ITextureSource *tsrc, TileSpec *tile,
 	if (use_normal_texture) {
 		tile->normal_texture = tsrc->getNormalTexture(tiledef->name);
 	}
-	tile->flags_texture = tsrc->getShaderFlagsTexture(tiledef, tile);
+	tile->flags_texture = tsrc->getShaderFlagsTexture(
+		tile->normal_texture ? true : false,
+		tiledef->tileable_horizontal, tiledef->tileable_vertical);
 
 	// Material flags
 	tile->material_flags = 0;
