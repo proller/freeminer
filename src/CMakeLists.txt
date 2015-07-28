@@ -76,11 +76,11 @@ endif()
 
 set(CMAKE_REQUIRED_FLAGS "")
 
-#if(MSVC)
-#	option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 0)
-#else()
+if(MSVC)
+	option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 0)
+else()
 	option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 1)
-#endif()
+endif()
 
 if(ENABLE_THREADS)
 	set(ENABLE_THREADS 1)
@@ -439,6 +439,21 @@ else()
 	set(USE_IPV4_DEFAULT 0)
 endif()
 
+OPTION(ENABLE_SPATIAL "Enable SpatialIndex AreaStore backend" TRUE)
+set(USE_SPATIAL FALSE)
+
+if(ENABLE_SPATIAL)
+	find_library(SPATIAL_LIBRARY spatialindex)
+	find_path(SPATIAL_INCLUDE_DIR spatialindex/SpatialIndex.h)
+	if(SPATIAL_LIBRARY AND SPATIAL_INCLUDE_DIR)
+		set(USE_SPATIAL TRUE)
+		message(STATUS "SpatialIndex AreaStore backend enabled.")
+		include_directories(${SPATIAL_INCLUDE_DIR})
+	else(SPATIAL_LIBRARY AND SPATIAL_INCLUDE_DIR)
+		message(STATUS "SpatialIndex not found!")
+	endif(SPATIAL_LIBRARY AND SPATIAL_INCLUDE_DIR)
+endif(ENABLE_SPATIAL)
+
 
 if(NOT MSVC)
 	set(USE_GPROF FALSE CACHE BOOL "Use -pg flag for g++")
@@ -589,6 +604,7 @@ set(FMcommon_SRCS
 )
 
 set(common_SRCS
+	areastore.cpp
 	ban.cpp
 	cavegen.cpp
 	clientiface.cpp
@@ -854,6 +870,9 @@ if(BUILD_CLIENT)
 		target_link_libraries(${PROJECT_NAME} shlwapi.lib)
 		add_definitions(-DNOMINMAX)
 	endif()
+	if (USE_SPATIAL)
+		target_link_libraries(${PROJECT_NAME} ${SPATIAL_LIBRARY})
+	endif()
 endif(BUILD_CLIENT)
 
 
@@ -882,6 +901,9 @@ if(BUILD_SERVER)
 	endif()
 	if (USE_REDIS)
 		target_link_libraries(${PROJECT_NAME}server ${REDIS_LIBRARY})
+	endif()
+	if (USE_SPATIAL)
+		target_link_libraries(${PROJECT_NAME}server ${SPATIAL_LIBRARY})
 	endif()
 	if(USE_CURL)
 		target_link_libraries(

@@ -232,6 +232,7 @@ Server::Server(
 	m_uptime(0),
 	m_clients(&m_con),
 	m_shutdown_requested(false),
+	m_shutdown_ask_reconnect(false),
 	m_ignore_map_edit_events(false),
 	m_ignore_map_edit_events_peer_id(0),
 	m_next_sound_id(0)
@@ -478,7 +479,17 @@ Server::~Server()
 		m_env->saveLoadedPlayers();
 
 		infostream << "Server: Kicking players" << std::endl;
-		m_env->kickAllPlayers(g_settings->get("kick_msg_shutdown"));
+		std::string kick_msg;
+		bool reconnect = false;
+		if (getShutdownRequested()) {
+			reconnect = m_shutdown_ask_reconnect;
+			kick_msg = m_shutdown_msg;
+		}
+		if (kick_msg == "") {
+			kick_msg = g_settings->get("kick_msg_shutdown");
+		}
+		m_env->kickAllPlayers(SERVER_ACCESSDENIED_SHUTDOWN,
+			kick_msg, reconnect);
 
 		infostream << "Server: Saving environment metadata" << std::endl;
 		m_env->saveMeta();
@@ -629,11 +640,17 @@ void Server::step(float dtime)
 			//throw ServerError(async_err);
 		}
 		else {
-			//m_env->kickAllPlayers(g_settings->get("kick_msg_crash"));
+/*
+			m_env->kickAllPlayers(SERVER_ACCESSDENIED_CRASH,
+				g_settings->get("kick_msg_crash"),
+				g_settings->getBool("ask_reconnect_on_crash"));
+*/
 			errorstream << "UNRECOVERABLE error occurred. Stopping server. "
 					<< "Please fix the following error:" << std::endl
 					<< async_err << std::endl;
-			//FATAL_ERROR(async_err.c_str());
+/*
+			FATAL_ERROR(async_err.c_str());
+*/
 		}
 	}
 }
@@ -1335,7 +1352,7 @@ PlayerSAO* Server::StageTwoClientInit(u16 peer_id)
 		RemoteClient* client = m_clients.lockedGetClientNoEx(peer_id, CS_InitDone);
 		if (client != NULL) {
 			playername = client->getName();
-			playersao = emergePlayer(playername.c_str(), peer_id);
+			playersao = emergePlayer(playername.c_str(), peer_id, client->net_proto_version);
 		}
 
 	RemotePlayer *player =
@@ -1779,16 +1796,19 @@ void Server::SendBreath(u16 peer_id, u16 breath)
 	Send(&pkt);
 }
 
-void Server::SendAccessDenied(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason)
+void Server::SendAccessDenied(u16 peer_id, AccessDeniedCode reason,
+		const std::string &custom_reason, bool reconnect)
 {
-	DSTACK(__FUNCTION_NAME);
+	if (reason >= SERVER_ACCESSDENIED_MAX)
+		return;
 
 	NetworkPacket pkt(TOCLIENT_ACCESS_DENIED, 1, peer_id);
-	pkt << (u8) reason;
-
-	if (reason == SERVER_ACCESSDENIED_CUSTOM_STRING) {
+	pkt << (u8)reason;
+	if (reason == SERVER_ACCESSDENIED_CUSTOM_STRING)
 		pkt << narrow_to_wide(custom_reason);
-	}
+	else if (reason == SERVER_ACCESSDENIED_SHUTDOWN ||
+			reason == SERVER_ACCESSDENIED_CRASH)
+		pkt << narrow_to_wide(custom_reason) << (u8)reconnect;
 	Send(&pkt);
 }
 
@@ -2861,6 +2881,7 @@ void Server::RespawnPlayer(u16 peer_id)
 	stat.add("respawn", playersao->getPlayer()->getName());
 }
 
+
 #if MINETEST_PROTO
 void Server::DenySudoAccess(u16 peer_id)
 {
@@ -2870,6 +2891,26 @@ void Server::DenySudoAccess(u16 peer_id)
 	Send(&pkt);
 }
 #endif
+
+
+void Server::DenyAccessVerCompliant(u16 peer_id, u16 proto_ver, AccessDeniedCode reason,
+		const std::string &str_reason, bool reconnect)
+{
+	if (proto_ver >= 25) {
+		SendAccessDenied(peer_id, reason, str_reason);
+	} else {
+		std::string wreason = (
+			reason == SERVER_ACCESSDENIED_CUSTOM_STRING ? str_reason :
+			accessDeniedStrings[(u8)reason]);
+#if MINETEST_PROTO
+		SendAccessDenied_Legacy(peer_id, wreason);
+#endif
+	}
+
+	m_clients.event(peer_id, CSE_SetDenied);
+	m_con.DisconnectPeer(peer_id);
+}
+
 
 void Server::DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason)
 {
@@ -3334,34 +3375,36 @@ void Server::notifyPlayers(const std::string &msg)
 	SendChatMessage(PEER_ID_INEXISTENT,msg);
 }
 
-void Server::spawnParticle(const char *playername, v3f pos,
+void Server::spawnParticle(const std::string &playername, v3f pos,
 	v3f velocity, v3f acceleration,
 	float expirationtime, float size, bool
 	collisiondetection, bool vertical, const std::string &texture)
 {
-	Player *player = m_env->getPlayer(playername);
-	if(!player)
-		return;
-	SendSpawnParticle(player->peer_id, pos, velocity, acceleration,
+	u16 peer_id = PEER_ID_INEXISTENT;
+	if (playername != "") {
+		Player* player = m_env->getPlayer(playername.c_str());
+		if (!player)
+			return;
+		peer_id = player->peer_id;
+	}
+
+	SendSpawnParticle(peer_id, pos, velocity, acceleration,
 			expirationtime, size, collisiondetection, vertical, texture);
 }
 
-void Server::spawnParticleAll(v3f pos, v3f velocity, v3f acceleration,
-	float expirationtime, float size,
-	bool collisiondetection, bool vertical, const std::string &texture)
-{
-	SendSpawnParticle(PEER_ID_INEXISTENT,pos, velocity, acceleration,
-			expirationtime, size, collisiondetection, vertical, texture);
-}
-
-u32 Server::addParticleSpawner(const char *playername, u16 amount, float spawntime,
+u32 Server::addParticleSpawner(u16 amount, float spawntime,
 	v3f minpos, v3f maxpos, v3f minvel, v3f maxvel, v3f minacc, v3f maxacc,
 	float minexptime, float maxexptime, float minsize, float maxsize,
-	bool collisiondetection, bool vertical, const std::string &texture)
+	bool collisiondetection, bool vertical, const std::string &texture,
+	const std::string &playername)
 {
-	Player *player = m_env->getPlayer(playername);
-	if(!player)
-		return -1;
+	u16 peer_id = PEER_ID_INEXISTENT;
+	if (playername != "") {
+		Player* player = m_env->getPlayer(playername.c_str());
+		if (!player)
+			return -1;
+		peer_id = player->peer_id;
+	}
 
 	u32 id = 0;
 	for(;;) // look for unused particlespawner id
@@ -3376,7 +3419,7 @@ u32 Server::addParticleSpawner(const char *playername, u16 amount, float spawnti
 		}
 	}
 
-	SendAddParticleSpawner(player->peer_id, amount, spawntime,
+	SendAddParticleSpawner(peer_id, amount, spawntime,
 		minpos, maxpos, minvel, maxvel, minacc, maxacc,
 		minexptime, maxexptime, minsize, maxsize,
 		collisiondetection, vertical, texture, id);
@@ -3384,55 +3427,21 @@ u32 Server::addParticleSpawner(const char *playername, u16 amount, float spawnti
 	return id;
 }
 
-u32 Server::addParticleSpawnerAll(u16 amount, float spawntime,
-	v3f minpos, v3f maxpos,
-	v3f minvel, v3f maxvel,
-	v3f minacc, v3f maxacc,
-	float minexptime, float maxexptime,
-	float minsize, float maxsize,
-	bool collisiondetection, bool vertical, const std::string &texture)
+void Server::deleteParticleSpawner(const std::string &playername, u32 id)
 {
-	u32 id = 0;
-	for(;;) // look for unused particlespawner id
-	{
-		id++;
-		if (std::find(m_particlespawner_ids.begin(),
-				m_particlespawner_ids.end(), id)
-				== m_particlespawner_ids.end())
-		{
-			m_particlespawner_ids.push_back(id);
-			break;
-		}
+	u16 peer_id = PEER_ID_INEXISTENT;
+	if (playername != "") {
+		Player* player = m_env->getPlayer(playername.c_str());
+		if (!player)
+			return;
+		peer_id = player->peer_id;
 	}
 
-	SendAddParticleSpawner(PEER_ID_INEXISTENT, amount, spawntime,
-		minpos, maxpos, minvel, maxvel, minacc, maxacc,
-		minexptime, maxexptime, minsize, maxsize,
-		collisiondetection, vertical, texture, id);
-
-	return id;
-}
-
-void Server::deleteParticleSpawner(const char *playername, u32 id)
-{
-	Player *player = m_env->getPlayer(playername);
-	if(!player)
-		return;
-
 	m_particlespawner_ids.erase(
 			std::remove(m_particlespawner_ids.begin(),
 			m_particlespawner_ids.end(), id),
 			m_particlespawner_ids.end());
-	SendDeleteParticleSpawner(player->peer_id, id);
-}
-
-void Server::deleteParticleSpawnerAll(u32 id)
-{
-	m_particlespawner_ids.erase(
-			std::remove(m_particlespawner_ids.begin(),
-			m_particlespawner_ids.end(), id),
-			m_particlespawner_ids.end());
-	SendDeleteParticleSpawner(PEER_ID_INEXISTENT, id);
+	SendDeleteParticleSpawner(peer_id, id);
 }
 
 Inventory* Server::createDetachedInventory(const std::string &name)
@@ -3632,7 +3641,7 @@ v3f Server::findSpawnPos()
 	return intToFloat(nodepos, BS);
 }
 
-PlayerSAO* Server::emergePlayer(const char *name, u16 peer_id)
+PlayerSAO* Server::emergePlayer(const char *name, u16 peer_id, u16 proto_version)
 {
 	RemotePlayer *player = NULL;
 	bool newplayer = false;
@@ -3687,6 +3696,8 @@ PlayerSAO* Server::emergePlayer(const char *name, u16 peer_id)
 	PlayerSAO *playersao = new PlayerSAO(m_env, player, peer_id,
 			getPlayerEffectivePrivs(player->getName()),
 			isSingleplayer());
+
+	player->protocol_version = proto_version;
 
 	/* Clean up old HUD elements from previous sessions */
 	player->clearHud();
