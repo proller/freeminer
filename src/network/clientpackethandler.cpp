@@ -106,7 +106,6 @@ void Client::handleCommand_Hello(NetworkPacket* pkt)
 
 void Client::handleCommand_AuthAccept(NetworkPacket* pkt)
 {
-	m_chosen_auth_mech = AUTH_MECHANISM_NONE;
 	deleteAuthData();
 
 	v3f playerpos;
@@ -132,7 +131,6 @@ void Client::handleCommand_AuthAccept(NetworkPacket* pkt)
 }
 void Client::handleCommand_AcceptSudoMode(NetworkPacket* pkt)
 {
-	m_chosen_auth_mech = AUTH_MECHANISM_NONE;
 	deleteAuthData();
 
 	m_password = m_new_password;
@@ -150,7 +148,6 @@ void Client::handleCommand_DenySudoMode(NetworkPacket* pkt)
 	m_chat_queue.push("Password change denied. Password NOT changed.");
 	// reset everything and be sad
 	deleteAuthData();
-	m_chosen_auth_mech = AUTH_MECHANISM_NONE;
 }
 void Client::handleCommand_InitLegacy(NetworkPacket* pkt)
 {
@@ -221,11 +218,28 @@ void Client::handleCommand_AccessDenied(NetworkPacket* pkt)
 
 		u8 denyCode = SERVER_ACCESSDENIED_UNEXPECTED_DATA;
 		*pkt >> denyCode;
-		if (denyCode == SERVER_ACCESSDENIED_CUSTOM_STRING) {
+		if (denyCode == SERVER_ACCESSDENIED_SHUTDOWN ||
+				denyCode == SERVER_ACCESSDENIED_CRASH) {
 			*pkt >> m_access_denied_reason;
-		}
-		else if (denyCode < SERVER_ACCESSDENIED_MAX) {
+			if (m_access_denied_reason == "") {
+				m_access_denied_reason = accessDeniedStrings[denyCode];
+			}
+			u8 reconnect;
+			*pkt >> reconnect;
+			m_access_denied_reconnect = reconnect & 1;
+		} else if (denyCode == SERVER_ACCESSDENIED_CUSTOM_STRING) {
+			*pkt >> m_access_denied_reason;
+		} else if (denyCode < SERVER_ACCESSDENIED_MAX) {
 			m_access_denied_reason = accessDeniedStrings[denyCode];
+		} else {
+			// Allow us to add new error messages to the
+			// protocol without raising the protocol version, if we want to.
+			// Until then (which may be never), this is outside
+			// of the defined protocol.
+			*pkt >> m_access_denied_reason;
+			if (m_access_denied_reason == "") {
+				m_access_denied_reason = "Unknown";
+			}
 		}
 	}
 	// 13/03/15 Legacy code from 0.4.12 and lesser. must stay 1 year

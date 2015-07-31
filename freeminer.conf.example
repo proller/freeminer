@@ -390,6 +390,15 @@
 #        "log"    = mimic and log backtrace of deprecated call (default for debug).
 #        "error"  = abort on usage of deprecated call (suggested for mod developers).
 #deprecated_lua_api_handling = legacy
+
+#kick_msg_shutdown = Server shutting down.
+#    A message to be displayed to all clients when the server shuts down
+#kick_msg_crash = This server has experienced an internal error. You will now be disconnected.
+#    A message to be displayed to all clients when the server crashes
+#ask_reconnect_on_crash = false
+#    Whether to ask clients to reconnect after a (lua) crash.
+#    Set this to true if your server is set up to restart automatically.
+
 #    Mod profiler
 #mod_profiling = false
 #    Detailed mod profile data
@@ -582,12 +591,12 @@
 
 #mgv7_np_terrain_base = 4, 70, (600, 600, 600), 82341, 5, 0.6, 2.0
 #mgv7_np_terrain_alt = 4, 25, (600, 600, 600), 5934, 5, 0.6, 2.0
-#mgv7_np_terrain_persist = 0.6, 0.12, (2000, 2000, 2000), 539, 3, 0.5, 2.0
-#mgv7_np_height_select = -12, 24, (500, 500, 500), 4213, 6, 0.69, 2.0
-#mgv7_np_filler_depth = 0, 1.2, (150, 150, 150), 261, 4, 0.7, 2.0
-#mgv7_np_mount_height = 184, 72, (1000, 1000, 1000), 72449, 3, 0.5, 2.0
+#mgv7_np_terrain_persist = 0.6, 0.1, (2000, 2000, 2000), 539, 3, 0.6, 2.0
+#mgv7_np_height_select = -12, 24, (500, 500, 500), 4213, 6, 0.7, 2.0
+#mgv7_np_filler_depth = 0, 1.2, (150, 150, 150), 261, 3, 0.7, 2.0
+#mgv7_np_mount_height = 256, 112, (1000, 1000, 1000), 72449, 3, 0.6, 2.0
 #mgv7_np_ridge_uwater = 0, 1, (1000, 1000, 1000), 85039, 5, 0.6, 2.0
-#mgv7_np_mountain = -0.6, 1, (250, 350, 250), 5333, 5, 0.68, 2.0
+#mgv7_np_mountain = -0.6, 1, (250, 350, 250), 5333, 5, 0.63, 2.0
 #mgv7_np_ridge = 0, 1, (100, 100, 100), 6467, 4, 0.75, 2.0
 #mgv7_np_cave1 = 0, 12, (100, 100, 100), 52534, 4, 0.5, 2.0
 #mgv7_np_cave2 = 0, 12, (100, 100, 100), 10325, 4, 0.5, 2.0

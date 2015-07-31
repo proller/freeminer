@@ -27,8 +27,10 @@ include $(PREBUILT_STATIC_LIBRARY)
 ifdef NOT_USED_ICONV
 include $(CLEAR_VARS)
 LOCAL_MODULE := iconv
-LOCAL_SRC_FILES := deps/libiconv/obj/local/$(TARGET_ARCH_ABI)/libiconv.a
-include $(PREBUILT_STATIC_LIBRARY)
+#LOCAL_SRC_FILES := deps/libiconv/obj/local/$(TARGET_ARCH_ABI)/libiconv.a
+#include $(PREBUILT_STATIC_LIBRARY)
+LOCAL_SRC_FILES := deps/libiconv/lib/.libs/libiconv.so
+include $(PREBUILT_SHARED_LIBRARY)
 endif
 
 include $(CLEAR_VARS)
@@ -170,6 +172,7 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/fm_map.cpp                        \
 		jni/src/key_value_storage.cpp             \
 		jni/src/log_types.cpp                     \
+		jni/src/areastore.cpp                     \
 		jni/src/ban.cpp                           \
 		jni/src/camera.cpp                        \
 		jni/src/cavegen.cpp                       \
@@ -350,6 +353,7 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/script/cpp_api/s_player.cpp       \
 		jni/src/script/cpp_api/s_security.cpp     \
 		jni/src/script/cpp_api/s_server.cpp       \
+		jni/src/script/lua_api/l_areastore.cpp    \
 		jni/src/script/lua_api/l_base.cpp         \
 		jni/src/script/lua_api/l_craft.cpp        \
 		jni/src/script/lua_api/l_env.cpp          \
@@ -417,8 +421,8 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/jthread/pthread/jevent.cpp        \
 		jni/src/jthread/pthread/jsemaphore.cpp
 
-LOCAL_SHARED_LIBRARIES := openal ogg vorbis gmp
-LOCAL_STATIC_LIBRARIES := Irrlicht iconv freetype curl ssl crypto android_native_app_glue $(PROFILER_LIBS)
+LOCAL_SHARED_LIBRARIES := iconv openal ogg vorbis gmp
+LOCAL_STATIC_LIBRARIES := Irrlicht freetype curl ssl crypto android_native_app_glue $(PROFILER_LIBS)
 
 #freeminer:
 LOCAL_STATIC_LIBRARIES += msgpack jsoncpp gettext

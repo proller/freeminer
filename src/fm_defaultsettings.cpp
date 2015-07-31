@@ -128,6 +128,9 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("debug_log_level", "2");
 	settings->setDefault("time_taker_enabled", debug ? "5" : "0");
 
+	settings->setDefault("kick_msg_shutdown", "Server shutting down.");
+	settings->setDefault("kick_msg_crash", "This server has experienced an internal error. You will now be disconnected.");
+
 	//
 	// Keymaps
 	//
@@ -377,7 +380,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("server_url", "");
 	settings->setDefault("enable_remote_media_server", "true");
 	settings->setDefault("remote_media", "");
-	settings->setDefault("timeout_mul", android ? "10" : "1");
+	settings->setDefault("timeout_mul", android ? "5" : "1");
 
 	// Check when player joins
 	settings->setDefault("strict_protocol_version_checking", "false");
@@ -401,6 +404,10 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("enable_rollback_recording", "false");
 	settings->setDefault("max_spawn_height", "50");
 	settings->setDefault("time_speed", "72");
+
+	settings->setDefault("kick_msg_shutdown", "Server shutting down.");
+	settings->setDefault("kick_msg_crash", "This server has experienced an internal error. You will now be disconnected.");
+
 
 	// Backend server settings
 	settings->setDefault("max_packets_per_iteration", "1024");
@@ -497,7 +504,7 @@ void set_default_settings(Settings *settings) {
 	// Tweaks for windows
 	//
 
-	settings->setDefault("more_threads", win32 ? "false" : "true");
+	settings->setDefault("more_threads", "true");
 
 #if !defined(SERVER) && defined(_WIN32)
 	settings->setDefault("console_enabled", debug ? "true" : "false");

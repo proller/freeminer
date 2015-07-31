@@ -65,6 +65,15 @@ e.g.
 The game directory can contain the file minetest.conf, which will be used
 to set default settings when running the particular game.
 
+### Menu images
+
+Games can provide custom main menu images. They are put inside a `menu` directory inside the game directory.
+
+The images are named `$identifier.png`, where `$identifier` is one of `overlay,background,footer,header`.
+If you want to specify multiple images for one identifier, add additional images named like `$identifier.$n.png`, with an ascending number $n starting with 1,
+and a random image will be chosen from the provided ones.
+
+
 Mod load path
 -------------
 Generic:
@@ -1711,7 +1720,7 @@ Helper functions
             max_jitter = 0.5,          -- maximum packet time jitter
             avg_jitter = 0.03,         -- average packet time jitter
             connection_uptime = 200,   -- seconds since client connected
-    
+
             -- following information is available on debug build only!!!
             -- DO NOT USE IN MODS
             --ser_vers = 26,             -- serialization version used by client
@@ -1824,6 +1833,7 @@ Call these functions only at load time!
         * `dug_too_fast`
 * `minetest.register_on_chat_message(func(name, message))`
     * Called always when a player says something
+    * Return `true` to mark the message as handled, which means that it will not be sent to other players
 * `minetest.register_on_player_receive_fields(func(player, formname, fields))`
     * Called when a button is pressed in player's inventory form
     * Newest functions are called first
@@ -2164,7 +2174,8 @@ These functions return the leftover itemstack.
     * Optional: Variable number of arguments that are passed to `func`
 
 ### Server
-* `minetest.request_shutdown()`: request for server shutdown
+* `minetest.request_shutdown([message],[reconnect])`: request for server shutdown. Will display `message` to clients,
+    and `reconnect` == true displays a reconnect button.
 * `minetest.get_server_status()`: returns server status string
 
 ### Bans
@@ -2470,6 +2481,7 @@ This is basically a reference to a C++ `ServerActiveObject`
 
 ##### Player-only (no-op for other objects)
 * `get_player_name()`: returns `""` if is not a player
+* `get_player_velocity()`: returns `nil` if is not a player otherwise a table {x, y, z} representing the player's instantaneous velocity in nodes/s
 * `get_look_dir()`: get camera direction as a unit vector
 * `get_look_pitch()`: pitch in radians
 * `get_look_yaw()`: yaw in radians (wraps around pretty randomly as of now)
@@ -2589,6 +2601,28 @@ An `InvRef` is a reference to an inventory.
   with an empty `ItemStack`
 * `get_location()`: returns a location compatible to `minetest.get_inventory(location)`
     * returns `{type="undefined"}` in case location is not known
+
+### `AreaStore`
+A fast access data structure to store areas, and find areas near a given position or area.
+Every area has a `data` string attribute to store additional information.
+You can create an empty `AreaStore` by calling `AreaStore()`, or `AreaStore(type_name)`.
+If you chose the parameter-less constructor, a fast implementation will be automatically chosen for you.
+
+#### Methods
+* `get_area(id, include_borders, include_data)`: returns the area with the id `id`. (optional) Boolean values `include_borders` and `include_data` control what's copied.
+* `get_areas_for_pos(pos, include_borders, include_data)`: returns all areas that contain the position `pos`. (optional) Boolean values `include_borders` and `include_data` control what's copied.
+* `get_areas_in_area(edge1, edge2, accept_overlap, include_borders, include_data)`: returns all areas that contain all nodes inside the area specified by `edge1` and `edge2` (inclusive). If `accept_overlap` is true, also areas are returned that have nodes in common with the specified area. (optional) Boolean values `include_borders` and `include_data` control what's copied.
+* `insert_area(edge1, edge2, data)`: inserts an area into the store. Returns the id if successful, nil otherwise. The (inclusive) positions `edge1` and `edge2` describe the area, `data`
+is a string stored with the area.
+* `reserve(count)`: reserves resources for at most `count` many contained areas. Only needed for efficiency, and only some implementations profit.
+* `remove_area(id)`: removes the area with the given id from the store, returns success.
+* `set_cache_params(params)`: sets params for the included prefiltering cache. Calling invalidates the cache, so that its elements have to be newly generated.
+    * `params`:
+      {
+        enabled = boolean, -- whether to enable, default true
+        block_radius = number, -- the radius (in nodes) of the areas the cache generates prefiltered lists for, minimum 16, default 64
+        limit = number, -- the cache's size, minimum 20, default 1000
+      }
 
 ### `ItemStack`
 An `ItemStack` is a stack of items.
@@ -3058,8 +3092,13 @@ Definition tables
 ### Tile definition
 * `"image.png"`
 * `{name="image.png", animation={Tile Animation definition}}`
-* `{name="image.png", backface_culling=bool}`
-    * backface culling only supported in special tiles
+* `{name="image.png", backface_culling=bool, tileable_vertical=bool,
+    tileable_horizontal=bool}`
+    * backface culling only supported in special tiles.
+    * tileable flags are info for shaders, how they should treat texture
+	  when displacement mapping is used
+	  Directions are from the point of view of the tile texture,
+	  not the node it's on
 * deprecated, yet still supported field names:
     * `image` (name)
 

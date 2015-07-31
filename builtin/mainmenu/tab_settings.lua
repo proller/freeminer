@@ -60,6 +60,19 @@ local function getLeavesStyleSettingIndex()
 	return 1
 end
 
+local dd_antialiasing_labels = {
+	fgettext("None"),
+	fgettext("2x"),
+	fgettext("4x"),
+	fgettext("8x"),
+}
+
+local antialiasing = {
+	{dd_antialiasing_labels[1]..","..dd_antialiasing_labels[2]..","..
+		dd_antialiasing_labels[3]..","..dd_antialiasing_labels[4]},
+	{"0", "2", "4", "8"}
+}
+
 local function getFilterSettingIndex()
 	if (core.setting_get(filters[2][3]) == "true") then
 		return 3
@@ -80,16 +93,23 @@ local function getMipmapSettingIndex()
 	return 1
 end
 
-local function video_driver_fname_to_name(selected_driver)
-	local video_drivers = core.get_video_drivers()
-
-	for i=1, #video_drivers do
-		if selected_driver == video_drivers[i].friendly_name then
-			return video_drivers[i].name:lower()
+local function getAntialiasingSettingIndex()
+	local antialiasing_setting = core.setting_get("fsaa")
+	for i = 1, #(antialiasing[2]) do
+		if antialiasing_setting == antialiasing[2][i] then
+			return i
 		end
 	end
+	return 1
+end
 
-	return ""
+local function antialiasing_fname_to_name(fname)
+	for i = 1, #(dd_antialiasing_labels) do
+		if fname == dd_antialiasing_labels[i] then
+			return antialiasing[2][i]
+		end
+	end
+	return 0
 end
 
 local function dlg_confirm_reset_formspec(data)
@@ -180,23 +200,6 @@ local function scrollbar_to_gui_scale(value)
 end
 
 local function formspec(tabview, name, tabdata)
-	local video_drivers = core.get_video_drivers()
-	local current_video_driver = core.setting_get("video_driver"):lower()
-
-	local driver_formspec_string = ""
-	local driver_current_idx = 0
-
-	for i=2, #video_drivers do
-		driver_formspec_string = driver_formspec_string .. video_drivers[i].friendly_name
-		if i ~= #video_drivers then
-			driver_formspec_string = driver_formspec_string .. ","
-		end
-
-		if current_video_driver == video_drivers[i].name:lower() then
-			driver_current_idx = i - 1
-		end
-	end
-
 	local tab_string =
 		"box[0,0;3.5,4.0;#999999]" ..
 		"checkbox[0.25,0;cb_smooth_lighting;".. fgettext("Smooth Lighting")
@@ -219,11 +222,9 @@ local function formspec(tabview, name, tabdata)
 				.. getFilterSettingIndex() .. "]" ..
 		"dropdown[3.85,1.35;3.85;dd_mipmap;" .. mipmap[1][1] .. ";"
 				.. getMipmapSettingIndex() .. "]" ..
-		"label[3.85,2.15;".. fgettext("Rendering:") .. "]"..
-		"dropdown[3.85,2.6;3.85;dd_video_driver;"
-				.. driver_formspec_string .. ";" .. driver_current_idx .. "]" ..
-		"tooltip[dd_video_driver;" ..
-				fgettext("Restart minetest for driver change to take effect") .. "]" ..
+		"label[3.85,2.15;".. fgettext("Antialiasing:") .. "]"..
+		"dropdown[3.85,2.6;3.85;dd_antialiasing;" .. antialiasing[1][1] .. ";"
+		.. getAntialiasingSettingIndex() .. "]" ..
 		"box[7.75,0;4,4;#999999]" ..
 		"checkbox[8,0;cb_shaders;".. fgettext("Shaders") .. ";"
 				.. dump(core.setting_getbool("enable_shaders")) .. "]"
@@ -386,11 +387,6 @@ local function handle_settings_buttons(this, fields, tabname, tabdata)
 		core.setting_set("leaves_style", leaves_style[2][1])
 		ddhandled = true
 	end
-	if fields["dd_video_driver"] then
-		core.setting_set("video_driver",
-			video_driver_fname_to_name(fields["dd_video_driver"]))
-		ddhandled = true
-	end
 	if fields["dd_filters"] == dd_filter_labels[1] then
 		core.setting_set("bilinear_filter", "false")
 		core.setting_set("trilinear_filter", "false")
@@ -419,6 +415,11 @@ local function handle_settings_buttons(this, fields, tabname, tabdata)
 	if fields["dd_mipmap"] == dd_mipmap_labels[3] then
 		core.setting_set("mip_map", "true")
 		core.setting_set("anisotropic_filter", "true")
+		ddhandled = true
+	end
+	if fields["dd_antialiasing"] then
+		core.setting_set("fsaa",
+			antialiasing_fname_to_name(fields["dd_antialiasing"]))
 		ddhandled = true
 	end
 

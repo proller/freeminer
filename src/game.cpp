@@ -21,37 +21,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "game.h"
-/*
-#include "irrlichttypes_extrabloated.h"
-#include <IGUICheckBox.h>
-#include <IGUIEditBox.h>
-#include <IGUIListBox.h>
-#include <IGUIButton.h>
-#include <IGUIStaticText.h>
-#include <IGUIFont.h>
-#include <IMaterialRendererServices.h>
-#include "IMeshCache.h"
-#include "client.h"
-#include "server.h"
-#include "guiPasswordChange.h"
-#include "guiVolumeChange.h"
-#include "guiKeyChangeMenu.h"
-#include "guiFormSpecMenu.h"
-#include "guiTextInputMenu.h"
-#include "tool.h"
-#include "guiChatConsole.h"
-#include "config.h"
-#include "version.h"
-#include "clouds.h"
-#include "particles.h"
-#include "camera.h"
-#include "mapblock.h"
-#include "settings.h"
-#include "profiler.h"
-#include "mainmenumanager.h"
-#include "gettext.h"
-#include "log_types.h"
-*/
 
 #include <iomanip>
 #include "camera.h"
@@ -98,18 +67,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #if USE_SOUND
 	#include "sound_openal.h"
 #endif
-/*
-#include "event_manager.h"
-#include <iomanip>
-#include <list>
-#include "util/directiontables.h"
-#include "util/pointedthing.h"
-#include "guiTable.h"
-#include "util/string.h"
-#include "drawscene.h"
-#include "content_cao.h"
-#include "fontengine.h"
-*/
 
 #ifdef HAVE_TOUCHSCREENGUI
 	#include "touchscreengui.h"
@@ -942,11 +899,11 @@ public:
 #if (IRRLICHT_VERSION_MAJOR == 1 && IRRLICHT_VERSION_MINOR < 8)
 		services->setPixelShaderConstant("baseTexture" , (irr::f32 *)&layer0, 1);
 		services->setPixelShaderConstant("normalTexture" , (irr::f32 *)&layer1, 1);
-		services->setPixelShaderConstant("useNormalmap" , (irr::f32 *)&layer2, 1);
+		services->setPixelShaderConstant("textureFlags" , (irr::f32 *)&layer2, 1);
 #else
 		services->setPixelShaderConstant("baseTexture" , (irr::s32 *)&layer0, 1);
 		services->setPixelShaderConstant("normalTexture" , (irr::s32 *)&layer1, 1);
-		services->setPixelShaderConstant("useNormalmap" , (irr::s32 *)&layer2, 1);
+		services->setPixelShaderConstant("textureFlags" , (irr::s32 *)&layer2, 1);
 #endif
 		ItemStack playeritem;
 		{
@@ -1520,8 +1477,7 @@ struct VolatileRunFlags {
  * hides most of the stuff in this class (nothing in this class is required
  * by any other file) but exposes the public methods/data only.
  */
-class Game
-{
+class Game {
 public:
 	Game();
 	~Game();
@@ -1537,6 +1493,7 @@ public:
 			std::string *address,
 			u16 port,
 			std::string &error_message,
+			bool *reconnect,
 			ChatBackend *chat_backend,
 			const SubgameSpec &gamespec,    // Used for local game
 			bool simple_singleplayer_mode);
@@ -1695,6 +1652,7 @@ private:
 	scene::ISceneManager *smgr;
 	bool *kill;
 	std::string *error_message;
+	bool *reconnect_requested;
 	IGameDef *gamedef;                     // Convenience (same as *client)
 	scene::ISceneNode *skybox;
 
@@ -1840,17 +1798,19 @@ bool Game::startup(bool *kill,
 		std::string *address,     // can change if simple_singleplayer_mode
 		u16 port,
 		std::string &error_message,
+		bool *reconnect,
 		ChatBackend *chat_backend,
 		const SubgameSpec &gamespec,
 		bool simple_singleplayer_mode)
 {
 	// "cache"
-	this->device        = device;
-	this->kill          = kill;
-	this->error_message = &error_message;
-	this->random_input  = random_input;
-	this->input         = input;
-	this->chat_backend  = chat_backend;
+	this->device              = device;
+	this->kill                = kill;
+	this->error_message       = &error_message;
+	this->reconnect_requested = reconnect;
+	this->random_input        = random_input;
+	this->input               = input;
+	this->chat_backend        = chat_backend;
 	this->simple_singleplayer_mode = simple_singleplayer_mode;
 
 	driver              = device->getVideoDriver();
@@ -2419,6 +2379,7 @@ bool Game::connectToServer(const std::string &playername,
 			if (client->accessDenied()) {
 				*error_message = "Access denied. Reason: "
 						+ client->accessDeniedReason();
+				*reconnect_requested = client->reconnectRequested();
 				errorstream << *error_message << std::endl;
 				return false;
 			}
@@ -2551,7 +2512,7 @@ bool Game::getServerContent(bool *aborted)
 			time_counter = 0;
 		}
 		time_counter += dtime < dtime_start ? dtime : dtime - dtime_start;
-		if (time_counter > CONNECTION_TIMEOUT * timeout_mul) {
+		if (time_counter > CONNECTION_TIMEOUT * 5 * timeout_mul) {
 			flags.reconnect = 1;
 			*aborted = true;
 			return false;
@@ -2588,6 +2549,7 @@ inline bool Game::checkConnection()
 	if (client->accessDenied()) {
 		*error_message = "Access denied. Reason: "
 				+ client->accessDeniedReason();
+		*reconnect_requested = client->reconnectRequested();
 		errorstream << *error_message << std::endl;
 		return false;
 	}
@@ -4823,6 +4785,7 @@ bool the_game(bool *kill,
 
 		std::string &error_message,
 		ChatBackend &chat_backend,
+		bool *reconnect_requested,
 		const SubgameSpec &gamespec,        // Used for local game
 		bool simple_singleplayer_mode,
 		unsigned int autoexit
@@ -4841,8 +4804,8 @@ bool the_game(bool *kill,
 
 		game.runData  = { 0 };
 		if (game.startup(kill, random_input, input, device, map_dir,
-				playername, password, &server_address, port,
-				error_message, &chat_backend, gamespec,
+				playername, password, &server_address, port, error_message,
+				reconnect_requested, &chat_backend, gamespec,
 				simple_singleplayer_mode)) {
 			started = true;
 			game.runData.autoexit = autoexit;
@@ -4852,13 +4815,9 @@ bool the_game(bool *kill,
 
 #ifdef NDEBUG
 	} catch (SerializationError &e) {
-		error_message = strgettext("A serialization error occurred:")
-				+ "\n" + e.what();
-		if (!simple_singleplayer_mode) {
-			error_message += "\n\n"
-					+ strgettext("The server is probably running a different version of")
-					+ " " PROJECT_NAME_C ".";
-		}
+		error_message = std::string("A serialization error occurred:\n")
+				+ e.what() + "\n\nThe server is probably "
+				" running a different version of " PROJECT_NAME_C ".";
 		errorstream << error_message << std::endl;
 	} catch (ServerError &e) {
 		error_message = e.what();

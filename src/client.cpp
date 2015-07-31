@@ -230,6 +230,7 @@ Client::Client(
 	m_chosen_auth_mech(AUTH_MECHANISM_NONE),
 	m_auth_data(NULL),
 	m_access_denied(false),
+	m_access_denied_reconnect(false),
 	m_itemdef_received(false),
 	m_nodedef_received(false),
 	m_media_downloader(new ClientMediaDownloader()),
@@ -495,8 +496,10 @@ void Client::step(float dtime)
 	if(counter >= 10) {
 		counter = 0.0;
 		// connectedAndInitialized() is true, peer exists.
+#if MINETEST_PROTO
 		float avg_rtt = getRTT();
 		infostream<<"Client: avg_rtt="<<avg_rtt<<std::endl;
+#endif
 
 		sendDrawControl(); //not very good place. maybe 5s timer better
 	}
@@ -543,10 +546,19 @@ void Client::step(float dtime)
 			if(block) {
 				block->setMesh(r.mesh);
 				if (r.mesh) {
-					minimap_mapblock = r.mesh->getMinimapMapblock();
-					r.mesh->m_minimap_mapblock = nullptr;
-					do_mapper_update = (minimap_mapblock != NULL);
+					minimap_mapblock = r.mesh->moveMinimapMapblock();
+					if (minimap_mapblock == NULL)
+						do_mapper_update = false;
 				}
+
+				if (r.mesh && r.mesh->getMesh()->getMeshBufferCount() == 0) {
+					//delete r.mesh;
+				} else {
+					// Replace with the new mesh
+					block->mesh = r.mesh;
+				}
+			} else {
+				//delete r.mesh;
 			}
 			if (do_mapper_update)
 				m_mapper->addBlock(r.p, minimap_mapblock);
@@ -729,14 +741,19 @@ bool Client::loadMedia(const std::string &data, const std::string &filename)
 // Virtual methods from con::PeerHandler
 void Client::peerAdded(u16 peer_id)
 {
-	infostream<<"Client::peerAdded(): peer->id="
-			<<peer_id<<std::endl;
+	infostream << "Client::peerAdded(): peer->id="
+			<< peer_id << std::endl;
 }
 void Client::deletingPeer(u16 peer_id, bool timeout)
 {
-	infostream<<"Client::deletingPeer(): "
+	infostream << "Client::deletingPeer(): "
 			"Server Peer is getting deleted "
-			<<"(timeout="<<timeout<<")"<<std::endl;
+			<< "(timeout=" << timeout << ")" << std::endl;
+
+	if (timeout) {
+		m_access_denied = true;
+		m_access_denied_reason = _("Connection timed out.");
+	}
 }
 
 /*
@@ -1003,6 +1020,7 @@ void Client::deleteAuthData()
 		case AUTH_MECHANISM_NONE:
 			break;
 	}
+	m_chosen_auth_mech = AUTH_MECHANISM_NONE;
 }
 
 
@@ -1094,7 +1112,6 @@ void Client::startAuth(AuthMechanism chosen_auth_mechanism)
 
 			NetworkPacket resp_pkt(TOSERVER_SRP_BYTES_A, 0);
 			resp_pkt << std::string(bytes_A, len_A) << based_on;
-			free(bytes_A);
 			Send(&resp_pkt);
 			break;
 		}
@@ -1872,22 +1889,31 @@ void Client::afterContentReceived(IrrlichtDevice *device)
 
 float Client::getRTT(void)
 {
+#if MINETEST_PROTO
+	return m_con.getPeerStat(PEER_ID_SERVER,con::AVG_RTT);
+#else
 	return 0;
-	//return m_con.getPeerStat(PEER_ID_SERVER,con::AVG_RTT);
+#endif
 }
 
 float Client::getCurRate(void)
 {
+#if MINETEST_PROTO
+	return ( m_con.getLocalStat(con::CUR_INC_RATE) +
+			m_con.getLocalStat(con::CUR_DL_RATE));
+#else
 	return 0;
-//	return ( m_con.getLocalStat(con::CUR_INC_RATE) +
-//			m_con.getLocalStat(con::CUR_DL_RATE));
+#endif
 }
 
 float Client::getAvgRate(void)
 {
+#if MINETEST_PROTO
+	return ( m_con.getLocalStat(con::AVG_INC_RATE) +
+			m_con.getLocalStat(con::AVG_DL_RATE));
+#else
 	return 0;
-//	return ( m_con.getLocalStat(con::AVG_INC_RATE) +
-//			m_con.getLocalStat(con::AVG_DL_RATE));
+#endif
 }
 
 void Client::makeScreenshot(const std::string & name, IrrlichtDevice *device)
