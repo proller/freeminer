@@ -28,6 +28,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "log.h"
 #include <sstream>
 
+#include "settings.h"
+
 #ifdef GPROF
 #include "prof.h"
 #endif
@@ -87,6 +89,17 @@ std::string path_storage = DIR_DELIM "sdcard" DIR_DELIM;
 android_app* app_global;
 JNIEnv*      jnienv;
 jclass       nativeActivity;
+
+void handleAndroidActivityEvents()
+{
+	int ident;
+	int events;
+	struct android_poll_source *source;
+
+	while ( (ident = ALooper_pollOnce(0, NULL, &events, (void**)&source)) >= 0)
+		if (source)
+			source->process(porting::app_global, source);
+}
 
 int android_version_sdk_int = 0;
 
@@ -181,7 +194,9 @@ void cleanupAndroid()
 #endif
 
 	JavaVM *jvm = app_global->activity->vm;
+	if (jvm)
 	jvm->DetachCurrentThread();
+	ANativeActivity_finish(app_global->activity);
 }
 
 void setExternalStorageDir(JNIEnv* lJNIEnv)
@@ -310,6 +325,17 @@ v2u32 getDisplaySize()
 	return retval;
 }
 #endif //SERVER
+
+
+int canKeyboard() {
+	auto v = g_settings->getS32("android_keyboard");
+	if (v)
+		return v;
+	// dont work on some 4.4.2
+	//if (porting::android_version_sdk_int >= 18)
+	//	return 1;
+	return false;
+}
 
 // http://stackoverflow.com/questions/5864790/how-to-show-the-soft-keyboard-on-native-activity
 void displayKeyboard(bool pShow, android_app* mApplication, JNIEnv* lJNIEnv) {

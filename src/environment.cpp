@@ -2222,30 +2222,30 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 			bool stays_in_same_block = false;
 			bool data_changed = true;
 
-			if(obj->m_static_exists){
-				if(obj->m_static_block == blockpos_o)
+			if (obj->m_static_exists) {
+				if (obj->m_static_block == blockpos_o)
 					stays_in_same_block = true;
 
 				MapBlock *block = m_map->emergeBlock(obj->m_static_block, false);
 				if (!block)
 					continue;
 
-				std::map<u16, StaticObject>::iterator n =
+					std::map<u16, StaticObject>::iterator n =
 						block->m_static_objects.m_active.find(id);
-				if(n != block->m_static_objects.m_active.end()){
-					StaticObject static_old = n->second;
+					if (n != block->m_static_objects.m_active.end()) {
+						StaticObject static_old = n->second;
 
-					float save_movem = obj->getMinimumSavedMovement();
+						float save_movem = obj->getMinimumSavedMovement();
 
-					if(static_old.data == staticdata_new &&
-							(static_old.pos - objectpos).getLength() < save_movem)
-						data_changed = false;
-				} else {
-					infostream<<"ServerEnvironment::deactivateFarObjects(): "
+						if (static_old.data == staticdata_new &&
+								(static_old.pos - objectpos).getLength() < save_movem)
+							data_changed = false;
+					} else {
+						infostream<<"ServerEnvironment::deactivateFarObjects(): "
 							<<"id="<<id<<" m_static_exists=true but "
 							<<"static data doesn't actually exist in "
 							<<PP(obj->m_static_block)<<std::endl;
-				}
+					}
 			}
 
 			bool shall_be_written = (!stays_in_same_block || data_changed);
@@ -2541,8 +2541,8 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 					speed.Y -= lplayer->movement_gravity * lplayer->physics_override_gravity * dtime_part * 2;
 					viscosity_factor = 0.97; // todo maybe depend on speed; 0.96 = ~100 nps max
 					viscosity_factor += (1.0-viscosity_factor) *
-						(1-(MAP_GENERATION_LIMIT - pf.Y/BS)/
-							MAP_GENERATION_LIMIT);
+						(1-(MAX_MAP_GENERATION_LIMIT - pf.Y/BS)/
+							MAX_MAP_GENERATION_LIMIT);
 				}
 
 				// Liquid floating / sinking
