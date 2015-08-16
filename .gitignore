@@ -28,6 +28,10 @@ tags
 
 ## Configuration/log files
 freeminer.conf
+auto_*
+util/autotest/logs.*
+util/autotest/auto.json
+util/autotest/world
 debug.txt
 client/favoriteservers.json
 
@@ -40,6 +44,7 @@ doc/doxygen_*
 CMakeFiles/*
 src/CMakeFiles/*
 src/Makefile
+src/android_version_githash.h
 src/android_version.h
 src/cmake_config.h
 src/cmake_config_githash.h
@@ -94,6 +99,7 @@ build/android/jni/src
 build/android/libs
 build/android/obj
 build/android/path.cfg
+build/android/and_env
 build/android/AndroidManifest.xml
 timestamp
 

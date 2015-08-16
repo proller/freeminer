@@ -261,17 +261,20 @@ void push_object_properties(lua_State *L, ObjectProperties *prop)
 }
 
 /******************************************************************************/
-TileDef read_tiledef(lua_State *L, int index)
+TileDef read_tiledef(lua_State *L, int index, u8 drawtype)
 {
 	if(index < 0)
 		index = lua_gettop(L) + 1 + index;
 
 	TileDef tiledef;
-
+	bool default_tiling = (drawtype == NDT_PLANTLIKE || drawtype == NDT_FIRELIKE)
+		? false : true;
 	// key at index -2 and value at index
 	if(lua_isstring(L, index)){
 		// "default_lava.png"
 		tiledef.name = lua_tostring(L, index);
+		tiledef.tileable_vertical = default_tiling;
+		tiledef.tileable_horizontal = default_tiling;
 	}
 	else if(lua_istable(L, index))
 	{
@@ -280,20 +283,24 @@ TileDef read_tiledef(lua_State *L, int index)
 		getstringfield(L, index, "name", tiledef.name);
 		getstringfield(L, index, "image", tiledef.name); // MaterialSpec compat.
 		tiledef.backface_culling = getboolfield_default(
-					L, index, "backface_culling", true);
+			L, index, "backface_culling", true);
+		tiledef.tileable_horizontal = getboolfield_default(
+			L, index, "tileable_horizontal", default_tiling);
+		tiledef.tileable_vertical = getboolfield_default(
+			L, index, "tileable_vertical", default_tiling);
 		// animation = {}
 		lua_getfield(L, index, "animation");
 		if(lua_istable(L, -1)){
 			// {type="vertical_frames", aspect_w=16, aspect_h=16, length=2.0}
 			tiledef.animation.type = (TileAnimationType)
-					getenumfield(L, -1, "type", es_TileAnimationType,
-					TAT_NONE);
+				getenumfield(L, -1, "type", es_TileAnimationType,
+				TAT_NONE);
 			tiledef.animation.aspect_w =
-					getintfield_default(L, -1, "aspect_w", 16);
+				getintfield_default(L, -1, "aspect_w", 16);
 			tiledef.animation.aspect_h =
-					getintfield_default(L, -1, "aspect_h", 16);
+				getintfield_default(L, -1, "aspect_h", 16);
 			tiledef.animation.length =
-					getfloatfield_default(L, -1, "length", 1.0);
+				getfloatfield_default(L, -1, "length", 1.0);
 		}
 		lua_pop(L, 1);
 	}
@@ -370,7 +377,7 @@ ContentFeatures read_content_features(lua_State *L, int index)
 		int i = 0;
 		while(lua_next(L, table) != 0){
 			// Read tiledef from value
-			f.tiledef[i] = read_tiledef(L, -1);
+			f.tiledef[i] = read_tiledef(L, -1, f.drawtype);
 			// removes value, keeps key for next iteration
 			lua_pop(L, 1);
 			i++;
@@ -473,7 +480,7 @@ ContentFeatures read_content_features(lua_State *L, int index)
 		int i = 0;
 		while(lua_next(L, table) != 0){
 			// Read tiledef from value
-			f.tiledef_special[i] = read_tiledef(L, -1);
+			f.tiledef_special[i] = read_tiledef(L, -1, f.drawtype);
 			// removes value, keeps key for next iteration
 			lua_pop(L, 1);
 			i++;
@@ -1071,11 +1078,11 @@ void read_groups(lua_State *L, int index,
 }
 
 /******************************************************************************/
-void push_groups(lua_State *L, std::map<std::string, int> groups)
+void push_groups(lua_State *L, const std::map<std::string, int> &groups)
 {
 	lua_newtable(L);
-	for (std::map<std::string, int>::iterator it = groups.begin();
-			it != groups.end(); ++it) {
+	std::map<std::string, int>::const_iterator it;
+	for (it = groups.begin(); it != groups.end(); ++it) {
 		lua_pushnumber(L, it->second);
 		lua_setfield(L, -2, it->first.c_str());
 	}
@@ -1084,12 +1091,10 @@ void push_groups(lua_State *L, std::map<std::string, int> groups)
 /******************************************************************************/
 void push_items(lua_State *L, const std::vector<ItemStack> &items)
 {
-	// Create and fill table
 	lua_createtable(L, items.size(), 0);
-	std::vector<ItemStack>::const_iterator iter = items.begin();
-	for (u32 i = 0; iter != items.end(); iter++) {
-		LuaItemStack::create(L, *iter);
-		lua_rawseti(L, -2, ++i);
+	for (u32 i = 0; i != items.size(); i++) {
+		LuaItemStack::create(L, items[i]);
+		lua_rawseti(L, -2, i + 1);
 	}
 }
 

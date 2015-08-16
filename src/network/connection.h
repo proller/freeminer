@@ -192,7 +192,7 @@ struct BufferedPacket
 		data(a_size), time(0.0), totaltime(0.0), absolute_send_time(-1),
 		resend_count(0)
 	{}
-	SharedBuffer<u8> data; // Data of the packet, including headers
+	Buffer<u8> data; // Data of the packet, including headers
 	float time; // Seconds from buffering the packet or re-sending
 	float totaltime; // Seconds from buffering the packet
 	unsigned int absolute_send_time;
@@ -1033,13 +1033,11 @@ public:
 	friend class ConnectionSendThread;
 	friend class ConnectionReceiveThread;
 
-	Connection(u32 protocol_id, u32 max_packet_size, float timeout, bool ipv6);
 	Connection(u32 protocol_id, u32 max_packet_size, float timeout, bool ipv6,
 			PeerHandler *peerhandler);
 	~Connection();
 
 	/* Interface */
-	ConnectionEvent getEvent();
 	ConnectionEvent waitEvent(u32 timeout_ms);
 	void putCommand(ConnectionCommand &c);
 
@@ -1074,7 +1072,11 @@ protected:
 	void PrintInfo(std::ostream &out);
 	void PrintInfo();
 
-	std::list<u16> getPeerIDs() { JMutexAutoLock lock(m_peers_mutex); return m_peer_ids; }
+	std::list<u16> getPeerIDs()
+	{
+		JMutexAutoLock peerlock(m_peers_mutex);
+		return m_peer_ids;
+	}
 
 	UDPSocket m_udpSocket;
 	MutexedQueue<ConnectionCommand> m_command_queue;

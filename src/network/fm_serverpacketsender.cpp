@@ -59,12 +59,13 @@ void Server::SendBreath(u16 peer_id, u16 breath)
 	m_clients.send(peer_id, 0, buffer, true);
 }
 
-void Server::SendAccessDenied(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason)
+void Server::SendAccessDenied(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason, bool reconnect)
 {
 	DSTACK(__FUNCTION_NAME);
-	MSGPACK_PACKET_INIT(TOCLIENT_ACCESS_DENIED_LEGACY, 1);
+	MSGPACK_PACKET_INIT(TOCLIENT_ACCESS_DENIED_LEGACY, 3);
 	PACK(TOCLIENT_ACCESS_DENIED_CUSTOM_STRING, custom_reason);
 	PACK(TOCLIENT_ACCESS_DENIED_REASON, (int)reason);
+	PACK(TOCLIENT_ACCESS_DENIED_RECONNECT, reconnect);
 
 	// Send as reliable
 	m_clients.send(peer_id, 0, buffer, true);
@@ -88,7 +89,16 @@ void Server::SendItemDef(u16 peer_id,
 {
 	DSTACK(__FUNCTION_NAME);
 	MSGPACK_PACKET_INIT(TOCLIENT_ITEMDEF, 1);
-	PACK(TOCLIENT_ITEMDEF_DEFINITIONS, *itemdef);
+
+	auto client = m_clients.getClient(peer_id, CS_InitDone);
+	if (!client)
+		return;
+
+	if (client->net_proto_version_fm >= 2) {
+		PACK_ZIP(TOCLIENT_ITEMDEF_DEFINITIONS_ZIP, *itemdef);
+	} else {
+		PACK(TOCLIENT_ITEMDEF_DEFINITIONS, *itemdef);
+	}
 
 	m_clients.send(peer_id, 0, buffer, true);
 }
@@ -99,7 +109,15 @@ void Server::SendNodeDef(u16 peer_id,
 	DSTACK(__FUNCTION_NAME);
 
 	MSGPACK_PACKET_INIT(TOCLIENT_NODEDEF, 1);
-	PACK(TOCLIENT_NODEDEF_DEFINITIONS, *nodedef);
+
+	auto client = m_clients.getClient(peer_id, CS_InitDone);
+	if (!client)
+		return;
+	if (client->net_proto_version_fm >= 2) {
+		PACK_ZIP(TOCLIENT_NODEDEF_DEFINITIONS_ZIP, *nodedef);
+	} else {
+		PACK(TOCLIENT_NODEDEF_DEFINITIONS, *nodedef);
+	}
 
 	// Send as reliable
 	m_clients.send(peer_id, 0, buffer, true);

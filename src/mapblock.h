@@ -35,6 +35,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "modifiedstate.h"
 #include "util/numeric.h" // getContainerPos
 #include "util/lock.h"
+#include "settings.h"
 
 #include <ISceneNode.h>
 #include <IMeshSceneNode.h>
@@ -298,7 +299,7 @@ public:
 
 	inline v3s16 getPosRelative()
 	{
-		return m_pos * MAP_BLOCKSIZE;
+		return m_pos_relative;
 	}
 
 	inline core::aabbox3d<s16> getBox()
@@ -664,6 +665,14 @@ private:
 	// Position in blocks on parent
 	v3s16 m_pos;
 
+	/* This is the precalculated m_pos_relative value
+	* This caches the value, improving performance by removing 3 s16 multiplications
+	* at runtime on each getPosRelative call
+	* For a 5 minutes runtime with valgrind this removes 3 * 19M s16 multiplications
+	* The gain can be estimated in Release Build to 3 * 100M multiply operations for 5 mins
+	*/
+	v3s16 m_pos_relative;
+
 	IGameDef *m_gamedef;
 
 	/*
@@ -731,13 +740,14 @@ typedef std::vector<MapBlock*> MapBlockVect;
 
 inline bool blockpos_over_limit(v3s16 p)
 {
-	return
-	  (p.X < -MAP_GENERATION_LIMIT / MAP_BLOCKSIZE
-	|| p.X >  MAP_GENERATION_LIMIT / MAP_BLOCKSIZE
-	|| p.Y < -MAP_GENERATION_LIMIT / MAP_BLOCKSIZE
-	|| p.Y >  MAP_GENERATION_LIMIT / MAP_BLOCKSIZE
-	|| p.Z < -MAP_GENERATION_LIMIT / MAP_BLOCKSIZE
-	|| p.Z >  MAP_GENERATION_LIMIT / MAP_BLOCKSIZE);
+	const static u16 map_gen_limit = MYMIN(MAX_MAP_GENERATION_LIMIT,
+		g_settings->getU16("map_generation_limit"));
+	return (p.X < -map_gen_limit / MAP_BLOCKSIZE
+			|| p.X >  map_gen_limit / MAP_BLOCKSIZE
+			|| p.Y < -map_gen_limit / MAP_BLOCKSIZE
+			|| p.Y >  map_gen_limit / MAP_BLOCKSIZE
+			|| p.Z < -map_gen_limit / MAP_BLOCKSIZE
+			|| p.Z >  map_gen_limit / MAP_BLOCKSIZE);
 }
 
 /*
@@ -770,4 +780,3 @@ std::string analyze_block(MapBlock *block);
 typedef MapBlock * MapBlockP;
 
 #endif
-

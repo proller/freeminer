@@ -270,6 +270,8 @@ void Server::handleCommand_Init(NetworkPacket* pkt)
 			// Take care of default passwords.
 			client->enc_pwd = getSRPVerifier(playerName, default_password);
 			auth_mechs |= AUTH_MECHANISM_SRP;
+			// Create auth, but only on successful login
+			client->create_player_on_auth_success = true;
 		}
 	}
 
@@ -363,7 +365,7 @@ void Server::handleCommand_Init_Legacy(NetworkPacket* pkt)
 		DenyAccess_Legacy(pkt->getPeerId(), std::wstring(
 				L"Your client's version is not supported.\n"
 				L"Server version is ")
-				+ narrow_to_wide(g_version_string) + L"."
+				+ utf8_to_wide(g_version_string) + L"."
 		);
 		return;
 	}
@@ -415,15 +417,15 @@ void Server::handleCommand_Init_Legacy(NetworkPacket* pkt)
 		DenyAccess_Legacy(pkt->getPeerId(), std::wstring(
 				L"Your client's version is not supported.\n"
 				L"Server version is ")
-				+ narrow_to_wide(g_version_string) + L",\n"
+				+ utf8_to_wide(g_version_string) + L",\n"
 				+ L"server's PROTOCOL_VERSION is "
-				+ narrow_to_wide(itos(SERVER_PROTOCOL_VERSION_MIN))
+				+ utf8_to_wide(itos(SERVER_PROTOCOL_VERSION_MIN))
 				+ L"..."
-				+ narrow_to_wide(itos(SERVER_PROTOCOL_VERSION_MAX))
+				+ utf8_to_wide(itos(SERVER_PROTOCOL_VERSION_MAX))
 				+ L", client's PROTOCOL_VERSION is "
-				+ narrow_to_wide(itos(min_net_proto_version))
+				+ utf8_to_wide(itos(min_net_proto_version))
 				+ L"..."
-				+ narrow_to_wide(itos(max_net_proto_version))
+				+ utf8_to_wide(itos(max_net_proto_version))
 		);
 		return;
 	}
@@ -435,13 +437,13 @@ void Server::handleCommand_Init_Legacy(NetworkPacket* pkt)
 			DenyAccess_Legacy(pkt->getPeerId(), std::wstring(
 					L"Your client's version is not supported.\n"
 					L"Server version is ")
-					+ narrow_to_wide(g_version_string) + L",\n"
+					+ utf8_to_wide(g_version_string) + L",\n"
 					+ L"server's PROTOCOL_VERSION (strict) is "
-					+ narrow_to_wide(itos(LATEST_PROTOCOL_VERSION))
+					+ utf8_to_wide(itos(LATEST_PROTOCOL_VERSION))
 					+ L", client's PROTOCOL_VERSION is "
-					+ narrow_to_wide(itos(min_net_proto_version))
+					+ utf8_to_wide(itos(min_net_proto_version))
 					+ L"..."
-					+ narrow_to_wide(itos(max_net_proto_version))
+					+ utf8_to_wide(itos(max_net_proto_version))
 			);
 			return;
 		}
@@ -494,7 +496,7 @@ void Server::handleCommand_Init_Legacy(NetworkPacket* pkt)
 					<< "tried to connect from " << addr_s << " "
 					<< "but it was disallowed for the following reason: "
 					<< reason << std::endl;
-			DenyAccess_Legacy(pkt->getPeerId(), narrow_to_wide(reason.c_str()));
+			DenyAccess_Legacy(pkt->getPeerId(), utf8_to_wide(reason.c_str()));
 			return;
 		}
 	}
@@ -1192,7 +1194,7 @@ void Server::handleCommand_Damage(NetworkPacket* pkt)
 				<< std::endl;
 
 		playersao->setHP(playersao->getHP() - damage);
-		SendPlayerHPOrDie(playersao->getPeerID(), playersao->getHP() == 0);
+		SendPlayerHPOrDie(playersao);
 
 		stat.add("damage", player->getName(), damage);
 	}
@@ -1554,14 +1556,12 @@ void Server::handleCommand_Interact(NetworkPacket* pkt)
 			// If the object is a player and its HP changed
 			if (src_original_hp != pointed_object->getHP() &&
 					pointed_object->getType() == ACTIVEOBJECT_TYPE_PLAYER) {
-				SendPlayerHPOrDie(((PlayerSAO*)pointed_object)->getPeerID(),
-						pointed_object->getHP() == 0);
+				SendPlayerHPOrDie((PlayerSAO *)pointed_object);
 			}
 
 			// If the puncher is a player and its HP changed
-			if (dst_origin_hp != playersao->getHP()) {
-				SendPlayerHPOrDie(playersao->getPeerID(), playersao->getHP() == 0);
-			}
+			if (dst_origin_hp != playersao->getHP())
+				SendPlayerHPOrDie(playersao);
 
 			stat.add("punch", player->getName());
 		}
@@ -1914,14 +1914,8 @@ void Server::handleCommand_FirstSrp(NetworkPacket* pkt)
 		}
 
 		std::string initial_ver_key;
-		std::string raw_default_password = g_settings->get("default_password");
-		// If default_password is empty, allow any initial password
-		if (raw_default_password.length() == 0) {
-			initial_ver_key = encodeSRPVerifier(verification_key, salt);
-		} else {
-			initial_ver_key = getSRPVerifier(playername, raw_default_password);
-		}
 
+		initial_ver_key = encodeSRPVerifier(verification_key, salt);
 		m_script->createAuth(playername, initial_ver_key);
 
 		acceptAuth(pkt->getPeerId(), false);
@@ -2126,6 +2120,20 @@ void Server::handleCommand_SrpBytesM(NetworkPacket* pkt)
 			DenyAccess(pkt->getPeerId(), SERVER_ACCESSDENIED_WRONG_PASSWORD);
 			return;
 		}
+	}
+
+	if (client->create_player_on_auth_success) {
+		std::string playername = client->getName();
+		m_script->createAuth(playername, client->enc_pwd);
+
+		std::string checkpwd; // not used, but needed for passing something
+		if (!m_script->getAuth(playername, &checkpwd, NULL)) {
+			actionstream << "Server: " << playername << " cannot be authenticated"
+				<< " (auth handler does not work?)" << std::endl;
+			DenyAccess(pkt->getPeerId(), SERVER_ACCESSDENIED_SERVER_FAIL);
+			return;
+		}
+		client->create_player_on_auth_success = false;
 	}
 
 	acceptAuth(pkt->getPeerId(), wantSudo);

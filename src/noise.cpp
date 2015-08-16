@@ -89,6 +89,9 @@ u32 PcgRandom::next()
 
 u32 PcgRandom::range(u32 bound)
 {
+	// If the bound is 0, we cover the whole RNG's range
+	if (bound == 0)
+		return next();
 	/*
 	If the bound is not a multiple of the RNG's range, it may cause bias,
 	e.g. a RNG has a range from 0 to 3 and we take want a number 0 to 2.
@@ -137,7 +140,7 @@ void PcgRandom::bytes(void *out, size_t len)
 		*outb = r & 0xFF;
 		outb++;
 		bytes_left--;
-		r >>= 8;
+		r >>= CHAR_BIT;
 	}
 }
 
@@ -193,14 +196,6 @@ inline float biLinearInterpolation(
 {
 	float tx = easeCurve(x);
 	float ty = easeCurve(y);
-#if 0
-	return (
-		v00 * (1 - tx) * (1 - ty) +
-		v10 *      tx  * (1 - ty) +
-		v01 * (1 - tx) *      ty  +
-		v11 *      tx  *      ty
-	);
-#endif
 	float u = linearInterpolation(v00, v10, tx);
 	float v = linearInterpolation(v01, v11, tx);
 	return linearInterpolation(u, v, ty);
@@ -226,18 +221,6 @@ float triLinearInterpolation(
 	float tx = easeCurve(x);
 	float ty = easeCurve(y);
 	float tz = easeCurve(z);
-#if 0
-	return (
-		v000 * (1 - tx) * (1 - ty) * (1 - tz) +
-		v100 *      tx  * (1 - ty) * (1 - tz) +
-		v010 * (1 - tx) *      ty  * (1 - tz) +
-		v110 *      tx  *      ty  * (1 - tz) +
-		v001 * (1 - tx) * (1 - ty) *      tz  +
-		v101 *      tx  * (1 - ty) *      tz  +
-		v011 * (1 - tx) *      ty  *      tz  +
-		v111 *      tx  *      ty  *      tz
-	);
-#endif
 	float u = biLinearInterpolationNoEase(v000, v100, v010, v110, tx, ty);
 	float v = biLinearInterpolationNoEase(v001, v101, v011, v111, tx, ty);
 	return linearInterpolation(u, v, tz);
@@ -252,33 +235,6 @@ float triLinearInterpolationNoEase(
 	float v = biLinearInterpolationNoEase(v001, v101, v011, v111, x, y);
 	return linearInterpolation(u, v, z);
 }
-
-
-#if 0
-float noise2d_gradient(float x, float y, int seed)
-{
-	// Calculate the integer coordinates
-	int x0 = (x > 0.0 ? (int)x : (int)x - 1);
-	int y0 = (y > 0.0 ? (int)y : (int)y - 1);
-	// Calculate the remaining part of the coordinates
-	float xl = x - (float)x0;
-	float yl = y - (float)y0;
-	// Calculate random cosine lookup table indices for the integer corners.
-	// They are looked up as unit vector gradients from the lookup table.
-	int n00 = (int)((noise2d(x0, y0, seed)+1)*8);
-	int n10 = (int)((noise2d(x0+1, y0, seed)+1)*8);
-	int n01 = (int)((noise2d(x0, y0+1, seed)+1)*8);
-	int n11 = (int)((noise2d(x0+1, y0+1, seed)+1)*8);
-	// Make a dot product for the gradients and the positions, to get the values
-	float s = dotProduct(cos_lookup[n00], cos_lookup[(n00+12)%16], xl, yl);
-	float u = dotProduct(-cos_lookup[n10], cos_lookup[(n10+12)%16], 1.-xl, yl);
-	float v = dotProduct(cos_lookup[n01], -cos_lookup[(n01+12)%16], xl, 1.-yl);
-	float w = dotProduct(-cos_lookup[n11], -cos_lookup[(n11+12)%16], 1.-xl, 1.-yl);
-	// Interpolate between the values
-	return biLinearInterpolation(s,u,v,w,xl,yl);
-}
-#endif
-
 
 float noise2d_gradient(float x, float y, int seed, bool eased)
 {
@@ -847,14 +803,14 @@ void Noise::updateResults(float g, float *gmap,
 }
 
 float farscale(float scale, float z) {
-	return ( 1 + ( 1 - (MAP_GENERATION_LIMIT * 1 - (fabs(z))                     ) / (MAP_GENERATION_LIMIT * 1) ) * (scale - 1) );
+	return ( 1 + ( 1 - (MAX_MAP_GENERATION_LIMIT * 1 - (fabs(z))                     ) / (MAX_MAP_GENERATION_LIMIT * 1) ) * (scale - 1) );
 }
 
 float farscale(float scale, float x, float z) {
-	return ( 1 + ( 1 - (MAP_GENERATION_LIMIT * 2 - (fabs(x) + fabs(z))           ) / (MAP_GENERATION_LIMIT * 2) ) * (scale - 1) );
+	return ( 1 + ( 1 - (MAX_MAP_GENERATION_LIMIT * 2 - (fabs(x) + fabs(z))           ) / (MAX_MAP_GENERATION_LIMIT * 2) ) * (scale - 1) );
 }
 
 float farscale(float scale, float x, float y, float z) {
-	return ( 1 + ( 1 - (MAP_GENERATION_LIMIT * 3 - (fabs(x) + fabs(y) + fabs(z)) ) / (MAP_GENERATION_LIMIT * 3) ) * (scale - 1) );
+	return ( 1 + ( 1 - (MAX_MAP_GENERATION_LIMIT * 3 - (fabs(x) + fabs(y) + fabs(z)) ) / (MAX_MAP_GENERATION_LIMIT * 3) ) * (scale - 1) );
 }
 

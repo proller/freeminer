@@ -63,7 +63,7 @@ static const char *modified_reason_strings[] = {
 	"deactivateFarObjects: Static data moved in",
 	"deactivateFarObjects: Static data moved out",
 	"deactivateFarObjects: Static data changed considerably",
-	"finishBlockMake: expireDayNightDiff"
+	"finishBlockMake: expireDayNightDiff",
 	"unknown",
 };
 
@@ -78,6 +78,7 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 		m_uptime_timer_last(0),
 		m_parent(parent),
 		m_pos(pos),
+		m_pos_relative(pos * MAP_BLOCKSIZE),
 		m_gamedef(gamedef),
 		m_modified(MOD_STATE_CLEAN),
 		m_modified_reason(MOD_REASON_INITIAL),

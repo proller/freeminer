@@ -68,6 +68,9 @@ public:
 	void getBonePosition(const std::string &bone, v3f *position, v3f *rotation);
 	void setAttachment(int parent_id, const std::string &bone, v3f position, v3f rotation);
 	void getAttachment(int *parent_id, std::string *bone, v3f *position, v3f *rotation);
+	void addAttachmentChild(int child_id);
+	void removeAttachmentChild(int child_id);
+	std::set<int> getAttachmentChildIds();
 	ObjectProperties* accessObjectProperties();
 	void notifyObjectPropertiesModified();
 	/* LuaEntitySAO-specific */
@@ -92,7 +95,7 @@ private:
 	bool m_registered;
 	struct ObjectProperties m_prop;
 	
-	s16 m_hp;
+	std::atomic_ushort m_hp;
 	v3f m_velocity;
 	v3f m_acceleration;
 	float m_yaw;
@@ -116,6 +119,7 @@ private:
 	bool m_bone_position_sent;
 
 	int m_attachment_parent_id;
+	std::set<int> m_attachment_child_ids;
 	std::string m_attachment_bone;
 	v3f m_attachment_position;
 	v3f m_attachment_rotation;
@@ -207,6 +211,9 @@ public:
 	void getBonePosition(const std::string &bone, v3f *position, v3f *rotation);
 	void setAttachment(int parent_id, const std::string &bone, v3f position, v3f rotation);
 	void getAttachment(int *parent_id, std::string *bone, v3f *position, v3f *rotation);
+	void addAttachmentChild(int child_id);
+	void removeAttachmentChild(int child_id);
+	std::set<int> getAttachmentChildIds();
 	ObjectProperties* accessObjectProperties();
 	void notifyObjectPropertiesModified();
 	void setNametagColor(video::SColor color);
@@ -328,6 +335,7 @@ private:
 	bool m_bone_position_sent;
 
 	int m_attachment_parent_id;
+	std::set<int> m_attachment_child_ids;
 	std::string m_attachment_bone;
 	v3f m_attachment_position;
 	v3f m_attachment_rotation;
@@ -342,7 +350,7 @@ public:
 	float m_physics_override_gravity;
 	bool m_physics_override_sneak;
 	bool m_physics_override_sneak_glitch;
-	bool m_physics_override_sent;
+	std::atomic_bool m_physics_override_sent;
 };
 
 #endif

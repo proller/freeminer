@@ -96,6 +96,9 @@
 #random_input = false
 #    Timeout for client to remove unused map data from memory
 #client_unload_unused_data_timeout = 600
+#    Maximum number of mapblocks for client to be kept in memory
+#    Set to -1 for unlimited amount
+#client_mapblock_limit = 1000
 #    Whether to fog out the end of the visible area
 #enable_fog = true
 #    Whether to show the client debug info (has the same effect as hitting F5)
@@ -110,8 +113,11 @@
 #liquid_queue_purge_time = 0
 #    Liquid update interval in seconds
 #liquid_update = 1.0
-#    Enable transparent leaf textures, disable for speed
-#new_style_leaves = true
+#    Leaves style:
+#     fancy  - all faces visible
+#     simple - only outer faces, if defined special_tiles are used
+#     opaque - disable transparency
+#leaves_style = fancy
 #    Connects glass if supported by node
 #connected_glass = false
 #    Enable smooth lighting with simple ambient occlusion.
@@ -265,8 +271,16 @@
 #    Lower is darker, Higher is lighter. The valid range of values for this
 #    setting is 0.25 to 4.0 inclusive. If the value is out of range it will be
 #    set to the nearest valid value.
-#enable_mesh_cache = true
+#enable_mesh_cache = false
 #    Enables caching of facedir rotated meshes
+
+#enable_minimap = true
+#    Enables minimap
+#minimap_shape_round = true
+#    true - round shape, false - square
+#minimap_double_scan_height = true
+#    true = 256, false = 128
+#    useable to make minimap smoother on slower machines
 
 #    The time in seconds it takes between repeated
 #    right clicks when holding the right mouse button.
@@ -379,6 +393,15 @@
 #        "log"    = mimic and log backtrace of deprecated call (default for debug).
 #        "error"  = abort on usage of deprecated call (suggested for mod developers).
 #deprecated_lua_api_handling = legacy
+
+#kick_msg_shutdown = Server shutting down.
+#    A message to be displayed to all clients when the server shuts down
+#kick_msg_crash = This server has experienced an internal error. You will now be disconnected.
+#    A message to be displayed to all clients when the server crashes
+#ask_reconnect_on_crash = false
+#    Whether to ask clients to reconnect after a (lua) crash.
+#    Set this to true if your server is set up to restart automatically.
+
 #    Mod profiler
 #mod_profiling = false
 #    Detailed mod profile data
@@ -399,6 +422,13 @@
 #max_block_send_distance = 10
 #    From how far blocks are generated for clients, stated in mapblocks (16 nodes)
 #max_block_generate_distance = 6
+#    Where the map generator stops.
+#    Please note:
+#      * Limited to 31000 (setting above has no effect)
+#      * The map generator works in groups of 80x80x80 nodes (5x5x5 MapBlocks).
+#      * Those groups have an offset of -32, -32 nodes from the origin.
+#      * Only groups which are within the map_generation_limit are generated
+#map_generation_limit = 31000
 #    Number of extra blocks that can be loaded by /clearobjects at once.
 #    This is a trade-off between sqlite transaction overhead and
 #    memory consumption (4096=100MB, as a rule of thumb).
@@ -536,9 +566,9 @@
 #    other noise parameters are shown in positional format to save space.
 
 #    Noise parameters for biome API temperature, humidity and biome blend
-#mg_biome_np_heat = 50, 50, (750, 750, 750), 5349, 3, 0.5, 2.0
+#mg_biome_np_heat = 50, 50, (1000, 1000, 1000), 5349, 3, 0.5, 2.0
 #mg_biome_np_heat_blend = 0, 1.5, (8, 8, 8), 13, 2, 1.0, 2.0
-#mg_biome_np_humidity = 50, 50, (750, 750, 750), 842, 3, 0.5, 2.0
+#mg_biome_np_humidity = 50, 50, (1000, 1000, 1000), 842, 3, 0.5, 2.0
 #mg_biome_np_humidity_blend = 0, 1.5, (8, 8, 8), 90003, 2, 1.0, 2.0
 
 #mgv5_np_filler_depth = 0, 1, (150, 150, 150), 261, 4, 0.7, 2.0
@@ -571,12 +601,12 @@
 
 #mgv7_np_terrain_base = 4, 70, (600, 600, 600), 82341, 5, 0.6, 2.0
 #mgv7_np_terrain_alt = 4, 25, (600, 600, 600), 5934, 5, 0.6, 2.0
-#mgv7_np_terrain_persist = 0.6, 0.12, (2000, 2000, 2000), 539, 3, 0.5, 2.0
-#mgv7_np_height_select = -12, 24, (500, 500, 500), 4213, 6, 0.69, 2.0
-#mgv7_np_filler_depth = 0, 1.2, (150, 150, 150), 261, 4, 0.7, 2.0
-#mgv7_np_mount_height = 184, 72, (1000, 1000, 1000), 72449, 3, 0.5, 2.0
+#mgv7_np_terrain_persist = 0.6, 0.1, (2000, 2000, 2000), 539, 3, 0.6, 2.0
+#mgv7_np_height_select = -12, 24, (500, 500, 500), 4213, 6, 0.7, 2.0
+#mgv7_np_filler_depth = 0, 1.2, (150, 150, 150), 261, 3, 0.7, 2.0
+#mgv7_np_mount_height = 256, 112, (1000, 1000, 1000), 72449, 3, 0.6, 2.0
 #mgv7_np_ridge_uwater = 0, 1, (1000, 1000, 1000), 85039, 5, 0.6, 2.0
-#mgv7_np_mountain = -0.6, 1, (250, 350, 250), 5333, 5, 0.68, 2.0
+#mgv7_np_mountain = -0.6, 1, (250, 350, 250), 5333, 5, 0.63, 2.0
 #mgv7_np_ridge = 0, 1, (100, 100, 100), 6467, 4, 0.75, 2.0
 #mgv7_np_cave1 = 0, 12, (100, 100, 100), 52534, 4, 0.5, 2.0
 #mgv7_np_cave2 = 0, 12, (100, 100, 100), 10325, 4, 0.5, 2.0
@@ -721,4 +751,3 @@
 #    Comma-separated list of trusted mods that are allowed to access insecure
 #    functions even when mod security is on (via request_insecure_environment()).
 #secure.trusted_mods =
-

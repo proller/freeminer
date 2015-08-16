@@ -26,7 +26,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "collision.h"
 #include "environment.h"
 #include "settings.h"
-#include "profiler.h"
 #include "serialization.h" // For compressZlib
 #include "tool.h" // For ToolCapabilities
 #include "gamedef.h"
@@ -70,9 +69,11 @@ public:
 			return;
 		}
 
+		auto m_base_position = getBasePosition();
 		m_base_position.Y += dtime * BS * 2;
 		if(m_base_position.Y > 8*BS)
 			m_base_position.Y = 2*BS;
+		setBasePosition(m_base_position);
 
 		if(send_recommended == false)
 			return;
@@ -126,7 +127,6 @@ LuaEntitySAO::LuaEntitySAO(ServerEnvironment *env, v3f pos,
 	m_init_name(name),
 	m_init_state(state),
 	m_registered(false),
-	m_hp(-1),
 	m_velocity(0,0,0),
 	m_acceleration(0,0,0),
 	m_yaw(0),
@@ -144,6 +144,7 @@ LuaEntitySAO::LuaEntitySAO(ServerEnvironment *env, v3f pos,
 	m_attachment_parent_id(0),
 	m_attachment_sent(false)
 {
+	m_hp = -1;
 	m_properties_sent = true;
 	// Only register type if no environment supplied
 	if(env == NULL){
@@ -164,8 +165,6 @@ LuaEntitySAO::~LuaEntitySAO()
 
 void LuaEntitySAO::addedToEnvironment(u32 dtime_s)
 {
-	auto lock = lock_unique_rec();
-
 	ServerActiveObject::addedToEnvironment(dtime_s);
 
 	// Create entity from name
@@ -260,7 +259,7 @@ void LuaEntitySAO::step(float dtime, bool send_recommended)
 	if(isAttached())
 	{
 		v3f pos = m_env->getActiveObject(m_attachment_parent_id)->getBasePosition();
-		m_base_position = pos;
+		setBasePosition(pos);
 		m_velocity = v3f(0,0,0);
 		m_acceleration = v3f(0,0,0);
 	}
@@ -314,7 +313,7 @@ void LuaEntitySAO::step(float dtime, bool send_recommended)
 		} else if(m_last_sent_position_timer > 0.2){
 			minchange = 0.05*BS;
 		}
-		float move_d = m_base_position.getDistanceFrom(m_last_sent_position);
+		float move_d = getBasePosition().getDistanceFrom(m_last_sent_position);
 		move_d += m_last_sent_move_precision;
 		float vel_d = m_velocity.getDistanceFrom(m_last_sent_velocity);
 		if(move_d > minchange || vel_d > minchange ||
@@ -372,7 +371,7 @@ std::string LuaEntitySAO::getClientInitializationData(u16 protocol_version)
 		os<<serializeString(""); // name
 		writeU8(os, 0); // is_player
 		writeS16(os, getId()); //id
-		writeV3F1000(os, m_base_position);
+		writeV3F1000(os, getBasePosition());
 		writeF1000(os, m_yaw);
 		writeS16(os, m_hp);
 
@@ -391,7 +390,7 @@ std::string LuaEntitySAO::getClientInitializationData(u16 protocol_version)
 		writeU8(os, 0); // version
 		os<<serializeString(""); // name
 		writeU8(os, 0); // is_player
-		writeV3F1000(os, m_base_position);
+		writeV3F1000(os, getBasePosition());
 		writeF1000(os, m_yaw);
 		writeS16(os, m_hp);
 		writeU8(os, 2); // number of messages stuffed in here
@@ -498,7 +497,7 @@ void LuaEntitySAO::setPos(v3f pos)
 {
 	if(isAttached())
 		return;
-	m_base_position = pos;
+	setBasePosition(pos);
 	sendPosition(false, true);
 }
 
@@ -506,7 +505,7 @@ void LuaEntitySAO::moveTo(v3f pos, bool continuous)
 {
 	if(isAttached())
 		return;
-	m_base_position = pos;
+	setBasePosition(pos);
 	if(!continuous)
 		sendPosition(true, true);
 }
@@ -540,6 +539,7 @@ s16 LuaEntitySAO::getHP() const
 
 void LuaEntitySAO::setArmorGroups(const ItemGroupList &armor_groups)
 {
+	auto lock = lock_unique_rec();
 	m_armor_groups = armor_groups;
 	m_armor_groups_sent = false;
 }
@@ -602,6 +602,21 @@ void LuaEntitySAO::getAttachment(int *parent_id, std::string *bone, v3f *positio
 	*bone = m_attachment_bone;
 	*position = m_attachment_position;
 	*rotation = m_attachment_rotation;
+}
+
+void LuaEntitySAO::addAttachmentChild(int child_id)
+{
+	m_attachment_child_ids.insert(child_id);
+}
+
+void LuaEntitySAO::removeAttachmentChild(int child_id)
+{
+	m_attachment_child_ids.erase(child_id);
+}
+
+std::set<int> LuaEntitySAO::getAttachmentChildIds()
+{
+	return m_attachment_child_ids;
 }
 
 ObjectProperties* LuaEntitySAO::accessObjectProperties()
@@ -682,18 +697,18 @@ void LuaEntitySAO::sendPosition(bool do_interpolate, bool is_movement_end)
 	if(isAttached())
 		return;
 
-	m_last_sent_move_precision = m_base_position.getDistanceFrom(
+	m_last_sent_move_precision = getBasePosition().getDistanceFrom(
 			m_last_sent_position);
 	m_last_sent_position_timer = 0;
 	m_last_sent_yaw = m_yaw;
-	m_last_sent_position = m_base_position;
+	m_last_sent_position = getBasePosition();
 	m_last_sent_velocity = m_velocity;
 	//m_last_sent_acceleration = m_acceleration;
 
 	float update_interval = m_env->getSendRecommendedInterval();
 
 	std::string str = gob_cmd_update_position(
-		m_base_position,
+		getBasePosition(),
 		m_velocity,
 		m_acceleration,
 		m_yaw,
@@ -713,8 +728,8 @@ bool LuaEntitySAO::getCollisionBox(aabb3f *toset) {
 		toset->MinEdge = m_prop.collisionbox.MinEdge * BS;
 		toset->MaxEdge = m_prop.collisionbox.MaxEdge * BS;
 
-		toset->MinEdge += m_base_position;
-		toset->MaxEdge += m_base_position;
+		toset->MinEdge += getBasePosition();
+		toset->MaxEdge += getBasePosition();
 
 		return true;
 	}
@@ -761,12 +776,12 @@ PlayerSAO::PlayerSAO(ServerEnvironment *env_, Player *player_, u16 peer_id_,
 	m_physics_override_jump(1),
 	m_physics_override_gravity(1),
 	m_physics_override_sneak(true),
-	m_physics_override_sneak_glitch(true),
-	m_physics_override_sent(false)
+	m_physics_override_sneak_glitch(true)
 {
 	m_properties_sent = true;
 	m_position_not_sent = false;
 	m_ms_from_last_respawn = 10000; //more than ignore move time (1)
+	m_physics_override_sent = false;
 
 	assert(m_player);	// pre-condition
 	assert(m_peer_id != 0);	// pre-condition
@@ -987,6 +1002,7 @@ void PlayerSAO::step(float dtime, bool send_recommended)
 	}
 
 	if(m_physics_override_sent == false){
+		auto lock = lock_unique();
 		m_physics_override_sent = true;
 		std::string str = gob_cmd_update_physics_override(m_physics_override_speed,
 				m_physics_override_jump, m_physics_override_gravity,
@@ -997,6 +1013,7 @@ void PlayerSAO::step(float dtime, bool send_recommended)
 	}
 
 	if(m_animation_sent == false){
+		auto lock = lock_unique();
 		m_animation_sent = true;
 		std::string str = gob_cmd_update_animation(
 			m_animation_range, m_animation_speed, m_animation_blend, m_animation_loop);
@@ -1264,6 +1281,21 @@ void PlayerSAO::getAttachment(int *parent_id, std::string *bone, v3f *position,
 	*rotation = m_attachment_rotation;
 }
 
+void PlayerSAO::addAttachmentChild(int child_id)
+{
+	m_attachment_child_ids.insert(child_id);
+}
+
+void PlayerSAO::removeAttachmentChild(int child_id)
+{
+	m_attachment_child_ids.erase(child_id);
+}
+
+std::set<int> PlayerSAO::getAttachmentChildIds()
+{
+	return m_attachment_child_ids;
+}
+
 ObjectProperties* PlayerSAO::accessObjectProperties()
 {
 	return &m_prop;
@@ -1390,8 +1422,8 @@ bool PlayerSAO::getCollisionBox(aabb3f *toset) {
 	//update collision box
 	*toset = m_player->getCollisionbox();
 
-	toset->MinEdge += m_base_position;
-	toset->MaxEdge += m_base_position;
+	toset->MinEdge += getBasePosition();
+	toset->MaxEdge += getBasePosition();
 
 	return true;
 }

@@ -57,6 +57,20 @@ class MtEventManager;
 struct PointedThing;
 class Database;
 class Server;
+class Mapper;
+struct MinimapMapblock;
+
+/*
+struct QueuedMeshUpdate
+{
+	v3s16 p;
+	MeshMakeData *data;
+	bool ack_block_to_server;
+
+	QueuedMeshUpdate();
+	~QueuedMeshUpdate();
+};
+*/
 
 enum LocalClientState {
 	LC_Created,
@@ -96,23 +110,26 @@ struct MeshUpdateResult
 	}
 };
 
-class MeshUpdateThread : public thread_pool
+class MeshUpdateThread : public UpdateThread
 {
+private:
+	MeshUpdateQueue m_queue_in;
+ 
+protected:
+	const char *getName()
+	{ return "MeshUpdateThread"; }
+	virtual void doUpdate();
+
 public:
 
-	MeshUpdateThread(IGameDef *gamedef, int id_ = 0):
-		m_gamedef(gamedef)
-		,id(id_)
+	MeshUpdateThread()
 	{
 	}
 
-	void * Thread();
-
-	MeshUpdateQueue m_queue_in;
+	void enqueueUpdate(v3s16 p, std::shared_ptr<MeshMakeData> data,
+			bool urgent);
 
 	MutexedQueue<MeshUpdateResult> m_queue_out;
-
-	IGameDef *m_gamedef;
 
 	v3s16 m_camera_offset;
 	int id;
@@ -477,6 +494,8 @@ public:
 	bool accessDenied()
 	{ return m_access_denied; }
 
+	bool reconnectRequested() { return m_access_denied_reconnect; }
+
 	std::string accessDeniedReason()
 	{ return m_access_denied_reason; }
 
@@ -487,6 +506,9 @@ public:
 	bool mediaReceived()
 	{ return m_media_downloader == NULL; }
 
+	u8 getProtoVersion()
+	{ return m_proto_ver; }
+
 	float mediaReceiveProgress();
 
 	void afterContentReceived(IrrlichtDevice *device);
@@ -494,6 +516,9 @@ public:
 	float getRTT(void);
 	float getCurRate(void);
 	float getAvgRate(void);
+
+	Mapper* getMapper ()
+	{ return m_mapper; }
 
 	// IGameDef interface
 	virtual IItemDefManager* getItemDefManager();
@@ -533,7 +558,7 @@ private:
 			bool is_local_server);
 
 	void ReceiveAll();
-	void Receive();
+	bool Receive();
 
 	void sendPlayerPos();
 	// Send the item number 'item' as player item to the server
@@ -576,10 +601,17 @@ public:
 	con::Connection m_con;
 private:
 	IrrlichtDevice *m_device;
+	Mapper *m_mapper;
 	// Server serialization version
 	u8 m_server_ser_ver;
+
 	// Used version of the protocol with server
+	// Values smaller than 25 only mean they are smaller than 25,
+	// and aren't accurate. We simply just don't know, because
+	// the server didn't send the version back then.
+	// If 0, server init hasn't been received yet.
 	u8 m_proto_ver;
+
 	u16 m_playeritem;
 	u16 m_previous_playeritem;
 	bool m_inventory_updated;
@@ -614,6 +646,7 @@ private:
 	void * m_auth_data;
 
 	bool m_access_denied;
+	bool m_access_denied_reconnect;
 	std::string m_access_denied_reason;
 	Queue<ClientEvent> m_client_event_queue;
 	//std::queue<ClientEvent> m_client_event_queue;

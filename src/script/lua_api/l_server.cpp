@@ -33,7 +33,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 // request_shutdown()
 int ModApiServer::l_request_shutdown(lua_State *L)
 {
-	getServer(L)->requestShutdown();
+	const char *msg = lua_tolstring(L, 1, NULL);
+	bool reconnect = lua_toboolean(L, 2);
+	getServer(L)->requestShutdown(msg ? msg : "", reconnect);
 	return 0;
 }
 
@@ -439,6 +441,31 @@ int ModApiServer::l_notify_authentication_modified(lua_State *L)
 	return 0;
 }
 
+// get_last_run_mod()
+int ModApiServer::l_get_last_run_mod(lua_State *L)
+{
+	NO_MAP_LOCK_REQUIRED;
+	lua_getfield(L, LUA_REGISTRYINDEX, SCRIPT_MOD_NAME_FIELD);
+	const char *current_mod = lua_tostring(L, -1);
+	if (current_mod == NULL || current_mod[0] == '\0') {
+		lua_pop(L, 1);
+		lua_pushstring(L, getScriptApiBase(L)->getOrigin().c_str());
+	}
+	return 1;
+}
+
+// set_last_run_mod(modname)
+int ModApiServer::l_set_last_run_mod(lua_State *L)
+{
+	NO_MAP_LOCK_REQUIRED;
+#ifdef SCRIPTAPI_DEBUG
+	const char *mod = lua_tostring(L, 1);
+	getScriptApiBase(L)->setOriginDirect(mod);
+	//printf(">>>> last mod set from Lua: %s\n", mod);
+#endif
+	return 0;
+}
+
 #ifndef NDEBUG
 // cause_error(type_of_error)
 int ModApiServer::l_cause_error(lua_State *L)
@@ -496,6 +523,8 @@ void ModApiServer::Initialize(lua_State *L, int top)
 	API_FCT(unban_player_or_ip);
 	API_FCT(notify_authentication_modified);
 
+	API_FCT(get_last_run_mod);
+	API_FCT(set_last_run_mod);
 #ifndef NDEBUG
 	API_FCT(cause_error);
 #endif

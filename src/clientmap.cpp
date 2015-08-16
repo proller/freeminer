@@ -46,13 +46,15 @@ MapDrawControl::MapDrawControl():
 		blocks_drawn(0),
 		blocks_would_have_drawn(0),
 		farthest_drawn(0)
-		,farmesh(0)
-		,farmesh_step(1)
-		,fps(30)
-		,fps_avg(30)
-		,fps_wanted(30)
-		,drawtime_avg(30)
-		,block_overflow(false)
+		,
+		farmesh(0),
+		farmesh_step(1),
+		fps(30),
+		fps_avg(30),
+		fps_wanted(30),
+		drawtime_avg(30),
+		fov_add(0)
+		//,block_overflow(false)
 	{
 		farmesh = g_settings->getS32("farmesh");
 		farmesh_step = g_settings->getS32("farmesh_step");
@@ -689,17 +691,26 @@ return;
 		used_meshes.emplace_back(mapBlockMesh);
 
 		// Mesh animation
+		if (mesh_step <= 1)
 		{
 			//JMutexAutoLock lock(block->mesh_mutex);
 
 			mapBlockMesh->updateCameraOffset(m_camera_offset);
 
 			// Pretty random but this should work somewhat nicely
+#if __ANDROID__
+			bool faraway = d >= BS*16;
+#else
 			bool faraway = d >= BS*50;
+#endif
 			//bool faraway = d >= m_control.wanted_range * BS;
 			if(mapBlockMesh->isAnimationForced() ||
 					!faraway ||
+#if __ANDROID__
+0)
+#else
 					mesh_animate_count_far < (m_control.range_all ? 200 : 50))
+#endif
 			{
 				bool animated = mapBlockMesh->animate(
 						faraway,

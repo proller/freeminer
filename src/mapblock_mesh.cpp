@@ -28,6 +28,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "nodedef.h"
 #include "gamedef.h"
 #include "mesh.h"
+#include "minimap.h"
 #include "content_mapblock.h"
 #include "noise.h"
 #include "shader.h"
@@ -1101,6 +1102,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	no_draw(data->no_draw),
 	timestamp(data->timestamp),
 	m_mesh(nullptr),
+	m_minimap_mapblock(NULL),
 	m_gamedef(data->m_gamedef),
 	m_tsrc(m_gamedef->getTextureSource()),
 	m_shdrsrc(m_gamedef->getShaderSource()),
@@ -1113,15 +1115,23 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	m_usage_timer(0)
 {
 	m_mesh = new scene::SMesh();
+
 	m_enable_shaders = data->m_use_shaders;
 	m_enable_highlighting = g_settings->getBool("enable_node_highlighting");
+
+	if (!data->fill_data())
+		return;
+	if (step == 1)
+	if (g_settings->getBool("enable_minimap")) {
+		m_minimap_mapblock = new MinimapMapblock;
+		m_minimap_mapblock->getMinimapNodes(
+			&data->m_vmanip, data->m_blockpos * MAP_BLOCKSIZE);
+	}
 
 	// 4-21ms for MAP_BLOCKSIZE=16  (NOTE: probably outdated)
 	// 24-155ms for MAP_BLOCKSIZE=32  (NOTE: probably outdated)
 	//TimeTaker timer1("MapBlockMesh()");
 
-	if (!data->fill_data())
-		return;
 
 	timestamp = data->timestamp;
 
@@ -1240,7 +1250,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 		}
 
 		if(m_enable_highlighting && p.tile.material_flags & MATERIAL_FLAG_HIGHLIGHTED)
-			m_highlighted_materials.push_back(i);	
+			m_highlighted_materials.push_back(i);
 
 		for(u32 j = 0; j < p.vertices.size(); j++)
 		{
@@ -1293,10 +1303,8 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 				p.tile.applyMaterialOptionsWithShaders(material);
 				if (p.tile.normal_texture) {
 					material.setTexture(1, p.tile.normal_texture);
-					material.setTexture(2, m_tsrc->getTextureForMesh("enable_img.png"));
-				} else {
-					material.setTexture(2, m_tsrc->getTextureForMesh("disable_img.png"));
 				}
+				material.setTexture(2, p.tile.flags_texture);
 			} else {
 				p.tile.applyMaterialOptions(material);
 			}
@@ -1364,6 +1372,7 @@ MapBlockMesh::~MapBlockMesh()
 		}
 	m_mesh->drop();
 	m_mesh = NULL;
+	delete m_minimap_mapblock;
 }
 
 void MapBlockMesh::setStatic()
@@ -1382,7 +1391,11 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack, u32 daynight_rat
 		return false;
 	}
 
+#if __ANDROID__
+	m_animation_force_timer = myrand_range(500, 1000);
+#else
 	m_animation_force_timer = myrand_range(5, 100);
+#endif
 
 	// Cracks
 	if(crack != m_last_crack)
@@ -1441,10 +1454,8 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack, u32 daynight_rat
 		if (m_enable_shaders) {
 			if (animation_frame.normal_texture) {
 				buf->getMaterial().setTexture(1, animation_frame.normal_texture);
-				buf->getMaterial().setTexture(2, m_tsrc->getTextureForMesh("enable_img.png"));
-			} else {
-				buf->getMaterial().setTexture(2, m_tsrc->getTextureForMesh("disable_img.png"));
 			}
+			buf->getMaterial().setTexture(2, animation_frame.flags_texture);
 		}
 	}
 
@@ -1473,7 +1484,7 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack, u32 daynight_rat
 	// Node highlighting
 	if (m_enable_highlighting) {
 		u8 day = m_highlight_mesh_color.getRed();
-		u8 night = m_highlight_mesh_color.getGreen();	
+		u8 night = m_highlight_mesh_color.getGreen();
 		video::SColor hc;
 		finalColorBlend(hc, day, night, daynight_ratio);
 		float sin_r = 0.07 * sin(1.5 * time);
