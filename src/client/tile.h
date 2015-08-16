@@ -38,9 +38,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 // (that's probably because of opengles driver and stuff?
 //  I certainly don't want to debug this, so for now workaround will only
 //  be applied to android devices)
+/*
 #ifdef __ANDROID__
 #define EMT_TRANSPARENT_ALPHA_CHANNEL_REF EMT_TRANSPARENT_ALPHA_CHANNEL
 #endif
+*/
 
 class IGameDef;
 struct TileSpec;
@@ -206,6 +208,8 @@ enum MaterialType{
 // defined by extra parameters
 #define MATERIAL_FLAG_ANIMATION_VERTICAL_FRAMES 0x08
 #define MATERIAL_FLAG_HIGHLIGHTED 0x10
+#define MATERIAL_FLAG_TILEABLE_HORIZONTAL 0x20
+#define MATERIAL_FLAG_TILEABLE_VERTICAL 0x40
 
 /*
 	This fully defines the looks of a tile.
@@ -254,7 +258,9 @@ struct TileSpec
 			alpha == other.alpha &&
 			material_type == other.material_type &&
 			material_flags == other.material_flags &&
-			rotation == other.rotation
+			rotation == other.rotation &&
+			(material_flags & MATERIAL_FLAG_TILEABLE_HORIZONTAL) &&
+			(material_flags & MATERIAL_FLAG_TILEABLE_VERTICAL)
 		);
 	}
 
@@ -288,12 +294,26 @@ struct TileSpec
 		}
 		material.BackfaceCulling = (material_flags & MATERIAL_FLAG_BACKFACE_CULLING)
 			? true : false;
+		if (!(material_flags & MATERIAL_FLAG_TILEABLE_HORIZONTAL)) {
+			material.TextureLayer[0].TextureWrapU = video::ETC_CLAMP_TO_EDGE;
+		}
+		if (!(material_flags & MATERIAL_FLAG_TILEABLE_VERTICAL)) {
+			material.TextureLayer[0].TextureWrapV = video::ETC_CLAMP_TO_EDGE;
+		}
 	}
 
 	void applyMaterialOptionsWithShaders(video::SMaterial &material) const
 	{
 		material.BackfaceCulling = (material_flags & MATERIAL_FLAG_BACKFACE_CULLING)
 			? true : false;
+		if (!(material_flags & MATERIAL_FLAG_TILEABLE_HORIZONTAL)) {
+			material.TextureLayer[0].TextureWrapU = video::ETC_CLAMP_TO_EDGE;
+			material.TextureLayer[1].TextureWrapU = video::ETC_CLAMP_TO_EDGE;
+		}
+		if (!(material_flags & MATERIAL_FLAG_TILEABLE_VERTICAL)) {
+			material.TextureLayer[0].TextureWrapV = video::ETC_CLAMP_TO_EDGE;
+			material.TextureLayer[1].TextureWrapV = video::ETC_CLAMP_TO_EDGE;
+		}
 	}
 	
 	u32 texture_id;

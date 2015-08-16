@@ -37,12 +37,25 @@ extern "C" {
 #include "common/c_internal.h"
 
 #define SCRIPTAPI_LOCK_DEBUG
+#define SCRIPTAPI_DEBUG
 
 #define SCRIPT_MOD_NAME_FIELD "current_mod_name"
 // MUST be an invalid mod name so that mods can't
 // use that name to bypass security!
 #define BUILTIN_MOD_NAME "*builtin*"
 
+#define PCALL_RES(RES) do {                 \
+	int result_ = (RES);                    \
+	if (result_ != 0) {                     \
+		scriptError(result_, __FUNCTION__); \
+	}                                       \
+} while (0)
+
+#define runCallbacks(nargs, mode) \
+	runCallbacksRaw((nargs), (mode), __FUNCTION__)
+
+#define setOriginFromTable(index) \
+	setOriginFromTableRaw(index, __FUNCTION__)
 
 class Server;
 class Environment;
@@ -58,11 +71,18 @@ public:
 		std::string *error=NULL);
 	bool loadScript(const std::string &script_path, std::string *error=NULL);
 
+	void runCallbacksRaw(int nargs,
+		RunCallbacksMode mode, const char *fxn);
+
 	/* object */
 	void addObjectReference(ServerActiveObject *cobj);
 	void removeObjectReference(ServerActiveObject *cobj);
 
 	Server* getServer() { return m_server; }
+
+	std::string getOrigin() { return m_last_run_mod; }
+	void setOriginDirect(const char *origin);
+	void setOriginFromTableRaw(int index, const char *fxn);
 
 protected:
 	friend class LuaABM;
@@ -77,9 +97,8 @@ protected:
 		{ return m_luastack; }
 
 	void realityCheck();
-	void scriptError();
-	void scriptErrorNoEx();
 
+	void scriptError(int result, const char *fxn);
 	void stackDump(std::ostream &o);
 
 	void setServer(Server* server) { m_server = server; }
@@ -94,6 +113,10 @@ protected:
 	void objectrefGet(lua_State *L, u16 id);
 
 	std::recursive_mutex m_luastackmutex;
+/*
+	JMutex          m_luastackmutex;
+*/
+	std::string     m_last_run_mod;
 	// Stack index of Lua error handler
 	int             m_errorhandler;
 	bool            m_secure;

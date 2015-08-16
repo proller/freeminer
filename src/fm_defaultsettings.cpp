@@ -102,6 +102,9 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("timelapse", "0");
 	settings->setDefault("serverlist_file", "favoriteservers.json");
 
+	std::string serverlist_cache = porting::path_user + DIR_DELIM + "client" + DIR_DELIM + "servers_public.json";
+	settings->setDefault("serverlist_cache", serverlist_cache);
+
 	// Main menu
 	settings->setDefault("menu_clouds", "true");
 	settings->setDefault("main_menu_tab", "multiplayer");
@@ -163,7 +166,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("keymap_toggle_hud", "KEY_F1");
 	settings->setDefault("keymap_toggle_chat", "KEY_F2");
 	settings->setDefault("keymap_toggle_force_fog_off", "KEY_F3");
-	//settings->setDefault("keymap_toggle_update_camera", debug ? "KEY_F4" : "none");
+	//settings->setDefault("keymap_toggle_update_camera", debug ? "KEY_F4" : "");
 	settings->setDefault("keymap_toggle_block_boundaries", "KEY_F4");
 	settings->setDefault("keymap_toggle_debug", "KEY_F5");
 	settings->setDefault("keymap_toggle_profiler", "KEY_F6");
@@ -343,6 +346,7 @@ void set_default_settings(Settings *settings) {
 	// Client Backend
 	settings->setDefault("desynchronize_mapblock_texture_animation", "true");
 	settings->setDefault("client_unload_unused_data_timeout", "200");
+	settings->setDefault("client_mapblock_limit", "1000");
 	//settings->setDefault("unload_unused_meshes_timeout", "120");
 	settings->setDefault("enable_mesh_cache", "false");
 	settings->setDefault("repeat_rightclick_time", "0.25");
@@ -530,6 +534,11 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("touchscreen_threshold", "20");
 	settings->setDefault("smooth_lighting", "false");
 	settings->setDefault("enable_3d_clouds", "false");
+
+	settings->setDefault("wanted_fps", "20");
+	settings->setDefault("fps_max", "30");
+	settings->setDefault("mouse_sensitivity", "0.05");
+
 	/*
 	settings->setDefault("max_simultaneous_block_sends_per_client", "3");
 	settings->setDefault("emergequeue_limit_diskonly", "8");

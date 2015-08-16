@@ -194,7 +194,7 @@ struct BufferedPacket
 		data(a_size), time(0.0), totaltime(0.0), absolute_send_time(-1),
 		resend_count(0)
 	{}
-	SharedBuffer<u8> data; // Data of the packet, including headers
+	Buffer<u8> data; // Data of the packet, including headers
 	float time; // Seconds from buffering the packet or re-sending
 	float totaltime; // Seconds from buffering the packet
 	unsigned int absolute_send_time;
@@ -1040,7 +1040,6 @@ public:
 	~Connection();
 
 	/* Interface */
-	ConnectionEvent getEvent();
 	ConnectionEvent waitEvent(u32 timeout_ms);
 	void putCommand(ConnectionCommand &c);
 

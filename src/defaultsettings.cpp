@@ -65,7 +65,7 @@ void set_default_settings(Settings *settings)
 #if DEBUG
 			"KEY_F4");
 #else
-			"none");
+			"");
 #endif
 	settings->setDefault("keymap_toggle_debug", "KEY_F5");
 	settings->setDefault("keymap_toggle_profiler", "KEY_F6");
@@ -111,6 +111,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("address", "");
 	settings->setDefault("random_input", "false");
 	settings->setDefault("client_unload_unused_data_timeout", "600");
+	settings->setDefault("client_mapblock_limit", "1000");
 	settings->setDefault("enable_fog", "true");
 	settings->setDefault("fov", "72");
 	settings->setDefault("view_bobbing", "true");

@@ -225,10 +225,10 @@ function menu_handle_key_up_down(fields,textlist,settingname)
 
 			configure_selected_world_params(newidx)
 		end
-		
+
 		return true
 	end
-	
+
 	return false
 end
 
@@ -236,9 +236,18 @@ end
 function asyncOnlineFavourites()
 
 	if not menudata.public_known then
-		menudata.public_known = {{
+		local file = io.open( core.setting_get("serverlist_cache"), "r" )
+		if file then
+			local data = file:read("*all")
+			menudata.public_known = core.parse_json( data )
+			file:close()
+		end
+	end
+
+	if not menudata.public_known then
+	menudata.public_known = {{
 			name = fgettext("Loading..."),
-			description = fgettext("Try reenabling public serverlist and check your internet connection.")
+			description = fgettext_ne("Try reenabling public serverlist and check your internet connection.")
 		}}
 	end
 	menudata.favorites = menudata.public_known
@@ -253,6 +262,13 @@ function asyncOnlineFavourites()
 				if favs[1] then
 					menudata.public_known = favs
 					menudata.favorites = menudata.public_known
+
+					local file = io.open( core.setting_get("serverlist_cache"), "w" )
+					if file then
+						file:write( core.write_json( favs ) )
+						file:close()
+					end
+
 				end
 				core.event_handler("Refresh")
 			end
@@ -263,22 +279,22 @@ end
 --------------------------------------------------------------------------------
 function text2textlist(xpos,ypos,width,height,tl_name,textlen,text,transparency)
 	local textlines = core.splittext(text,textlen)
-	
+
 	local retval = "textlist[" .. xpos .. "," .. ypos .. ";"
 								.. width .. "," .. height .. ";"
 								.. tl_name .. ";"
-	
+
 	for i=1, #textlines, 1 do
 		textlines[i] = textlines[i]:gsub("\r","")
 		retval = retval .. core.formspec_escape(textlines[i]) .. ","
 	end
-	
+
 	retval = retval .. ";0;"
-	
+
 	if transparency then
 		retval = retval .. "true"
 	end
-	
+
 	retval = retval .. "]"
 
 	return retval

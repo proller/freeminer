@@ -33,7 +33,7 @@ VERSION_TWEAK := $(shell cat $(ROOT)/../../CMakeLists.txt | \
 ANDROID_VERSION_CODE = 12
 
 #and for freeminer for skip conflict:
-ANDROID_VERSION_CODE = 29
+ANDROID_VERSION_CODE = 31
 
 PROJECT_NAME_C = freeminer
 
@@ -54,11 +54,14 @@ PROJECT_NAME_C = freeminer
 # toolchain config for arm new processors
 ################################################################################
 TARGET_HOST = arm-linux
-TARGET_ABI = armeabi-v7a
+#TARGET_ABI = armeabi-v7a
+TARGET_ABI = armeabi-v7a-hard
 TARGET_LIBDIR = armeabi-v7a
 TARGET_TOOLCHAIN = arm-linux-androideabi-
-TARGET_CFLAGS_ADDON = -mfloat-abi=softfp -mfpu=vfpv3
+#TARGET_CFLAGS_ADDON = -mfloat-abi=softfp -mfpu=vfpv3
+TARGET_CFLAGS_ADDON =  -mfpu=vfpv3-d16 -D_NDK_MATH_NO_SOFTFP=1 -mfloat-abi=hard -march=armv7-a
 TARGET_CXXFLAGS_ADDON = $(TARGET_CFLAGS_ADDON)
+TARGET_LDFLAGS_ADDON = -Wl,--no-warn-mismatch -lm_hard
 TARGET_ARCH = armv7
 CROSS_PREFIX = arm-linux-androideabi-
 COMPILER_VERSION = 4.9
@@ -769,7 +772,7 @@ assets : $(ASSETS_TIMESTAMP) locale
 	mkdir ${ROOT}/assets/freeminer/games; \
 	for game in ${GAMES_TO_COPY};                                              \
 	do                                                                         \
-	    cp -r ${ROOT}/../../games/$$game ${ROOT}/assets/freeminer/games/; \
+	    cp -Lr ${ROOT}/../../games/$$game ${ROOT}/assets/freeminer/games/; \
 	done;                                                                      \
 	cp -r ${ROOT}/../../mods ${ROOT}/assets/freeminer; \
 	cp -r ${ROOT}/cmake/locale ${ROOT}/assets/freeminer; \
@@ -778,7 +781,7 @@ assets : $(ASSETS_TIMESTAMP) locale
 	cp -r ${IRRLICHT_DIR}/media/Shaders ${ROOT}/assets/freeminer/media; \
 	cd ${ROOT}/assets ||  exit 1;                                              \
 	find . -name "timestamp" -exec rm {} \; ;                                  \
-	find . -name "favoriteservers.json" -exec rm {} \; ;                       \
+	find . \( -name "favoriteservers.json" -o -name "servers_public.json" \) -exec rm {} \; ;                       \
 	find . -name "*.blend" -exec rm {} \; ;                                    \
 	find . -name "*~" -exec rm {} \; ;                                         \
 	find . -type d -path "*.git" -exec rm -rf {} \; ;                          \
