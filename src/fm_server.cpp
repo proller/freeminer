@@ -247,7 +247,7 @@ int Server::AsyncRunMapStep(float dtime, bool async) {
 		//JMutexAutoLock lock(m_env_mutex);
 		// Run Map's timers and unload unused data
 		ScopeProfiler sp(g_profiler, "Server: map timer and unload");
-		if(m_env->getMap().timerUpdate(m_uptime.get(), g_settings->getFloat("server_unload_unused_data_timeout"), max_cycle_ms)) {
+		if(m_env->getMap().timerUpdate(m_uptime.get(), g_settings->getFloat("server_unload_unused_data_timeout"), -1, max_cycle_ms)) {
 			m_map_timer_and_unload_interval.run_next(map_timer_and_unload_dtime);
 			++ret;
 		}
@@ -255,6 +255,11 @@ int Server::AsyncRunMapStep(float dtime, bool async) {
 
 	/* Transform liquids */
 	m_liquid_transform_timer += dtime;
+	{
+#if !ENABLE_THREADS
+	auto lockmapl = m_env->getMap().m_nothread_locker.try_lock_unique_rec();
+	if (lockmapl->owns_lock())
+#endif
 	if(!m_more_threads && m_liquid_transform_timer >= m_liquid_transform_interval)
 	{
 		TimeTaker timer_step("Server step: liquid transform");
@@ -273,7 +278,7 @@ int Server::AsyncRunMapStep(float dtime, bool async) {
 			++ret;
 		}
 	}
-
+	}
 		/*
 			Set the modified blocks unsent for all the clients
 		*/

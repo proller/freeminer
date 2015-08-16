@@ -43,6 +43,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mapblock_mesh.h"
 #include "event.h"
 #endif
+#include "server.h"
 #include "daynightratio.h"
 #include "map.h"
 #include "emerge.h"
@@ -434,6 +435,18 @@ bool ServerEnvironment::line_of_sight(v3f pos1, v3f pos2, float stepsize, v3s16 
 	return true;
 }
 
+void ServerEnvironment::kickAllPlayers(AccessDeniedCode reason,
+		const std::string &str_reason, bool reconnect)
+{
+	for (std::vector<Player*>::iterator it = m_players.begin();
+			it != m_players.end();
+			++it) {
+		((Server*)m_gamedef)->DenyAccessVerCompliant((*it)->peer_id,
+			(*it)->protocol_version, (AccessDeniedCode)reason,
+			str_reason, reconnect);
+	}
+}
+
 void ServerEnvironment::saveLoadedPlayers()
 {
 	auto i = m_players.begin();
@@ -631,6 +644,7 @@ void ServerEnvironment::loadMeta()
 				wider_unknown_count++;
 				continue;
 			}
+			auto lock = block2->m_static_objects.m_active.lock_shared_rec();
 			wider += block2->m_static_objects.m_active.size()
 					+ block2->m_static_objects.m_stored.size();
 		}
@@ -1180,6 +1194,12 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	 */
 	m_circuit.update(dtime);
 
+#if !ENABLE_THREADS
+		auto lockmap = m_map->m_nothread_locker.try_lock_unique_rec();
+		if (!lockmap->owns_lock())
+			return;
+#endif
+
 	/*
 		Manage active block list
 	*/
@@ -1594,6 +1614,7 @@ bool isFreeServerActiveObjectId(u16 id,
 u16 getFreeServerActiveObjectId(
 		maybe_concurrent_map<u16, ServerActiveObject*> &objects)
 {
+	auto lock = objects.lock_unique_rec();
 	//try to reuse id's as late as possible
 	static u16 last_used_id = 0;
 	u16 startid = last_used_id;
@@ -1610,56 +1631,12 @@ u16 getFreeServerActiveObjectId(
 
 u16 ServerEnvironment::addActiveObject(ServerActiveObject *object)
 {
-	assert(object);	// Pre-condition
+	if (!object)
+		return 0;
 	m_added_objects++;
 	u16 id = addActiveObjectRaw(object, true, 0);
 	return id;
 }
-
-#if 0
-bool ServerEnvironment::addActiveObjectAsStatic(ServerActiveObject *obj)
-{
-	assert(obj);
-
-	v3f objectpos = obj->getBasePosition();
-
-	// The block in which the object resides in
-	v3s16 blockpos_o = getNodeBlockPos(floatToInt(objectpos, BS));
-
-	/*
-		Update the static data
-	*/
-
-	// Create new static object
-	std::string staticdata = obj->getStaticData();
-	StaticObject s_obj(obj->getType(), objectpos, staticdata);
-	// Add to the block where the object is located in
-	v3s16 blockpos = getNodeBlockPos(floatToInt(objectpos, BS));
-	// Get or generate the block
-	MapBlock *block = m_map->emergeBlock(blockpos);
-
-	bool succeeded = false;
-
-	if(block)
-	{
-		block->m_static_objects.insert(0, s_obj);
-		block->raiseModified(MOD_STATE_WRITE_AT_UNLOAD,
-				"addActiveObjectAsStatic");
-		succeeded = true;
-	}
-	else{
-		infostream<<"ServerEnvironment::addActiveObjectAsStatic: "
-				<<"Could not find or generate "
-				<<"a block for storing static object"<<std::endl;
-		succeeded = false;
-	}
-
-	if(obj->environmentDeletes())
-		delete obj;
-
-	return succeeded;
-}
-#endif
 
 /*
 	Finds out what new objects have been added to
@@ -1861,8 +1838,11 @@ u16 ServerEnvironment::addActiveObjectRaw(ServerActiveObject *object,
 		MapBlock *block = m_map->emergeBlock(blockpos);
 		if(block){
 			block->m_static_objects.m_active.set(object->getId(), s_obj);
+			{
+			auto lock = object->lock_unique_rec();
 			object->m_static_exists = true;
 			object->m_static_block = blockpos;
+			}
 
 			if(set_changed)
 				block->raiseModified(MOD_STATE_WRITE_NEEDED,
@@ -2030,6 +2010,8 @@ void ServerEnvironment::activateObjects(MapBlock *block, u32 dtime_s)
 	if(block == NULL)
 		return;
 
+	//auto lock = block->m_static_objects.m_active.lock_unique_rec();
+
 	// Ignore if no stored objects (to not set changed flag)
 	if(block->m_static_objects.m_stored.empty())
 		return;
@@ -2167,15 +2149,22 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 		// The block in which the object resides in
 		v3s16 blockpos_o = getNodeBlockPos(floatToInt(objectpos, BS));
 
+		v3POS static_block;
+		{
+			auto lock = obj->try_lock_unique();
+			if (!lock->owns_lock())
+				continue;
+			static_block = obj->m_static_block;
+		}
 		// If object's static data is stored in a deactivated block and object
 		// is actually located in an active block, re-save to the block in
 		// which the object is actually located in.
 		if(!force_delete &&
 				obj->m_static_exists &&
-				!m_active_blocks.contains(obj->m_static_block) &&
+				!m_active_blocks.contains(static_block) &&
 				 m_active_blocks.contains(blockpos_o))
 		{
-			v3s16 old_static_block = obj->m_static_block;
+			v3s16 old_static_block = static_block;
 
 			// Save to block where object is located
 			MapBlock *block = m_map->emergeBlock(blockpos_o, false);
@@ -2234,30 +2223,30 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 			bool stays_in_same_block = false;
 			bool data_changed = true;
 
-			if(obj->m_static_exists){
-				if(obj->m_static_block == blockpos_o)
+			if (obj->m_static_exists) {
+				if (obj->m_static_block == blockpos_o)
 					stays_in_same_block = true;
 
 				MapBlock *block = m_map->emergeBlock(obj->m_static_block, false);
 				if (!block)
 					continue;
 
-				std::map<u16, StaticObject>::iterator n =
+					std::map<u16, StaticObject>::iterator n =
 						block->m_static_objects.m_active.find(id);
-				if(n != block->m_static_objects.m_active.end()){
-					StaticObject static_old = n->second;
+					if (n != block->m_static_objects.m_active.end()) {
+						StaticObject static_old = n->second;
 
-					float save_movem = obj->getMinimumSavedMovement();
+						float save_movem = obj->getMinimumSavedMovement();
 
-					if(static_old.data == staticdata_new &&
-							(static_old.pos - objectpos).getLength() < save_movem)
-						data_changed = false;
-				} else {
-					infostream<<"ServerEnvironment::deactivateFarObjects(): "
+						if (static_old.data == staticdata_new &&
+								(static_old.pos - objectpos).getLength() < save_movem)
+							data_changed = false;
+					} else {
+						infostream<<"ServerEnvironment::deactivateFarObjects(): "
 							<<"id="<<id<<" m_static_exists=true but "
 							<<"static data doesn't actually exist in "
 							<<PP(obj->m_static_block)<<std::endl;
-				}
+					}
 			}
 
 			bool shall_be_written = (!stays_in_same_block || data_changed);
@@ -2402,10 +2391,10 @@ ClientEnvironment::ClientEnvironment(ClientMap *map, scene::ISceneManager *smgr,
 	m_gamedef(gamedef),
 	m_irr(irr)
 	,m_active_objects_client_last(0),
-	m_move_max_loop(10)
+	m_move_max_loop(3)
 {
 	char zero = 0;
-	memset(m_attachements, zero, sizeof(m_attachements));
+	memset(attachement_parent_ids, zero, sizeof(attachement_parent_ids));
 }
 
 ClientEnvironment::~ClientEnvironment()
@@ -2465,6 +2454,8 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 {
 	DSTACK(__FUNCTION_NAME);
 
+	TimeTaker timer0("ClientEnvironment::step()");
+
 	/* Step time of day */
 	stepTimeOfDay(dtime);
 
@@ -2509,12 +2500,18 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	if(dtime > 2)
 		dtime = 2;
 
+	if (player_speed <= 0.01)
+		dtime_max_increment = dtime;
+
 	f32 dtime_downcount = dtime;
 
 	/*
 		Stuff that has a maximum time increment
 	*/
 
+
+	{
+		//TimeTaker timer1("ClientEnvironment::step() move");
 	u32 loopcount = 0;
 	u32 breaked = 0, lend_ms = porting::getTimeMs() + max_cycle_ms;
 	do
@@ -2553,8 +2550,8 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 					speed.Y -= lplayer->movement_gravity * lplayer->physics_override_gravity * dtime_part * 2;
 					viscosity_factor = 0.97; // todo maybe depend on speed; 0.96 = ~100 nps max
 					viscosity_factor += (1.0-viscosity_factor) *
-						(1-(MAP_GENERATION_LIMIT - pf.Y/BS)/
-							MAP_GENERATION_LIMIT);
+						(1-(MAX_MAP_GENERATION_LIMIT - pf.Y/BS)/
+							MAX_MAP_GENERATION_LIMIT);
 				}
 
 				// Liquid floating / sinking
@@ -2581,15 +2578,6 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 
 					v3f d = d_wanted.normalize() * dl;
 					speed += d;
-
-#if 0 // old code
-					if(speed.X > lplayer->movement_liquid_fluidity + lplayer->movement_liquid_fluidity_smooth)	speed.X -= lplayer->movement_liquid_fluidity_smooth;
-					if(speed.X < -lplayer->movement_liquid_fluidity - lplayer->movement_liquid_fluidity_smooth)	speed.X += lplayer->movement_liquid_fluidity_smooth;
-					if(speed.Y > lplayer->movement_liquid_fluidity + lplayer->movement_liquid_fluidity_smooth)	speed.Y -= lplayer->movement_liquid_fluidity_smooth;
-					if(speed.Y < -lplayer->movement_liquid_fluidity - lplayer->movement_liquid_fluidity_smooth)	speed.Y += lplayer->movement_liquid_fluidity_smooth;
-					if(speed.Z > lplayer->movement_liquid_fluidity + lplayer->movement_liquid_fluidity_smooth)	speed.Z -= lplayer->movement_liquid_fluidity_smooth;
-					if(speed.Z < -lplayer->movement_liquid_fluidity - lplayer->movement_liquid_fluidity_smooth)	speed.Z += lplayer->movement_liquid_fluidity_smooth;
-#endif
 				}
 
 				lplayer->setSpeed(speed);
@@ -2614,8 +2602,13 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 
 	if (breaked && m_move_max_loop > loopcount)
 		--m_move_max_loop;
-	if (!breaked && m_move_max_loop < 50)
+	if (!breaked && m_move_max_loop < 5)
 		++m_move_max_loop;
+
+	}
+
+	{
+		//TimeTaker timer2("ClientEnvironment::step() collision");
 
 	for(auto
 			i = player_collisions.begin();
@@ -2651,6 +2644,7 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 				m_gamedef->event()->put(e);
 			}
 		}
+	}
 	}
 
 	/*
@@ -2731,6 +2725,8 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		}
 	}
 
+	{
+		//TimeTaker timer5("ClientEnvironment::step() players");
 	/*
 		Stuff that can be done in an arbitarily large dtime
 	*/
@@ -2746,6 +2742,7 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 			player->move(dtime, this, 100*BS);
 
 		}
+	}
 	}
 
 	// Update lighting on local player (used for wield item)
@@ -2775,9 +2772,13 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		Step active objects and update lighting of them
 	*/
 
+	{
+		//TimeTaker timer6("ClientEnvironment::step() objects");
+
 	g_profiler->avg("CEnv: num of objects", m_active_objects.size());
-	bool update_lighting = m_active_object_light_update_interval.step(dtime, 0.21);
+	bool update_lighting = m_active_object_light_update_interval.step(dtime, 1);
 	u32 n = 0, calls = 0, end_ms = porting::getTimeMs() + u32(500/g_settings->getFloat("wanted_fps"));
+	int skipped = 0;
 	for(std::map<u16, ClientActiveObject*>::iterator
 			i = m_active_objects.begin();
 			i != m_active_objects.end(); ++i)
@@ -2790,6 +2791,14 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		++calls;
 
 		ClientActiveObject* obj = i->second;
+
+		auto & draw_control = getClientMap().getControl();
+		if ((pf.getDistanceFrom(obj->getPosition()) / BS) * 1.2 > draw_control.wanted_range) {
+			//errorstream<<"skip "<<obj->getId() << " p="<<pf<< " o=" << obj->getPosition() << " r=" << pf.getDistanceFrom(obj->getPosition()) / BS << " wr=" << draw_control.wanted_range<< std::endl;
+			++skipped;
+			continue;
+		}
+
 		// Step object
 		obj->step(dtime, this);
 
@@ -2817,6 +2826,10 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	if (!calls)
 		m_active_objects_client_last = 0;
 
+	//infostream<<"objects "<<m_active_objects_client_last <<"/"<<m_active_objects.size()<<" skipped="<<skipped<<std::endl;
+
+	}
+
 	/*
 		Step and handle simple objects
 	*/
@@ -2841,6 +2854,15 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 void ClientEnvironment::addSimpleObject(ClientSimpleObject *simple)
 {
 	m_simple_objects.push_back(simple);
+}
+
+GenericCAO* ClientEnvironment::getGenericCAO(u16 id)
+{
+	ClientActiveObject *obj = getActiveObject(id);
+	if (obj && obj->getType() == ACTIVEOBJECT_TYPE_GENERIC)
+		return (GenericCAO*) obj;
+	else
+		return NULL;
 }
 
 ClientActiveObject* ClientEnvironment::getActiveObject(u16 id)
@@ -2974,28 +2996,23 @@ void ClientEnvironment::removeActiveObject(u16 id)
 	m_active_objects.erase(id);
 }
 
-void ClientEnvironment::processActiveObjectMessage(u16 id,
-		const std::string &data)
+void ClientEnvironment::processActiveObjectMessage(u16 id, const std::string &data)
 {
-	ClientActiveObject* obj = getActiveObject(id);
-	if(obj == NULL)
-	{
-		verbosestream<<"ClientEnvironment::processActiveObjectMessage():"
-				<<" got message for id="<<id<<", which doesn't exist."
-				<<std::endl;
+	ClientActiveObject *obj = getActiveObject(id);
+	if (obj == NULL) {
+		verbosestream << "ClientEnvironment::processActiveObjectMessage():"
+			<< " got message for id=" << id << ", which doesn't exist."
+			<< std::endl;
 		return;
 	}
-	try
-	{
+
+	try {
 		obj->processMessage(data);
-	}
-	catch(SerializationError &e)
-	{
+	} catch (SerializationError &e) {
 		errorstream<<"ClientEnvironment::processActiveObjectMessage():"
-				<<" id="<<id<<" type="<<obj->getType()
-				<<" SerializationError in processMessage(),"
-				<<" message="<<serializeJsonString(data)
-				<<std::endl;
+			<< " id=" << id << " type=" << obj->getType()
+			<< " SerializationError in processMessage(): " << e.what()
+			<< std::endl;
 	}
 }
 

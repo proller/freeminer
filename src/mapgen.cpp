@@ -71,36 +71,41 @@ FlagDesc flagdesc_gennotify[] = {
 
 Mapgen::Mapgen()
 {
-	generating    = false;
-	id            = -1;
-	seed          = 0;
-	water_level   = 0;
+	generating  = false;
+	id          = -1;
+	seed        = 0;
+	water_level = 0;
+	flags       = 0;
+
 	liquid_pressure = 0;
-	flags         = 0;
 
-	vm          = NULL;
-	ndef        = NULL;
-	heightmap   = NULL;
-	biomemap    = NULL;
-
+	vm        = NULL;
+	ndef      = NULL;
+	heightmap = NULL;
+	biomemap  = NULL;
+	heatmap   = NULL;
+	humidmap  = NULL;
 }
 
 
 Mapgen::Mapgen(int mapgenid, MapgenParams *params, EmergeManager *emerge) :
 	gennotify(emerge->gen_notify_on, &emerge->gen_notify_on_deco_ids)
 {
-	generating    = false;
-	id            = mapgenid;
-	seed          = (int)params->seed;
-	water_level   = params->water_level;
+	generating  = false;
+	id          = mapgenid;
+	seed        = (int)params->seed;
+	water_level = params->water_level;
+	flags       = params->flags;
+	csize       = v3s16(1, 1, 1) * (params->chunksize * MAP_BLOCKSIZE);
+
 	liquid_pressure = params->liquid_pressure;
-	flags         = params->flags;
-	csize         = v3s16(1, 1, 1) * (params->chunksize * MAP_BLOCKSIZE);
 
 	vm        = NULL;
 	ndef      = NULL;
 	heightmap = NULL;
 	biomemap  = NULL;
+	heatmap   = NULL;
+	humidmap  = NULL;
 }
 
 
@@ -146,7 +151,7 @@ s16 Mapgen::findGroundLevelFull(v2s16 p2d)
 }
 
 
-// Returns -MAP_GENERATION_LIMIT if not found
+// Returns -MAX_MAP_GENERATION_LIMIT if not found
 s16 Mapgen::findGroundLevel(v2s16 p2d, s16 ymin, s16 ymax)
 {
 	v3s16 em = vm->m_area.getExtent();
@@ -160,7 +165,7 @@ s16 Mapgen::findGroundLevel(v2s16 p2d, s16 ymin, s16 ymax)
 
 		vm->m_area.add_y(em, i, -1);
 	}
-	return (y >= ymin) ? y : -MAP_GENERATION_LIMIT;
+	return (y >= ymin) ? y : -MAX_MAP_GENERATION_LIMIT;
 }
 
 
@@ -500,4 +505,3 @@ void MapgenParams::save(Settings &settings) const
 	if (sparams)
 		sparams->writeParams(&settings);
 }
-

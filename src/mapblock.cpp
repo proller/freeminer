@@ -63,7 +63,7 @@ static const char *modified_reason_strings[] = {
 	"deactivateFarObjects: Static data moved in",
 	"deactivateFarObjects: Static data moved out",
 	"deactivateFarObjects: Static data changed considerably",
-	"finishBlockMake: expireDayNightDiff"
+	"finishBlockMake: expireDayNightDiff",
 	"unknown",
 };
 
@@ -78,6 +78,7 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 		m_uptime_timer_last(0),
 		m_parent(parent),
 		m_pos(pos),
+		m_pos_relative(pos * MAP_BLOCKSIZE),
 		m_gamedef(gamedef),
 		m_modified(MOD_STATE_CLEAN),
 		m_modified_reason(MOD_REASON_INITIAL),
@@ -484,11 +485,11 @@ s16 MapBlock::getGroundLevel(v2s16 p2d)
 // sure we can handle all content ids. But it's absolutely worth it as it's
 // a speedup of 4 for one of the major time consuming functions on storing
 // mapblocks.
-static content_t getBlockNodeIdMapping_mapping[USHRT_MAX];
+static content_t getBlockNodeIdMapping_mapping[USHRT_MAX + 1];
 static void getBlockNodeIdMapping(NameIdMapping *nimap, MapNode *nodes,
 		INodeDefManager *nodedef)
 {
-	memset(getBlockNodeIdMapping_mapping, 0xFF, USHRT_MAX * sizeof(content_t));
+	memset(getBlockNodeIdMapping_mapping, 0xFF, (USHRT_MAX + 1) * sizeof(content_t));
 
 	std::set<content_t> unknown_contents;
 	content_t id_counter = 0;

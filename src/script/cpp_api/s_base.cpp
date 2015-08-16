@@ -24,6 +24,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "cpp_api/s_internal.h"
 #include "cpp_api/s_security.h"
 #include "lua_api/l_object.h"
+#include "common/c_converter.h"
 #include "serverobject.h"
 #include "debug.h"
 #include "filesys.h"
@@ -71,6 +72,11 @@ public:
 
 ScriptApiBase::ScriptApiBase()
 {
+/*
+#ifdef SCRIPTAPI_LOCK_DEBUG
+	m_locked = false;
+#endif
+*/
 	m_luastack = luaL_newstate();
 	FATAL_ERROR_IF(!m_luastack, "luaL_newstate() failed");
 
@@ -118,14 +124,14 @@ ScriptApiBase::~ScriptApiBase()
 }
 
 bool ScriptApiBase::loadMod(const std::string &script_path,
-		const std::string &mod_name)
+		const std::string &mod_name, std::string *error)
 {
 	ModNameStorer mod_name_storer(getStack(), mod_name);
 
-	return loadScript(script_path);
+	return loadScript(script_path, error);
 }
 
-bool ScriptApiBase::loadScript(const std::string &script_path)
+bool ScriptApiBase::loadScript(const std::string &script_path, std::string *error)
 {
 	verbosestream << "Loading and running script from " << script_path << std::endl;
 
@@ -139,70 +145,114 @@ bool ScriptApiBase::loadScript(const std::string &script_path)
 	}
 	ok = ok && !lua_pcall(L, 0, 0, m_errorhandler);
 	if (!ok) {
-		errorstream << "========== ERROR FROM LUA ===========" << std::endl;
-		errorstream << "Failed to load and run script from " << std::endl;
-		errorstream << script_path << ":" << std::endl;
-		errorstream << std::endl;
-		errorstream << lua_tostring(L, -1) << std::endl;
-		errorstream << std::endl;
-		errorstream << "======= END OF ERROR FROM LUA ========" << std::endl;
+		std::string error_msg = lua_tostring(L, -1);
+		if (error)
+			*error = error_msg;
+		errorstream << "========== ERROR FROM LUA ===========" << std::endl
+			<< "Failed to load and run script from " << std::endl
+			<< script_path << ":" << std::endl << std::endl
+			<< error_msg << std::endl << std::endl
+			<< "======= END OF ERROR FROM LUA ========" << std::endl;
 		lua_pop(L, 1); // Pop error message from stack
 		return false;
 	}
 	return true;
 }
 
+// Push the list of callbacks (a lua table).
+// Then push nargs arguments.
+// Then call this function, which
+// - runs the callbacks
+// - replaces the table and arguments with the return value,
+//     computed depending on mode
+void ScriptApiBase::runCallbacksRaw(int nargs,
+		RunCallbacksMode mode, const char *fxn)
+{
+	lua_State *L = getStack();
+	FATAL_ERROR_IF(lua_gettop(L) < nargs + 1, "Not enough arguments");
+
+	// Insert error handler
+	lua_pushcfunction(L, script_error_handler);
+	int errorhandler = lua_gettop(L) - nargs - 1;
+	lua_insert(L, errorhandler);
+
+	// Insert run_callbacks between error handler and table
+	lua_getglobal(L, "core");
+	lua_getfield(L, -1, "run_callbacks");
+	lua_remove(L, -2);
+	lua_insert(L, errorhandler + 1);
+
+	// Insert mode after table
+	lua_pushnumber(L, (int)mode);
+	lua_insert(L, errorhandler + 3);
+
+	// Stack now looks like this:
+	// ... <error handler> <run_callbacks> <table> <mode> <arg#1> <arg#2> ... <arg#n>
+
+	int result = lua_pcall(L, nargs + 2, 1, errorhandler);
+	if (result != 0)
+		scriptError(result, fxn);
+
+	lua_remove(L, -2); // Remove error handler
+}
+
 void ScriptApiBase::realityCheck()
 {
 	int top = lua_gettop(m_luastack);
-	if(top >= 30){
-		dstream<<"Stack is over 30:"<<std::endl;
+	if (top >= 30) {
+		dstream << "Stack is over 30:" << std::endl;
 		stackDump(dstream);
 		std::string traceback = script_get_backtrace(m_luastack);
 		throw LuaError("Stack is over 30 (reality check)\n" + traceback);
 	}
 }
 
-void ScriptApiBase::scriptError()
+void ScriptApiBase::scriptError(int result, const char *fxn)
 {
-	throw LuaError(lua_tostring(m_luastack, -1));
-}
-
-void ScriptApiBase::scriptErrorNoEx()
-{
-	errorstream<<"lua exception: " << lua_tostring(m_luastack, -1) << std::endl;
+	script_error(getStack(), result, m_last_run_mod.c_str(), fxn);
 }
 
 void ScriptApiBase::stackDump(std::ostream &o)
 {
-	int i;
 	int top = lua_gettop(m_luastack);
-	for (i = 1; i <= top; i++) {  /* repeat for each level */
+	for (int i = 1; i <= top; i++) {  /* repeat for each level */
 		int t = lua_type(m_luastack, i);
 		switch (t) {
-
 			case LUA_TSTRING:  /* strings */
-				o<<"\""<<lua_tostring(m_luastack, i)<<"\"";
+				o << "\"" << lua_tostring(m_luastack, i) << "\"";
 				break;
-
 			case LUA_TBOOLEAN:  /* booleans */
-				o<<(lua_toboolean(m_luastack, i) ? "true" : "false");
+				o << (lua_toboolean(m_luastack, i) ? "true" : "false");
 				break;
-
 			case LUA_TNUMBER:  /* numbers */ {
 				char buf[10];
 				snprintf(buf, 10, "%g", lua_tonumber(m_luastack, i));
-				o<<buf;
-				break; }
-
-			default:  /* other values */
-				o<<lua_typename(m_luastack, t);
+				o << buf;
 				break;
-
+			}
+			default:  /* other values */
+				o << lua_typename(m_luastack, t);
+				break;
 		}
-		o<<" ";
+		o << " ";
 	}
-	o<<std::endl;
+	o << std::endl;
+}
+
+void ScriptApiBase::setOriginDirect(const char *origin)
+{
+	m_last_run_mod = origin ? origin : "??";
+}
+
+void ScriptApiBase::setOriginFromTableRaw(int index, const char *fxn)
+{
+#ifdef SCRIPTAPI_DEBUG
+	lua_State *L = getStack();
+
+	m_last_run_mod = lua_istable(L, index) ?
+		getstringfield_default(L, index, "mod_origin", "") : "";
+	//printf(">>>> running %s for mod: %s\n", fxn, m_last_run_mod.c_str());
+#endif
 }
 
 void ScriptApiBase::addObjectReference(ServerActiveObject *cobj)
@@ -254,7 +304,7 @@ void ScriptApiBase::removeObjectReference(ServerActiveObject *cobj)
 void ScriptApiBase::objectrefGetOrCreate(lua_State *L,
 		ServerActiveObject *cobj)
 {
-	if(cobj == NULL || cobj->getId() == 0){
+	if (cobj == NULL || cobj->getId() == 0) {
 		ObjectRef::create(L, cobj);
 	} else {
 		objectrefGet(L, cobj->getId());
@@ -272,4 +322,3 @@ void ScriptApiBase::objectrefGet(lua_State *L, u16 id)
 	lua_remove(L, -2); // object_refs
 	lua_remove(L, -2); // core
 }
-

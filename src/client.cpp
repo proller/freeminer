@@ -39,6 +39,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "porting.h"
 #include "mapblock_mesh.h"
 #include "mapblock.h"
+#include "minimap.h"
 #include "settings.h"
 #include "profiler.h"
 #include "gettext.h"
@@ -133,29 +134,18 @@ std::shared_ptr<MeshMakeData> MeshUpdateQueue::pop()
 	MeshUpdateThread
 */
 
-void * MeshUpdateThread::Thread()
+void MeshUpdateThread::enqueueUpdate(v3s16 p, std::shared_ptr<MeshMakeData> data,
+		bool urgent)
 {
-	ThreadStarted();
+	m_queue_in.addBlock(p, data, urgent);
+	deferUpdate();
+}
 
-	log_register_thread("MeshUpdateThread" + itos(id));
-
-	DSTACK(__FUNCTION_NAME);
-
-	BEGIN_DEBUG_EXCEPTION_HANDLER
-
-	porting::setThreadName(("MeshUpdateThread" + itos(id)).c_str());
-	porting::setThreadPriority(30);
-
-	while(!StopRequested())
-	{
-
+void MeshUpdateThread::doUpdate()
+{
+	std::shared_ptr<MeshMakeData> q;
+	while ((q = m_queue_in.pop())) {
 		try {
-		auto q = m_queue_in.pop();
-		if(!q)
-		{
-			sleep_ms(3);
-			continue;
-		}
 		m_queue_in.m_process.set(q->m_blockpos, 1);
 
 		ScopeProfiler sp(g_profiler, "Client: Mesh making " + itos(q->step));
@@ -181,10 +171,6 @@ void * MeshUpdateThread::Thread()
 		}
 
 	}
-
-	END_DEBUG_EXCEPTION_HANDLER(errorstream)
-
-	return NULL;
 }
 
 /*
@@ -216,7 +202,7 @@ Client::Client(
 	m_nodedef(nodedef),
 	m_sound(sound),
 	m_event(event),
-	m_mesh_update_thread(this),
+	m_mesh_update_thread(),
 	m_env(
 		new ClientMap(this, this, control,
 			device->getSceneManager()->getRootSceneNode(),
@@ -228,6 +214,7 @@ Client::Client(
 	m_con(PROTOCOL_ID, is_simple_singleplayer_game ? MAX_PACKET_SIZE_SINGLEPLAYER : MAX_PACKET_SIZE, CONNECTION_TIMEOUT, ipv6, this),
 	m_device(device),
 	m_server_ser_ver(SER_FMT_VER_INVALID),
+	m_proto_ver(0),
 	m_playeritem(0),
 	m_previous_playeritem(0),
 	m_inventory_updated(false),
@@ -243,6 +230,7 @@ Client::Client(
 	m_chosen_auth_mech(AUTH_MECHANISM_NONE),
 	m_auth_data(NULL),
 	m_access_denied(false),
+	m_access_denied_reconnect(false),
 	m_itemdef_received(false),
 	m_nodedef_received(false),
 	m_media_downloader(new ClientMediaDownloader()),
@@ -259,6 +247,9 @@ Client::Client(
 {
 	// Add local player
 	m_env.addPlayer(new LocalPlayer(this, playername));
+
+	m_mapper = new Mapper(device, this);
+	//m_cache_save_interval = g_settings->getU16("server_map_save_interval");
 
 	m_cache_smooth_lighting = g_settings->getBool("smooth_lighting");
 	m_cache_enable_shaders  = g_settings->getBool("enable_shaders");
@@ -287,7 +278,7 @@ Client::~Client()
 	m_mesh_update_thread.Stop();
 	m_mesh_update_thread.Wait();
 /*
-	while(!m_mesh_update_thread.m_queue_out.empty()) {
+	while (!m_mesh_update_thread.m_queue_out.empty()) {
 		MeshUpdateResult r = m_mesh_update_thread.m_queue_out.pop_frontNoEx();
 		delete r.mesh;
 	}
@@ -296,20 +287,22 @@ Client::~Client()
 	delete m_inventory_from_server;
 
 	// Delete detached inventories
-	for(std::map<std::string, Inventory*>::iterator
+	for (std::map<std::string, Inventory*>::iterator
 			i = m_detached_inventories.begin();
-			i != m_detached_inventories.end(); i++){
+			i != m_detached_inventories.end(); ++i) {
 		delete i->second;
 	}
 
 	// cleanup 3d model meshes on client shutdown
 	while (m_device->getSceneManager()->getMeshCache()->getMeshCount() != 0) {
-		scene::IAnimatedMesh * mesh =
+		scene::IAnimatedMesh *mesh =
 			m_device->getSceneManager()->getMeshCache()->getMeshByIndex(0);
 
 		if (mesh != NULL)
 			m_device->getSceneManager()->getMeshCache()->removeMesh(mesh);
 	}
+
+	delete m_mapper;
 }
 
 void Client::connect(Address address,
@@ -424,10 +417,11 @@ void Client::step(float dtime)
 		std::vector<v3s16> deleted_blocks;
 		
 		if(m_env.getMap().timerUpdate(m_uptime,
-				g_settings->getFloat("client_unload_unused_data_timeout"),
-				max_cycle_ms,
-				&deleted_blocks))
-				m_map_timer_and_unload_interval.run_next(map_timer_and_unload_dtime);
+			g_settings->getFloat("client_unload_unused_data_timeout"),
+			g_settings->getS32("client_mapblock_limit"),
+			max_cycle_ms,
+			&deleted_blocks))
+			m_map_timer_and_unload_interval.run_next(map_timer_and_unload_dtime);
 
 		/*if(deleted_blocks.size() > 0)
 			infostream<<"Client: Unloaded "<<deleted_blocks.size()
@@ -505,8 +499,10 @@ void Client::step(float dtime)
 	if(counter >= 10) {
 		counter = 0.0;
 		// connectedAndInitialized() is true, peer exists.
+#if MINETEST_PROTO
 		float avg_rtt = getRTT();
 		infostream<<"Client: avg_rtt="<<avg_rtt<<std::endl;
+#endif
 
 		sendDrawControl(); //not very good place. maybe 5s timer better
 	}
@@ -540,15 +536,35 @@ void Client::step(float dtime)
 		*/
 		{
 
-		while(!m_mesh_update_thread.m_queue_out.empty_try()) {
+		while (!m_mesh_update_thread.m_queue_out.empty_try()) {
 			num_processed_meshes++;
+
+			MinimapMapblock *minimap_mapblock = NULL;
+			bool do_mapper_update = true;
+
 			MeshUpdateResult r = m_mesh_update_thread.m_queue_out.pop_frontNoEx();
 			if (!r.mesh)
 				continue;
 			auto block = m_env.getMap().getBlock(r.p);
 			if(block) {
 				block->setMesh(r.mesh);
+				if (r.mesh) {
+					minimap_mapblock = r.mesh->moveMinimapMapblock();
+					if (minimap_mapblock == NULL)
+						do_mapper_update = false;
+				}
+
+				if (r.mesh && r.mesh->getMesh()->getMeshBufferCount() == 0) {
+					//delete r.mesh;
+				} else {
+					// Replace with the new mesh
+					block->mesh = r.mesh;
+				}
+			} else {
+				//delete r.mesh;
 			}
+			if (do_mapper_update)
+				m_mapper->addBlock(r.p, minimap_mapblock);
 			if (porting::getTimeMs() > end_ms) {
 				break;
 			}
@@ -728,14 +744,19 @@ bool Client::loadMedia(const std::string &data, const std::string &filename)
 // Virtual methods from con::PeerHandler
 void Client::peerAdded(u16 peer_id)
 {
-	infostream<<"Client::peerAdded(): peer->id="
-			<<peer_id<<std::endl;
+	infostream << "Client::peerAdded(): peer->id="
+			<< peer_id << std::endl;
 }
 void Client::deletingPeer(u16 peer_id, bool timeout)
 {
-	infostream<<"Client::deletingPeer(): "
+	infostream << "Client::deletingPeer(): "
 			"Server Peer is getting deleted "
-			<<"(timeout="<<timeout<<")"<<std::endl;
+			<< "(timeout=" << timeout << ")" << std::endl;
+
+	if (timeout) {
+		m_access_denied = true;
+		m_access_denied_reason = _("Connection timed out.");
+	}
 }
 
 /*
@@ -831,9 +852,14 @@ void Client::ReceiveAll()
 	auto end_ms = porting::getTimeMs() + 10;
 	for(;;)
 	{
+#if MINETEST_PROTO
 		try {
-			Receive();
+#endif
+			if (!Receive())
+				break;
 			g_profiler->graphAdd("client_received_packets", 1);
+
+#if MINETEST_PROTO
 		}
 		catch(con::NoIncomingDataException &e) {
 			break;
@@ -843,6 +869,7 @@ void Client::ReceiveAll()
 					"InvalidIncomingDataException: what()="
 					<<e.what()<<std::endl;
 		}
+#endif
 		// Limit time even if there would be huge amounts of data to
 		// process
 		if(porting::getTimeMs() > end_ms)
@@ -850,12 +877,15 @@ void Client::ReceiveAll()
 	}
 }
 
-void Client::Receive()
+bool Client::Receive()
 {
 	DSTACK(__FUNCTION_NAME);
 	NetworkPacket pkt;
-	if (m_con.Receive(&pkt))
-		ProcessData(&pkt);
+	if (!m_con.Receive(&pkt))
+		return false;
+
+	ProcessData(&pkt);
+	return true;
 }
 
 //FMTODO
@@ -895,6 +925,7 @@ void Client::ProcessData(NetworkPacket *pkt)
 	if (command >= TOCLIENT_NUM_MSG_TYPES) {
 		infostream << "Client: Ignoring unknown command "
 			<< command << std::endl;
+		return;
 	}
 
 	/*
@@ -1001,6 +1032,7 @@ void Client::deleteAuthData()
 		case AUTH_MECHANISM_NONE:
 			break;
 	}
+	m_chosen_auth_mech = AUTH_MECHANISM_NONE;
 }
 
 
@@ -1092,7 +1124,6 @@ void Client::startAuth(AuthMechanism chosen_auth_mechanism)
 
 			NetworkPacket resp_pkt(TOSERVER_SRP_BYTES_A, 0);
 			resp_pkt << std::string(bytes_A, len_A) << based_on;
-			free(bytes_A);
 			Send(&resp_pkt);
 			break;
 		}
@@ -1653,9 +1684,10 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent, int step)
 	}
 
 	// Add task to queue
-	unsigned int qsize = m_mesh_update_thread.m_queue_in.addBlock(p, data, urgent);
-	draw_control.block_overflow = qsize > 1000; // todo: depend on mesh make speed
-
+	//unsigned int qsize = 
+	//m_mesh_update_thread.m_queue_in.addBlock(p, data, urgent);
+	m_mesh_update_thread.enqueueUpdate(p, data, urgent);
+	//draw_control.block_overflow = qsize > 1000; // todo: depend on mesh make speed
 }
 
 void Client::addUpdateMeshTaskWithEdge(v3POS blockpos, bool urgent)
@@ -1869,22 +1901,31 @@ void Client::afterContentReceived(IrrlichtDevice *device)
 
 float Client::getRTT(void)
 {
+#if MINETEST_PROTO
+	return m_con.getPeerStat(PEER_ID_SERVER,con::AVG_RTT);
+#else
 	return 0;
-	//return m_con.getPeerStat(PEER_ID_SERVER,con::AVG_RTT);
+#endif
 }
 
 float Client::getCurRate(void)
 {
+#if MINETEST_PROTO
+	return ( m_con.getLocalStat(con::CUR_INC_RATE) +
+			m_con.getLocalStat(con::CUR_DL_RATE));
+#else
 	return 0;
-//	return ( m_con.getLocalStat(con::CUR_INC_RATE) +
-//			m_con.getLocalStat(con::CUR_DL_RATE));
+#endif
 }
 
 float Client::getAvgRate(void)
 {
+#if MINETEST_PROTO
+	return ( m_con.getLocalStat(con::AVG_INC_RATE) +
+			m_con.getLocalStat(con::AVG_DL_RATE));
+#else
 	return 0;
-//	return ( m_con.getLocalStat(con::AVG_INC_RATE) +
-//			m_con.getLocalStat(con::AVG_DL_RATE));
+#endif
 }
 
 void Client::makeScreenshot(const std::string & name, IrrlichtDevice *device)

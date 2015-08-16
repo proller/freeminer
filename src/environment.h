@@ -51,6 +51,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "circuit.h"
 #include "key_value_storage.h"
 #include <unordered_set>
+//#include "jthread/jmutex.h"
+#include "network/networkprotocol.h" // for AccessDeniedCode
 
 class ServerEnvironment;
 class ActiveBlockModifier;
@@ -267,6 +269,8 @@ public:
 
 	KeyValueStorage *getKeyValueStorage();
 
+	void kickAllPlayers(AccessDeniedCode reason,
+		const std::string &str_reason, bool reconnect);
 	// Save players
 	void saveLoadedPlayers();
 	void savePlayer(const std::string &playername);
@@ -486,6 +490,8 @@ private:
 #ifndef SERVER
 
 #include "clientobject.h"
+#include "content_cao.h"
+
 class ClientSimpleObject;
 
 /*
@@ -548,6 +554,7 @@ public:
 		ActiveObjects
 	*/
 
+	GenericCAO* getGenericCAO(u16 id);
 	ClientActiveObject* getActiveObject(u16 id);
 
 	/*
@@ -583,7 +590,7 @@ public:
 	// Get event from queue. CEE_NONE is returned if queue is empty.
 	ClientEnvEvent getClientEvent();
 
-	u16 m_attachements[USHRT_MAX];
+	u16 attachement_parent_ids[USHRT_MAX + 1];
 
 	std::list<std::string> getPlayerNames()
 	{ return m_player_names; }

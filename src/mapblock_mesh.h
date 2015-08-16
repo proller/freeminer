@@ -43,6 +43,7 @@ class IShaderSource;
 int getFarmeshStep(MapDrawControl& draw_control, const v3POS & player_pos, const v3POS & block_pos);
 
 class MapBlock;
+struct MinimapMapblock;
 
 struct MeshMakeData
 {
@@ -129,9 +130,16 @@ public:
 	// Returns true if anything has been changed.
 	bool animate(bool faraway, float time, int crack, u32 daynight_ratio);
 
-	scene::SMesh* getMesh()
+	scene::SMesh *getMesh()
 	{
 		return m_mesh;
+	}
+
+	MinimapMapblock *moveMinimapMapblock()
+	{
+		MinimapMapblock *p = m_minimap_mapblock;
+		m_minimap_mapblock = NULL;
+		return p;
 	}
 
 	bool isAnimationForced() const
@@ -169,6 +177,9 @@ public:
 
 private:
 	scene::SMesh *m_mesh;
+public:
+	MinimapMapblock *m_minimap_mapblock;
+private:
 	IGameDef *m_gamedef;
 	ITextureSource *m_tsrc;
 	IShaderSource *m_shdrsrc;

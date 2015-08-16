@@ -114,7 +114,7 @@ private:
 	// get_physics_override(self)
 	static int l_get_physics_override(lua_State *L);
 
-	// set_animation(self, frame_range, frame_speed, frame_blend)
+	// set_animation(self, frame_range, frame_speed, frame_blend, frame_loop)
 	static int l_set_animation(lua_State *L);
 
 	// get_animation(self)
@@ -185,6 +185,9 @@ private:
 
 	// get_player_name(self)
 	static int l_get_player_name(lua_State *L);
+
+	// get_player_velocity(self)
+	static int l_get_player_velocity(lua_State *L);
 
 	// get_look_dir(self)
 	static int l_get_look_dir(lua_State *L);

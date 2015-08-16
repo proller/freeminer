@@ -27,7 +27,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "content_sao.h"
 #include "nodedef.h"
 #include "voxelalgorithms.h"
-#include "profiler.h"
 #include "settings.h" // For g_settings
 #include "emerge.h"
 #include "dungeongen.h"
@@ -59,6 +58,8 @@ MapgenV5::MapgenV5(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 
 	this->biomemap  = new u8[csize.X * csize.Z];
 	this->heightmap = new s16[csize.X * csize.Z];
+	this->heatmap   = NULL;
+	this->humidmap  = NULL;
 
 	MapgenV5Params *sp = (MapgenV5Params *)params->sparams;
 	this->spflags      = sp->spflags;
@@ -218,7 +219,7 @@ int MapgenV5::getGroundLevelAtPoint(v2s16 p)
 	s16 search_top = water_level + 15;
 	s16 search_base = water_level;
 
-	s16 level = -MAP_GENERATION_LIMIT;
+	s16 level = -MAX_MAP_GENERATION_LIMIT;
 	for (s16 y = search_top; y >= search_base; y--) {
 		float n_ground = NoisePerlin3D(&noise_ground->np, p.X, y, p.Y, seed);
 		if (n_ground * f > y - h) {
@@ -382,6 +383,9 @@ void MapgenV5::calculateNoise()
 		noise_heat->result[i] += noise_heat_blend->result[i];
 		noise_humidity->result[i] += noise_humidity_blend->result[i];
 	}
+
+	heatmap = noise_heat->result;
+	humidmap = noise_humidity->result;
 	//printf("calculateNoise: %dus\n", t.stop());
 }
 
@@ -407,7 +411,7 @@ int MapgenV5::generateBaseTerrain()
 {
 	u32 index = 0;
 	u32 index2d = 0;
-	int stone_surface_max_y = -MAP_GENERATION_LIMIT;
+	int stone_surface_max_y = -MAX_MAP_GENERATION_LIMIT;
 
 	for (s16 z=node_min.Z; z<=node_max.Z; z++) {
 		for (s16 y=node_min.Y - 1; y<=node_max.Y + 1; y++) {
@@ -545,30 +549,24 @@ MgStoneType MapgenV5::generateBiomes(float *heat_map, float *humidity_map)
 
 void MapgenV5::generateCaves(int max_stone_y)
 {
-	u32 index = 0;
-	u32 index2d = 0;
+	if (max_stone_y >= node_min.Y) {
+		u32 index = 0;
 
-	for (s16 z=node_min.Z; z<=node_max.Z; z++) {
-		for (s16 y=node_min.Y - 1; y<=node_max.Y + 1; y++) {
+		for (s16 z = node_min.Z; z <= node_max.Z; z++)
+		for (s16 y = node_min.Y - 1; y <= node_max.Y + 1; y++) {
 			u32 i = vm->m_area.index(node_min.X, y, z);
-			for (s16 x=node_min.X; x<=node_max.X; x++, i++, index++, index2d++) {
+			for (s16 x = node_min.X; x <= node_max.X; x++, i++, index++) {
 				float d1 = contour(noise_cave1->result[index]);
 				float d2 = contour(noise_cave2->result[index]);
 				if (d1*d2 > 0.125) {
-					Biome *biome = (Biome *)bmgr->getRaw(biomemap[index2d]);
 					content_t c = vm->m_data[i].getContent();
-					if (!ndef->get(c).is_ground_content || c == CONTENT_AIR ||
-							(y <= water_level &&
-							c != biome->c_stone &&
-							c != c_stone))
+					if (!ndef->get(c).is_ground_content || c == CONTENT_AIR)
 						continue;
 
 					vm->m_data[i] = MapNode(CONTENT_AIR);
 				}
 			}
-			index2d -= ystride;
 		}
-		index2d += ystride;
 	}
 
 	if (node_max.Y > LARGE_CAVE_DEPTH)
@@ -631,4 +629,3 @@ void MapgenV5::dustTopNodes()
 		}
 	}
 }
-

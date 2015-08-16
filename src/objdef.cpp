@@ -31,17 +31,18 @@ ObjDefManager::ObjDefManager(IGameDef *gamedef, ObjDefType type)
 
 ObjDefManager::~ObjDefManager()
 {
-/* leak!
+	clear();
+/*
 	for (size_t i = 0; i != m_objects.size(); i++)
 		delete m_objects[i];
-but no crash */
-	m_objects.clear();
+*/
 }
 
 
 ObjDefHandle ObjDefManager::add(ObjDef *obj)
 {
-	assert(obj);
+	if (!obj)
+		return OBJDEF_INVALID_HANDLE;
 
 	if (obj->name.length() && getByName(obj->name))
 		return OBJDEF_INVALID_HANDLE;

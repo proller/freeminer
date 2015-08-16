@@ -140,9 +140,12 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 		Add TOCLIENT_HELLO for presenting server to client after client
 			presentation
 		Add TOCLIENT_AUTH_ACCEPT to accept connection from client
+		Rename GENERIC_CMD_SET_ATTACHMENT to GENERIC_CMD_ATTACH_TO
+	PROTOCOL_VERSION 26:
+		Add TileDef tileable_horizontal, tileable_vertical flags
 */
 
-#define LATEST_PROTOCOL_VERSION 25
+#define LATEST_PROTOCOL_VERSION 26
 
 // Server's supported network protocol range
 #define SERVER_PROTOCOL_VERSION_MIN 13
@@ -152,7 +155,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #define CLIENT_PROTOCOL_VERSION_MIN 13
 #define CLIENT_PROTOCOL_VERSION_MAX LATEST_PROTOCOL_VERSION
 
-#define CLIENT_PROTOCOL_VERSION_FM 1
+#define CLIENT_PROTOCOL_VERSION_FM 2
 #define SERVER_PROTOCOL_VERSION_FM 0
 
 // Constant that differentiates the protocol from random data and other protocols
@@ -233,7 +236,8 @@ enum {
 #define TOCLIENT_ACCESS_DENIED 0x0A
 	/*
 		u8 reason
-		std::string custom reason (if reason == SERVER_ACCESSDENIED_CUSTOM_STRING)
+		std::string custom reason (if needed, otherwise "")
+		u8 (bool) reconnect
 	*/
 
 #define TOCLIENT_BLOCKDATA 0x20
@@ -342,7 +346,8 @@ enum {
 	// string
 	TOCLIENT_ACCESS_DENIED_CUSTOM_STRING,
 	// u16 command
-	TOCLIENT_ACCESS_DENIED_REASON
+	TOCLIENT_ACCESS_DENIED_REASON,
+	TOCLIENT_ACCESS_DENIED_RECONNECT
 };
 	/*
 		u16 command
@@ -367,7 +372,8 @@ typedef std::vector<std::pair<std::string, std::string> > MediaData;
 
 #define TOCLIENT_NODEDEF 0x3a
 enum {
-	TOCLIENT_NODEDEF_DEFINITIONS
+	TOCLIENT_NODEDEF_DEFINITIONS,
+	TOCLIENT_NODEDEF_DEFINITIONS_ZIP
 };
 	/*
 		u16 command
@@ -395,7 +401,8 @@ enum {
 
 #define TOCLIENT_ITEMDEF 0x3d
 enum {
-	TOCLIENT_ITEMDEF_DEFINITIONS
+	TOCLIENT_ITEMDEF_DEFINITIONS,
+	TOCLIENT_ITEMDEF_DEFINITIONS_ZIP
 };
 
 typedef std::vector<std::pair<std::string, std::string> > MediaAnnounceList;
@@ -939,7 +946,7 @@ enum {
 	TOSERVER_DRAWCONTROL_RANGE_ALL,
 	TOSERVER_DRAWCONTROL_FARMESH,
 	TOSERVER_DRAWCONTROL_FOV,
-	TOSERVER_DRAWCONTROL_BLOCK_OVERFLOW
+	TOSERVER_DRAWCONTROL_BLOCK_OVERFLOW //not used
 };
 
 #define TOSERVER_FIRST_SRP 0x50
@@ -1006,6 +1013,8 @@ enum AccessDeniedCode {
 	SERVER_ACCESSDENIED_ALREADY_CONNECTED,
 	SERVER_ACCESSDENIED_SERVER_FAIL,
 	SERVER_ACCESSDENIED_CUSTOM_STRING,
+	SERVER_ACCESSDENIED_SHUTDOWN,
+	SERVER_ACCESSDENIED_CRASH,
 	SERVER_ACCESSDENIED_MAX,
 };
 
@@ -1023,8 +1032,10 @@ const static std::string accessDeniedStrings[SERVER_ACCESSDENIED_MAX] = {
 	"Too many users.",
 	"Empty passwords are disallowed.  Set a password and try again.",
 	"Another client is connected with this name.  If your client closed unexpectedly, try again in a minute.",
-	"Server authention failed.  This is likely a server error."
+	"Server authentication failed.  This is likely a server error.",
 	"",
+	"Server shutting down.",
+	"This server has experienced an internal error. You will now be disconnected."
 };
 
 #endif

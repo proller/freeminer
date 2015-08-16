@@ -117,6 +117,10 @@ int RemoteClient::GetNextBlocks (
 {
 	DSTACK(__FUNCTION_NAME);
 
+	auto lock = lock_unique_rec();
+	if (!lock->owns_lock())
+		return 0;
+
 	// Increment timers
 	m_nothing_to_send_pause_timer -= dtime;
 	m_nearest_unsent_reset_timer += dtime;
@@ -147,7 +151,7 @@ int RemoteClient::GetNextBlocks (
 	// Predict to next block
 	v3f playerpos_predicted = playerpos + playerspeeddir*MAP_BLOCKSIZE*BS;
 
-	v3s16 center_nodepos = floatToInt(playerpos_predicted, BS);floatToInt(playerpos_predicted, BS);
+	v3s16 center_nodepos = floatToInt(playerpos_predicted, BS);
 
 	v3s16 center = getNodeBlockPos(center_nodepos);
 
@@ -259,7 +263,14 @@ int RemoteClient::GetNextBlocks (
 	auto cam_pos_nodes = floatToInt(playerpos, BS);
 
 	auto nodemgr = env->getGameDef()->getNodeDefManager();
-	MapNode n = env->getMap().getNodeTry(cam_pos_nodes);
+	MapNode n;
+	{
+#if !ENABLE_THREADS
+		auto lock = env->getServerMap().m_nothread_locker.lock_shared_rec();
+#endif
+		n = env->getMap().getNodeTry(cam_pos_nodes);
+	}
+
 	if(n && nodemgr->get(n).solidness == 2)
 		occlusion_culling_enabled = false;
 
@@ -328,8 +339,7 @@ int RemoteClient::GetNextBlocks (
 				max_simul_dynamic = max_simul_sends_setting;
 
 			// Don't select too many blocks for sending
-			if(num_blocks_selected+num_blocks_sending >= max_simul_dynamic)
-			{
+			if (num_blocks_selected + num_blocks_sending >= max_simul_dynamic) {
 				//queue_is_full = true;
 				goto queue_full_break;
 			}
@@ -337,12 +347,7 @@ int RemoteClient::GetNextBlocks (
 			/*
 				Do not go over-limit
 			*/
-			if(p.X < -MAP_GENERATION_LIMIT / MAP_BLOCKSIZE
-			|| p.X > MAP_GENERATION_LIMIT / MAP_BLOCKSIZE
-			|| p.Y < -MAP_GENERATION_LIMIT / MAP_BLOCKSIZE
-			|| p.Y > MAP_GENERATION_LIMIT / MAP_BLOCKSIZE
-			|| p.Z < -MAP_GENERATION_LIMIT / MAP_BLOCKSIZE
-			|| p.Z > MAP_GENERATION_LIMIT / MAP_BLOCKSIZE)
+			if (blockpos_over_limit(p))
 				continue;
 
 			// If this is true, inexistent block will be made from scratch
@@ -382,7 +387,7 @@ int RemoteClient::GetNextBlocks (
 				auto lock = m_blocks_sent.lock_shared_rec();
 				block_sent = m_blocks_sent.find(p) != m_blocks_sent.end() ? m_blocks_sent.get(p) : 0;
 			}
-			if(block_sent > 0 && ((block_overflow && d>1) || block_sent + (d <= 2 ? 1 : d*d*d) > m_uptime)) {
+			if(block_sent > 0 && (/* (block_overflow && d>1) || */ block_sent + (d <= 2 ? 1 : d*d*d) > m_uptime)) {
 				continue;
 			}
 
@@ -427,6 +432,9 @@ int RemoteClient::GetNextBlocks (
 			v3POS spn = cam_pos_nodes + v3POS(0,0,0);
 			s16 bs2 = MAP_BLOCKSIZE/2 + 1;
 			u32 needed_count = 1;
+#if !ENABLE_THREADS
+			auto lock = env->getServerMap().m_nothread_locker.lock_shared_rec();
+#endif
 			//VERY BAD COPYPASTE FROM clientmap.cpp!
 			if( d >= 1 &&
 				occlusion_culling_enabled &&
@@ -460,9 +468,11 @@ int RemoteClient::GetNextBlocks (
 				block->resetUsageTimer();
 
 				//todo: fixme
-				//if (block->getLightingExpired() && (block_sent /*|| d>=1*/)) {
-				//	continue;
-				//}
+				if (block->getLightingExpired() && (block_sent || d >= 1)) {
+					env->getServerMap().lighting_modified_blocks.set(p, nullptr);
+					continue;
+				}
+
 
 				// Block is valid if lighting is up-to-date and data exists
 				if(block->isValid() == false)
