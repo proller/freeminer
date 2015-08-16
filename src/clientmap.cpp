@@ -536,7 +536,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 
 	m_camera_mutex.Lock();
 	v3f camera_position = m_camera_position;
-	f32 camera_fov = m_camera_fov;
+	f32 camera_fov = m_camera_fov * 1.1;
 	m_camera_mutex.Unlock();
 
 	//if(m_control.fps_avg > m_control.fps_wanted *0.7)
@@ -587,7 +587,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 		float d = 0.0;
 		if(isBlockInSight(block->getPos(), camera_position,
 				m_camera_direction, camera_fov,
-				100000*BS, &d) == false)
+				100000*BS, &d, mapBlockMesh->scale) == false)
 		{
 			continue;
 		}

@@ -194,15 +194,15 @@ u64 murmur_hash_64_ua(const void *key, int len, unsigned int seed)
 	range: viewing range
 */
 bool isBlockInSight(v3s16 blockpos_b, v3f camera_pos, v3f camera_dir,
-		f32 camera_fov, f32 range, f32 *distance_ptr)
+		f32 camera_fov, f32 range, f32 *distance_ptr, int block_scale)
 {
-	v3s16 blockpos_nodes = blockpos_b * MAP_BLOCKSIZE;
+	v3s16 blockpos_nodes = blockpos_b * MAP_BLOCKSIZE * block_scale;
 
 	// Block center position
 	v3f blockpos(
-			((float)blockpos_nodes.X + MAP_BLOCKSIZE/2) * BS,
-			((float)blockpos_nodes.Y + MAP_BLOCKSIZE/2) * BS,
-			((float)blockpos_nodes.Z + MAP_BLOCKSIZE/2) * BS
+			((float)blockpos_nodes.X + MAP_BLOCKSIZE * block_scale/2.0 ) * BS,
+			((float)blockpos_nodes.Y + MAP_BLOCKSIZE * block_scale/2.0 ) * BS,
+			((float)blockpos_nodes.Z + MAP_BLOCKSIZE * block_scale/2.0 ) * BS
 	);
 
 	// Block position relative to camera
@@ -220,7 +220,7 @@ bool isBlockInSight(v3s16 blockpos_b, v3f camera_pos, v3f camera_dir,
 
 	// Maximum radius of a block.  The magic number is
 	// sqrt(3.0) / 2.0 in literal form.
-	f32 block_max_radius = 0.866025403784 * MAP_BLOCKSIZE * BS;
+	f32 block_max_radius = 0.866025403784 * MAP_BLOCKSIZE * BS * block_scale;
 
 	// If block is (nearly) touching the camera, don't
 	// bother validating further (that is, render it anyway)
@@ -229,6 +229,9 @@ bool isBlockInSight(v3s16 blockpos_b, v3f camera_pos, v3f camera_dir,
 
 	if (!camera_fov)
 		return true;
+
+	//camera_fov*=1.1;
+
 	// Adjust camera position, for purposes of computing the angle,
 	// such that a block that has any portion visible with the
 	// current camera position will have the center visible at the

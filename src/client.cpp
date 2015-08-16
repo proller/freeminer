@@ -1587,10 +1587,16 @@ void Client::addUpdateMeshTaskForNode(v3s16 nodepos, bool urgent)
 
 void Client::updateMeshTimestampWithEdge(v3s16 blockpos) {
 
-	int step = getFarmeshStep(m_env.getClientMap().getControl(), getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), blockpos);
+	//int step = getFarmeshStep(m_env.getClientMap().getControl(), getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), blockpos);
 	for (int i = 0; i < 7; ++i) {
 		v3POS bp1 = blockpos + g_6dirs[i];
-		v3POS actualpos = getFarmeshActual(bp1, step);
+		auto *block = m_env.getMap().getBlockNoCreateNoEx(bp1); // todo maybe update bp1 too if differ
+		if(!block)
+			continue;
+		block->setTimestampNoChangedFlag(m_uptime);
+	}
+	for (int step = 1; step <= FARMESH_STEP_MAX; ++step) {
+		v3POS actualpos = getFarmeshActual(blockpos, step);
 		auto *block = m_env.getMap().getBlockNoCreateNoEx(actualpos); // todo maybe update bp1 too if differ
 		if(!block)
 			continue;
