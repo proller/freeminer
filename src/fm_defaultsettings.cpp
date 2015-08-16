@@ -44,6 +44,14 @@ const bool win32 =
 #endif
     ;
 
+const bool android =
+#if defined(__ANDROID__)
+    true
+#else
+    false
+#endif
+    ;
+
 void set_default_settings(Settings *settings) {
 	//
 	// Client and server
@@ -91,7 +99,11 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("texture_path", "");
 	settings->setDefault("shader_path", "");
 	settings->setDefault("screenshot_path", ".");
+	settings->setDefault("timelapse", "0");
 	settings->setDefault("serverlist_file", "favoriteservers.json");
+
+	std::string serverlist_cache = porting::path_user + DIR_DELIM + "client" + DIR_DELIM + "servers_public.json";
+	settings->setDefault("serverlist_cache", serverlist_cache);
 
 	// Main menu
 	settings->setDefault("menu_clouds", "true");
@@ -119,6 +131,9 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("debug_log_level", "2");
 	settings->setDefault("time_taker_enabled", debug ? "5" : "0");
 
+	settings->setDefault("kick_msg_shutdown", "Server shutting down.");
+	settings->setDefault("kick_msg_crash", "This server has experienced an internal error. You will now be disconnected.");
+
 	//
 	// Keymaps
 	//
@@ -134,8 +149,9 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("keymap_inventory", "KEY_KEY_I");
 	settings->setDefault("keymap_special1", "KEY_KEY_E");
 	settings->setDefault("keymap_chat", "KEY_KEY_T");
-	settings->setDefault("keymap_msg", "@");
+	//settings->setDefault("keymap_msg", "@");
 	settings->setDefault("keymap_cmd", "/");
+	settings->setDefault("keymap_minimap", "KEY_F9");
 #if IRRLICHT_VERSION_10000  >= 10703
 	settings->setDefault("keymap_console", "KEY_OEM_3");
 #else
@@ -150,7 +166,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("keymap_toggle_hud", "KEY_F1");
 	settings->setDefault("keymap_toggle_chat", "KEY_F2");
 	settings->setDefault("keymap_toggle_force_fog_off", "KEY_F3");
-	//settings->setDefault("keymap_toggle_update_camera", debug ? "KEY_F4" : "none");
+	//settings->setDefault("keymap_toggle_update_camera", debug ? "KEY_F4" : "");
 	settings->setDefault("keymap_toggle_block_boundaries", "KEY_F4");
 	settings->setDefault("keymap_toggle_debug", "KEY_F5");
 	settings->setDefault("keymap_toggle_profiler", "KEY_F6");
@@ -237,8 +253,10 @@ void set_default_settings(Settings *settings) {
 	// Shaders
 	settings->setDefault("enable_bumpmapping", "true");
 	settings->setDefault("enable_parallax_occlusion", "true");
-	settings->setDefault("parallax_occlusion_scale", "0.06");
-	settings->setDefault("parallax_occlusion_bias", "0.03");
+	settings->setDefault("parallax_occlusion_mode", "1");
+	settings->setDefault("parallax_occlusion_iterations", "4");
+	settings->setDefault("parallax_occlusion_scale", "0.08");
+	settings->setDefault("parallax_occlusion_bias", "0.04");
 	settings->setDefault("generate_normalmaps", "false");
 	settings->setDefault("normalmaps_strength", "0.6");
 	settings->setDefault("normalmaps_smooth", "1");
@@ -255,10 +273,11 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("enable_clouds", "true");
 	settings->setDefault("enable_3d_clouds", "true");
 	settings->setDefault("cloud_height", "300");
+	settings->setDefault("cloud_radius", "36");
 	settings->setDefault("new_style_water", "false");
 	settings->setDefault("opaque_water", "false");
 	settings->setDefault("connected_glass", "false");
-	settings->setDefault("new_style_leaves", "true");
+	settings->setDefault("leaves_style", "fancy");
 	settings->setDefault("enable_fog", "true");
 	settings->setDefault("directional_colored_fog", "true");
 
@@ -269,7 +288,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("3d_paralax_strength", "0.025");
 	settings->setDefault("tooltip_show_delay", "400");
 	// A bit more than the server will send around the player, to make fog blend well
-	settings->setDefault("viewing_range_nodes_max", itos(MAP_GENERATION_LIMIT));
+	settings->setDefault("viewing_range_nodes_max", itos(MAX_MAP_GENERATION_LIMIT));
 	settings->setDefault("viewing_range_nodes_min", "35");
 	settings->setDefault("shadows", "0");
 
@@ -299,6 +318,7 @@ void set_default_settings(Settings *settings) {
 
 	// Weather
 	settings->setDefault("weather", "true");
+	settings->setDefault("weather_biome", "false");
 	settings->setDefault("weather_heat_season", "30");
 	settings->setDefault("weather_heat_daily", "8");
 	settings->setDefault("weather_heat_width", "3000");
@@ -309,19 +329,6 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("weather_humidity_daily", "-12");
 	settings->setDefault("weather_humidity_width", "300");
 	settings->setDefault("weather_humidity_days", "2");
-
-	// Mini Map
-	settings->setDefault("hud_map", "false");
-	settings->setDefault("hud_map_back", "0,0,0");
-	settings->setDefault("hud_map_width", "128");
-	settings->setDefault("hud_map_height", "128");
-	settings->setDefault("hud_map_scale", "1.0");
-	settings->setDefault("hud_map_alpha", "192");
-	settings->setDefault("hud_map_above", "true");
-	settings->setDefault("hud_map_scan", "64");
-	settings->setDefault("hud_map_surface", "32");
-	settings->setDefault("hud_map_tracking", "false");
-	settings->setDefault("hud_map_border", "16");
 
 	// Color / Readability
 	settings->setDefault("console_color", "(0,0,0)");
@@ -339,8 +346,9 @@ void set_default_settings(Settings *settings) {
 	// Client Backend
 	settings->setDefault("desynchronize_mapblock_texture_animation", "true");
 	settings->setDefault("client_unload_unused_data_timeout", "200");
+	settings->setDefault("client_mapblock_limit", "1000");
 	//settings->setDefault("unload_unused_meshes_timeout", "120");
-	settings->setDefault("enable_mesh_cache", "true");
+	settings->setDefault("enable_mesh_cache", "false");
 	settings->setDefault("repeat_rightclick_time", "0.25");
 	settings->setDefault("random_input", "false");
 	settings->setDefault("respawn_auto", "false");
@@ -349,6 +357,11 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("enable_local_map_saving", "false");
 	settings->setDefault("enable_build_where_you_stand", "false");
 	settings->setDefault("hotbar_cycling", "false");
+
+	// Mini Map
+	settings->setDefault("enable_minimap", "true");
+	settings->setDefault("minimap_shape_round", "true");
+	settings->setDefault("minimap_double_scan_height", "true");
 
 	//
 	// Server stuff
@@ -371,6 +384,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("server_url", "");
 	settings->setDefault("enable_remote_media_server", "true");
 	settings->setDefault("remote_media", "");
+	settings->setDefault("timeout_mul", android ? "5" : "1");
 
 	// Check when player joins
 	settings->setDefault("strict_protocol_version_checking", "false");
@@ -395,6 +409,10 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("max_spawn_height", "50");
 	settings->setDefault("time_speed", "72");
 
+	settings->setDefault("kick_msg_shutdown", "Server shutting down.");
+	settings->setDefault("kick_msg_crash", "This server has experienced an internal error. You will now be disconnected.");
+
+
 	// Backend server settings
 	settings->setDefault("max_packets_per_iteration", "1024");
 	settings->setDefault("cache_block_before_spawn", "true");
@@ -408,6 +426,7 @@ void set_default_settings(Settings *settings) {
 #endif
 	settings->setDefault("abm_random", "true");
 	settings->setDefault("enable_force_load", "true");
+	settings->setDefault("map_generation_limit", "31000");
 	settings->setDefault("max_simultaneous_block_sends_per_client", "50");
 	settings->setDefault("max_block_send_distance", "30");
 	settings->setDefault("max_block_generate_distance", "7");
@@ -422,18 +441,21 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("emergequeue_limit_generate", ""); // autodetect from number of cpus
 	settings->setDefault("emergequeue_limit_total", ""); // autodetect from number of cpus
 	settings->setDefault("num_emerge_threads", "");
+	settings->setDefault("secure.enable_security", "false");
+	settings->setDefault("secure.trusted_mods", "");
+
 	// Storage
 	settings->setDefault("server_map_save_interval", "300");
 	settings->setDefault("sqlite_synchronous", "1");
 	settings->setDefault("save_generated_block", "true");
 	// IPv6
-#if ENET_IPV6
+#if (ENET_IPV6 || MINETEST_PROTO)
 	settings->setDefault("enable_ipv6", "true");
 #else
 	settings->setDefault("enable_ipv6", "false");
 #endif
 
-#if !defined(_WIN32) && !USE_IPV4_DEFAULT && ENET_IPV6
+#if !USE_IPV4_DEFAULT && (ENET_IPV6 || MINETEST_PROTO)
 	settings->setDefault("ipv6_server", "true"); // problems on all windows versions (unable to play in local game)
 #else
 	settings->setDefault("ipv6_server", "false");
@@ -444,7 +466,7 @@ void set_default_settings(Settings *settings) {
 	//
 
 	// Movement
-	settings->setDefault("enable_movement_fov", "true");
+	settings->setDefault("movement_fov", "true");
 	settings->setDefault("aux1_descends", "false");
 	settings->setDefault("doubletap_jump", "false");
 	settings->setDefault("always_fly_fast", "true");
@@ -487,9 +509,9 @@ void set_default_settings(Settings *settings) {
 	// Tweaks for windows
 	//
 
-	settings->setDefault("more_threads", win32 ? "false" : "true");
+	settings->setDefault("more_threads", "true");
 
-#if !defined(SERVER) && defined(_MSC_VER)
+#if !defined(SERVER) && defined(_WIN32)
 	settings->setDefault("console_enabled", debug ? "true" : "false");
 #endif
 
@@ -511,6 +533,12 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("TMPFolder", "/sdcard/freeminer/tmp/");
 	settings->setDefault("touchscreen_threshold", "20");
 	settings->setDefault("smooth_lighting", "false");
+	settings->setDefault("enable_3d_clouds", "false");
+
+	settings->setDefault("wanted_fps", "20");
+	settings->setDefault("fps_max", "30");
+	settings->setDefault("mouse_sensitivity", "0.05");
+
 	/*
 	settings->setDefault("max_simultaneous_block_sends_per_client", "3");
 	settings->setDefault("emergequeue_limit_diskonly", "8");
@@ -518,7 +546,9 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("viewing_range_nodes_max", "50");
 	settings->setDefault("viewing_range_nodes_min", "20");
 	*/
+	settings->setDefault("num_emerge_threads", "1"); // too unstable when > 1
 	settings->setDefault("inventory_image_hack", "false");
+	settings->setDefault("enable_minimap", "false");
 
 	//check for device with small screen
 	float x_inches = ((double) porting::getDisplaySize().X /
@@ -540,8 +570,13 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("abm_random", "0");
 	settings->setDefault("farmesh", "2");
 	settings->setDefault("farmesh_step", "1");
-	settings->setDefault("new_style_leaves", "false");
+	settings->setDefault("leaves_style", "opaque");
 	settings->setDefault("autojump", "1");
+
+	char lang[3] = {};
+	AConfiguration_getLanguage(porting::app_global->config, lang);
+	settings->setDefault("language", lang);
+	settings->setDefault("android_keyboard", "0");
 
 #else
 	settings->setDefault("screen_dpi", "72");

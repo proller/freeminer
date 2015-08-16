@@ -46,13 +46,16 @@ MapDrawControl::MapDrawControl():
 		blocks_drawn(0),
 		blocks_would_have_drawn(0),
 		farthest_drawn(0)
-		,farmesh(0)
-		,fps(30)
-		,fps_avg(30)
-		,fps_wanted(30)
-		,drawtime_avg(30)
+		,
+		farmesh(0),
+		farmesh_step(1),
+		fps(30),
+		fps_avg(30),
+		fps_wanted(30),
+		drawtime_avg(30),
+		fov_add(0)
 		,camera_fov_blocks(0)
-		,block_overflow(false)
+		//,block_overflow(false)
 	{
 		farmesh = g_settings->getS32("farmesh");
 		farmesh_step = g_settings->getS32("farmesh_step");
@@ -418,7 +421,8 @@ infostream<<" making mesh for new step="<<mesh_step<<" bp="<<bp<<std::endl;
 			mesh->incrementUsageTimer(dtime);
 
 			// Add to set
-			block->refGrab();
+			//block->refGrab();
+			block->resetUsageTimer();
 			drawlist.set(bp, block);
 
 			blocks_drawn++;
@@ -441,8 +445,8 @@ infostream<<" making mesh for new step="<<mesh_step<<" bp="<<bp<<std::endl;
 	if (m_drawlist_last)
 		return;
 
-	for (auto & ir : *m_drawlist)
-		ir.second->refDrop();
+	//for (auto & ir : *m_drawlist)
+	//	ir.second->refDrop();
 
 	auto m_drawlist_old = !m_drawlist_current ? &m_drawlist_1 : &m_drawlist_0;
 	m_drawlist = m_drawlist_current ? &m_drawlist_1 : &m_drawlist_0;
@@ -595,17 +599,26 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 		used_meshes.emplace_back(mapBlockMesh);
 
 		// Mesh animation
+		if (mesh_step <= 1)
 		{
 			//JMutexAutoLock lock(block->mesh_mutex);
 
 			mapBlockMesh->updateCameraOffset(m_camera_offset);
 
 			// Pretty random but this should work somewhat nicely
+#if __ANDROID__
+			bool faraway = d >= BS*16;
+#else
 			bool faraway = d >= BS*50;
+#endif
 			//bool faraway = d >= m_control.wanted_range * BS;
 			if(mapBlockMesh->isAnimationForced() ||
 					!faraway ||
+#if __ANDROID__
+0)
+#else
 					mesh_animate_count_far < (m_control.range_all ? 200 : 50))
+#endif
 			{
 				bool animated = mapBlockMesh->animate(
 						faraway,
@@ -629,7 +642,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 		{
 			//JMutexAutoLock lock(block->mesh_mutex);
 
-			scene::SMesh *mesh = mapBlockMesh->getMesh();
+			auto *mesh = mapBlockMesh->getMesh();
 			if (!mesh)
 				continue;
 

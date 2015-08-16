@@ -508,11 +508,11 @@ bool setSystemPaths()
 	// Use ".\bin\.."
 	path_share = std::string(buf) + "\\..";
 
-	// Use "C:\Documents and Settings\user\Application Data\<PROJECT_NAME_LOWER>"
+	// Use "C:\Documents and Settings\user\Application Data\<PROJECT_NAME>"
 	DWORD len = GetEnvironmentVariable("APPDATA", buf, sizeof(buf));
 	FATAL_ERROR_IF(len == 0 || len > sizeof(buf), "Failed to get APPDATA");
 
-	path_user = std::string(buf) + DIR_DELIM PROJECT_NAME_LOWER;
+	path_user = std::string(buf) + DIR_DELIM + PROJECT_NAME;
 	return true;
 }
 
@@ -544,7 +544,7 @@ bool setSystemPaths()
 		trylist.push_back(static_sharedir);
 
 	trylist.push_back(bindir + DIR_DELIM ".." DIR_DELIM "share"
-		DIR_DELIM PROJECT_NAME_LOWER);
+		DIR_DELIM + PROJECT_NAME);
 	trylist.push_back(bindir + DIR_DELIM "..");
 
 #ifdef __ANDROID__
@@ -573,7 +573,7 @@ bool setSystemPaths()
 
 #ifndef __ANDROID__
 	path_user = std::string(getenv("HOME")) + DIR_DELIM "."
-		PROJECT_NAME_LOWER;
+		+ PROJECT_NAME;
 #endif
 
 	return true;
@@ -596,8 +596,9 @@ bool setSystemPaths()
 	}
 	CFRelease(resources_url);
 
-	path_user = std::string(getenv("HOME")) +
-		"/Library/Application Support/" PROJECT_NAME_LOWER;
+	path_user = std::string(getenv("HOME"))
+		+ "/Library/Application Support/"
+		+ PROJECT_NAME;
 	return true;
 }
 
@@ -608,7 +609,7 @@ bool setSystemPaths()
 {
 	path_share = STATIC_SHAREDIR;
 	path_user  = std::string(getenv("HOME")) + DIR_DELIM "."
-		PROJECT_NAME_LOWER;
+		+ lowercase(PROJECT_NAME);
 	return true;
 }
 
@@ -788,25 +789,23 @@ const char *getVideoDriverFriendlyName(irr::video::E_DRIVER_TYPE type)
 
 static float calcDisplayDensity()
 {
-	const char* current_display = getenv("DISPLAY");
+	const char *current_display = getenv("DISPLAY");
 
 	if (current_display != NULL) {
-			Display * x11display = XOpenDisplay(current_display);
+		Display *x11display = XOpenDisplay(current_display);
 
-			if (x11display != NULL) {
-				/* try x direct */
-				float dpi_height =
-						floor(DisplayHeight(x11display, 0) /
-								(DisplayHeightMM(x11display, 0) * 0.039370) + 0.5);
-				float dpi_width =
-						floor(DisplayWidth(x11display, 0) /
-								(DisplayWidthMM(x11display, 0) * 0.039370) +0.5);
+		if (x11display != NULL) {
+			/* try x direct */
+			float dpi_height = floor(DisplayHeight(x11display, 0) /
+							(DisplayHeightMM(x11display, 0) * 0.039370) + 0.5);
+			float dpi_width = floor(DisplayWidth(x11display, 0) /
+							(DisplayWidthMM(x11display, 0) * 0.039370) + 0.5);
 
-				XCloseDisplay(x11display);
+			XCloseDisplay(x11display);
 
-				return std::max(dpi_height,dpi_width) / 96.0;
-			}
+			return std::max(dpi_height,dpi_width) / 96.0;
 		}
+	}
 
 	/* return manually specified dpi */
 	return g_settings->getFloat("screen_dpi")/96.0;

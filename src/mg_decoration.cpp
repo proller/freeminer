@@ -91,7 +91,7 @@ size_t Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 
 	// Divide area into parts
 	if (carea_size % sidelen) {
-		errorstream << "Decoration::placeDeco: chunk size is not divisible by "
+		infostream << "Decoration::placeDeco: chunk size is not divisible by "
 			"sidelen; setting sidelen to " << carea_size << std::endl;
 		sidelen = carea_size;
 	}
@@ -129,7 +129,6 @@ size_t Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 			s16 y = mg->heightmap ?
 					mg->heightmap[mapindex] :
 					mg->findGroundLevel(v2s16(x, z), nmin.Y, nmax.Y);
-			y = MYMAX(y, mg->water_level);
 
 			if (y < nmin.Y || y > nmax.Y ||
 				y < y_min  || y > y_max)
@@ -247,7 +246,7 @@ bool DecoSimple::canPlaceDecoration(MMVManip *vm, v3s16 p)
 		return true;
 
 	int nneighs = 0;
-	v3s16 dirs[8] = {
+	v3s16 dirs[16] = {
 		v3s16( 0, 0,  1),
 		v3s16( 0, 0, -1),
 		v3s16( 1, 0,  0),
@@ -255,7 +254,16 @@ bool DecoSimple::canPlaceDecoration(MMVManip *vm, v3s16 p)
 		v3s16( 1, 0,  1),
 		v3s16(-1, 0,  1),
 		v3s16(-1, 0, -1),
-		v3s16( 1, 0, -1)
+		v3s16( 1, 0, -1),
+
+		v3s16( 0, 1,  1),
+		v3s16( 0, 1, -1),
+		v3s16( 1, 1,  0),
+		v3s16(-1, 1,  0),
+		v3s16( 1, 1,  1),
+		v3s16(-1, 1,  1),
+		v3s16(-1, 1, -1),
+		v3s16( 1, 1, -1)
 	};
 
 	// Check a Moore neighborhood if there are enough spawnby nodes
@@ -309,14 +317,7 @@ int DecoSimple::getHeight()
 
 ///////////////////////////////////////////////////////////////////////////////
 
-DecoSchematic::~DecoSchematic() {
-	if (schematic)
-		delete schematic;
-	schematic = nullptr;
-};
-
-DecoSchematic::DecoSchematic() //:
-	//kwolekr drugged? Decoration::Decoration()
+DecoSchematic::DecoSchematic()
 {
 	schematic = NULL;
 }
@@ -346,7 +347,7 @@ size_t DecoSchematic::generate(MMVManip *vm, PseudoRandom *pr, v3s16 p)
 
 	bool force_placement = (flags & DECO_FORCE_PLACEMENT);
 
-	schematic->blitToVManip(p, vm, rot, force_placement, m_ndef);
+	schematic->blitToVManip(p, vm, rot, force_placement);
 
 	return 1;
 }

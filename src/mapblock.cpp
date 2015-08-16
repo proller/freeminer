@@ -44,6 +44,30 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
+static const char *modified_reason_strings[] = {
+	"initial",
+	"reallocate",
+	"setIsUnderground",
+	"setLightingExpired",
+	"setGenerated",
+	"setNode",
+	"setNodeNoCheck",
+	"setTimestamp",
+	"NodeMetaRef::reportMetadataChange",
+	"clearAllObjects",
+	"Timestamp expired (step)",
+	"addActiveObjectRaw",
+	"removeRemovedObjects/remove",
+	"removeRemovedObjects/deactivate",
+	"Stored list cleared in activateObjects due to overflow",
+	"deactivateFarObjects: Static data moved in",
+	"deactivateFarObjects: Static data moved out",
+	"deactivateFarObjects: Static data changed considerably",
+	"finishBlockMake: expireDayNightDiff",
+	"unknown",
+};
+
+
 /*
 	MapBlock
 */
@@ -54,8 +78,10 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 		m_uptime_timer_last(0),
 		m_parent(parent),
 		m_pos(pos),
+		m_pos_relative(pos * MAP_BLOCKSIZE),
 		m_gamedef(gamedef),
 		m_modified(MOD_STATE_CLEAN),
+		m_modified_reason(MOD_REASON_INITIAL),
 		is_underground(false),
 		m_day_night_differs(false),
 		m_generated(false),
@@ -123,7 +149,28 @@ MapNode MapBlock::getNodeParent(v3s16 p, bool *is_valid_position)
 
 	if (is_valid_position)
 		*is_valid_position = true;
-	return data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X];
+	return data[p.Z * zstride + p.Y * ystride + p.X];
+}
+
+std::string MapBlock::getModifiedReasonString()
+{
+	std::string reason;
+
+	const u32 ubound = MYMIN(sizeof(m_modified_reason) * CHAR_BIT,
+		ARRLEN(modified_reason_strings));
+
+	for (u32 i = 0; i != ubound; i++) {
+		if ((m_modified_reason & (1 << i)) == 0)
+			continue;
+
+		reason += modified_reason_strings[i];
+		reason += ", ";
+	}
+
+	if (reason.length() > 2)
+		reason.resize(reason.length() - 2);
+
+	return reason;
 }
 
 /*
@@ -358,7 +405,7 @@ void MapBlock::actuallyUpdateDayNightDiff()
 		Check if any lighting value differs
 	*/
 	auto lock = lock_shared_rec();
-	for (u32 i = 0; i < MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; i++) {
+	for (u32 i = 0; i < nodecount; i++) {
 		MapNode &n = data[i];
 
 		differs = !n.isLightDayNightEq(nodemgr);
@@ -372,7 +419,7 @@ void MapBlock::actuallyUpdateDayNightDiff()
 	*/
 	if (differs) {
 		bool only_air = true;
-		for (u32 i = 0; i < MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; i++) {
+		for (u32 i = 0; i < nodecount; i++) {
 			MapNode &n = data[i];
 			if (n.getContent() != CONTENT_AIR) {
 				only_air = false;
@@ -436,16 +483,15 @@ s16 MapBlock::getGroundLevel(v2s16 p2d)
 // sure we can handle all content ids. But it's absolutely worth it as it's
 // a speedup of 4 for one of the major time consuming functions on storing
 // mapblocks.
-static content_t getBlockNodeIdMapping_mapping[USHRT_MAX];
+static content_t getBlockNodeIdMapping_mapping[USHRT_MAX + 1];
 static void getBlockNodeIdMapping(NameIdMapping *nimap, MapNode *nodes,
 		INodeDefManager *nodedef)
 {
-	memset(getBlockNodeIdMapping_mapping, 0xFF, USHRT_MAX * sizeof(content_t));
+	memset(getBlockNodeIdMapping_mapping, 0xFF, (USHRT_MAX + 1) * sizeof(content_t));
 
 	std::set<content_t> unknown_contents;
 	content_t id_counter = 0;
-	for(u32 i=0; i<MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; i++)
-	{
+	for (u32 i = 0; i < MapBlock::nodecount; i++) {
 		content_t global_id = nodes[i].getContent();
 		content_t id = CONTENT_IGNORE;
 
@@ -492,8 +538,7 @@ static void correctBlockNodeIds(const NameIdMapping *nimap, MapNode *nodes,
 	std::set<content_t> unnamed_contents;
 	std::set<std::string> unallocatable_contents;
 	std::lock_guard<std::mutex> lock(correctBlockNodeIds_mutex);
-	for(u32 i=0; i<MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; i++)
-	{
+	for (u32 i = 0; i < MapBlock::nodecount; i++) {
 		content_t local_id = nodes[i].getContent();
 		std::string name;
 		bool found = nimap->getName(local_id, name);
@@ -528,7 +573,7 @@ static void correctBlockNodeIds(const NameIdMapping *nimap, MapNode *nodes,
 	}
 }
 
-void MapBlock::serialize(std::ostream &os, u8 version, bool disk)
+void MapBlock::serialize(std::ostream &os, u8 version, bool disk, bool use_content_only)
 {
 	auto lock = lock_shared_rec();
 	if(!ser_ver_supported(version))
@@ -557,11 +602,14 @@ void MapBlock::serialize(std::ostream &os, u8 version, bool disk)
 
 	writeU8(os, flags);
 
+	// fmtodo: check version and dont pack data if more than 20150427 or 0.4.12.7+
+	if (!disk && use_content_only && content_only != CONTENT_IGNORE)
+		return;
+
 	/*
 		Bulk node data
 	*/
 	NameIdMapping nimap;
-	u32 nodecount = MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE;
 	if(disk)
 	{
 		MapNode *tmp_nodes = new MapNode[nodecount];
@@ -664,12 +712,18 @@ bool MapBlock::deSerialize(std::istream &is, u8 version, bool disk)
 		return false;
 	}
 
+	if (!disk && content_only != CONTENT_IGNORE) {
+		auto n = MapNode(content_only);
+		for (u32 i = 0; i < MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; i++)
+			data[i] = n;
+		return true;
+	}
+
 	/*
 		Bulk node data
 	*/
 	TRACESTREAM(<<"MapBlock::deSerialize "<<PP(getPos())
 			<<": Bulk node data"<<std::endl);
-	u32 nodecount = MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE;
 	u8 content_width = readU8(is);
 	u8 params_width = readU8(is);
 	if(content_width != 1 && content_width != 2)
@@ -783,23 +837,11 @@ void MapBlock::deSerializeNetworkSpecific(std::istream &is)
 #ifndef NDEBUG
 		g_profiler->add("Map: setNode", 1);
 #endif
-		if( (!data) ||   //todo: maybe one length check here:
-			(p.X < 0 || p.X >= MAP_BLOCKSIZE) ||
-			(p.Y < 0 || p.Y >= MAP_BLOCKSIZE) ||
-			(p.Z < 0 || p.Z >= MAP_BLOCKSIZE) )
+		if (!isValidPosition(p.X, p.Y, p.Z))
 			return;
 		auto lock = lock_unique_rec();
-		data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X] = n;
+		data[p.Z*zstride + p.Y*ystride + p.X] = n;
 		raiseModified(MOD_STATE_WRITE_NEEDED);
-	}
-
-	void MapBlock::setNodeNoCheck(v3s16 p, MapNode & n)
-	{
-		if(data == NULL)
-			throw InvalidPositionException("setNodeNoCheck data=NULL");
-		auto lock = lock_unique_rec();
-		data[p.Z*MAP_BLOCKSIZE*MAP_BLOCKSIZE + p.Y*MAP_BLOCKSIZE + p.X] = n;
-		raiseModified(MOD_STATE_WRITE_NEEDED/*, "setNodeNoCheck"*/);
 	}
 
 	void MapBlock::raiseModified(u32 mod)
@@ -846,8 +888,6 @@ void MapBlock::delMesh() {
 
 void MapBlock::deSerialize_pre22(std::istream &is, u8 version, bool disk)
 {
-	u32 nodecount = MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE;
-
 	// Initialize default flags
 	is_underground = false;
 	m_day_night_differs = false;
@@ -1077,7 +1117,7 @@ void MapBlock::deSerialize_pre22(std::istream &is, u8 version, bool disk)
 
 void MapBlock::incrementUsageTimer(float dtime)
 {
-	auto lock = lock_unique_rec();
+	std::lock_guard<std::mutex> lock(m_usage_timer_mutex);
 	m_usage_timer += dtime;
 /*
 #ifndef SERVER

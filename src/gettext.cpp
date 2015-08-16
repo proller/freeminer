@@ -105,8 +105,9 @@ const char* MSVC_LocaleLookup(const char* raw_shortname) {
 
 	last_raw_value = shortname;
 
-	if (glb_supported_locales.find(narrow_to_wide(shortname)) != glb_supported_locales.end()) {
-		last_full_name = wide_to_narrow(glb_supported_locales[narrow_to_wide(shortname)]);
+	if (glb_supported_locales.find(utf8_to_wide(shortname)) != glb_supported_locales.end()) {
+		last_full_name = wide_to_utf8(
+			glb_supported_locales[utf8_to_wide(shortname)]);
 		return last_full_name.c_str();
 	}
 
@@ -239,8 +240,19 @@ void init_gettext(const char *path, const std::string &configured_language) {
 #endif
 #endif
 
-	bindtextdomain(PROJECT_NAME_LOWER, path);
-	textdomain(PROJECT_NAME_LOWER);
+	static std::string name = lowercase(PROJECT_NAME);
+	bindtextdomain(name.c_str(), path);
+	textdomain(name.c_str());
+
+#ifdef LIBINTL_LITE_API
+	// https://github.com/j-jorge/libintl-lite.git
+	{
+		std::string clang = configured_language.empty() ? "en" : configured_language;
+		std::string cpath = path;
+		cpath += "/" + clang + "/LC_MESSAGES/" + name + ".mo";
+		loadMessageCatalog(name.c_str(), cpath.c_str());
+	}
+#endif
 
 #if defined(_WIN32)
 	// Set character encoding for Win32

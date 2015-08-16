@@ -38,6 +38,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/string.h" // for parseColorString()
 #include "imagefilters.h"
 #include "guiscalingfilter.h"
+#include "nodedef.h"
+
 
 #ifdef __ANDROID__
 #include <GLES/gl.h>
@@ -184,7 +186,8 @@ public:
 	void insert(const std::string &name, video::IImage *img,
 			bool prefer_local, video::IVideoDriver *driver)
 	{
-		assert(img); // Pre-condition
+		if(!img)
+			return;
 		// Remove old image
 		std::map<std::string, video::IImage*>::iterator n;
 		n = m_images.find(name);
@@ -207,10 +210,6 @@ public:
 				}
 			}
 		}
-
-		// Apply the "clean transparent" filter, if configured.
-		if (g_settings->getBool("texture_clean_transparent"))
-			imageCleanTransparent(toadd, 127);
 
 		if (need_to_grab)
 			toadd->grab();
@@ -318,7 +317,7 @@ public:
 	*/
 	video::ITexture* getTexture(u32 id);
 
-	video::ITexture* getTexture(const std::string &name, u32 *id);
+	video::ITexture* getTexture(const std::string &name, u32 *id = NULL);
 
 	TextureInfo* getTextureInfo(u32 id);
 	/*
@@ -371,6 +370,10 @@ public:
 	video::IImage* generateImage(const std::string &name);
 
 	video::ITexture* getNormalTexture(const std::string &name);
+	video::SColor getTextureAverageColor(const std::string &name);
+	video::ITexture *getShaderFlagsTexture(
+		bool normamap_present, bool tileable_vertical, bool tileable_horizontal);
+
 private:
 
 	// The id of the thread that is allowed to use irrlicht directly
@@ -421,7 +424,8 @@ IWritableTextureSource* createTextureSource(IrrlichtDevice *device)
 TextureSource::TextureSource(IrrlichtDevice *device):
 		m_device(device)
 {
-	assert(m_device); // Pre-condition
+	if (!m_device)
+		return;
 
 	m_main_thread = get_current_thread_id();
 
@@ -595,7 +599,8 @@ u32 TextureSource::generateTexture(const std::string &name)
 	}
 
 	video::IVideoDriver *driver = m_device->getVideoDriver();
-	sanity_check(driver);
+	if (!driver)
+		return 0;
 
 	video::IImage *img = generateImage(name);
 
@@ -673,7 +678,7 @@ TextureInfo * TextureSource::getTextureInfo(u32 id)
 
 video::ITexture* TextureSource::getTextureForMesh(const std::string &name, u32 *id)
 {
-	return getTexture(name + "^[autoupscaleformesh", id);
+	return getTexture(name + "^[applyfiltersformesh", id);
 }
 
 void TextureSource::processQueue()
@@ -700,7 +705,8 @@ void TextureSource::insertSourceImage(const std::string &name, video::IImage *im
 {
 	//infostream<<"TextureSource::insertSourceImage(): name="<<name<<std::endl;
 
-	sanity_check(get_current_thread_id() == m_main_thread);
+	if (!(get_current_thread_id() == m_main_thread))
+		return;
 
 	m_sourcecache.insert(name, img, true, m_device->getVideoDriver());
 	m_source_image_existence.set(name, true);
@@ -711,7 +717,8 @@ void TextureSource::rebuildImagesAndTextures()
 	JMutexAutoLock lock(m_textureinfo_cache_mutex);
 
 	video::IVideoDriver* driver = m_device->getVideoDriver();
-	sanity_check(driver);
+	if (!driver)
+		return;
 
 	// Recreate textures
 	for (u32 i=0; i<m_textureinfo_cache.size(); i++){
@@ -719,8 +726,10 @@ void TextureSource::rebuildImagesAndTextures()
 		video::IImage *img = generateImage(ti->name);
 #ifdef __ANDROID__
 		img = Align2Npot2(img, driver);
+/* wtf
 		sanity_check(img->getDimension().Height == npot2(img->getDimension().Height));
 		sanity_check(img->getDimension().Width == npot2(img->getDimension().Width));
+*/
 #endif
 		// Create texture from resulting image
 		video::ITexture *t = NULL;
@@ -742,7 +751,8 @@ video::ITexture* TextureSource::generateTextureFromMesh(
 		const TextureFromMeshParams &params)
 {
 	video::IVideoDriver *driver = m_device->getVideoDriver();
-	sanity_check(driver);
+	if (!driver)
+		return nullptr;
 
 #ifdef __ANDROID__
 	const GLubyte* renderstr = glGetString(GL_RENDERER);
@@ -758,9 +768,11 @@ video::ITexture* TextureSource::generateTextureFromMesh(
 		) {
 		// Get a scene manager
 		scene::ISceneManager *smgr_main = m_device->getSceneManager();
-		sanity_check(smgr_main);
+		if (!smgr_main)
+			return nullptr;
 		scene::ISceneManager *smgr = smgr_main->createNewSceneManager();
-		sanity_check(smgr);
+		if(!smgr)
+			return nullptr;
 
 		const float scaling = 0.2;
 
@@ -901,9 +913,11 @@ video::ITexture* TextureSource::generateTextureFromMesh(
 
 	// Get a scene manager
 	scene::ISceneManager *smgr_main = m_device->getSceneManager();
-	assert(smgr_main);
+	if (!smgr_main)
+		return nullptr;
 	scene::ISceneManager *smgr = smgr_main->createNewSceneManager();
-	assert(smgr);
+	if(!smgr)
+		return nullptr;
 
 	scene::IMeshSceneNode* meshnode =
 			smgr->addMeshSceneNode(params.mesh, NULL,
@@ -1008,7 +1022,8 @@ video::IImage* TextureSource::generateImage(const std::string &name)
 
 
 	video::IVideoDriver* driver = m_device->getVideoDriver();
-	sanity_check(driver);
+	if (!driver)
+		return nullptr;
 
 	/*
 		Parse out the last part of the name of the image and act
@@ -1017,7 +1032,7 @@ video::IImage* TextureSource::generateImage(const std::string &name)
 
 	std::string last_part_of_name = name.substr(last_separator_pos + 1);
 
-	/* 
+	/*
 		If this name is enclosed in parentheses, generate it
 		and blit it onto the base image
 	*/
@@ -1108,7 +1123,8 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 		video::IImage *& baseimg)
 {
 	video::IVideoDriver* driver = m_device->getVideoDriver();
-	sanity_check(driver);
+	if (!driver)
+		return false;
 
 	// Stuff starting with [ are special commands
 	if (part_of_name.size() == 0 || part_of_name[0] != '[')
@@ -1136,7 +1152,8 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 			//core::dimension2d<u32> dim(2,2);
 			core::dimension2d<u32> dim(1,1);
 			image = driver->createImage(video::ECF_A8R8G8B8, dim);
-			sanity_check(image != NULL);
+			if (!image)
+				return false;
 			/*image->setPixel(0,0, video::SColor(255,255,0,0));
 			image->setPixel(1,0, video::SColor(255,0,255,0));
 			image->setPixel(0,1, video::SColor(255,0,0,255));
@@ -1199,7 +1216,7 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 			Adds a cracking texture
 			N = animation frame count, P = crack progression
 		*/
-		if (part_of_name.substr(0,6) == "[crack")
+		if (str_starts_with(part_of_name, "[crack"))
 		{
 			if (baseimg == NULL) {
 				errorstream<<"generateImagePart(): baseimg == NULL "
@@ -1215,28 +1232,29 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 			s32 frame_count = stoi(sf.next(":"));
 			s32 progression = stoi(sf.next(":"));
 
-			/*
-				Load crack image.
+			if (progression >= 0) {
+				/*
+					Load crack image.
 
-				It is an image with a number of cracking stages
-				horizontally tiled.
-			*/
-			video::IImage *img_crack = m_sourcecache.getOrLoad(
+					It is an image with a number of cracking stages
+					horizontally tiled.
+				*/
+				video::IImage *img_crack = m_sourcecache.getOrLoad(
 					"crack_anylength.png", m_device);
 
-			if (img_crack && progression >= 0)
-			{
-				draw_crack(img_crack, baseimg,
+				if (img_crack) {
+					draw_crack(img_crack, baseimg,
 						use_overlay, frame_count,
 						progression, driver);
-				img_crack->drop();
+					img_crack->drop();
+				}
 			}
 		}
 		/*
 			[combine:WxH:X,Y=filename:X,Y=filename2
 			Creates a bigger texture from an amount of smaller ones
 		*/
-		else if (part_of_name.substr(0,8) == "[combine")
+		else if (str_starts_with(part_of_name, "[combine"))
 		{
 			Strfnd sf(part_of_name);
 			sf.next(":");
@@ -1280,7 +1298,7 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 		/*
 			"[brighten"
 		*/
-		else if (part_of_name.substr(0,9) == "[brighten")
+		else if (str_starts_with(part_of_name, "[brighten"))
 		{
 			if (baseimg == NULL) {
 				errorstream<<"generateImagePart(): baseimg==NULL "
@@ -1298,7 +1316,7 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 			that the transparent parts don't look completely black
 			when simple alpha channel is used for rendering.
 		*/
-		else if (part_of_name.substr(0,8) == "[noalpha")
+		else if (str_starts_with(part_of_name, "[noalpha"))
 		{
 			if (baseimg == NULL){
 				errorstream<<"generateImagePart(): baseimg==NULL "
@@ -1322,7 +1340,7 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 			"[makealpha:R,G,B"
 			Convert one color to transparent.
 		*/
-		else if (part_of_name.substr(0,11) == "[makealpha:")
+		else if (str_starts_with(part_of_name, "[makealpha:"))
 		{
 			if (baseimg == NULL) {
 				errorstream<<"generateImagePart(): baseimg == NULL "
@@ -1378,7 +1396,7 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 			The resulting transform will be equivalent to one of the
 			eight existing ones, though (see: dihedral group).
 		*/
-		else if (part_of_name.substr(0,10) == "[transform")
+		else if (str_starts_with(part_of_name, "[transform"))
 		{
 			if (baseimg == NULL) {
 				errorstream<<"generateImagePart(): baseimg == NULL "
@@ -1392,7 +1410,8 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 					transform, baseimg->getDimension());
 			video::IImage *image = driver->createImage(
 					baseimg->getColorFormat(), dim);
-			sanity_check(image != NULL);
+			if (!image)
+				return false;
 			imageTransform(transform, baseimg, image);
 			baseimg->drop();
 			baseimg = image;
@@ -1405,7 +1424,7 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 			Example (a grass block (not actually used in game):
 			"[inventorycube{grass.png{mud.png&grass_side.png{mud.png&grass_side.png"
 		*/
-		else if (part_of_name.substr(0,14) == "[inventorycube")
+		else if (str_starts_with(part_of_name, "[inventorycube"))
 		{
 			if (baseimg != NULL){
 				errorstream<<"generateImagePart(): baseimg != NULL "
@@ -1522,7 +1541,7 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 			[lowpart:percent:filename
 			Adds the lower part of a texture
 		*/
-		else if (part_of_name.substr(0,9) == "[lowpart:")
+		else if (str_starts_with(part_of_name, "[lowpart:"))
 		{
 			Strfnd sf(part_of_name);
 			sf.next(":");
@@ -1558,7 +1577,7 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 			Crops a frame of a vertical animation.
 			N = frame count, I = frame index
 		*/
-		else if (part_of_name.substr(0,15) == "[verticalframe:")
+		else if (str_starts_with(part_of_name, "[verticalframe:"))
 		{
 			Strfnd sf(part_of_name);
 			sf.next(":");
@@ -1603,7 +1622,7 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 			[mask:filename
 			Applies a mask to an image
 		*/
-		else if (part_of_name.substr(0,6) == "[mask:")
+		else if (str_starts_with(part_of_name, "[mask:"))
 		{
 			if (baseimg == NULL) {
 				errorstream << "generateImage(): baseimg == NULL "
@@ -1619,6 +1638,7 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 			if (img) {
 				apply_mask(img, baseimg, v2s32(0, 0), v2s32(0, 0),
 						img->getDimension());
+				img->drop();
 			} else {
 				errorstream << "generateImage(): Failed to load \""
 						<< filename << "\".";
@@ -1629,7 +1649,8 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 			Overlays image with given color
 			color = color as ColorString
 		*/
-		else if (part_of_name.substr(0,10) == "[colorize:") {
+		else if (str_starts_with(part_of_name, "[colorize:"))
+		{
 			Strfnd sf(part_of_name);
 			sf.next(":");
 			std::string color_str = sf.next(":");
@@ -1666,7 +1687,12 @@ bool TextureSource::generateImagePart(std::string part_of_name,
 			blit_with_interpolate_overlay(img, baseimg, v2s32(0,0), v2s32(0,0), dim, ratio);
 			img->drop();
 		}
-		else if (part_of_name.substr(0,19) == "[autoupscaleformesh") {
+		else if (str_starts_with(part_of_name, "[applyfiltersformesh"))
+		{
+			// Apply the "clean transparent" filter, if configured.
+			if (g_settings->getBool("texture_clean_transparent"))
+				imageCleanTransparent(baseimg, 127);
+
 			/* Upscale textures to user's requested minimum size.  This is a trick to make
 			 * filters look as good on low-res textures as on high-res ones, by making
 			 * low-res textures BECOME high-res ones.  This is helpful for worlds that
@@ -1958,8 +1984,10 @@ void imageTransform(u32 transform, video::IImage *src, video::IImage *dst)
 	core::dimension2d<u32> dstdim = dst->getDimension();
 
 	// Pre-conditions
-	assert(dstdim == imageTransformDimension(transform, src->getDimension()));
-	assert(transform <= 7);
+	if (!(dstdim == imageTransformDimension(transform, src->getDimension())))
+		return;
+	if (!(transform <= 7))
+		return;
 
 	/*
 		Compute the transformation from source coordinates (sx,sy)
@@ -1997,9 +2025,8 @@ void imageTransform(u32 transform, video::IImage *src, video::IImage *dst)
 
 video::ITexture* TextureSource::getNormalTexture(const std::string &name)
 {
-	u32 id;
 	if (isKnownSourceImage("override_normal.png"))
-		return getTexture("override_normal.png", &id);
+		return getTexture("override_normal.png");
 	std::string fname_base = name;
 	std::string normal_ext = "_normal.png";
 	size_t pos = fname_base.find(".");
@@ -2011,7 +2038,73 @@ video::ITexture* TextureSource::getNormalTexture(const std::string &name)
 			fname_base.replace(i, 4, normal_ext);
 			i += normal_ext.length();
 		}
-		return getTexture(fname_base, &id);
+		return getTexture(fname_base);
 		}
 	return NULL;
+}
+
+video::SColor TextureSource::getTextureAverageColor(const std::string &name)
+{
+	video::IVideoDriver *driver = m_device->getVideoDriver();
+	video::SColor c(0, 0, 0, 0);
+	video::ITexture *texture = getTexture(name);
+	video::IImage *image = driver->createImage(texture,
+		core::position2d<s32>(0, 0),
+		texture->getOriginalSize());
+	u32 total = 0;
+	u32 tR = 0;
+	u32 tG = 0;
+	u32 tB = 0;
+	core::dimension2d<u32> dim = image->getDimension();
+	u16 step = 1;
+	if (dim.Width > 16)
+		step = dim.Width / 16;
+	for (u16 x = 0; x < dim.Width; x += step) {
+		for (u16 y = 0; y < dim.Width; y += step) {
+			c = image->getPixel(x,y);
+			if (c.getAlpha() > 0) {
+				total++;
+				tR += c.getRed();
+				tG += c.getGreen();
+				tB += c.getBlue();
+			}
+		}
+	}
+	image->drop();
+	if (total > 0) {
+		c.setRed(tR / total);
+		c.setGreen(tG / total);
+		c.setBlue(tB / total);
+	}
+	c.setAlpha(255);
+	return c;
+}
+
+
+video::ITexture *TextureSource::getShaderFlagsTexture(
+	bool normalmap_present, bool tileable_vertical, bool tileable_horizontal)
+{
+	std::string tname = "__shaderFlagsTexture";
+	tname += normalmap_present ? "1" : "0";
+	tname += tileable_horizontal ? "1" : "0";
+	tname += tileable_vertical ? "1" : "0";
+
+	if (isKnownSourceImage(tname)) {
+		return getTexture(tname);
+	} else {
+		video::IVideoDriver *driver = m_device->getVideoDriver();
+		video::IImage *flags_image = driver->createImage(
+			video::ECF_A8R8G8B8, core::dimension2d<u32>(1, 1));
+		if(!flags_image)
+			return nullptr;
+		video::SColor c(
+			255,
+			normalmap_present ? 255 : 0,
+			tileable_horizontal ? 255 : 0,
+			tileable_vertical ? 255 : 0);
+		flags_image->setPixel(0, 0, c);
+		insertSourceImage(tname, flags_image);
+		flags_image->drop();
+		return getTexture(tname);
+	}
 }

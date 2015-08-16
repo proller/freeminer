@@ -15,13 +15,17 @@ run Android SDK Manager
 
 ```bash
 cd ~
-wget https://dl.google.com/android/ndk/android-ndk-r10d-linux-x86_64.bin
-chmod +x android-ndk-r10d-linux-x86_64.bin
-./android-ndk-r10d-linux-x86_64.bin
-wget https://dl.google.com/android/android-sdk_r24.0.2-linux.tgz
-tar xf android-sdk_r24.0.2-linux.tgz
-# press y here:
-~/android-sdk-linux/tools/android update sdk --no-ui --filter platform-tool,android-10,build-tools-21.1.2
+
+sudo apt-get install -y default-jdk android-tools-adb ant m4 gcc-multilib lib32z1
+wget https://dl.google.com/android/ndk/android-ndk-r10e-linux-x86_64.bin
+chmod +x android-ndk-r10e-linux-x86_64.bin
+./android-ndk-r10e-linux-x86_64.bin
+wget https://dl.google.com/android/android-sdk_r24.3.3-linux.tgz
+tar xf android-sdk_r24.3.3-linux.tgz
+echo "yyyyyy" | ~/android-sdk-linux/tools/android update sdk --no-ui
+
+#BROKEN echo y | ~/android-sdk-linux/tools/android update sdk --no-ui --filter platform-tool,android-15,build-tools-22.0.1
+
 ```
 
 
@@ -29,8 +33,8 @@ tar xf android-sdk_r24.0.2-linux.tgz
 
 run make in freeminer/build/android , answer to questions, it will create path.cfg with
 ```
-ANDROID_NDK = /home/user/android-ndk-r10d
-NDK_MODULE_PATH = /home/user/android-ndk-r10d/toolchains
+ANDROID_NDK = /home/user/android-ndk-r10e
+NDK_MODULE_PATH = /home/user/android-ndk-r10e/toolchains
 SDKFOLDER = /home/user/android-sdk-linux/
 ```
 

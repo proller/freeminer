@@ -33,11 +33,12 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "map.h"
 #include "emerge.h"
 #include "serverobject.h"              // TODO this is used for cleanup of only
+#include "log_types.h"
+#include "util/srp.h"
 
 #include "util/numeric.h"
 #include "util/mathconstants.h"
 #include "profiler.h"
-#include "log_types.h"
 #include "gamedef.h"
 
 
@@ -116,6 +117,10 @@ int RemoteClient::GetNextBlocks (
 {
 	DSTACK(__FUNCTION_NAME);
 
+	auto lock = lock_unique_rec();
+	if (!lock->owns_lock())
+		return 0;
+
 	// Increment timers
 	m_nothing_to_send_pause_timer -= dtime;
 	m_nearest_unsent_reset_timer += dtime;
@@ -146,7 +151,7 @@ int RemoteClient::GetNextBlocks (
 	// Predict to next block
 	v3f playerpos_predicted = playerpos + playerspeeddir*MAP_BLOCKSIZE*BS;
 
-	v3s16 center_nodepos = floatToInt(playerpos_predicted, BS);floatToInt(playerpos_predicted, BS);
+	v3s16 center_nodepos = floatToInt(playerpos_predicted, BS);
 
 	v3s16 center = getNodeBlockPos(center_nodepos);
 
@@ -258,7 +263,14 @@ int RemoteClient::GetNextBlocks (
 	auto cam_pos_nodes = floatToInt(playerpos, BS);
 
 	auto nodemgr = env->getGameDef()->getNodeDefManager();
-	MapNode n = env->getMap().getNodeTry(cam_pos_nodes);
+	MapNode n;
+	{
+#if !ENABLE_THREADS
+		auto lock = env->getServerMap().m_nothread_locker.lock_shared_rec();
+#endif
+		n = env->getMap().getNodeTry(cam_pos_nodes);
+	}
+
 	if(n && nodemgr->get(n).solidness == 2)
 		occlusion_culling_enabled = false;
 
@@ -327,8 +339,7 @@ int RemoteClient::GetNextBlocks (
 				max_simul_dynamic = max_simul_sends_setting;
 
 			// Don't select too many blocks for sending
-			if(num_blocks_selected+num_blocks_sending >= max_simul_dynamic)
-			{
+			if (num_blocks_selected + num_blocks_sending >= max_simul_dynamic) {
 				//queue_is_full = true;
 				goto queue_full_break;
 			}
@@ -336,12 +347,7 @@ int RemoteClient::GetNextBlocks (
 			/*
 				Do not go over-limit
 			*/
-			if(p.X < -MAP_GENERATION_LIMIT / MAP_BLOCKSIZE
-			|| p.X > MAP_GENERATION_LIMIT / MAP_BLOCKSIZE
-			|| p.Y < -MAP_GENERATION_LIMIT / MAP_BLOCKSIZE
-			|| p.Y > MAP_GENERATION_LIMIT / MAP_BLOCKSIZE
-			|| p.Z < -MAP_GENERATION_LIMIT / MAP_BLOCKSIZE
-			|| p.Z > MAP_GENERATION_LIMIT / MAP_BLOCKSIZE)
+			if (blockpos_over_limit(p))
 				continue;
 
 			// If this is true, inexistent block will be made from scratch
@@ -381,7 +387,7 @@ int RemoteClient::GetNextBlocks (
 				auto lock = m_blocks_sent.lock_shared_rec();
 				block_sent = m_blocks_sent.find(p) != m_blocks_sent.end() ? m_blocks_sent.get(p) : 0;
 			}
-			if(block_sent > 0 && ((block_overflow && d>1) || block_sent + (d <= 2 ? 1 : d*d*d) > m_uptime)) {
+			if(block_sent > 0 && (/* (block_overflow && d>1) || */ block_sent + (d <= 2 ? 1 : d*d*d) > m_uptime)) {
 				continue;
 			}
 
@@ -426,6 +432,9 @@ int RemoteClient::GetNextBlocks (
 			v3POS spn = cam_pos_nodes + v3POS(0,0,0);
 			s16 bs2 = MAP_BLOCKSIZE/2 + 1;
 			u32 needed_count = 1;
+#if !ENABLE_THREADS
+			auto lock = env->getServerMap().m_nothread_locker.lock_shared_rec();
+#endif
 			//VERY BAD COPYPASTE FROM clientmap.cpp!
 			if( d >= 1 &&
 				occlusion_culling_enabled &&
@@ -459,9 +468,11 @@ int RemoteClient::GetNextBlocks (
 				block->resetUsageTimer();
 
 				//todo: fixme
-				//if (block->getLightingExpired() && (block_sent /*|| d>=1*/)) {
-				//	continue;
-				//}
+				if (block->getLightingExpired() && (block_sent || d >= 1)) {
+					env->getServerMap().lighting_modified_blocks.set(p, nullptr);
+					continue;
+				}
+
 
 				// Block is valid if lighting is up-to-date and data exists
 				if(block->isValid() == false)
@@ -595,10 +606,12 @@ void RemoteClient::notifyEvent(ClientStateEvent event)
 		//intentionally do nothing
 		break;
 	case CS_Created:
-		switch(event)
-		{
-		case CSE_Init:
-			m_state = CS_InitSent;
+		switch (event) {
+		case CSE_Hello:
+			m_state = CS_HelloSent;
+			break;
+		case CSE_InitLegacy:
+			m_state = CS_AwaitingInit2;
 			break;
 		case CSE_Disconnect:
 			m_state = CS_Disconnecting;
@@ -615,7 +628,32 @@ void RemoteClient::notifyEvent(ClientStateEvent event)
 	case CS_Denied:
 		/* don't do anything if in denied state */
 		break;
-	case CS_InitSent:
+	case CS_HelloSent:
+		switch(event)
+		{
+		case CSE_AuthAccept:
+			m_state = CS_AwaitingInit2;
+			if ((chosen_mech == AUTH_MECHANISM_SRP)
+					|| (chosen_mech == AUTH_MECHANISM_LEGACY_PASSWORD))
+				srp_verifier_delete((SRPVerifier *) auth_data);
+			chosen_mech = AUTH_MECHANISM_NONE;
+			break;
+		case CSE_Disconnect:
+			m_state = CS_Disconnecting;
+			break;
+		case CSE_SetDenied:
+			m_state = CS_Denied;
+			if ((chosen_mech == AUTH_MECHANISM_SRP)
+					|| (chosen_mech == AUTH_MECHANISM_LEGACY_PASSWORD))
+				srp_verifier_delete((SRPVerifier *) auth_data);
+			chosen_mech = AUTH_MECHANISM_NONE;
+			break;
+		default:
+			myerror << "HelloSent: Invalid client state transition! " << event;
+			throw ClientStateError(myerror.str());
+		}
+		break;
+	case CS_AwaitingInit2:
 		switch(event)
 		{
 		case CSE_GotInit2:
@@ -682,7 +720,32 @@ void RemoteClient::notifyEvent(ClientStateEvent event)
 		case CSE_Disconnect:
 			m_state = CS_Disconnecting;
 			break;
+		case CSE_SudoSuccess:
+			m_state = CS_SudoMode;
+			if ((chosen_mech == AUTH_MECHANISM_SRP)
+					|| (chosen_mech == AUTH_MECHANISM_LEGACY_PASSWORD))
+				srp_verifier_delete((SRPVerifier *) auth_data);
+			chosen_mech = AUTH_MECHANISM_NONE;
+			break;
 		/* Init GotInit2 SetDefinitionsSent SetMediaSent SetDenied */
+		default:
+			myerror << "Active: Invalid client state transition! " << event;
+			throw ClientStateError(myerror.str());
+			break;
+		}
+		break;
+	case CS_SudoMode:
+		switch(event)
+		{
+		case CSE_SetDenied:
+			m_state = CS_Denied;
+			break;
+		case CSE_Disconnect:
+			m_state = CS_Disconnecting;
+			break;
+		case CSE_SudoLeave:
+			m_state = CS_Active;
+			break;
 		default:
 			myerror << "Active: Invalid client state transition! " << event;
 			throw ClientStateError(myerror.str());

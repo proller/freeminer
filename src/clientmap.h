@@ -59,7 +59,8 @@ struct MapDrawControl
 	float camera_fov_blocks;
 
 	float fov;
-	bool block_overflow;
+	float fov_add;
+	//bool block_overflow;
 };
 
 class Client;

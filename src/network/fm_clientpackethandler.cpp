@@ -54,7 +54,7 @@ void Client::ProcessData(NetworkPacket *pkt) {
 	auto sender_peer_id = pkt->getPeerId();
 
 	int command;
-	MsgpackPacket packet;
+	MsgpackPacketSafe packet;
 	msgpack::unpacked msg;
 
 	if (!con::parse_msgpack_packet(pkt->getString(0), datasize, &packet, &command, &msg)) {
@@ -62,7 +62,7 @@ void Client::ProcessData(NetworkPacket *pkt) {
 		return;
 	}
 
-	//infostream<<"Client: received command="<<command<<std::endl;
+	//infostream<<"Client: received command="<<command << " size=" << datasize<<std::endl;
 	m_packetcounter.add((u16)command);
 
 	/*
@@ -81,7 +81,7 @@ void Client::ProcessData(NetworkPacket *pkt) {
 
 	//infostream<<"Client received command="<<(int)command<<std::endl;
 
-	if(command == TOCLIENT_INIT)
+	if(command == TOCLIENT_INIT_LEGACY)
 	{
 		u8 deployed;
 		packet[TOCLIENT_INIT_DEPLOYED].convert(&deployed);
@@ -117,6 +117,9 @@ void Client::ProcessData(NetworkPacket *pkt) {
 			packet[TOCLIENT_INIT_MAP_PARAMS].convert(&settings);
 			m_localserver->getEmergeManager()->params.load(settings);
 		}
+
+		//if (packet.count(TOCLIENT_INIT_PROTOCOL_VERSION_FM))
+		//	packet[TOCLIENT_INIT_PROTOCOL_VERSION_FM].convert( not used );
 
 		// Reply to server
 		MSGPACK_PACKET_INIT(TOSERVER_INIT2, 0);
@@ -172,6 +175,7 @@ void Client::ProcessData(NetworkPacket *pkt) {
 		v3s16 p = packet[TOCLIENT_BLOCKDATA_POS].as<v3s16>();
 		s8 step = 1;
 		packet[TOCLIENT_BLOCKDATA_STEP].convert(&step);
+
 		if (step == 1) {
 
 		std::istringstream istr(packet[TOCLIENT_BLOCKDATA_DATA].as<std::string>(), std::ios_base::binary);
@@ -183,17 +187,14 @@ void Client::ProcessData(NetworkPacket *pkt) {
 		if (new_block)
 			block = new MapBlock(&m_env.getMap(), p, this);
 
+		packet.convert_safe(TOCLIENT_BLOCKDATA_CONTENT_ONLY, &block->content_only);
+
 		block->deSerialize(istr, ser_version, false);
 		s32 h; // for convert to atomic
 		packet[TOCLIENT_BLOCKDATA_HEAT].convert(&h);
 		block->heat = h;
 		packet[TOCLIENT_BLOCKDATA_HUMIDITY].convert(&h);
 		block->humidity = h;
-
-
-		if (packet.count(TOCLIENT_BLOCKDATA_CONTENT_ONLY))
-			block->content_only = packet[TOCLIENT_BLOCKDATA_CONTENT_ONLY].as<content_t>();
-
 
 		if (m_localserver != NULL) {
 			m_localserver->getMap().saveBlock(block);
@@ -421,8 +422,11 @@ void Client::ProcessData(NetworkPacket *pkt) {
 		// updating content definitions
 		//assert(!m_mesh_update_thread.IsRunning());
 
-		packet[TOCLIENT_NODEDEF_DEFINITIONS].convert(m_nodedef);
-		m_nodedef_received = true;
+		if (packet_convert_safe_zip(packet, TOCLIENT_NODEDEF_DEFINITIONS_ZIP, m_nodedef)) {
+			m_nodedef_received = true;
+		} else if (packet_convert_safe(packet, TOCLIENT_NODEDEF_DEFINITIONS, m_nodedef)) {
+			m_nodedef_received = true;
+		}
 	}
 	else if(command == TOCLIENT_ITEMDEF)
 	{
@@ -433,8 +437,11 @@ void Client::ProcessData(NetworkPacket *pkt) {
 		// updating content definitions
 		//assert(!m_mesh_update_thread.IsRunning());
 
-		packet[TOCLIENT_ITEMDEF_DEFINITIONS].convert(m_itemdef);
-		m_itemdef_received = true;
+		if (packet_convert_safe_zip(packet, TOCLIENT_ITEMDEF_DEFINITIONS_ZIP, m_itemdef)) {
+			m_itemdef_received = true;
+		} else if (packet_convert_safe(packet, TOCLIENT_ITEMDEF_DEFINITIONS, m_itemdef)) {
+			m_itemdef_received = true;
+		}
 	}
 	else if(command == TOCLIENT_PLAY_SOUND)
 	{

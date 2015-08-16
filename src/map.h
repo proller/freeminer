@@ -228,7 +228,7 @@ public:
 
 	void spreadLight(enum LightBank bank,
 			std::set<v3s16> & from_nodes,
-			std::map<v3s16, MapBlock*> & modified_blocks, int recursive = 0);
+			std::map<v3s16, MapBlock*> & modified_blocks, u32 end_ms = 0);
 
 	void lightNeighbors(enum LightBank bank,
 			v3s16 pos,
@@ -291,7 +291,7 @@ public:
 		Updates usage timers and unloads unused blocks and sectors.
 		Saves modified blocks before unloading on MAPTYPE_SERVER.
 	*/
-	u32 timerUpdate(float uptime, float unload_timeout, unsigned int max_cycle_ms = 100,
+	u32 timerUpdate(float uptime, float unload_timeout, u32 max_loaded_blocks, unsigned int max_cycle_ms = 100,
 			std::vector<v3s16> *unloaded_blocks=NULL);
 
 	/*
@@ -310,7 +310,8 @@ public:
 		These are basically coordinate wrappers to MapBlock
 	*/
 
-	NodeMetadata* getNodeMetadata(v3s16 p);
+	std::vector<v3s16> findNodesWithMetadata(v3s16 p1, v3s16 p2);
+	NodeMetadata *getNodeMetadata(v3s16 p);
 
 	/**
 	 * Sets metadata for a node.

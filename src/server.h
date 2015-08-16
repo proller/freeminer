@@ -206,7 +206,6 @@ public:
 	void handleCommand_Null(NetworkPacket* pkt) {};
 	void handleCommand_Deprecated(NetworkPacket* pkt);
 	void handleCommand_Init(NetworkPacket* pkt);
-	void handleCommand_Auth(NetworkPacket* pkt);
 	void handleCommand_Init_Legacy(NetworkPacket* pkt);
 	void handleCommand_Init2(NetworkPacket* pkt);
 	void handleCommand_RequestMedia(NetworkPacket* pkt);
@@ -226,6 +225,9 @@ public:
 	void handleCommand_RemovedSounds(NetworkPacket* pkt);
 	void handleCommand_NodeMetaFields(NetworkPacket* pkt);
 	void handleCommand_InventoryFields(NetworkPacket* pkt);
+	void handleCommand_FirstSrp(NetworkPacket* pkt);
+	void handleCommand_SrpBytesA(NetworkPacket* pkt);
+	void handleCommand_SrpBytesM(NetworkPacket* pkt);
 
 	void ProcessData(NetworkPacket *pkt);
 
@@ -255,8 +257,13 @@ public:
 			{ return m_shutdown_requested; }
 
 	// request server to shutdown
-	inline void requestShutdown(void)
-			{ m_shutdown_requested = true; }
+	inline void requestShutdown() { m_shutdown_requested = true; }
+	void requestShutdown(const std::string &msg, bool reconnect)
+	{
+		m_shutdown_requested = true;
+		m_shutdown_msg = msg;
+		m_shutdown_ask_reconnect = reconnect;
+	}
 
 	// Returns -1 if failed, sound handle on success
 	// Envlock
@@ -276,34 +283,21 @@ public:
 	// Envlock and conlock should be locked when calling this
 	void notifyPlayer(const char *name, const std::string &msg);
 	void notifyPlayers(const std::string &msg);
-	void spawnParticle(const char *playername,
+	void spawnParticle(const std::string &playername,
 		v3f pos, v3f velocity, v3f acceleration,
 		float expirationtime, float size,
-		bool collisiondetection, bool vertical, std::string texture);
+		bool collisiondetection, bool vertical, const std::string &texture);
 
-	void spawnParticleAll(v3f pos, v3f velocity, v3f acceleration,
-		float expirationtime, float size,
-		bool collisiondetection, bool vertical, std::string texture);
-
-	u32 addParticleSpawner(const char *playername,
-		u16 amount, float spawntime,
+	u32 addParticleSpawner(u16 amount, float spawntime,
 		v3f minpos, v3f maxpos,
 		v3f minvel, v3f maxvel,
 		v3f minacc, v3f maxacc,
 		float minexptime, float maxexptime,
 		float minsize, float maxsize,
-		bool collisiondetection, bool vertical, std::string texture);
+		bool collisiondetection, bool vertical, const std::string &texture,
+		const std::string &playername);
 
-	u32 addParticleSpawnerAll(u16 amount, float spawntime,
-		v3f minpos, v3f maxpos,
-		v3f minvel, v3f maxvel,
-		v3f minacc, v3f maxacc,
-		float minexptime, float maxexptime,
-		float minsize, float maxsize,
-		bool collisiondetection, bool vertical, std::string texture);
-
-	void deleteParticleSpawner(const char *playername, u32 id);
-	void deleteParticleSpawnerAll(u32 id);
+	void deleteParticleSpawner(const std::string &playername, u32 id);
 
 	// Creates or resets inventory
 	Inventory* createDetachedInventory(const std::string &name);
@@ -335,10 +329,10 @@ public:
 	IWritableNodeDefManager* getWritableNodeDefManager();
 	IWritableCraftDefManager* getWritableCraftDefManager();
 
-	const ModSpec* getModSpec(const std::string &modname);
+	const ModSpec* getModSpec(const std::string &modname) const;
 	void getModNames(std::vector<std::string> &modlist);
 	std::string getBuiltinLuaPath();
-	inline std::string getWorldPath()
+	inline std::string getWorldPath() const
 			{ return m_path_world; }
 
 	inline bool isSingleplayer()
@@ -356,8 +350,11 @@ public:
 	bool hudChange(Player *player, u32 id, HudElementStat stat, void *value);
 	bool hudSetFlags(Player *player, u32 flags, u32 mask);
 	bool hudSetHotbarItemcount(Player *player, s32 hotbar_itemcount);
+	s32 hudGetHotbarItemcount(Player *player);
 	void hudSetHotbarImage(Player *player, std::string name);
+	std::string hudGetHotbarImage(Player *player);
 	void hudSetHotbarSelectedImage(Player *player, std::string name);
+	std::string hudGetHotbarSelectedImage(Player *player);
 
 	inline Address getPeerAddress(u16 peer_id)
 			{ return m_con.GetPeerAddress(peer_id); }
@@ -377,11 +374,15 @@ public:
 	void peerAdded(u16 peer_id);
 	void deletingPeer(u16 peer_id, bool timeout);
 
+	void DenySudoAccess(u16 peer_id);
+	void DenyAccessVerCompliant(u16 peer_id, u16 proto_ver, AccessDeniedCode reason,
+		const std::string &str_reason = "", bool reconnect = false);
 	void DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason="");
 
 	//fmtodo: remove:
 	void DenyAccess(u16 peer_id, const std::string &reason);
 
+	void acceptAuth(u16 peer_id, bool forSudoMode);
 	void DenyAccess_Legacy(u16 peer_id, const std::wstring &reason);
 
 	bool getClientConInfo(u16 peer_id, con::rtt_stat_type type,float* retval);
@@ -389,7 +390,7 @@ public:
 			u8* ser_vers, u16* prot_vers, u8* major, u8* minor, u8* patch,
 			std::string* vers_string);
 
-	void SendPlayerHPOrDie(u16 peer_id, bool die) { die ? DiePlayer(peer_id) : SendPlayerHP(peer_id); }
+	void SendPlayerHPOrDie(PlayerSAO *player);
 	void SendPlayerBreath(u16 peer_id);
 	void SendInventory(PlayerSAO* playerSAO);
 	void SendMovePlayer(u16 peer_id);
@@ -405,7 +406,8 @@ private:
 	void SendMovement(u16 peer_id);
 	void SendHP(u16 peer_id, u8 hp);
 	void SendBreath(u16 peer_id, u16 breath);
-	void SendAccessDenied(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason);
+	void SendAccessDenied(u16 peer_id, AccessDeniedCode reason,
+		const std::string &custom_reason, bool reconnect = false);
 	void SendAccessDenied_Legacy(u16 peer_id, const std::string &reason);
 	void SendDeathscreen(u16 peer_id,bool set_camera_point_target, v3f camera_point_target);
 	void SendItemDef(u16 peer_id,IItemDefManager *itemdef, u16 protocol_version);
@@ -517,7 +519,7 @@ private:
 
 		Call with env and con locked.
 	*/
-	PlayerSAO *emergePlayer(const char *name, u16 peer_id);
+	PlayerSAO *emergePlayer(const char *name, u16 peer_id, u16 proto_version);
 
 	void handlePeerChanges();
 
@@ -544,7 +546,7 @@ private:
 	float m_print_info_timer;
 	float m_masterserver_timer;
 	float m_objectdata_timer;
-	float m_emergethread_trigger_timer;
+	//float m_emergethread_trigger_timer;
 	float m_savemap_timer;
 	IntervalLimiter m_map_timer_and_unload_interval;
 
@@ -644,6 +646,8 @@ private:
 	*/
 
 	bool m_shutdown_requested;
+	std::string m_shutdown_msg;
+	bool m_shutdown_ask_reconnect;
 
 	/*
 		Map edit event queue. Automatically receives all map edits.
@@ -717,9 +721,9 @@ private:
 /*
 	Runs a simple dedicated server loop.
 
-	Shuts down when run is set to false.
+	Shuts down when kill is set to true.
 */
-void dedicated_server_loop(Server &server, bool &run);
+void dedicated_server_loop(Server &server, bool &kill);
 
 #endif
 

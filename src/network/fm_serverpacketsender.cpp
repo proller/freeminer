@@ -59,12 +59,13 @@ void Server::SendBreath(u16 peer_id, u16 breath)
 	m_clients.send(peer_id, 0, buffer, true);
 }
 
-void Server::SendAccessDenied(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason)
+void Server::SendAccessDenied(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason, bool reconnect)
 {
 	DSTACK(__FUNCTION_NAME);
-	MSGPACK_PACKET_INIT(TOCLIENT_ACCESS_DENIED_LEGACY, 1);
+	MSGPACK_PACKET_INIT(TOCLIENT_ACCESS_DENIED_LEGACY, 3);
 	PACK(TOCLIENT_ACCESS_DENIED_CUSTOM_STRING, custom_reason);
 	PACK(TOCLIENT_ACCESS_DENIED_REASON, (int)reason);
+	PACK(TOCLIENT_ACCESS_DENIED_RECONNECT, reconnect);
 
 	// Send as reliable
 	m_clients.send(peer_id, 0, buffer, true);
@@ -88,7 +89,16 @@ void Server::SendItemDef(u16 peer_id,
 {
 	DSTACK(__FUNCTION_NAME);
 	MSGPACK_PACKET_INIT(TOCLIENT_ITEMDEF, 1);
-	PACK(TOCLIENT_ITEMDEF_DEFINITIONS, *itemdef);
+
+	auto client = m_clients.getClient(peer_id, CS_InitDone);
+	if (!client)
+		return;
+
+	if (client->net_proto_version_fm >= 2) {
+		PACK_ZIP(TOCLIENT_ITEMDEF_DEFINITIONS_ZIP, *itemdef);
+	} else {
+		PACK(TOCLIENT_ITEMDEF_DEFINITIONS, *itemdef);
+	}
 
 	m_clients.send(peer_id, 0, buffer, true);
 }
@@ -99,7 +109,15 @@ void Server::SendNodeDef(u16 peer_id,
 	DSTACK(__FUNCTION_NAME);
 
 	MSGPACK_PACKET_INIT(TOCLIENT_NODEDEF, 1);
-	PACK(TOCLIENT_NODEDEF_DEFINITIONS, *nodedef);
+
+	auto client = m_clients.getClient(peer_id, CS_InitDone);
+	if (!client)
+		return;
+	if (client->net_proto_version_fm >= 2) {
+		PACK_ZIP(TOCLIENT_NODEDEF_DEFINITIONS_ZIP, *nodedef);
+	} else {
+		PACK(TOCLIENT_NODEDEF_DEFINITIONS, *nodedef);
+	}
 
 	// Send as reliable
 	m_clients.send(peer_id, 0, buffer, true);
@@ -679,7 +697,11 @@ void Server::SendBlockNoLock(u16 peer_id, MapBlock *block, u8 ver, u16 net_proto
 	PACK(TOCLIENT_BLOCKDATA_POS, block->getPos());
 
 	std::ostringstream os(std::ios_base::binary);
-	block->serialize(os, ver, false);
+
+	auto client = m_clients.getClient(peer_id);
+	if (!client)
+		return;
+	block->serialize(os, ver, false, client->net_proto_version_fm >= 1);
 	PACK(TOCLIENT_BLOCKDATA_DATA, os.str());
 
 	PACK(TOCLIENT_BLOCKDATA_HEAT, (s16)block->heat);
@@ -724,6 +746,7 @@ void Server::sendRequestedMedia(u16 peer_id,
 	/* Read files */
 	// TODO: optimize
 	MediaData media_data;
+	u32 size = 0;
 
 	for(auto i = tosend.begin();
 			i != tosend.end(); ++i) {
@@ -751,13 +774,21 @@ void Server::sendRequestedMedia(u16 peer_id,
 		fis.seekg(0, std::ios::beg);
 		fis.read(&contents[0], contents.size());
 		media_data.push_back(std::make_pair(name, contents));
+		size += contents.size();
+		if (size > 0xffff) {
+			MSGPACK_PACKET_INIT(TOCLIENT_MEDIA, 1);
+			PACK(TOCLIENT_MEDIA_MEDIA, media_data);
+			m_clients.send(peer_id, 2, buffer, true);
+			media_data.clear();
+			size = 0;
+		}
 	}
 
-	MSGPACK_PACKET_INIT(TOCLIENT_MEDIA, 1);
-	PACK(TOCLIENT_MEDIA_MEDIA, media_data);
-
-	// Send as reliable
-	m_clients.send(peer_id, 2, buffer, true);
+	if (!media_data.empty()) {
+		MSGPACK_PACKET_INIT(TOCLIENT_MEDIA, 1);
+		PACK(TOCLIENT_MEDIA_MEDIA, media_data);
+		m_clients.send(peer_id, 2, buffer, true);
+	}
 }
 
 void Server::sendDetachedInventory(const std::string &name, u16 peer_id)

@@ -1,11 +1,15 @@
 ## Generic ignorable patterns and files
 *~
 .*.swp
+.*-swp
 *bak*
 tags
 *.vim
 *.orig
 *.rej
+
+## Files related to minetest development cycle
+/*.patch
 
 ## Non-static Minetest directories
 /bin/
@@ -24,6 +28,10 @@ tags
 
 ## Configuration/log files
 freeminer.conf
+auto_*
+util/autotest/logs.*
+util/autotest/auto.json
+util/autotest/world
 debug.txt
 client/favoriteservers.json
 
@@ -36,6 +44,7 @@ doc/doxygen_*
 CMakeFiles/*
 src/CMakeFiles/*
 src/Makefile
+src/android_version_githash.h
 src/android_version.h
 src/cmake_config.h
 src/cmake_config_githash.h
@@ -45,6 +54,7 @@ src/script/common/CMakeFiles/*
 src/script/cpp_api/CMakeFiles/*
 src/script/lua_api/CMakeFiles/*
 src/util/CMakeFiles/*
+src/unittest/CMakeFiles/*
 src/jthread/CMakeFiles/*
 src/jthread/Makefile
 src/jthread/cmake_config.h
@@ -57,6 +67,8 @@ src/cguittfont/CMakeFiles/
 src/cguittfont/libcguittfont.a
 src/cguittfont/cmake_install.cmake
 src/cguittfont/Makefile
+src/gmp/CMakeFiles/
+src/gmp/libgmp.a
 src/json/CMakeFiles/
 src/json/libjsoncpp.a
 src/sqlite/CMakeFiles/*
@@ -69,7 +81,10 @@ CPackSourceConfig.cmake
 Makefile
 cmake_install.cmake
 locale/
+.directory
+.kdev4/
 *.cbp
+*.kdev4
 *.layout
 *.o
 _build
@@ -84,6 +99,7 @@ build/android/jni/src
 build/android/libs
 build/android/obj
 build/android/path.cfg
+build/android/and_env
 build/android/AndroidManifest.xml
 timestamp
 

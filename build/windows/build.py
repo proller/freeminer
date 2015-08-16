@@ -72,12 +72,16 @@ freetype = "freetype-2.5.5"
 luajit = "LuaJIT-2.0.3"
 gettext = "gettext-0.14.6"
 libiconv = "libiconv-1.9.2"
-MSGPACK_VERSION = "c4df1ba6cc6ed2f3ef937e4b10ade41b376f3a01"
-msgpack = "msgpack-c-{}".format(MSGPACK_VERSION)
+#MSGPACK_VERSION = "cpp-1.1.0"
+#msgpack = "msgpack-c-{}".format(MSGPACK_VERSION)
 #SQLITE_VERSION="3080704"
 #sqlite = "sqlite-autoconf-{}".format(SQLITE_VERSION)
 SQLITE_VERSION="3.8.4.2"
 sqlite = "sqlite-{}".format(SQLITE_VERSION)
+
+#somtimes vs becomes mad
+#error MSB8020: The build tools for Visual Studio 2012 (Platform Toolset = 'v110') cannot be found.
+patch_toolset = 1
 
 def main():
 	build_type = "Release"
@@ -111,6 +115,8 @@ def main():
 		patch(os.path.join("zlib", "deflate.c"), "const char deflate_copyright[] =", "static const char deflate_copyright[] =")
 		os.system("devenv /upgrade Irrlicht11.0.sln")
 		patch("Irrlicht11.0.vcxproj", "; _ITERATOR_DEBUG_LEVEL=0", "")
+		if patch_toolset:
+			patch("Irrlicht11.0.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
 		os.system('MSBuild Irrlicht11.0.sln /p:Configuration="Static lib - {}"'.format(build_type))
 		os.chdir(os.path.join("..", "..", ".."))
 
@@ -142,6 +148,10 @@ def main():
 		extract_tar(tar_path, ".")
 		print("building libogg")
 		os.chdir(os.path.join(libogg, "win32", "VS2010"))
+
+		if patch_toolset:
+			patch("libogg_static.vcxproj", '<ConfigurationType>StaticLibrary</ConfigurationType>', '<ConfigurationType>StaticLibrary</ConfigurationType><PlatformToolset>v120</PlatformToolset>')
+
 		os.system("devenv /upgrade libogg_static.vcxproj")
 		os.system("MSBuild libogg_static.vcxproj /p:Configuration={}".format(build_type))
 		os.chdir(os.path.join("..", "..", ".."))
@@ -160,6 +170,10 @@ def main():
 		patch(os.path.join("libvorbisfile", "libvorbisfile_static.vcxproj"), "<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>")
 		patch(os.path.join("libvorbis", "libvorbis_static.vcxproj"), "<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreaded</RuntimeLibrary>")
 		patch(os.path.join("libvorbis", "libvorbis_static.vcxproj"), "<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>")
+
+		if patch_toolset:
+			patch(os.path.join("libvorbis", "libvorbis_static.vcxproj"), '<ConfigurationType>StaticLibrary</ConfigurationType>', '<ConfigurationType>StaticLibrary</ConfigurationType><PlatformToolset>v120</PlatformToolset>')
+			patch(os.path.join("libvorbisfile", "libvorbisfile_static.vcxproj"), '<ConfigurationType>StaticLibrary</ConfigurationType>', '<ConfigurationType>StaticLibrary</ConfigurationType><PlatformToolset>v120</PlatformToolset>')
 
 		os.system("devenv /upgrade vorbis_static.sln")
 		os.system("MSBuild vorbis_static.sln /p:Configuration={}".format(build_type))
@@ -180,6 +194,14 @@ def main():
 		patch("zlibvc.def", "VERSION		1.2.8", "VERSION		1.2")
 		os.system("devenv /upgrade zlibvc.sln")
 		patch("zlibstat.vcxproj", "MultiThreadedDebugDLL", "MultiThreadedDebug")
+		if patch_toolset:
+			patch("zlibstat.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
+			patch("zlibvc.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
+			patch("minizip.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
+			patch("testzlibdll.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
+			patch("testzlib.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
+			patch("miniunz.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
+		
 		os.system("MSBuild zlibvc.sln /p:Configuration={} /p:Platform=win32".format(build_type))
 		os.chdir(os.path.join("..", "..", "..", ".."))
 
@@ -190,6 +212,10 @@ def main():
 		extract_tar(tar_path, ".")
 		print("building freetype")
 		os.chdir(os.path.join(freetype, "builds", "windows", "vc2010"))
+
+		if patch_toolset:
+			patch("freetype.vcxproj", "<PlatformToolset>v100</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
+
 		os.system("devenv /upgrade freetype.vcxproj")
 		os.system('MSBuild freetype.vcxproj /p:Configuration="{} Multithreaded"'.format(build_type))
 		os.chdir(os.path.join("..", "..", "..", ".."))
@@ -241,19 +267,19 @@ def main():
 		
 		os.chdir("..")
 
-	if not os.path.exists(msgpack):
-		print("msgpack not found, downloading")
-		download("https://github.com/freeminer/msgpack-c/archive/{}.zip".format(MSGPACK_VERSION), "msgpack.zip")
-		extract_zip("msgpack.zip", ".")
-		os.chdir(msgpack)
-		patch(os.path.join("src", "msgpack", "type.hpp"), '#include "type/tr1/unordered_map.hpp"', '// #include "type/tr1/unordered_map.hpp"')
-		patch(os.path.join("src", "msgpack", "type.hpp"), '#include "type/tr1/unordered_set.hpp"', '// #include "type/tr1/unordered_set.hpp"')
-		patch("msgpack_vc2008.vcproj", 'RuntimeLibrary="2"', 'RuntimeLibrary="0"')
-		patch("msgpack_vc2008.vcproj", 'RuntimeLibrary="3"', 'RuntimeLibrary="1"')
-		# use newer compiler, won't link otherwise
-		os.system("vcupgrade msgpack_vc2008.vcproj")
-		os.system("MSBuild msgpack_vc2008.vcxproj /p:Configuration={}".format(build_type))
-		os.chdir("..")
+	#if os.path.exists(msgpack):
+	#	print("msgpack not found, downloading")
+	#	#download("https://github.com/msgpack/msgpack-c/archive/{}.zip".format(MSGPACK_VERSION), "msgpack.zip")
+	#	#extract_zip("msgpack.zip", ".")
+	#	os.chdir(msgpack)
+	#	#patch(os.path.join("src", "msgpack", "type.hpp"), '#include "type/tr1/unordered_map.hpp"', '// #include "type/tr1/unordered_map.hpp"')
+	#	#patch(os.path.join("src", "msgpack", "type.hpp"), '#include "type/tr1/unordered_set.hpp"', '// #include "type/tr1/unordered_set.hpp"')
+	#	patch("msgpack_vc8.vcproj", 'RuntimeLibrary="2"', 'RuntimeLibrary="0"')
+	#	patch("msgpack_vc8.vcproj", 'RuntimeLibrary="3"', 'RuntimeLibrary="1"')
+	#	# use newer compiler, won't link otherwise
+	#	os.system("vcupgrade msgpack_vc8.vcproj")
+	#	os.system("MSBuild msgpack_vc8.vcxproj /p:Configuration={}".format(build_type))
+	#	os.chdir("..")
 
 	if not os.path.exists("leveldb.nupkg"):
 		print("Downloading LevelDB + dependencies from NuGet")
@@ -328,8 +354,6 @@ def main():
 		-DENABLE_LEVELDB=1
 		-DFORCE_LEVELDB=1
 		-DENABLE_SQLITE3=1
-		-DMSGPACK_INCLUDE_DIR=..\deps\{msgpack}\include\
-		-DMSGPACK_LIBRARY=..\deps\{msgpack}\lib\msgpack{msgpack_suffix}.lib
 	""".format(
 		curl_lib="libcurl_a.lib" if build_type != "Debug" else "libcurl_a_debug.lib",
 		freetype_lib="freetype255MT.lib" if build_type != "Debug" else "freetype255MT_D.lib",
@@ -342,9 +366,14 @@ def main():
 		libogg=libogg,
 		libvorbis=libvorbis,
 		curl=curl,
-		msgpack=msgpack,
-		msgpack_suffix="d" if build_type == "Debug" else "",
+		#msgpack=msgpack,
+		#msgpack_suffix="d" if build_type == "Debug" else "",
 	).replace("\n", "")
+
+# now in cmake
+#		-DMSGPACK_INCLUDE_DIR=..\deps\{msgpack}\include\
+#		-DMSGPACK_LIBRARY=..\deps\{msgpack}\lib\msgpack{msgpack_suffix}.lib
+
 	
 	os.system(r"cmake ..\..\.. " + cmake_string)
 	patch(os.path.join("src", "freeminer.vcxproj"), "</AdditionalLibraryDirectories>", r";$(DXSDK_DIR)\Lib\x86</AdditionalLibraryDirectories>")

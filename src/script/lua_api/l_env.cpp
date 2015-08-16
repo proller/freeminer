@@ -74,6 +74,8 @@ void LuaABM::trigger(ServerEnvironment *env, v3s16 p, MapNode n,
 		FATAL_ERROR("");
 	lua_remove(L, -2); // Remove registered_abms
 
+	scriptIface->setOriginFromTable(-1);
+
 	// Call action
 	luaL_checktype(L, -1, LUA_TTABLE);
 	lua_getfield(L, -1, "action");
@@ -85,8 +87,9 @@ void LuaABM::trigger(ServerEnvironment *env, v3s16 p, MapNode n,
 	lua_pushnumber(L, active_object_count_wider);
 	pushnode(L, neighbor, env->getGameDef()->ndef());
 	lua_pushboolean(L, activate);
-	if(lua_pcall(L, 6, 0, errorhandler))
-		script_error(L);
+
+	PCALL_RESL(L, lua_pcall(L, 6, 0, errorhandler));
+
 	lua_pop(L, 1); // Pop error handler
 }
 
@@ -374,6 +377,22 @@ int ModApiEnvMod::l_freeze_melt(lua_State *L)
 	return 1;
 }
 
+// find_nodes_with_meta(pos1, pos2)
+int ModApiEnvMod::l_find_nodes_with_meta(lua_State *L)
+{
+	GET_ENV_PTR;
+
+	std::vector<v3s16> positions = env->getMap().findNodesWithMetadata(
+		check_v3s16(L, 1), check_v3s16(L, 2));
+
+	lua_newtable(L);
+	for (size_t i = 0; i != positions.size(); i++) {
+		push_v3s16(L, positions[i]);
+		lua_rawseti(L, -2, i + 1);
+	}
+
+	return 1;
+}
 
 // get_meta(pos)
 int ModApiEnvMod::l_get_meta(lua_State *L)
@@ -442,8 +461,9 @@ int ModApiEnvMod::l_add_item(lua_State *L)
 		return 0;
 	lua_pushvalue(L, 1);
 	lua_pushstring(L, item.getItemString().c_str());
-	if(lua_pcall(L, 2, 1, errorhandler))
-		script_error(L);
+
+	PCALL_RESL(L, lua_pcall(L, 2, 1, errorhandler));
+
 	lua_remove(L, errorhandler); // Remove error handler
 	return 1;
 }
@@ -596,19 +616,28 @@ int ModApiEnvMod::l_find_nodes_in_area(lua_State *L)
 		ndef->getIds(lua_tostring(L, 3), filter);
 	}
 
+	std::map<content_t, u16> individual_count;
+
 	lua_newtable(L);
 	u64 i = 0;
-	for(s16 x = minp.X; x <= maxp.X; x++)
-	for(s16 y = minp.Y; y <= maxp.Y; y++)
-	for(s16 z = minp.Z; z <= maxp.Z; z++) {
-		v3s16 p(x, y, z);
-		content_t c = env->getMap().getNodeNoEx(p).getContent();
-		if(filter.count(c) != 0) {
-			push_v3s16(L, p);
-			lua_rawseti(L, -2, ++i);
-		}
+	for (s16 x = minp.X; x <= maxp.X; x++)
+		for (s16 y = minp.Y; y <= maxp.Y; y++)
+			for (s16 z = minp.Z; z <= maxp.Z; z++) {
+				v3s16 p(x, y, z);
+				content_t c = env->getMap().getNodeNoEx(p).getContent();
+				if (filter.count(c) != 0) {
+					push_v3s16(L, p);
+					lua_rawseti(L, -2, ++i);
+					individual_count[c]++;
+				}
 	}
-	return 1;
+	lua_newtable(L);
+	for (auto it = filter.begin();
+			it != filter.end(); ++it) {
+		lua_pushnumber(L, individual_count[*it]);
+		lua_setfield(L, -2, ndef->get(*it).name.c_str());
+	}
+	return 2;
 }
 
 // find_nodes_in_area_under_air(minp, maxp, nodenames) -> list of positions
@@ -994,6 +1023,7 @@ void ModApiEnvMod::Initialize(lua_State *L, int top)
 	API_FCT(add_node_level);
 	API_FCT(freeze_melt);
 	API_FCT(add_entity);
+	API_FCT(find_nodes_with_meta);
 	API_FCT(get_meta);
 	API_FCT(get_node_timer);
 	API_FCT(get_player_by_name);

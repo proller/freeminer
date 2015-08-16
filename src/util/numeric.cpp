@@ -26,14 +26,18 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "log.h"
 #include "../constants.h" // BS, MAP_BLOCKSIZE
 #include "../noise.h" // PseudoRandom, PcgRandom
+#include "../jthread/jmutexautolock.h"
 #include <string.h>
 #include <iostream>
 #include <atomic>
 
 std::map<u16, std::vector<v3s16> > FacePositionCache::m_cache;
+JMutex FacePositionCache::m_cache_mutex;
 // Calculate the borders of a "d-radius" cube
+// TODO: Make it work without mutex and data races, probably thread-local
 std::vector<v3s16> FacePositionCache::getFacePositions(u16 d)
 {
+	JMutexAutoLock cachelock(m_cache_mutex);
 	if (m_cache.find(d) != m_cache.end())
 		return m_cache[d];
 
@@ -220,7 +224,7 @@ bool isBlockInSight(v3s16 blockpos_b, v3f camera_pos, v3f camera_dir,
 
 	// Maximum radius of a block.  The magic number is
 	// sqrt(3.0) / 2.0 in literal form.
-	f32 block_max_radius = 0.866025403784 * MAP_BLOCKSIZE * BS * block_scale;
+	f32 block_max_radius = MAP_BLOCKSIZE * BS * block_scale;
 
 	// If block is (nearly) touching the camera, don't
 	// bother validating further (that is, render it anyway)

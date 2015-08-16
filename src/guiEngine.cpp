@@ -57,7 +57,7 @@ TextDestGuiEngine::TextDestGuiEngine(GUIEngine* engine)
 }
 
 /******************************************************************************/
-void TextDestGuiEngine::gotText(std::map<std::string, std::string> fields)
+void TextDestGuiEngine::gotText(const StringMap &fields)
 {
 	m_engine->getScriptIface()->handleMainMenuButtons(fields);
 }
@@ -65,7 +65,7 @@ void TextDestGuiEngine::gotText(std::map<std::string, std::string> fields)
 /******************************************************************************/
 void TextDestGuiEngine::gotText(std::wstring text)
 {
-	m_engine->getScriptIface()->handleMainMenuEvent(wide_to_narrow(text));
+	m_engine->getScriptIface()->handleMainMenuEvent(wide_to_utf8(text));
 }
 
 /******************************************************************************/
@@ -176,7 +176,7 @@ GUIEngine::GUIEngine(	irr::IrrlichtDevice* dev,
 		m_sound_manager = &dummySoundManager;
 
 	//create topleft header
-	std::string t = (std::string(PROJECT_NAME " ") +
+	std::string t = (std::string(PROJECT_NAME_C " ") +
 			g_version_hash);
 
 	core::rect<s32> rect(0, 0, g_fontengine->getTextWidth(t), g_fontengine->getTextHeight());
@@ -212,10 +212,8 @@ GUIEngine::GUIEngine(	irr::IrrlichtDevice* dev,
 	m_script = new MainMenuScripting(this);
 
 	try {
-		if (m_data->errormessage != "") {
-			m_script->setMainMenuErrorMessage(m_data->errormessage);
-			m_data->errormessage = "";
-		}
+		m_script->setMainMenuData(&m_data->script_data);
+		m_data->script_data.errormessage = "";
 
 		if (!loadMainMenuScript()) {
 			errorstream << "No future without mainmenu" << std::endl;
@@ -223,10 +221,9 @@ GUIEngine::GUIEngine(	irr::IrrlichtDevice* dev,
 		}
 
 		run();
-	}
-	catch(LuaError &e) {
+	} catch (LuaError &e) {
 		errorstream << "MAINMENU ERROR: " << e.what() << std::endl;
-		m_data->errormessage = e.what();
+		m_data->script_data.errormessage = e.what();
 	}
 
 	m_menu->quitMenu();
@@ -576,7 +573,7 @@ bool GUIEngine::downloadFile(std::string url, std::string target)
 /******************************************************************************/
 void GUIEngine::setTopleftText(std::string append)
 {
-	std::string toset = (std::string(PROJECT_NAME " ") +
+	std::string toset = (std::string(PROJECT_NAME_C " ") +
 			g_version_hash);
 
 	if (append != "")

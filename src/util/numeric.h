@@ -27,6 +27,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "../irr_v2d.h"
 #include "../irr_v3d.h"
 #include "../irr_aabb3d.h"
+#include "../jthread/jmutex.h"
 #include <algorithm>
 #include <list>
 #include <cmath>
@@ -46,6 +47,7 @@ public:
 private:
 	static void generateFacePosition(u16 d);
 	static std::map<u16, std::vector<v3s16> > m_cache;
+	static JMutex m_cache_mutex;
 };
 
 class IndentationRaiser
@@ -293,7 +295,7 @@ bool isBlockInSight(v3s16 blockpos_b, v3f camera_pos, v3f camera_dir,
 */
 inline s32 myround(f32 f)
 {
-	return floor(f + 0.5);
+	return (s32)(f < 0.f ? (f - 0.5f) : (f + 0.5f));
 }
 
 /*

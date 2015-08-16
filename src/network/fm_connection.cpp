@@ -34,7 +34,7 @@ namespace con
 {
 
 //very ugly windows hack
-#if defined(_MSC_VER) && defined(ENET_IPV6)
+#if ( defined(_MSC_VER) || defined(__MINGW32__) ) && defined(ENET_IPV6)
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -100,8 +100,12 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	m_peer_id(0),
 	m_bc_peerhandler(peerhandler),
 	m_last_recieved(0),
-	m_last_recieved_warn(0)
+	m_last_recieved_warn(0),
+	timeout_mul(0)
 {
+	timeout_mul = g_settings->getU16("timeout_mul");
+	if (!timeout_mul)
+		timeout_mul = 1;
 	start();
 }
 
@@ -135,7 +139,7 @@ void * Connection::Thread()
 
 void Connection::putEvent(ConnectionEvent &e)
 {
-	assert(e.type != CONNEVENT_NONE);
+	//if(e.type == CONNEVENT_NONE) return;
 	m_event_queue.push_back(e);
 }
 
@@ -189,6 +193,7 @@ void Connection::receive()
 	if (ret > 0)
 	{
 		m_last_recieved = porting::getTimeMs();
+		m_last_recieved_warn = 0;
 		switch (event.type)
 		{
 		case ENET_EVENT_TYPE_CONNECT:
@@ -232,14 +237,16 @@ void Connection::receive()
 			break;
 		}
 	} else if (ret < 0) {
-		infostream<<"enet_host_service failed = "<< ret << std::endl;
+		errorstream<<"recieve enet_host_service failed = "<< ret << std::endl;
 		if (m_peers.count(PEER_ID_SERVER))
 			deletePeer(PEER_ID_SERVER,  false);
 	} else { //0
-		if (m_peers.count(PEER_ID_SERVER)) { //ugly fix. todo: fix enet and remove
+		if (m_peers.count(PEER_ID_SERVER) && m_last_recieved) { //ugly fix. todo: fix enet and remove
 			unsigned int time = porting::getTimeMs();
-			if (time - m_last_recieved > 30000 && m_last_recieved_warn > 20000 && m_last_recieved_warn < 30000) {
-				errorstream<<"connection lost [30s], disconnecting."<<std::endl;
+			const unsigned int t1 = 10000, t2 = 30000 * timeout_mul, t3 = 60000 * timeout_mul;
+			unsigned int wait = time - m_last_recieved;
+			if (wait > t3 && m_last_recieved_warn > t2) {
+				errorstream<<"connection lost [60s], disconnecting."<<std::endl;
 #if defined(__has_feature)
 #if __has_feature(thread_sanitizer) || __has_feature(address_sanitizer)
 				if (0)
@@ -250,13 +257,13 @@ void Connection::receive()
 				}
 				m_last_recieved_warn = 0;
 				m_last_recieved = 0;
-			} else if (time - m_last_recieved > 20000 && m_last_recieved_warn > 10000 && m_last_recieved_warn < 20000) {
-				errorstream<<"connection lost [20s]!"<<std::endl;
+			} else if (wait > t2 && m_last_recieved_warn > t1 && m_last_recieved_warn < t2) {
+				errorstream<<"connection lost [30s]!"<<std::endl;
 				m_last_recieved_warn = time - m_last_recieved;
-			} else if (time - m_last_recieved > 10000 && m_last_recieved_warn < 10000) {
+			} else if (wait > t1 && m_last_recieved_warn < t1) {
 				errorstream<<"connection lost [10s]? ping."<<std::endl;
 				enet_peer_ping(m_peers.get(PEER_ID_SERVER));
-				m_last_recieved_warn = time - m_last_recieved;
+				m_last_recieved_warn = wait;
 			}
 		}
 	}
@@ -267,9 +274,9 @@ void Connection::serve(Address bind_addr)
 {
 	ENetAddress address;
 #if defined(ENET_IPV6)
-	address.host = in6addr_any;
+	address.host = bind_addr.getAddress6().sin6_addr; // in6addr_any;
 #else
-	address.host = ENET_HOST_ANY;
+	address.host = bind_addr.getAddress().sin_addr.s_addr; // ENET_HOST_ANY;
 #endif
 	address.port = bind_addr.getPort(); // fmtodo
 
@@ -321,8 +328,11 @@ void Connection::connect(Address addr)
 		m_peers.set(PEER_ID_SERVER, peer);
 		m_peers_address.set(PEER_ID_SERVER, addr);
 	} else {
-		if (ret == 0)
-			errorstream<<"enet_host_service ret="<<ret<<std::endl;
+		errorstream<<"connect enet_host_service ret="<<ret<<std::endl;
+		if (ret == 0) {
+			ConnectionEvent ev(CONNEVENT_CONNECT_FAILED);
+			putEvent(ev);
+		}
 
 		/* Either the 5 seconds are up or a disconnect event was */
 		/* received. Reset the peer in the event the 5 seconds   */
@@ -582,8 +592,15 @@ bool parse_msgpack_packet(char *data, u32 datasize, MsgpackPacket *packet, int *
 
 		*command = (*packet)[MSGPACK_COMMAND].as<int>();
 	}
-	catch (msgpack::type_error) { return false; }
-	catch (msgpack::unpack_error) { return false; }
+	catch (msgpack::type_error e) {
+		verbosestream<<"msgpack::type_error : "<<e.what()<<" datasize="<<datasize<<std::endl;
+		return false;
+	}
+	catch (msgpack::unpack_error e) {
+		verbosestream<<"msgpack::unpack_error : "<<e.what()<<" datasize="<<datasize<<std::endl;
+		//verbosestream<<"bad data:["<< std::string(data, datasize) <<"]"<<std::endl;
+		return false;
+	}
 	return true;
 }
 

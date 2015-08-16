@@ -31,7 +31,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "nodedef.h"
 #include "content_mapnode.h" // For content_mapnode_get_new_name
 #include "voxelalgorithms.h"
-#include "profiler.h"
 #include "settings.h" // For g_settings
 #include "log_types.h"
 #include "emerge.h"
@@ -94,39 +93,38 @@ MapgenV6::MapgenV6(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 	c_water_source    = ndef->getId("mapgen_water_source");
 	c_lava_source     = ndef->getId("mapgen_lava_source");
 	c_gravel          = ndef->getId("mapgen_gravel");
-	c_cobble          = ndef->getId("mapgen_cobble");
-	c_desert_sand     = ndef->getId("mapgen_desert_sand");
 	c_desert_stone    = ndef->getId("mapgen_desert_stone");
+	c_desert_sand     = ndef->getId("mapgen_desert_sand");
 	c_dirt_with_snow  = ndef->getId("mapgen_dirt_with_snow");
 	c_snow            = ndef->getId("mapgen_snow");
 	c_snowblock       = ndef->getId("mapgen_snowblock");
 	c_ice             = ndef->getId("mapgen_ice");
 
-	c_mossycobble     = ndef->getId("mapgen_mossycobble");
-	c_sandbrick       = ndef->getId("mapgen_sandstonebrick");
+	c_cobble          = ndef->getId("mapgen_cobble");
 	c_stair_cobble    = ndef->getId("mapgen_stair_cobble");
-	c_stair_sandstone = ndef->getId("mapgen_stair_sandstone");
+	c_mossycobble     = ndef->getId("mapgen_mossycobble");
+
 	if (c_desert_sand == CONTENT_IGNORE)
 		c_desert_sand = c_sand;
 	if (c_desert_stone == CONTENT_IGNORE)
 		c_desert_stone = c_stone;
 	if (c_mossycobble == CONTENT_IGNORE)
 		c_mossycobble = c_cobble;
-	if (c_sandbrick == CONTENT_IGNORE)
-		c_sandbrick = c_desert_stone;
 	if (c_stair_cobble == CONTENT_IGNORE)
 		c_stair_cobble = c_cobble;
-	if (c_stair_sandstone == CONTENT_IGNORE)
-		c_stair_sandstone = c_sandbrick;
 
 	// freeminer:
 	c_dirt_with_snow  = ndef->getId("mapgen_dirt_with_snow");
 	c_ice             = ndef->getId("mapgen_ice");
+
+	if (c_dirt_with_snow == CONTENT_IGNORE)
+		c_dirt_with_snow = c_dirt_with_grass;
+	if (c_snow == CONTENT_IGNORE)
+		c_snow = CONTENT_AIR;
+	if (c_snowblock == CONTENT_IGNORE)
+		c_snowblock = c_dirt_with_grass;
 	if (c_ice == CONTENT_IGNORE)
 		c_ice = c_water_source;
-	if (c_dirt_with_snow == CONTENT_IGNORE)
-		c_dirt_with_snow = c_dirt;
-
 }
 
 
@@ -157,9 +155,9 @@ MapgenV6Params::MapgenV6Params()
 	np_height_select  = NoiseParams(0,    1.0,  v3f(250.0, 250.0, 250.0), 4213,   5, 0.69, 2.0);
 	np_mud            = NoiseParams(4,    2.0,  v3f(200.0, 200.0, 200.0), 91013,  3, 0.55, 2.0);
 	np_beach          = NoiseParams(0,    1.0,  v3f(250.0, 250.0, 250.0), 59420,  3, 0.50, 2.0);
-	np_biome          = NoiseParams(0,    1.0,  v3f(250.0, 250.0, 250.0), 9130,   3, 0.50, 2.0);
+	np_biome          = NoiseParams(0,    1.0,  v3f(500.0, 500.0, 500.0), 9130,   3, 0.50, 2.0);
 	np_cave           = NoiseParams(6,    6.0,  v3f(250.0, 250.0, 250.0), 34329,  3, 0.50, 2.0);
-	np_humidity       = NoiseParams(0.5,  0.5,  v3f(500.0, 500.0, 500.0), 72384,  4, 0.66, 2.0);
+	np_humidity       = NoiseParams(0.5,  0.5,  v3f(500.0, 500.0, 500.0), 72384,  3, 0.50, 2.0);
 	np_trees          = NoiseParams(0,    1.0,  v3f(125.0, 125.0, 125.0), 2,      4, 0.66, 2.0);
 	np_apple_trees    = NoiseParams(0,    1.0,  v3f(100.0, 100.0, 100.0), 342902, 3, 0.45, 2.0);
 }
@@ -344,7 +342,7 @@ bool MapgenV6::getHaveBeach(v2s16 p)
 
 BiomeV6Type MapgenV6::getBiome(v3POS p)
 {
-	int index = (p.Y - full_node_min.Z) * (ystride + 2 * MAP_BLOCKSIZE)
+	int index = (p.Z - full_node_min.Z) * (ystride + 2 * MAP_BLOCKSIZE)
 			+ (p.X - full_node_min.X);
 	return getBiome(index, p);
 }
@@ -357,11 +355,11 @@ float MapgenV6::getHumidity(v3POS p)
 		seed+72384, 4, 0.66);
 	noise = (noise + 1.0)/2.0;*/
 
-	if (m_emerge->env->m_use_weather) {
+	if (m_emerge->env->m_use_weather_biome) {
 		return (m_emerge->env->getServerMap().updateBlockHumidity(m_emerge->env, p, nullptr, &humidity_cache) - m_emerge->params.np_biome_humidity.offset) / m_emerge->params.np_biome_humidity.scale;
 	}
 
-	int index = (p.Y - full_node_min.Z) * (ystride + 2 * MAP_BLOCKSIZE)
+	int index = (p.Z - full_node_min.Z) * (ystride + 2 * MAP_BLOCKSIZE)
 			+ (p.X - full_node_min.X);
 	float noise = noise_humidity->result[index];
 
@@ -434,7 +432,7 @@ BiomeV6Type MapgenV6::getBiome(int index, v3POS p)
 
 	float d, h;
 
-	if (m_emerge->env->m_use_weather) {
+	if (m_emerge->env->m_use_weather_biome) {
 		d = (m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env, p, nullptr, &heat_cache) - m_emerge->params.np_biome_heat.offset) / m_emerge->params.np_biome_heat.scale;
 		h = (m_emerge->env->getServerMap().updateBlockHumidity(m_emerge->env, p, nullptr, &humidity_cache) - m_emerge->params.np_biome_humidity.offset) / m_emerge->params.np_biome_humidity.scale;
 	} else {
@@ -568,27 +566,27 @@ void MapgenV6::makeChunk(BlockMakeData *data)
 		dp.np_rarity  = nparams_dungeon_rarity;
 		dp.np_density = nparams_dungeon_density;
 		dp.np_wetness = nparams_dungeon_wetness;
-		dp.c_water = c_water_source;
+		dp.c_water    = c_water_source;
 		if (getBiome(0, node_min) == BT_DESERT) {
-			dp.c_cobble  = c_sandbrick;
-			dp.c_moss    = c_sandbrick; // should make this 'cracked sandstone' later
-			dp.c_stair   = c_stair_sandstone;
+			dp.c_cobble = c_desert_stone;
+			dp.c_moss   = c_desert_stone;
+			dp.c_stair  = c_desert_stone;
 
 			dp.diagonal_dirs = true;
-			dp.mossratio  = 0.0;
-			dp.holesize   = v3s16(2, 3, 2);
-			dp.roomsize   = v3s16(2, 5, 2);
-			dp.notifytype = GENNOTIFY_TEMPLE;
+			dp.mossratio     = 0.0;
+			dp.holesize      = v3s16(2, 3, 2);
+			dp.roomsize      = v3s16(2, 5, 2);
+			dp.notifytype    = GENNOTIFY_TEMPLE;
 		} else {
-			dp.c_cobble  = c_cobble;
-			dp.c_moss    = c_mossycobble;
-			dp.c_stair   = c_stair_cobble;
+			dp.c_cobble = c_cobble;
+			dp.c_moss   = c_mossycobble;
+			dp.c_stair  = c_stair_cobble;
 
 			dp.diagonal_dirs = false;
-			dp.mossratio  = 3.0;
-			dp.holesize   = v3s16(1, 2, 1);
-			dp.roomsize   = v3s16(0, 0, 0);
-			dp.notifytype = GENNOTIFY_DUNGEON;
+			dp.mossratio     = 3.0;
+			dp.holesize      = v3s16(1, 2, 1);
+			dp.roomsize      = v3s16(0, 0, 0);
+			dp.notifytype    = GENNOTIFY_DUNGEON;
 		}
 
 		DungeonGen dgen(this, &dp);
@@ -649,7 +647,7 @@ int MapgenV6::generateGround()
 	MapNode n_air(CONTENT_AIR), n_water_source(c_water_source);
 	MapNode n_stone(c_stone), n_desert_stone(c_desert_stone);
 	MapNode n_ice(c_ice);
-	int stone_surface_max_y = -MAP_GENERATION_LIMIT;
+	int stone_surface_max_y = -MAX_MAP_GENERATION_LIMIT;
 
 	u32 index = 0;
 	for (s16 z = node_min.Z; z <= node_max.Z; z++)
@@ -1056,7 +1054,7 @@ void MapgenV6::growGrass() // Add surface nodes
 			} else if (bt == BT_TUNDRA) {
 				if (c == c_dirt) {
 					vm->m_data[i] = n_dirt_with_snow;
-				} else if (c == c_stone) {
+				} else if (c == c_stone && surface_y < node_max.Y) {
 					vm->m_area.add_y(em, i, 1);
 					vm->m_data[i] = n_snow;
 				}
