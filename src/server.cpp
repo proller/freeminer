@@ -1171,12 +1171,15 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 				infostream<<"Server: MEET_OTHER"<<std::endl;
 */
 				prof.add("MEET_OTHER", 1);
+/*
 				for(std::set<v3s16>::iterator
 						i = event->modified_blocks.begin();
 						i != event->modified_blocks.end(); ++i)
 				{
 					setBlockNotSent(*i);
 				}
+*/
+				SetBlocksNotSent();
 			}
 			else {
 				prof.add("unknown", 1);
@@ -1189,6 +1192,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 			*/
 			if (!far_players.empty()) {
 				// Convert list format to that wanted by SetBlocksNotSent
+/*
 				std::map<v3s16, MapBlock*> modified_blocks2;
 				for(std::set<v3s16>::iterator
 						i = event->modified_blocks.begin();
@@ -1196,6 +1200,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 					modified_blocks2[*i] =
 							m_env->getMap().getBlockNoCreateNoEx(*i);
 				}
+*/
 				// Set blocks not sent
 				for (auto
 						i = far_players.begin();
@@ -1204,7 +1209,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 					RemoteClient *client = getClient(peer_id);
 					if(client==NULL)
 						continue;
-					client->SetBlocksNotSent(modified_blocks2);
+					client->SetBlocksNotSent(/*modified_blocks2*/);
 				}
 			}
 
@@ -1629,14 +1634,19 @@ void Server::setInventoryModified(const InventoryLocation &loc, bool playerSend)
 
 void Server::SetBlocksNotSent(std::map<v3s16, MapBlock *>& block)
 {
+	SetBlocksNotSent();
+}
+
+void Server::SetBlocksNotSent()
+{
 	std::vector<u16> clients = m_clients.getClientIDs();
 	// Set the modified blocks unsent for all the clients
 	for (auto
 		 i = clients.begin();
 		 i != clients.end(); ++i) {
 			RemoteClient *client = m_clients.lockedGetClientNoEx(*i);
-			if (client != NULL)
-				client->SetBlocksNotSent(block);
+			if (client)
+				client->SetBlocksNotSent();
 		}
 }
 
@@ -2409,7 +2419,7 @@ void Server::setBlockNotSent(v3s16 p)
 		i != clients.end(); ++i)
 	{
 		RemoteClient *client = m_clients.lockedGetClientNoEx(*i);
-		client->SetBlockNotSent(p);
+		client->SetBlocksNotSent();
 	}
 }
 

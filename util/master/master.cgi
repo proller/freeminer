@@ -127,26 +127,27 @@ sub get_params_utf8(;$$) {
     wantarray ? %$_ : $_;
 }
 
-sub file_rewrite(;$@) {
-    local $_ = shift;
-    return unless open my $fh, '>', $_;
-    return unless flock( $fh, Fcntl::LOCK_EX );
-    print $fh @_;
-    #return unless flock( $fh, Fcntl::LOCK_UN );
-    #close $fh;
-}
-
 sub printlog(;@) {
     #local $_ = shift;
     return unless open my $fh, '>>', $config{log};
     print $fh (join ' ', @_), "\n";
 }
 
+sub file_rewrite(;$@) {
+    local $_ = shift;
+    return unless open my $fh, '>', $_;
+    die 'rewrite: cant lock'  unless flock( $fh, Fcntl::LOCK_EX );
+    print $fh @_;
+    #return unless flock( $fh, Fcntl::LOCK_UN );
+    #close $fh;
+}
+
 sub file_read ($) {
-    open my $f, '<', $_[0] or return;
+    open my $fh, '<', $_[0] or return;
+    die 'read: cant lock' unless flock( $fh, Fcntl::LOCK_SH );
     local $/ = undef;
-    my $ret = <$f>;
-    close $f;
+    my $ret = <$fh>;
+    close $fh;
     return \$ret;
 }
 
@@ -336,16 +337,19 @@ sub request (;$) {
 sub request_cgi {
     my ($p, $after) = request(@_);
     shift @$p;
-    printu join "\n", map { join ': ', @$_ } shift @$p;
-    printu "\n\n";
-    printu join '', map { join '', @$_ } @$p;
+    printu(join "\n", map { join ': ', @$_ } shift @$p);
+    printu("\n\n");
+    printu(join '', map { join '', @$_ } @$p);
     if (fork) {
         unless ($config{debug}) {
             close STDOUT;
             close STDERR;
         }
     } else {
-        $after->() if ref $after ~~ 'CODE';
+        eval {
+            $after->() if ref $after ~~ 'CODE';
+        };
+        printlog "after error [$@]" if $@ and $config{debug};
     }
 }
 request_cgi() unless caller;
