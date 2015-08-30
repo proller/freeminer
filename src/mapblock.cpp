@@ -107,6 +107,8 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 	m_next_analyze_timestamp = 0;
 	m_abm_timestamp = 0;
 	content_only = CONTENT_IGNORE;
+	content_only_param1 = content_only_param2 = 0;
+	lighting_broken = false;
 }
 
 MapBlock::~MapBlock()
@@ -135,19 +137,14 @@ bool MapBlock::isValidPositionParent(v3s16 p)
 MapNode MapBlock::getNodeParent(v3s16 p, bool *is_valid_position)
 {
 	if (isValidPosition(p) == false)
-		return m_parent->getNodeTry(getPosRelative() + p);
+		return m_parent->getNodeNoEx(getPosRelative() + p);
 
 	if (data == NULL) {
 		if (is_valid_position)
 			*is_valid_position = false;
 		return MapNode(CONTENT_IGNORE);
 	}
-	auto lock = try_lock_shared_rec();
-	if (!lock->owns_lock()) {
-		if (is_valid_position)
-			*is_valid_position = false;
-		return MapNode(CONTENT_IGNORE);
-	}
+	auto lock = lock_shared_rec();
 
 	if (is_valid_position)
 		*is_valid_position = true;
@@ -175,6 +172,7 @@ std::string MapBlock::getModifiedReasonString()
 	return reason;
 }
 
+#if WTF
 /*
 	Propagates sunlight down through the block.
 	Doesn't modify nodes that are not affected by sunlight.
@@ -365,6 +363,7 @@ bool MapBlock::propagateSunlight(std::set<v3s16> & light_sources,
 
 	return block_below_is_valid;
 }
+#endif
 
 
 void MapBlock::copyTo(VoxelManipulator &dst)
@@ -715,7 +714,7 @@ bool MapBlock::deSerialize(std::istream &is, u8 version, bool disk)
 	}
 
 	if (!disk && content_only != CONTENT_IGNORE) {
-		auto n = MapNode(content_only);
+		auto n = MapNode(content_only, content_only_param1, content_only_param2);
 		for (u32 i = 0; i < MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; i++)
 			data[i] = n;
 		return true;
@@ -856,6 +855,7 @@ void MapBlock::deSerializeNetworkSpecific(std::istream &is)
 			if(m_modified >= MOD_STATE_WRITE_AT_UNLOAD)
 				m_disk_timestamp = m_timestamp;
 		}
+		setLightingExpired(true);
 	}
 
 void MapBlock::pushElementsToCircuit(Circuit* circuit)

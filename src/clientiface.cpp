@@ -45,7 +45,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 //VERY BAD COPYPASTE FROM clientmap.cpp!
 static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
 		float start_off, float end_off, u32 needed_count, INodeDefManager *nodemgr,
-		std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> & occlude_cache)
+		unordered_map_v3POS<bool> & occlude_cache)
 {
 	float d0 = (float)1 * p0.getDistanceFrom(p1);
 	v3s16 u0 = p1 - p0;
@@ -151,7 +151,7 @@ int RemoteClient::GetNextBlocks (
 	// Predict to next block
 	v3f playerpos_predicted = playerpos + playerspeeddir*MAP_BLOCKSIZE*BS;
 
-	v3s16 center_nodepos = floatToInt(playerpos_predicted, BS);floatToInt(playerpos_predicted, BS);
+	v3s16 center_nodepos = floatToInt(playerpos_predicted, BS);
 
 	v3s16 center = getNodeBlockPos(center_nodepos);
 
@@ -274,7 +274,7 @@ int RemoteClient::GetNextBlocks (
 	if(n && nodemgr->get(n).solidness == 2)
 		occlusion_culling_enabled = false;
 
-	std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> occlude_cache;
+	unordered_map_v3POS<bool> occlude_cache;
 
 
 	s16 d;
@@ -467,10 +467,12 @@ int RemoteClient::GetNextBlocks (
 				// Reset usage timer, this block will be of use in the future.
 				block->resetUsageTimer();
 
-				//todo: fixme
-				//if (block->getLightingExpired() && (block_sent /*|| d>=1*/)) {
-				//	continue;
-				//}
+				if (block->getLightingExpired()) {
+					env->getServerMap().lighting_modified_blocks.set(p, nullptr);
+				}
+
+				if (block->lighting_broken && block_sent)
+					continue;
 
 				// Block is valid if lighting is up-to-date and data exists
 				if(block->isValid() == false)
@@ -588,7 +590,12 @@ void RemoteClient::SetBlockNotSent(v3s16 p)
 
 void RemoteClient::SetBlocksNotSent(std::map<v3s16, MapBlock*> &blocks)
 {
-	SetBlockNotSent(v3POS());
+	++m_nearest_unsent_reset;
+}
+
+void RemoteClient::SetBlocksNotSent()
+{
+	++m_nearest_unsent_reset;
 }
 
 void RemoteClient::SetBlockDeleted(v3s16 p) {

@@ -30,10 +30,10 @@ VERSION_TWEAK := $(shell cat $(ROOT)/../../CMakeLists.txt | \
 # Increase for each build!
 ################################################################################
 # Play Store actual version (16/03/15): 11
-ANDROID_VERSION_CODE = 12
+ANDROID_VERSION_CODE = 13
 
 #and for freeminer for skip conflict:
-ANDROID_VERSION_CODE = 31
+ANDROID_VERSION_CODE = 33
 
 PROJECT_NAME_C = multicraft
 
@@ -130,7 +130,7 @@ OPENSSL_TIMESTAMP = $(OPENSSL_DIR)timestamp
 OPENSSL_TIMESTAMP_INT = $(ROOT)/deps/openssl_timestamp
 OPENSSL_URL = http://www.openssl.org/source/openssl-$(OPENSSL_VERSION).tar.gz
 
-CURL_VERSION = 7.43.0
+CURL_VERSION = 7.44.0
 CURL_DIR = $(ROOT)/deps/curl-$(CURL_VERSION)
 CURL_LIB = $(CURL_DIR)/lib/.libs/libcurl.a
 CURL_TIMESTAMP = $(CURL_DIR)/timestamp
@@ -1083,7 +1083,7 @@ $(ROOT)/jni/src/android_version.h : prep_srcdir
 	fi
 
 manifest :
-	@BASE_VERSION="${VERS_MAJOR}.${VERS_MINOR}.${VERS_PATCH}.${VERS_TWEAK}"; \
+	@BASE_VERSION="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}.${VERSION_TWEAK}"; \
 	if [ "${NDEBUG}x" != "x" ] ; then                                          \
 		DBG='';                                                                \
 		DBG_FLAG="android:debuggable=\"false\"";                               \

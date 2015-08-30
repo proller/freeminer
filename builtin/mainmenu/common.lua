@@ -67,13 +67,13 @@ function order_favorite_list(list)
 	--orders the favorite list after support
 	for i=1,#list,1 do
 		local fav = list[i]
-		if is_server_protocol_compat(fav.proto_min, fav.proto_max) then
+		if is_server_protocol_compat(fav.proto_min, fav.proto_max, fav.proto) then
 			table.insert(res, fav)
 		end
 	end
 	for i=1,#list,1 do
 		local fav = list[i]
-		if not is_server_protocol_compat(fav.proto_min, fav.proto_max) then
+		if not is_server_protocol_compat(fav.proto_min, fav.proto_max, fav.proto) then
 			table.insert(res, fav)
 		end
 	end
@@ -84,7 +84,7 @@ end
 function render_favorite(spec,render_details)
 	local text = ""
 
-	if spec.name ~= nil then
+	if spec.name ~= nil and spec.name ~= "" then
 		text = text .. core.formspec_escape(spec.name:trim())
 
 --		if spec.description ~= nil and
@@ -106,7 +106,7 @@ function render_favorite(spec,render_details)
 	end
 
 	local details = ""
-	local grey_out = not is_server_protocol_compat(spec.proto_max, spec.proto_min)
+	local grey_out = not is_server_protocol_compat(spec.proto_max, spec.proto_min, spec.proto)
 
 	if spec.clients ~= nil and spec.clients_max ~= nil then
 		local clients_color = ''
@@ -225,10 +225,10 @@ function menu_handle_key_up_down(fields,textlist,settingname)
 
 			configure_selected_world_params(newidx)
 		end
-		
+
 		return true
 	end
-	
+
 	return false
 end
 
@@ -247,7 +247,7 @@ function asyncOnlineFavourites()
 	if not menudata.public_known then
 	menudata.public_known = {{
 			name = fgettext("Loading..."),
-			description = fgettext("Try reenabling public serverlist and check your internet connection.")
+			description = fgettext_ne("Try reenabling public serverlist and check your internet connection.")
 		}}
 	end
 	menudata.favorites = menudata.public_known
@@ -279,34 +279,35 @@ end
 --------------------------------------------------------------------------------
 function text2textlist(xpos,ypos,width,height,tl_name,textlen,text,transparency)
 	local textlines = core.splittext(text,textlen)
-	
+
 	local retval = "textlist[" .. xpos .. "," .. ypos .. ";"
 								.. width .. "," .. height .. ";"
 								.. tl_name .. ";"
-	
+
 	for i=1, #textlines, 1 do
 		textlines[i] = textlines[i]:gsub("\r","")
 		retval = retval .. core.formspec_escape(textlines[i]) .. ","
 	end
-	
+
 	retval = retval .. ";0;"
-	
+
 	if transparency then
 		retval = retval .. "true"
 	end
-	
+
 	retval = retval .. "]"
 
 	return retval
 end
 
 --------------------------------------------------------------------------------
-function is_server_protocol_compat(proto_min, proto_max)
+function is_server_protocol_compat(proto_min, proto_max, proto)
+	if proto and core.setting_get("server_proto") ~= proto then print('false!'); return false end
 	return not ((min_supp_proto > (tonumber(proto_max) or 24)) or (max_supp_proto < (tonumber(proto_min) or 13)))
 end
 --------------------------------------------------------------------------------
-function is_server_protocol_compat_or_error(proto_min, proto_max)
-	if not is_server_protocol_compat(proto_min, proto_max) then
+function is_server_protocol_compat_or_error(proto_min, proto_max, proto)
+	if not is_server_protocol_compat(proto_min, proto_max, proto) then
 		gamedata.errormessage = fgettext_ne("Protocol version mismatch, server " ..
 			((proto_min ~= proto_max) and "supports protocols between $1 and $2" or "enforces protocol version $1") ..
 			", we " ..

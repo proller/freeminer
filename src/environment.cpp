@@ -1761,6 +1761,33 @@ void ServerEnvironment::getRemovedActiveObjects(v3s16 pos, s16 radius,
 	}
 }
 
+void ServerEnvironment::setStaticForActiveObjectsInBlock(
+	v3s16 blockpos, bool static_exists, v3s16 static_block)
+{
+	MapBlock *block = m_map->getBlockNoCreateNoEx(blockpos);
+	if (!block)
+		return;
+
+	for (std::map<u16, StaticObject>::iterator
+			so_it = block->m_static_objects.m_active.begin();
+			so_it != block->m_static_objects.m_active.end(); ++so_it) {
+		// Get the ServerActiveObject counterpart to this StaticObject
+		std::map<u16, ServerActiveObject *>::iterator ao_it;
+		ao_it = m_active_objects.find(so_it->first);
+		if (ao_it == m_active_objects.end()) {
+			// If this ever happens, there must be some kind of nasty bug.
+			errorstream << "ServerEnvironment::setStaticForObjectsInBlock(): "
+				"Object from MapBlock::m_static_objects::m_active not found "
+				"in m_active_objects";
+			continue;
+		}
+
+		ServerActiveObject *sao = ao_it->second;
+		sao->m_static_exists = static_exists;
+		sao->m_static_block  = static_block;
+	}
+}
+
 ActiveObjectMessage ServerEnvironment::getActiveObjectMessage()
 {
 	if(m_active_object_messages.empty())
@@ -2050,6 +2077,7 @@ void ServerEnvironment::activateObjects(MapBlock *block, u32 dtime_s)
 					<<"failed to create active object from static object "
 					<<"in block "<<PP(s_obj.pos/BS)
 					<<" type="<<(int)s_obj.type<<" data:"<<std::endl;
+			continue;
 			print_hexdump(verbosestream, s_obj.data);
 
 			new_stored.push_back(s_obj);
@@ -2373,7 +2401,6 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 	}
 }
 
-
 #ifndef SERVER
 
 #include "clientsimpleobject.h"
@@ -2391,7 +2418,7 @@ ClientEnvironment::ClientEnvironment(ClientMap *map, scene::ISceneManager *smgr,
 	m_gamedef(gamedef),
 	m_irr(irr)
 	,m_active_objects_client_last(0),
-	m_move_max_loop(10)
+	m_move_max_loop(3)
 {
 	char zero = 0;
 	memset(attachement_parent_ids, zero, sizeof(attachement_parent_ids));
@@ -2454,6 +2481,8 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 {
 	DSTACK(__FUNCTION_NAME);
 
+	TimeTaker timer0("ClientEnvironment::step()");
+
 	/* Step time of day */
 	stepTimeOfDay(dtime);
 
@@ -2494,9 +2523,18 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	if(dtime_max_increment*m_move_max_loop < dtime)
 		dtime_max_increment = dtime/m_move_max_loop;
 
+	//if (dtime > 1) errorstream<<" dtime="<<dtime<<" player_speed="<<player_speed<<std::endl;
+
+#define DTIME_MAX 2.0
+
 	// Don't allow overly huge dtime
-	if(dtime > 2)
-		dtime = 2;
+	if(dtime > DTIME_MAX)
+		dtime = DTIME_MAX;
+
+
+	if (player_speed <= 0.01 && dtime < 0.1)
+		dtime_max_increment = dtime;
+
 
 	f32 dtime_downcount = dtime;
 
@@ -2504,6 +2542,9 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		Stuff that has a maximum time increment
 	*/
 
+
+	{
+		//TimeTaker timer1("ClientEnvironment::step() move");
 	u32 loopcount = 0;
 	u32 breaked = 0, lend_ms = porting::getTimeMs() + max_cycle_ms;
 	do
@@ -2590,13 +2631,19 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	}
 	while(dtime_downcount > 0.001);
 
-	//infostream<<"loop "<<loopcount<<"/"<<m_move_max_loop<<" breaked="<<breaked<<std::endl;
+	//if (breaked) errorstream<<"loop "<<loopcount<<"/"<<m_move_max_loop<<" breaked="<<breaked<<std::endl;
 
 	if (breaked && m_move_max_loop > loopcount)
 		--m_move_max_loop;
-	if (!breaked && m_move_max_loop < 50)
+	if (!breaked && m_move_max_loop < 5)
 		++m_move_max_loop;
 
+	}
+
+	{
+		//TimeTaker timer2("ClientEnvironment::step() collision");
+
+	if (dtime < DTIME_MAX || lplayer->getSpeed().getLength() > PLAYER_FALL_TOLERANCE_SPEED)
 	for(auto
 			i = player_collisions.begin();
 			i != player_collisions.end(); ++i)
@@ -2631,6 +2678,7 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 				m_gamedef->event()->put(e);
 			}
 		}
+	}
 	}
 
 	/*
@@ -2711,6 +2759,8 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		}
 	}
 
+	{
+		//TimeTaker timer5("ClientEnvironment::step() players");
 	/*
 		Stuff that can be done in an arbitarily large dtime
 	*/
@@ -2726,6 +2776,7 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 			player->move(dtime, this, 100*BS);
 
 		}
+	}
 	}
 
 	// Update lighting on local player (used for wield item)
@@ -2755,9 +2806,13 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		Step active objects and update lighting of them
 	*/
 
+	{
+		//TimeTaker timer6("ClientEnvironment::step() objects");
+
 	g_profiler->avg("CEnv: num of objects", m_active_objects.size());
-	bool update_lighting = m_active_object_light_update_interval.step(dtime, 0.21);
+	bool update_lighting = m_active_object_light_update_interval.step(dtime, 1);
 	u32 n = 0, calls = 0, end_ms = porting::getTimeMs() + u32(500/g_settings->getFloat("wanted_fps"));
+	int skipped = 0;
 	for(std::map<u16, ClientActiveObject*>::iterator
 			i = m_active_objects.begin();
 			i != m_active_objects.end(); ++i)
@@ -2770,6 +2825,14 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		++calls;
 
 		ClientActiveObject* obj = i->second;
+
+		auto & draw_control = getClientMap().getControl();
+		if ((pf.getDistanceFrom(obj->getPosition()) / BS) * 1.2 > draw_control.wanted_range) {
+			//errorstream<<"skip "<<obj->getId() << " p="<<pf<< " o=" << obj->getPosition() << " r=" << pf.getDistanceFrom(obj->getPosition()) / BS << " wr=" << draw_control.wanted_range<< std::endl;
+			++skipped;
+			continue;
+		}
+
 		// Step object
 		obj->step(dtime, this);
 
@@ -2796,6 +2859,10 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	}
 	if (!calls)
 		m_active_objects_client_last = 0;
+
+	//infostream<<"objects "<<m_active_objects_client_last <<"/"<<m_active_objects.size()<<" skipped="<<skipped<<std::endl;
+
+	}
 
 	/*
 		Step and handle simple objects

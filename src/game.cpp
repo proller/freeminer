@@ -1558,7 +1558,7 @@ protected:
 
 	void toggleChat(float *statustext_time, bool *flag);
 	void toggleHud(float *statustext_time, bool *flag);
-	void toggleMinimap(float *statustext_time, bool *flag1, bool *flag2,
+	void toggleMinimap(float *statustext_time, bool *flag, bool show_hud,
 			bool shift_pressed);
 	void toggleFog(float *statustext_time, bool *flag);
 	void toggleDebug(float *statustext_time, bool *show_debug,
@@ -1608,6 +1608,9 @@ protected:
 			bool draw_clouds = true);
 
 	void showOverlayMessage(const std::string &msg, float dtime, int percent, bool draw_clouds = true);
+
+	static void settingChangedCallback(const std::string &setting_name, void *data);
+	void readSettings();
 
 private:
 	InputHandler *input;
@@ -1692,10 +1695,7 @@ private:
 
 	IntervalLimiter profiler_interval;
 
-	/* TODO: Add a callback function so these can be updated when a setting
-	 *       changes.  At this point in time it doesn't matter (e.g. /set
-	 *       is documented to change server settings only)
-	 *
+	/*
 	 * TODO: Local caching of settings is not optimal and should at some stage
 	 *       be updated to use a global settings object for getting thse values
 	 *       (as opposed to the this local caching). This can be addressed in
@@ -1740,15 +1740,22 @@ Game::Game() :
 	,
 	playerlist(nullptr)
 {
-	m_cache_doubletap_jump            = g_settings->getBool("doubletap_jump");
-	m_cache_enable_node_highlighting  = g_settings->getBool("enable_node_highlighting");
-	m_cache_enable_clouds             = g_settings->getBool("enable_clouds");
-	m_cache_enable_particles          = g_settings->getBool("enable_particles");
-	m_cache_enable_fog                = g_settings->getBool("enable_fog");
-	m_cache_mouse_sensitivity         = g_settings->getFloat("mouse_sensitivity");
-	m_repeat_right_click_time         = g_settings->getFloat("repeat_rightclick_time");
+	g_settings->registerChangedCallback("doubletap_jump",
+		&settingChangedCallback, this);
+	g_settings->registerChangedCallback("enable_node_highlighting",
+		&settingChangedCallback, this);
+	g_settings->registerChangedCallback("enable_clouds",
+		&settingChangedCallback, this);
+	g_settings->registerChangedCallback("enable_particles",
+		&settingChangedCallback, this);
+	g_settings->registerChangedCallback("enable_fog",
+		&settingChangedCallback, this);
+	g_settings->registerChangedCallback("mouse_sensitivity",
+		&settingChangedCallback, this);
+	g_settings->registerChangedCallback("repeat_rightclick_time",
+		&settingChangedCallback, this);
 
-	m_cache_mouse_sensitivity = rangelim(m_cache_mouse_sensitivity, 0.001, 100.0);
+	readSettings();
 
 #ifdef __ANDROID__
 	m_cache_hold_aux1 = false;	// This is initialised properly later
@@ -1783,6 +1790,21 @@ Game::~Game()
 	delete draw_control;
 
 	extendedResourceCleanup();
+
+	g_settings->deregisterChangedCallback("doubletap_jump",
+		&settingChangedCallback, this);
+	g_settings->deregisterChangedCallback("enable_node_highlighting",
+		&settingChangedCallback, this);
+	g_settings->deregisterChangedCallback("enable_clouds",
+		&settingChangedCallback, this);
+	g_settings->deregisterChangedCallback("enable_particles",
+		&settingChangedCallback, this);
+	g_settings->deregisterChangedCallback("enable_fog",
+		&settingChangedCallback, this);
+	g_settings->deregisterChangedCallback("mouse_sensitivity",
+		&settingChangedCallback, this);
+	g_settings->deregisterChangedCallback("repeat_rightclick_time",
+		&settingChangedCallback, this);
 }
 
 bool Game::startup(bool *kill,
@@ -2816,7 +2838,7 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_TOGGLE_HUD])) {
 		toggleHud(statustext_time, &flags->show_hud);
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_MINIMAP])) {
-		toggleMinimap(statustext_time, &flags->show_minimap, &flags->show_hud,
+		toggleMinimap(statustext_time, &flags->show_minimap, flags->show_hud,
 			input->isKeyDown(keycache.key[KeyCache::KEYMAP_ID_SNEAK]));
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_TOGGLE_CHAT])) {
 		toggleChat(statustext_time, &flags->show_chat);
@@ -3133,43 +3155,54 @@ void Game::toggleHud(float *statustext_time, bool *flag)
 		client->setHighlighted(client->getHighlighted(), *flag);
 }
 
-void Game::toggleMinimap(float *statustext_time, bool *flag, bool *show_hud, bool shift_pressed)
+void Game::toggleMinimap(float *statustext_time, bool *flag,
+	bool show_hud, bool shift_pressed)
 {
-	if (*show_hud && g_settings->getBool("enable_minimap")) {
-		if (shift_pressed) {
-			mapper->toggleMinimapShape();
-			return;
-		}
-		MinimapMode mode = mapper->getMinimapMode();
-		mode = (MinimapMode)((int)(mode) + 1);
-		*flag = true;
-		switch (mode) {
-			case MINIMAP_MODE_SURFACEx1:
-				statustext = L"Minimap in surface mode, Zoom x1";
-				break;
-			case MINIMAP_MODE_SURFACEx2:
-				statustext = L"Minimap in surface mode, Zoom x2";
-				break;
-			case MINIMAP_MODE_SURFACEx4:
-				statustext = L"Minimap in surface mode, Zoom x4";
-				break;
-			case MINIMAP_MODE_RADARx1:
-				statustext = L"Minimap in radar mode, Zoom x1";
-				break;
-			case MINIMAP_MODE_RADARx2:
-				statustext = L"Minimap in radar mode, Zoom x2";
-				break;
-			case MINIMAP_MODE_RADARx4:
-				statustext = L"Minimap in radar mode, Zoom x4";
-				break;
-			default:
-				mode = MINIMAP_MODE_OFF;
-				*flag = false;
-				statustext = L"Minimap hidden";
-		}
-		*statustext_time = 0;
-		mapper->setMinimapMode(mode);
+	if (!show_hud || !g_settings->getBool("enable_minimap"))
+		return;
+
+	if (shift_pressed) {
+		mapper->toggleMinimapShape();
+		return;
 	}
+
+	u32 hud_flags = client->getEnv().getLocalPlayer()->hud_flags;
+
+	MinimapMode mode = MINIMAP_MODE_OFF;
+	if (hud_flags & HUD_FLAG_MINIMAP_VISIBLE) {
+		mode = mapper->getMinimapMode();
+		mode = (MinimapMode)((int)mode + 1);
+	}
+
+	*flag = true;
+	switch (mode) {
+		case MINIMAP_MODE_SURFACEx1:
+			statustext = L"Minimap in surface mode, Zoom x1";
+			break;
+		case MINIMAP_MODE_SURFACEx2:
+			statustext = L"Minimap in surface mode, Zoom x2";
+			break;
+		case MINIMAP_MODE_SURFACEx4:
+			statustext = L"Minimap in surface mode, Zoom x4";
+			break;
+		case MINIMAP_MODE_RADARx1:
+			statustext = L"Minimap in radar mode, Zoom x1";
+			break;
+		case MINIMAP_MODE_RADARx2:
+			statustext = L"Minimap in radar mode, Zoom x2";
+			break;
+		case MINIMAP_MODE_RADARx4:
+			statustext = L"Minimap in radar mode, Zoom x4";
+			break;
+		default:
+			mode = MINIMAP_MODE_OFF;
+			*flag = false;
+			statustext = (hud_flags & HUD_FLAG_MINIMAP_VISIBLE) ?
+				L"Minimap hidden" : L"Minimap disabled by server";
+	}
+
+	*statustext_time = 0;
+	mapper->setMinimapMode(mode);
 }
 
 void Game::toggleFog(float *statustext_time, bool *flag)
@@ -4735,6 +4768,23 @@ void Game::showOverlayMessage(const std::string &msg, float dtime,
 	draw_load_screen(narrow_to_wide(msg), device, guienv, dtime, percent, draw_clouds);
 }
 
+void Game::settingChangedCallback(const std::string &setting_name, void *data)
+{
+	((Game *)data)->readSettings();
+}
+
+void Game::readSettings()
+{
+	m_cache_doubletap_jump            = g_settings->getBool("doubletap_jump");
+	m_cache_enable_node_highlighting  = g_settings->getBool("enable_node_highlighting");
+	m_cache_enable_clouds             = g_settings->getBool("enable_clouds");
+	m_cache_enable_particles          = g_settings->getBool("enable_particles");
+	m_cache_enable_fog                = g_settings->getBool("enable_fog");
+	m_cache_mouse_sensitivity         = g_settings->getFloat("mouse_sensitivity");
+	m_repeat_right_click_time         = g_settings->getFloat("repeat_rightclick_time");
+
+	m_cache_mouse_sensitivity = rangelim(m_cache_mouse_sensitivity, 0.001, 100.0);
+}
 
 
 

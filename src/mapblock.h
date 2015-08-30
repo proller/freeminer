@@ -391,8 +391,8 @@ public:
 
 	inline void setNodeNoCheck(v3s16 p, MapNode & n)
 	{
-		if (data == NULL)
-			throw InvalidPositionException("setNodeNoCheck data=NULL");
+		//if (data == NULL)
+		//	throw InvalidPositionException("setNodeNoCheck data=NULL");
 
 		auto lock = lock_unique_rec();
 
@@ -413,9 +413,11 @@ public:
 			setNode(v3s16(x0+x, y0+y, z0+z), node);
 	}
 
+/*
 	// See comments in mapblock.cpp
 	bool propagateSunlight(std::set<v3s16> &light_sources,
 		bool remove_light=false, bool *black_air_left=NULL);
+*/
 
 	// Copies data to VoxelManipulator to getPosRelative()
 	void copyTo(VoxelManipulator &dst);
@@ -631,17 +633,21 @@ public:
 
 	// Set to content type of a node if the block consists solely of nodes of one type, otherwise set to CONTENT_IGNORE
 	content_t content_only;
+	u8 content_only_param1, content_only_param2;
 	content_t analyzeContent() {
 		auto lock = lock_shared_rec();
 		content_only = data[0].param0;
+		content_only_param1 = data[0].param1;
+		content_only_param2 = data[0].param2;
 		for (int i = 1; i<MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; ++i) {
-			if (data[i].param0 != content_only) {
+			if (data[i].param0 != content_only || data[i].param1 != content_only_param1 || data[i].param2 != content_only_param2) {
 				content_only = CONTENT_IGNORE;
 				break;
 			}
 		}
 		return content_only;
 	}
+	std::atomic_bool lighting_broken;
 
 	static const u32 ystride = MAP_BLOCKSIZE;
 	static const u32 zstride = MAP_BLOCKSIZE * MAP_BLOCKSIZE;

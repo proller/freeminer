@@ -68,13 +68,13 @@ void set_default_settings(Settings *settings) {
 
 	// Screen
 #if __arm__
- #if defined(_IRR_COMPILE_WITH_OGLES1_)
+#if defined(_IRR_COMPILE_WITH_OGLES1_)
 	settings->setDefault("video_driver", "ogles1");
- #elif defined(_IRR_COMPILE_WITH_OGLES2_)
+#elif defined(_IRR_COMPILE_WITH_OGLES2_)
 	settings->setDefault("video_driver", "ogles2");
- #else
+#else
 	settings->setDefault("video_driver", "opengl");
- #endif
+#endif
 	settings->setDefault("enable_shaders", "0");
 #else
 	settings->setDefault("video_driver", "opengl");
@@ -188,7 +188,7 @@ void set_default_settings(Settings *settings) {
 	// Connecting to server
 	settings->setDefault("address", "");
 	settings->setDefault("remote_port", "30000");
-	settings->setDefault("reconnects", win32 ? "1" : "5"); // TODO: wix windows
+	settings->setDefault("reconnects", win32 ? "1" : "10"); // TODO: wix windows
 
 	// Connecting to curl
 	settings->setDefault("curl_timeout", "5000");
@@ -273,7 +273,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("enable_clouds", "true");
 	settings->setDefault("enable_3d_clouds", "true");
 	settings->setDefault("cloud_height", "300");
-	settings->setDefault("cloud_radius", "36");
+	settings->setDefault("cloud_radius", "12");
 	settings->setDefault("new_style_water", "false");
 	settings->setDefault("opaque_water", "false");
 	settings->setDefault("connected_glass", "false");
@@ -346,6 +346,7 @@ void set_default_settings(Settings *settings) {
 	// Client Backend
 	settings->setDefault("desynchronize_mapblock_texture_animation", "true");
 	settings->setDefault("client_unload_unused_data_timeout", "200");
+	settings->setDefault("client_mapblock_limit", "5000");
 	//settings->setDefault("unload_unused_meshes_timeout", "120");
 	settings->setDefault("enable_mesh_cache", "false");
 	settings->setDefault("repeat_rightclick_time", "0.25");
@@ -371,8 +372,10 @@ void set_default_settings(Settings *settings) {
 
 #if !MINETEST_PROTO
 	settings->setDefault("serverlist_url", "servers.freeminer.org");
+	settings->setDefault("server_proto", "fm_enet");
 #else
-	settings->setDefault("serverlist_url", "servers.minetest.net"); 
+	settings->setDefault("serverlist_url", "servers.minetest.net");
+	settings->setDefault("server_proto", "mt");
 #endif
 
 	settings->setDefault("server_address", "");
@@ -576,6 +579,8 @@ void set_default_settings(Settings *settings) {
 	AConfiguration_getLanguage(porting::app_global->config, lang);
 	settings->setDefault("language", lang);
 	settings->setDefault("android_keyboard", "0");
+	settings->setDefault("texture_min_size", "16");
+	settings->setDefault("cloud_radius", "6");
 
 #else
 	settings->setDefault("screen_dpi", "72");
