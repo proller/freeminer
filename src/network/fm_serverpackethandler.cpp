@@ -51,7 +51,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 {
 	DSTACK(__FUNCTION_NAME);
 	// Environment is locked first.
-	//JMutexAutoLock envlock(m_env_mutex);
+	//MutexAutoLock envlock(m_env_mutex);
 
 	ScopeProfiler sp(g_profiler, "Server::ProcessData");
 
@@ -136,10 +136,10 @@ void Server::ProcessData(NetworkPacket *pkt)
 		// Use the highest version supported by both
 		int deployed = std::min(client_max, our_max);
 		// If it's lower than the lowest supported, give up.
-		if(deployed < SER_FMT_CLIENT_VER_LOWEST)
+		if (deployed < SER_FMT_VER_LOWEST_READ)
 			deployed = SER_FMT_VER_INVALID;
 
-		if(deployed == SER_FMT_VER_INVALID)
+		if (deployed == SER_FMT_VER_INVALID)
 		{
 			actionstream<<"Server: A mismatched client tried to connect from "
 					<<addr_s<<std::endl;
@@ -762,7 +762,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 		std::string name = player->getName();
 
 		// Run script hook
-		bool ate = m_script->on_chat_message(player->getName(), message);
+		bool ate = m_script->on_chat_message(name, message);
 		// If script ate the message, don't proceed
 		if(ate)
 			return;
@@ -787,7 +787,13 @@ void Server::ProcessData(NetworkPacket *pkt)
 		{
 			if(checkPriv(player->getName(), "shout")){
 				line += "<";
-				line += name;
+				if (name.size() > 15) {
+					auto cutted = name;
+					cutted.resize(15);
+					line += cutted + ".";
+				} else {
+					line += name;
+				}
 				line += "> ";
 				line += message;
 				send_to_others = true;
@@ -798,7 +804,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 		if(!line.empty())
 		{
 			if(send_to_others) {
-				stat.add("chat", player->getName());
+				stat.add("chat", name);
 				actionstream<<"CHAT: "<<line<<std::endl;
 				SendChatMessage(PEER_ID_INEXISTENT, line);
 			} else

@@ -170,7 +170,7 @@ int main(int argc, char *argv[])
 	log_add_output_maxlev(&main_stderr_log_out, LMT_ACTION);
 	log_add_output_all_levs(&main_dstream_no_stderr_log_out);
 
-	log_register_thread("main");
+	log_register_thread("Main");
 
 	Settings cmd_args;
 	bool cmd_args_ok = get_cmdline_opts(argc, argv, &cmd_args);
@@ -394,7 +394,7 @@ static void list_game_ids()
 {
 	std::set<std::string> gameids = getAvailableGameIds();
 	for (std::set<std::string>::const_iterator i = gameids.begin();
-			i != gameids.end(); i++)
+			i != gameids.end(); ++i)
 		dstream << (*i) <<std::endl;
 }
 
@@ -515,10 +515,10 @@ static bool init_common(int *log_level, const Settings &cmd_args, int argc, char
 	httpfetch_init(g_settings->getS32("curl_parallel_limit"));
 
 #ifdef _MSC_VER
-	init_gettext((porting::path_share + DIR_DELIM + "locale").c_str(),
+	init_gettext(porting::path_locale.c_str(),
 		g_settings->get("language"), argc, argv);
 #else
-	init_gettext((porting::path_share + DIR_DELIM + "locale").c_str(),
+	init_gettext(porting::path_locale.c_str(),
 		g_settings->get("language"));
 #endif
 

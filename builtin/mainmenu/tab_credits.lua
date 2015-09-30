@@ -48,9 +48,10 @@ tab_credits = {
 				",Andrew Ward (rubenwardy) <rubenwardy@gmail.com>," ..
 				",Aaron Suen <warr1024@gmail.com>," ..
 				",Sokomine <wegwerf@anarres.dyndns.org>," ..
-				",Břetislav Štec (TeTpaAka)," ..
+				",Břetislav Štec (t0suj4/TBC_x)," ..
+				",TeTpaAka," ..
 				",Jean-Patrick G (kilbith) <jeanpatrick.guerrero@gmail.com>," ..
-				",Rui <mrrst0914@gmail.com>," ..
+				",Rui <rui914t@gmail.com>," ..
 				",Diego Martinez (kaeza) <kaeza@users.sf.net>," ..
 				",," ..
 				"#FFFF00," .. fgettext("Previous Core Developers") .."," ..

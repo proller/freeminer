@@ -36,6 +36,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/pointedthing.h"
 #include "content_sao.h"
 #include "treegen.h"
+#include "emerge.h"
 #include "pathfinder.h"
 #include <unordered_set>
 
@@ -58,8 +59,7 @@ void LuaABM::trigger(ServerEnvironment *env, v3s16 p, MapNode n,
 	sanity_check(lua_checkstack(L, 20));
 	StackUnroller stack_unroller(L);
 
-	lua_pushcfunction(L, script_error_handler);
-	int errorhandler = lua_gettop(L);
+	int error_handler = PUSH_ERROR_HANDLER(L);
 
 	// Get registered_abms
 	lua_getglobal(L, "core");
@@ -88,7 +88,9 @@ void LuaABM::trigger(ServerEnvironment *env, v3s16 p, MapNode n,
 	pushnode(L, neighbor, env->getGameDef()->ndef());
 	lua_pushboolean(L, activate);
 
-	PCALL_RESL(L, lua_pcall(L, 6, 0, errorhandler));
+	int result = lua_pcall(L, 6, 0, error_handler);
+	if (result)
+		scriptIface->scriptError(result, "LuaABM::trigger");
 
 	lua_pop(L, 1); // Pop error handler
 }
@@ -450,8 +452,7 @@ int ModApiEnvMod::l_add_item(lua_State *L)
 	if(item.empty() || !item.isKnown(getServer(L)->idef()))
 		return 0;
 
-	lua_pushcfunction(L, script_error_handler);
-	int errorhandler = lua_gettop(L);
+	int error_handler = PUSH_ERROR_HANDLER(L);
 
 	// Use spawn_item to spawn a __builtin:item
 	lua_getglobal(L, "core");
@@ -462,9 +463,9 @@ int ModApiEnvMod::l_add_item(lua_State *L)
 	lua_pushvalue(L, 1);
 	lua_pushstring(L, item.getItemString().c_str());
 
-	PCALL_RESL(L, lua_pcall(L, 2, 1, errorhandler));
+	PCALL_RESL(L, lua_pcall(L, 2, 1, error_handler));
 
-	lua_remove(L, errorhandler); // Remove error handler
+	lua_remove(L, error_handler);
 	return 1;
 }
 
@@ -791,6 +792,29 @@ int ModApiEnvMod::l_line_of_sight(lua_State *L)
 	return 1;
 }
 
+
+// emerge_area(p1, p2)
+// emerge mapblocks in area p1..p2
+int ModApiEnvMod::l_emerge_area(lua_State *L)
+{
+	GET_ENV_PTR;
+
+	EmergeManager *emerge = getServer(L)->getEmergeManager();
+
+	v3s16 bpmin = getNodeBlockPos(read_v3s16(L, 1));
+	v3s16 bpmax = getNodeBlockPos(read_v3s16(L, 2));
+	sortBoxVerticies(bpmin, bpmax);
+
+	for (s16 z = bpmin.Z; z <= bpmax.Z; z++)
+	for (s16 y = bpmin.Y; y <= bpmax.Y; y++)
+	for (s16 x = bpmin.X; x <= bpmax.X; x++) {
+		v3s16 chunkpos(x, y, z);
+		emerge->enqueueBlockEmerge(PEER_ID_INEXISTENT, chunkpos, false, true);
+	}
+
+	return 0;
+}
+
 // delete_area(p1, p2)
 // delete mapblocks in area p1..p2
 int ModApiEnvMod::l_delete_area(lua_State *L)
@@ -1036,6 +1060,7 @@ void ModApiEnvMod::Initialize(lua_State *L, int top)
 	API_FCT(find_node_near);
 	API_FCT(find_nodes_in_area);
 	API_FCT(find_nodes_in_area_under_air);
+	API_FCT(emerge_area);
 	API_FCT(delete_area);
 	API_FCT(get_perlin);
 	API_FCT(get_perlin_map);
