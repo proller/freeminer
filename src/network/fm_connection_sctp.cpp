@@ -159,14 +159,14 @@ Connection::~Connection() {
 
 /* Internal stuff */
 
-void * Connection::Thread() {
-	ThreadStarted();
-	log_register_thread("Connection");
+void * Connection::run() {
+	//ThreadStarted();
+	reg("Connection");
 
 	errorstream << "threadstart" << std::endl;
 
 
-	while(!StopRequested()) {
+	while(!stopRequested()) {
 		while(!m_command_queue.empty()) {
 			ConnectionCommand c = m_command_queue.pop_frontNoEx();
 			processCommand(c);
@@ -269,6 +269,8 @@ void Connection::sctp_setup(u16 port) {
 	if (sctp_inited)
 		return;
 	sctp_inited = true;
+
+errorstream<<"sctp_setup "<<port<<std::endl;
 
 	//usrsctp_init(9899, nullptr, nullptr);
 	//usrsctp_init(9899, nullptr, debug_printf);
@@ -611,6 +613,13 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 				errorstream << "SCTP_ASSOC_CHANGE" << std::endl;
 				//OnNotificationAssocChange(notification.sn_assoc_change);
 				{
+switch (notification.sn_assoc_change.sac_state) {
+	case SCTP_CANT_STR_ASSOC:
+		printf("SCTP_CANT_STR_ASSOC");
+		deletePeer(peer_id,  false);
+		break;
+
+}
 					handle_association_change_event(&(notification.sn_assoc_change));
 #if 0
 					const sctp_assoc_change& change = notification.sn_assoc_change;
@@ -796,12 +805,12 @@ void Connection::sock_setup(u16 peer_id, struct socket *sock) {
 	}
 // */
 
-// /*
+ /*
 	const int on = 1;
 	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_I_WANT_MAPPED_V4_ADDR, (const void*)&on, (socklen_t)sizeof(int)) < 0) {
 		perror("usrsctp_setsockopt SCTP_I_WANT_MAPPED_V4_ADDR");
 	}
-//  */
+  */
 
 	const int one = 1;
 	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_EXPLICIT_EOR, &one, sizeof(int)) < 0) {
@@ -897,7 +906,7 @@ void Connection::serve(Address bind_addr) {
 	//addr.sin_family = AF_INET;
 	//addr.sin_port = htons(bind_addr.getPort()); //htons(13);
 	//printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
-	printf("Waiting for connections on port %d\n", ntohs(addr.sin6_port));
+	printf("Waiting for connections on sctp port %d\n", ntohs(addr.sin6_port));
 	if (usrsctp_bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		perror("usrsctp_bind");
 	}
@@ -905,7 +914,7 @@ void Connection::serve(Address bind_addr) {
 		perror("usrsctp_listen");
 	}
 
-	errorstream << "serve() ok" << std::endl;
+	errorstream << "serve() ok " << sock<< std::endl;
 
 	sock_listen = true;
 
@@ -931,7 +940,7 @@ void Connection::connect(Address addr) {
 	struct socket *sock;
 
 	if ((sock = usrsctp_socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
-		errorstream << ("usrsctp_socket") << std::endl;
+		errorstream << ("usrsctp_socket") << sock<< std::endl;
 		ConnectionEvent ev(CONNEVENT_BIND_FAILED);
 		putEvent(ev);
 		return;
@@ -1000,7 +1009,7 @@ void Connection::connect(Address addr) {
 	*/
 
 	//memset(&encaps, 0, sizeof(encaps));
-// /*
+ /*
 	sctp_udpencaps encaps = {};
 	encaps.sue_address.ss_family = AF_INET6;
 	encaps.sue_port = htons(addr.getPort());
@@ -1011,10 +1020,22 @@ void Connection::connect(Address addr) {
 		ConnectionEvent ev(CONNEVENT_CONNECT_FAILED);
 		putEvent(ev);
 	}
-// */
+ */
 	struct sockaddr_in6 addr6 = {};
 
 	//memset((void *)&addr6, 0, sizeof(addr6));
+#ifdef HAVE_SIN6_LEN
+	addr6.sin6_len = sizeof(struct sockaddr_in6);
+#endif
+	addr6.sin6_family = AF_INET6;
+	addr6.sin6_addr = in6addr_any;
+
+	if (usrsctp_bind(sock, (struct sockaddr *)&addr6, sizeof(addr)) < 0) {
+		perror("usrsctp_bind");
+	}
+
+
+	addr6 = {};
 
 	if (!addr.isIPv6()) {
 		errorstream << "connect() transform to v6 " << addr.serializeString() << std::endl;
@@ -1041,7 +1062,7 @@ void Connection::connect(Address addr) {
 	//addr6.sin6_port = addr.getPort(); //atoi(argv[4]));
 	//if (inet_pton(AF_INET6, argv[3], &addr6.sin6_addr) == 1) {
 
-	errorstream << "connect() ... " << __LINE__ << std::endl;
+	//errorstream << "connect() ... " << __LINE__ << std::endl;
 	if (auto connect_result = usrsctp_connect(sock, (struct sockaddr *)&addr6, sizeof(addr6)) < 0) {
 		if (connect_result < 0 && errno != EINPROGRESS) {
 			perror("usrsctp_connect fail");
