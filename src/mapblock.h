@@ -74,6 +74,7 @@ enum{
 	// The block and all its neighbors have been generated
 	BLOCKGEN_FULLY_GENERATED=6
 };*/
+static MapNode ignoreNode(CONTENT_IGNORE);
 
 #if 0
 enum
@@ -99,7 +100,7 @@ public:
 			return getNode(p);
 		}
 		catch(InvalidPositionException &e){
-			return MapNode(CONTENT_IGNORE);
+			return ignoreNode;
 		}
 	}
 };
@@ -171,7 +172,7 @@ public:
 			memset(data, 0, nodecount * sizeof(MapNode));
 		else
 		for (u32 i = 0; i < nodecount; i++)
-			data[i] = MapNode(CONTENT_IGNORE);
+			data[i] = ignoreNode;
 	}
 
 	/*
@@ -329,7 +330,7 @@ public:
 		*valid_position = isValidPosition(p.X, p.Y, p.Z);
 
 		if (!*valid_position)
-			return MapNode(CONTENT_IGNORE);
+			return ignoreNode;
 
 		auto lock = lock_shared_rec();
 		return data[p.Z * zstride + p.Y * ystride + p.X];
@@ -346,7 +347,7 @@ public:
 	{
 		auto lock = try_lock_shared_rec();
 		if (!lock->owns_lock())
-			return MapNode(CONTENT_IGNORE);
+			return ignoreNode;
 		return getNodeNoLock(p);
 	}
 
@@ -366,7 +367,7 @@ public:
 	MapNode getNodeNoLock(v3POS p)
 	{
 		if (!data)
-			return MapNode(CONTENT_IGNORE);
+			return ignoreNode;
 		return data[p.Z*zstride + p.Y*ystride + p.X];
 	}
 
@@ -378,7 +379,7 @@ public:
 	{
 		*valid_position = data != NULL;
 		if (!valid_position)
-			return MapNode(CONTENT_IGNORE);
+			return ignoreNode;
 
 		auto lock = lock_shared_rec();
 		return data[z * zstride + y * ystride + x];
@@ -549,7 +550,7 @@ public:
 
 	// These don't write or read version by itself
 	// Set disk to true for on-disk format, false for over-the-network format
-	// Precondition: version >= SER_FMT_CLIENT_VER_LOWEST
+	// Precondition: version >= SER_FMT_VER_LOWEST_WRITE
 	void serialize(std::ostream &os, u8 version, bool disk, bool use_content_only = false);
 	// If disk == true: In addition to doing other things, will add
 	// unknown blocks from id-name mapping to wndef
@@ -736,6 +737,18 @@ private:
 };
 
 typedef std::vector<MapBlock*> MapBlockVect;
+
+inline bool objectpos_over_limit(v3f p)
+{
+	const static float map_gen_limit_bs = MYMIN(MAX_MAP_GENERATION_LIMIT,
+		g_settings->getU16("map_generation_limit")) * BS;
+	return (p.X < -map_gen_limit_bs
+		|| p.X >  map_gen_limit_bs
+		|| p.Y < -map_gen_limit_bs
+		|| p.Y >  map_gen_limit_bs
+		|| p.Z < -map_gen_limit_bs
+		|| p.Z >  map_gen_limit_bs);
+}
 
 inline bool blockpos_over_limit(v3s16 p)
 {

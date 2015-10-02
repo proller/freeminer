@@ -251,7 +251,7 @@ void Map::unspreadLight(enum LightBank bank,
 	v3s16 blockpos_last;
 	MapBlock *block = NULL;
 	// Cache this a bit, too
-	bool block_checked_in_modified = false;
+	//bool block_checked_in_modified = false;
 
 	for(std::map<v3s16, u8>::iterator j = from_nodes.begin();
 		j != from_nodes.end(); ++j)
@@ -265,7 +265,7 @@ void Map::unspreadLight(enum LightBank bank,
 				block = getBlockNoCreate(blockpos);
 				blockpos_last = blockpos;
 
-				block_checked_in_modified = false;
+				//block_checked_in_modified = false;
 				blockchangecount++;
 			}
 		}
@@ -305,7 +305,7 @@ void Map::unspreadLight(enum LightBank bank,
 
 					blockpos_last = blockpos;
 
-					block_checked_in_modified = false;
+					//block_checked_in_modified = false;
 					blockchangecount++;
 				}
 			}
@@ -319,7 +319,7 @@ void Map::unspreadLight(enum LightBank bank,
 			if (!is_valid_position)
 				continue;
 
-			bool changed = false;
+			//bool changed = false;
 
 			//TODO: Optimize output by optimizing light_sources?
 
@@ -344,7 +344,7 @@ void Map::unspreadLight(enum LightBank bank,
 					block->setNode(relpos, n2);
 
 					unlighted_nodes[n2pos] = current_light;
-					changed = true;
+					//changed = true;
 
 					/*
 						Remove from light_sources if it is there
@@ -435,7 +435,7 @@ void Map::spreadLight(enum LightBank bank,
 	v3s16 blockpos_last;
 	MapBlock *block = NULL;
 		// Cache this a bit, too
-	bool block_checked_in_modified = false;
+	//bool block_checked_in_modified = false;
 
 	for(std::set<v3s16>::iterator j = from_nodes.begin();
 		j != from_nodes.end(); ++j)
@@ -457,7 +457,7 @@ void Map::spreadLight(enum LightBank bank,
 					continue;
 				blockpos_last = blockpos;
 
-				block_checked_in_modified = false;
+				//block_checked_in_modified = false;
 				blockchangecount++;
 			}
 
@@ -492,7 +492,7 @@ void Map::spreadLight(enum LightBank bank,
 					block = getBlockNoCreate(blockpos);
 					blockpos_last = blockpos;
 
-					block_checked_in_modified = false;
+					//block_checked_in_modified = false;
 					blockchangecount++;
 				}
 			}
@@ -505,7 +505,7 @@ void Map::spreadLight(enum LightBank bank,
 			if (!is_valid_position)
 				continue;
 
-			bool changed = false;
+			//bool changed = false;
 			/*
 				If the neighbor is brighter than the current node,
 				add to list (it will light up this node on its turn)
@@ -513,7 +513,7 @@ void Map::spreadLight(enum LightBank bank,
 			if(n2.getLight(bank, nodemgr) > undiminish_light(oldlight))
 			{
 				lighted_nodes.insert(n2pos);
-				changed = true;
+				//changed = true;
 			}
 			/*
 				If the neighbor is dimmer than how much light this node
@@ -526,7 +526,7 @@ void Map::spreadLight(enum LightBank bank,
 					n2.setLight(bank, newlight, nodemgr);
 					block->setNode(relpos, n2);
 					lighted_nodes.insert(n2pos);
-					changed = true;
+					//changed = true;
 				}
 			}
 
@@ -690,7 +690,7 @@ u32 Map::updateLighting(enum LightBank bank,
 
 	int num_bottom_invalid = 0;
 
-	//JMutexAutoLock lock2(m_update_lighting_mutex);
+	//MutexAutoLock lock2(m_update_lighting_mutex);
 
 #if !ENABLE_THREADS
 	auto lock = m_nothread_locker.lock_unique_rec();
@@ -942,7 +942,7 @@ TimeTaker timer("updateLighting(LIGHTBANK_NIGHT)");
 
 	a_blocks.clear();
 TimeTaker timer("updateLighting expireDayNightDiff");
-	//JMutexAutoLock lock2(m_update_lighting_mutex);
+	//MutexAutoLock lock2(m_update_lighting_mutex);
 
 	/*
 		Update information about whether day and night light differ
@@ -2301,10 +2301,10 @@ ServerMap::ServerMap(std::string savedir, IGameDef *gamedef, EmergeManager *emer
 	}
 	catch(std::exception &e)
 	{
-		infostream<<"WARNING: ServerMap: Failed to load map from "<<savedir
+		actionstream<<"WARNING: ServerMap: Failed to load map from "<<savedir
 				<<", exception: "<<e.what()<<std::endl;
-		infostream<<"Please remove the map or fix it."<<std::endl;
-		infostream<<"WARNING: Map saving will be disabled."<<std::endl;
+		actionstream<<"Please remove the map or fix it."<<std::endl;
+		actionstream<<"WARNING: Map saving will be disabled."<<std::endl;
 	}
 
 	infostream<<"Initializing new map."<<std::endl;
@@ -2350,14 +2350,9 @@ bool ServerMap::initBlockMake(BlockMakeData *data, v3s16 blockpos)
 	bool enable_mapgen_debug_info = m_emerge->mapgen_debug_info;
 	EMERGE_DBG_OUT("initBlockMake(): " PP(blockpos) " - " PP(blockpos));
 
-	s16 chunksize = m_emerge->params.chunksize;
-	s16 coffset = -chunksize / 2;
-	v3s16 chunk_offset(coffset, coffset, coffset);
-	v3s16 blockpos_div = getContainerPos(blockpos - chunk_offset, chunksize);
-	v3s16 blockpos_min = blockpos_div * chunksize;
-	v3s16 blockpos_max = blockpos_div * chunksize + v3s16(1,1,1)*(chunksize-1);
-	blockpos_min += chunk_offset;
-	blockpos_max += chunk_offset;
+	s16 csize = m_emerge->params.chunksize;
+	v3s16 blockpos_min = EmergeManager::getContainingChunk(blockpos, csize);
+	v3s16 blockpos_max = blockpos_min + v3s16(1, 1, 1) * (csize - 1);
 
 	{
 		auto lock = m_mapgen_process.lock_unique_rec();

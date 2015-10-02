@@ -71,7 +71,7 @@ void NodeBox::serialize(std::ostream &os, u16 protocol_version) const
 		writeU16(os, fixed.size());
 		for(std::vector<aabb3f>::const_iterator
 				i = fixed.begin();
-				i != fixed.end(); i++)
+				i != fixed.end(); ++i)
 		{
 			writeV3F1000(os, i->MinEdge);
 			writeV3F1000(os, i->MaxEdge);
@@ -356,7 +356,7 @@ void ContentFeatures::serialize(std::ostream &os, u16 protocol_version) const
 	os<<serializeString(name);
 	writeU16(os, groups.size());
 	for(ItemGroupList::const_iterator
-			i = groups.begin(); i != groups.end(); i++){
+			i = groups.begin(); i != groups.end(); ++i){
 		os<<serializeString(i->first);
 		writeS16(os, i->second);
 	}
@@ -735,7 +735,7 @@ void CNodeDefManager::clear()
 		f.buildable_to        = true;
 		f.is_ground_content   = true;
 #ifndef SERVER
-		f.minimap_color = video::SColor(0,255,255,255);
+		f.minimap_color = video::SColor(0,0,0,0);
 #endif
 		// Insert directly into containers
 		content_t c = CONTENT_AIR;
@@ -757,7 +757,7 @@ void CNodeDefManager::clear()
 		f.buildable_to        = true; // A way to remove accidental CONTENT_IGNOREs
 		f.is_ground_content   = true;
 #ifndef SERVER
-		f.minimap_color = video::SColor(0,255,255,255);
+		f.minimap_color = video::SColor(0,0,0,0);
 #endif
 		// Insert directly into containers
 		content_t c = CONTENT_IGNORE;
@@ -957,7 +957,7 @@ void CNodeDefManager::updateAliases(IItemDefManager *idef)
 	std::set<std::string> all = idef->getAll();
 	m_name_id_mapping_with_aliases.clear();
 	for (std::set<std::string>::iterator
-			i = all.begin(); i != all.end(); i++) {
+			i = all.begin(); i != all.end(); ++i) {
 		std::string name = *i;
 		std::string convert_to = idef->getAlias(name);
 		content_t id;

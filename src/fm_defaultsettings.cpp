@@ -28,6 +28,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "constants.h"
 #include "porting.h"
 
+#ifndef SERVER // Only on client
+#include "minimap.h"
+#endif
+
 const bool debug =
 #ifdef NDEBUG
     false
@@ -98,7 +102,7 @@ void set_default_settings(Settings *settings) {
 	// Paths
 	settings->setDefault("texture_path", "");
 	settings->setDefault("shader_path", "");
-	settings->setDefault("screenshot_path", ".");
+	settings->setDefault("screenshot_path", "screenshots");
 	settings->setDefault("timelapse", "0");
 	settings->setDefault("serverlist_file", "favoriteservers.json");
 
@@ -279,6 +283,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("connected_glass", "false");
 	settings->setDefault("leaves_style", "fancy");
 	settings->setDefault("enable_fog", "true");
+	settings->setDefault("enable_zoom_cinematic", "true");
 	settings->setDefault("directional_colored_fog", "true");
 
 	// Visual Features
@@ -360,6 +365,10 @@ void set_default_settings(Settings *settings) {
 
 	// Mini Map
 	settings->setDefault("enable_minimap", "true");
+// TODO: refactor and resolve client/server dependencies
+#ifndef SERVER // Only on client
+	settings->setDefault("minimap_default_mode", itos(MINIMAP_MODE_SURFACEx1));
+#endif
 	settings->setDefault("minimap_shape_round", "true");
 	settings->setDefault("minimap_double_scan_height", "true");
 
@@ -437,6 +446,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("server_unload_unused_data_timeout", "310");
 	settings->setDefault("max_objects_per_block", "100");
 	settings->setDefault("full_block_send_enable_min_time_from_building", "2.0");
+	settings->setDefault("server_occlusion", "true");
 	settings->setDefault("dedicated_server_step", "0.1");
 	settings->setDefault("ignore_world_load_errors", "true");
 	settings->setDefault("emergequeue_limit_diskonly", ""); // autodetect from number of cpus

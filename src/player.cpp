@@ -23,7 +23,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "player.h"
 
 #include <fstream>
-#include "jthread/jmutexautolock.h"
+#include "threading/mutex_auto_lock.h"
 #include "util/numeric.h"
 #include "hud.h"
 #include "constants.h"
@@ -230,7 +230,7 @@ void Player::deSerialize(std::istream &is, std::string playername)
 
 u32 Player::addHud(HudElement *toadd)
 {
-	JMutexAutoLock lock(m_mutex);
+	MutexAutoLock lock(m_mutex);
 
 	u32 id = getFreeHudID();
 
@@ -244,7 +244,7 @@ u32 Player::addHud(HudElement *toadd)
 
 HudElement* Player::getHud(u32 id)
 {
-	JMutexAutoLock lock(m_mutex);
+	MutexAutoLock lock(m_mutex);
 
 	if (id < hud.size())
 		return hud[id];
@@ -254,7 +254,7 @@ HudElement* Player::getHud(u32 id)
 
 HudElement* Player::removeHud(u32 id)
 {
-	JMutexAutoLock lock(m_mutex);
+	MutexAutoLock lock(m_mutex);
 
 	HudElement* retval = NULL;
 	if (id < hud.size()) {
@@ -266,7 +266,7 @@ HudElement* Player::removeHud(u32 id)
 
 void Player::clearHud()
 {
-	JMutexAutoLock lock(m_mutex);
+	MutexAutoLock lock(m_mutex);
 
 	while(!hud.empty()) {
 		delete hud.back();
@@ -305,11 +305,12 @@ Json::Value operator<<(Json::Value &json, Player &player) {
 	json["inventory_old"] = ss.str();
 
 	json["name"] = player.m_name;
-	json["pitch"] = player.m_pitch;
-	json["yaw"] = player.m_yaw;
-	json["position"] << player.m_position;
+	json["pitch"] = player.getPitch();
+	json["yaw"] = player.getYaw();
+	auto pos = player.getPosition();
+	json["position"] << pos;
 	json["hp"] = player.hp.load();
-	json["breath"] = player.m_breath;
+	json["breath"] = player.getBreath();
 	return json;
 }
 

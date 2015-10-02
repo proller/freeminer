@@ -13,8 +13,8 @@ PATHCFGFILE = path.cfg
 
 ROOT = $(shell pwd)
 
-GAMES_TO_COPY = MultiCraft_game
-
+GAMES_TO_COPY = default
+MODS_TO_COPY =
 
 VERSION_MAJOR := $(shell cat $(ROOT)/../../CMakeLists.txt | \
 	grep ^set\(VERSION_MAJOR\ | sed 's/)/ /' | cut -f2 -d' ')
@@ -33,9 +33,10 @@ VERSION_TWEAK := $(shell cat $(ROOT)/../../CMakeLists.txt | \
 ANDROID_VERSION_CODE = 13
 
 #and for freeminer for skip conflict:
-ANDROID_VERSION_CODE = 33
+ANDROID_VERSION_CODE = 34
 
 PROJECT_NAME_C = multicraft
+GAMES_TO_COPY = MultiCraft_game
 
 ################################################################################
 # toolchain config for arm old processors
@@ -101,7 +102,7 @@ LEVELDB_DIR = $(ROOT)/deps/leveldb/
 LEVELDB_LIB = $(LEVELDB_DIR)libleveldb.a
 LEVELDB_TIMESTAMP = $(LEVELDB_DIR)/timestamp
 LEVELDB_TIMESTAMP_INT = $(ROOT)/deps/leveldb_timestamp
-LEVELDB_URL_GIT = https://code.google.com/p/leveldb/
+LEVELDB_URL_GIT = https://github.com/google/leveldb
 
 OPENAL_DIR = $(ROOT)/deps/openal-soft/
 OPENAL_LIB = $(OPENAL_DIR)libs/$(TARGET_ABI)/libopenal.so
@@ -773,10 +774,13 @@ assets : $(ASSETS_TIMESTAMP) locale
 	do                                                                         \
 	    cp -Lr ${ROOT}/../../games/$$game ${ROOT}/assets/freeminer/games/; \
 	done;                                                                      \
-	cp -r ${ROOT}/../../mods ${ROOT}/assets/freeminer; \
+	mkdir ${ROOT}/assets/freeminer/mods; \
+	for mod in ${MODS_TO_COPY}; do                                             \
+	    cp -r ${ROOT}/../../mods/$$mod ${ROOT}/assets/freeminer/mods/; \
+	done;                                                                      \
 	cp -r ${ROOT}/cmake/locale ${ROOT}/assets/freeminer; \
 	cp -r ${ROOT}/../../textures ${ROOT}/assets/freeminer; \
-	mkdir -p ${ROOT}/assets/freeminer/media;                                    \
+	mkdir -p ${ROOT}/assets/freeminer/media; \
 	cp -r ${IRRLICHT_DIR}/media/Shaders ${ROOT}/assets/freeminer/media; \
 	cd ${ROOT}/assets ||  exit 1;                                              \
 	find . -name "timestamp" -exec rm {} \; ;                                  \

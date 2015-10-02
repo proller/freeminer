@@ -165,7 +165,7 @@ bool wouldCollideWithCeiling(
 
 	for(std::vector<aabb3f>::const_iterator
 			i = staticboxes.begin();
-			i != staticboxes.end(); i++)
+			i != staticboxes.end(); ++i)
 	{
 		const aabb3f& staticbox = *i;
 		if((movingbox.MaxEdge.Y - d <= staticbox.MinEdge.Y) &&
@@ -236,6 +236,8 @@ collisionMoveResult collisionMoveSimple(Environment *env, IGameDef *gamedef,
 	s16 max_y = MYMAX(oldpos_i.Y, newpos_i.Y) + (box_0.MaxEdge.Y / BS) + 1;
 	s16 max_z = MYMAX(oldpos_i.Z, newpos_i.Z) + (box_0.MaxEdge.Z / BS) + 1;
 
+	bool any_position_valid = false;
+
 	for(s16 x = min_x; x <= max_x; x++)
 	for(s16 y = min_y; y <= max_y; y++)
 	for(s16 z = min_z; z <= max_z; z++)
@@ -248,6 +250,7 @@ collisionMoveResult collisionMoveSimple(Environment *env, IGameDef *gamedef,
 		if (is_position_valid) {
 			// Object collides into walkable nodes
 
+			any_position_valid = true;
 			const ContentFeatures &f = gamedef->getNodeDefManager()->get(n);
 			if(f.walkable == false)
 				continue;
@@ -256,7 +259,7 @@ collisionMoveResult collisionMoveSimple(Environment *env, IGameDef *gamedef,
 			std::vector<aabb3f> nodeboxes = n.getCollisionBoxes(gamedef->ndef());
 			for(std::vector<aabb3f>::iterator
 					i = nodeboxes.begin();
-					i != nodeboxes.end(); i++)
+					i != nodeboxes.end(); ++i)
 			{
 				aabb3f box = *i;
 				box.MinEdge += v3f(x, y, z)*BS;
@@ -280,6 +283,16 @@ collisionMoveResult collisionMoveSimple(Environment *env, IGameDef *gamedef,
 			is_object.push_back(false);
 		}
 	}
+
+	// Do not move if world has not loaded yet, since custom node boxes
+	// are not available for collision detection.
+	if (!any_position_valid)
+	{
+/* wtf?
+		return result;
+*/
+	}
+
 	} // tt2
 
 	if(collideWithObjects)
@@ -288,7 +301,6 @@ collisionMoveResult collisionMoveSimple(Environment *env, IGameDef *gamedef,
 		//TimeTaker tt3("collisionMoveSimple collect object boxes");
 
 		/* add object boxes to cboxes */
-
 
 		std::vector<ActiveObject*> objects;
 #ifndef SERVER
@@ -311,7 +323,7 @@ collisionMoveResult collisionMoveSimple(Environment *env, IGameDef *gamedef,
 				f32 distance = speed_f.getLength();
 				std::vector<u16> s_objects;
 				s_env->getObjectsInsideRadius(s_objects, pos_f, distance * 1.5);
-				for (std::vector<u16>::iterator iter = s_objects.begin(); iter != s_objects.end(); iter++) {
+				for (std::vector<u16>::iterator iter = s_objects.begin(); iter != s_objects.end(); ++iter) {
 					ServerActiveObject *current = s_env->getActiveObject(*iter);
 					if ((self == 0) || (self != current)) {
 						objects.push_back((ActiveObject*)current);

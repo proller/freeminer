@@ -29,8 +29,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 //#include "serverobject.h"
 #include "content_sao.h"
 #include "nodedef.h"
-#include "content_mapnode.h" // For content_mapnode_get_new_name
 #include "voxelalgorithms.h"
+//#include "profiler.h" // For TimeTaker
 #include "settings.h" // For g_settings
 #include "log_types.h"
 #include "emerge.h"
@@ -946,9 +946,11 @@ void MapgenV6::placeTreesAndJungleGrass()
 			for (u32 i = 0; i < grass_count; i++) {
 				s16 x = grassrandom.range(p2d_min.X, p2d_max.X);
 				s16 z = grassrandom.range(p2d_min.Y, p2d_max.Y);
+/* wtf
 				int mapindex = central_area_size.X * (z - node_min.Z)
 								+ (x - node_min.X);
-				//wtf s16 y = heightmap[mapindex];
+				s16 y = heightmap[mapindex];
+*/
 				s16 y = findGroundLevelFull(v2s16(x, z));
 				if (y < water_level)
 					continue;
@@ -966,9 +968,11 @@ void MapgenV6::placeTreesAndJungleGrass()
 		for (s32 i = 0; i < tree_count; i++) {
 			s16 x = myrand_range(p2d_min.X, p2d_max.X);
 			s16 z = myrand_range(p2d_min.Y, p2d_max.Y);
+/* wtf
 			int mapindex = central_area_size.X * (z - node_min.Z)
 							+ (x - node_min.X);
-			//wtf s16 y = heightmap[mapindex];
+			s16 y = heightmap[mapindex];
+*/
 			s16 y = findGroundLevelFull(v2s16(x, z));
 
 			// Don't make a tree under water level

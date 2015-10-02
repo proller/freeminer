@@ -33,7 +33,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "server.h"
 #include "scripting_game.h"
 #include "genericobject.h"
-#include "log.h"
+#include "log_types.h"
 
 std::map<u16, ServerActiveObject::Factory> ServerActiveObject::m_types;
 
@@ -364,6 +364,7 @@ std::string LuaEntitySAO::getClientInitializationData(u16 protocol_version)
 	std::ostringstream os(std::ios::binary);
 
 	auto lock = lock_shared_rec();
+	try {
 
 	if(protocol_version >= 14)
 	{
@@ -396,6 +397,11 @@ std::string LuaEntitySAO::getClientInitializationData(u16 protocol_version)
 		writeU8(os, 2); // number of messages stuffed in here
 		os<<serializeLongString(getPropertyPacket()); // message 1
 		os<<serializeLongString(gob_cmd_update_armor_groups(m_armor_groups)); // 2
+	}
+
+	} catch (std::exception &e){
+		errorstream << "Catn serialize object id="<<getId()<< " pos="<< getBasePosition() << std::endl;
+		return "";
 	}
 
 	// return result
@@ -810,6 +816,8 @@ PlayerSAO::PlayerSAO(ServerEnvironment *env_, Player *player_, u16 peer_id_,
 
 PlayerSAO::~PlayerSAO()
 {
+	if (!m_player)
+		return;
 	if(m_inventory != &m_player->inventory)
 		delete m_inventory;
 	--m_player->refs;
@@ -825,6 +833,10 @@ std::string PlayerSAO::getDescription()
 void PlayerSAO::addedToEnvironment(u32 dtime_s)
 {
 	ServerActiveObject::addedToEnvironment(dtime_s);
+	if (!m_player) {
+		errorstream << "PlayerSAO::addedToEnvironment(): Fail id=" << m_peer_id << std::endl;
+		return;
+	}
 	ServerActiveObject::setBasePosition(m_player->getPosition());
 	m_player->setPlayerSAO(this);
 	m_player->peer_id = m_peer_id;
@@ -839,7 +851,11 @@ void PlayerSAO::removingFromEnvironment()
 	{
 		m_player->setPlayerSAO(NULL);
 		m_player->peer_id = 0;
-		m_env->savePlayer(m_player->getName());
+		m_env->savePlayer((RemotePlayer*)m_player);
+		/*
+		m_env->removePlayer(m_player);
+		m_player = nullptr;
+		*/
 	}
 }
 
