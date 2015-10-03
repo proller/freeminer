@@ -826,6 +826,8 @@ PlayerSAO::~PlayerSAO()
 
 std::string PlayerSAO::getDescription()
 {
+	if (!m_player)
+		return "";
 	return std::string("player ") + m_player->getName();
 }
 
@@ -847,15 +849,15 @@ void PlayerSAO::addedToEnvironment(u32 dtime_s)
 void PlayerSAO::removingFromEnvironment()
 {
 	ServerActiveObject::removingFromEnvironment();
-	if(m_player->getPlayerSAO() == this)
+	if(m_player && m_player->getPlayerSAO() == this)
 	{
 		m_player->setPlayerSAO(NULL);
 		m_player->peer_id = 0;
 		m_env->savePlayer((RemotePlayer*)m_player);
 		/*
 		m_env->removePlayer(m_player);
-		m_player = nullptr;
 		*/
+		m_player = nullptr;
 	}
 }
 
@@ -868,6 +870,8 @@ std::string PlayerSAO::getClientInitializationData(u16 protocol_version)
 {
 	std::ostringstream os(std::ios::binary);
 
+	if (!m_player)
+		return "";
 	if(protocol_version >= 15)
 	{
 		writeU8(os, 1); // version
@@ -1074,6 +1078,9 @@ void PlayerSAO::setBasePosition(const v3f &position)
 
 void PlayerSAO::setPos(v3f pos)
 {
+	if (!m_player)
+		return;
+
 	if(isAttached())
 		return;
 	m_player->setPosition(pos);
@@ -1087,6 +1094,9 @@ void PlayerSAO::setPos(v3f pos)
 
 void PlayerSAO::moveTo(v3f pos, bool continuous)
 {
+	if (!m_player)
+		return;
+
 	if(isAttached())
 		return;
 	m_player->setPosition(pos);
@@ -1106,6 +1116,9 @@ void PlayerSAO::setYaw(float yaw)
 
 void PlayerSAO::setPitch(float pitch)
 {
+	if (!m_player)
+		return;
+
 	m_player->setPitch(pitch);
 	((Server*)m_env->getGameDef())->SendMovePlayer(m_peer_id);
 }
@@ -1115,6 +1128,9 @@ int PlayerSAO::punch(v3f dir,
 	ServerActiveObject *puncher,
 	float time_from_last_punch)
 {
+	if (!m_player)
+		return 0;
+
 	// It's best that attachments cannot be punched
 	if (isAttached())
 		return 0;
@@ -1177,6 +1193,8 @@ void PlayerSAO::rightClick(ServerActiveObject *clicker)
 
 s16 PlayerSAO::getHP() const
 {
+	if (!m_player)
+		return 0;
 	return m_player->hp;
 }
 
@@ -1189,6 +1207,9 @@ s16 PlayerSAO::readDamage()
 
 void PlayerSAO::setHP(s16 hp)
 {
+	if (!m_player)
+		return;
+
 	s16 oldhp = m_player->hp;
 
 	s16 hp_change = m_env->getScriptIface()->on_player_hpchange(this,
@@ -1218,11 +1239,15 @@ void PlayerSAO::setHP(s16 hp)
 
 u16 PlayerSAO::getBreath() const
 {
+	if (!m_player)
+		return 0;
 	return m_player->getBreath();
 }
 
 void PlayerSAO::setBreath(u16 breath)
 {
+	if (!m_player)
+		return;
 	m_player->setBreath(breath);
 }
 

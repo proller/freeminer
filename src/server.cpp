@@ -930,28 +930,28 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 			while (!added_objects.empty()) {
 				// Get object
 				u16 id = added_objects.front();
-				ServerActiveObject* obj = m_env->getActiveObject(id);
+				added_objects.pop();
 
-				// Get object type
-				u8 type = ACTIVEOBJECT_TYPE_INVALID;
-				if(obj == NULL)
+				ServerActiveObject* obj = m_env->getActiveObject(id);
+				if(!obj) {
 					infostream<<"WARNING: "<<__FUNCTION_NAME
 							<<": NULL object"<<std::endl;
-				else
-					type = obj->getSendType();
+					continue;
+				}
+				// Get object type
+				u8 type = obj->getSendType();
 
-				std::string data = "";
-				if(obj)
-					data = obj->getClientInitializationData(client->net_proto_version);
+				std::string data = obj->getClientInitializationData(client->net_proto_version);
+				if (!data.size())
+					continue;
+
 				added_objects_data.push_back(ActiveObjectAddData(id, type, data));
 
 				// Add to known objects
 				client->m_known_objects.set(id, true);
 
-				if(obj)
-					obj->m_known_by_count++;
+				obj->m_known_by_count++;
 
-				added_objects.pop();
 			}
 
 			MSGPACK_PACKET_INIT(TOCLIENT_ACTIVE_OBJECT_REMOVE_ADD, 2);
@@ -2814,8 +2814,12 @@ void Server::DiePlayer(u16 peer_id)
 
 	playersao->m_ms_from_last_respawn = 0;
 
+	auto player = playersao->getPlayer();
+	if (!player)
+		return;
+
 	infostream << "Server::DiePlayer(): Player "
-			<< playersao->getPlayer()->getName()
+			<< player->getName()
 			<< " dies" << std::endl;
 
 	playersao->setHP(0);
@@ -2826,7 +2830,7 @@ void Server::DiePlayer(u16 peer_id)
 	SendPlayerHP(peer_id);
 	SendDeathscreen(peer_id, false, v3f(0,0,0));
 
-	stat.add("die", playersao->getPlayer()->getName());
+	stat.add("die", player->getName());
 }
 
 void Server::RespawnPlayer(u16 peer_id)

@@ -1172,7 +1172,8 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	{
 		//TimeTaker timer_step_player("player step");
 		//ScopeProfiler sp(g_profiler, "SEnv: handle players avg", SPT_AVG);
-		for(std::vector<Player*>::iterator i = m_players.begin();
+		auto lock = m_players.lock_shared_rec();
+		for(auto i = m_players.begin();
 				i != m_players.end(); ++i)
 		{
 			Player *player = *i;
@@ -3023,9 +3024,11 @@ void ClientEnvironment::addActiveObject(u16 id, u8 type,
 
 	obj->setId(id);
 
+	bool add = false;
 	try
 	{
 		obj->initialize(init_data);
+		add = true;
 	}
 	catch(SerializationError &e)
 	{
@@ -3037,7 +3040,10 @@ void ClientEnvironment::addActiveObject(u16 id, u8 type,
 				<<std::endl;
 	}
 
+	if (add)
 	addActiveObject(obj);
+	else
+		delete obj;
 }
 
 void ClientEnvironment::removeActiveObject(u16 id)
