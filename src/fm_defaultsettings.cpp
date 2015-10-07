@@ -71,7 +71,8 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("language", "");
 
 	// Screen
-#if __arm__
+#if __ANDROID__ || __arm__
+	settings->setDefault("enable_shaders", "0");
 #if defined(_IRR_COMPILE_WITH_OGLES1_)
 	settings->setDefault("video_driver", "ogles1");
 #elif defined(_IRR_COMPILE_WITH_OGLES2_)
@@ -79,7 +80,6 @@ void set_default_settings(Settings *settings) {
 #else
 	settings->setDefault("video_driver", "opengl");
 #endif
-	settings->setDefault("enable_shaders", "0");
 #else
 	settings->setDefault("video_driver", "opengl");
 	settings->setDefault("enable_shaders", "1");
@@ -588,6 +588,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("farmesh_step", "1");
 	settings->setDefault("leaves_style", "opaque");
 	settings->setDefault("autojump", "1");
+	settings->setDefault("mg_name", "v7");
 
 	char lang[3] = {};
 	AConfiguration_getLanguage(porting::app_global->config, lang);

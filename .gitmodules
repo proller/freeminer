@@ -19,3 +19,6 @@
 [submodule "build/android/jni/android-ifaddrs"]
 	path = build/android/jni/android-ifaddrs
 	url = https://github.com/kmackay/android-ifaddrs.git
+[submodule "games/pixture"]
+	path = games/pixture
+	url = https://github.com/kaadmy/pixture.git

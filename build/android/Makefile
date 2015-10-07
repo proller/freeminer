@@ -13,7 +13,7 @@ PATHCFGFILE = path.cfg
 
 ROOT = $(shell pwd)
 
-GAMES_TO_COPY = default
+GAMES_TO_COPY = default pixture
 MODS_TO_COPY =
 
 
@@ -34,9 +34,11 @@ VERSION_TWEAK := $(shell cat $(ROOT)/../../CMakeLists.txt | \
 ANDROID_VERSION_CODE = 13
 
 #and for freeminer for skip conflict:
-ANDROID_VERSION_CODE = 34
+ANDROID_VERSION_CODE = 37
 
 PROJECT_NAME_C = freeminer
+
+GAMES_VERSION = ""
 
 ################################################################################
 # toolchain config for arm old processors
@@ -75,26 +77,33 @@ USE_SCTP = 1
 ################################################################################
 # toolchain config for little endian mips
 ################################################################################
-#TARGET_HOST = mipsel-linux
-#TARGET_ABI = mips
-#TARGET_LIBDIR = mips
-#TARGET_TOOLCHAIN = mipsel-linux-android-
-#TARGET_ARCH = mips32
-#CROSS_PREFIX = mipsel-linux-android-
-#COMPILER_VERSION = 4.8
-#HAVE_LEVELDB = 0
+ifeq ($(TARGET_MIPS),1)
+TARGET_HOST = mipsel-linux
+TARGET_ABI = mips
+TARGET_LIBDIR = mips
+TARGET_TOOLCHAIN = mipsel-linux-android-
+TARGET_CFLAGS_ADDON =
+TARGET_CXXFLAGS_ADDON =
+TARGET_LDFLAGS_ADDON =
+TARGET_ARCH = mips32
+CROSS_PREFIX = mipsel-linux-android-
+HAVE_LEVELDB = 0
+endif
 
 ################################################################################
 # toolchain config for x86
 ################################################################################
-#TARGET_HOST = x86-linux
-#TARGET_ABI = x86
-#TARGET_LIBDIR = x86
-#TARGET_TOOLCHAIN = x86-
-#CROSS_PREFIX = i686-linux-android-
-#TARGET_ARCH = x86
-#COMPILER_VERSION = 4.8
-#HAVE_LEVELDB = 1
+ifeq ($(TARGET_x86),1)
+TARGET_HOST = x86-linux
+TARGET_ABI = x86
+TARGET_LIBDIR = x86
+TARGET_TOOLCHAIN = x86-
+TARGET_CFLAGS_ADDON =
+TARGET_CXXFLAGS_ADDON =
+TARGET_LDFLAGS_ADDON =
+CROSS_PREFIX = i686-linux-android-
+TARGET_ARCH = x86
+endif
 
 ################################################################################
 ASSETS_TIMESTAMP = deps/assets_timestamp
@@ -770,10 +779,10 @@ assets : $(ASSETS_TIMESTAMP) locale
 	cp -r ${ROOT}/../../client ${ROOT}/assets/freeminer; \
 	#cp -r ${ROOT}/../../doc ${ROOT}/assets/freeminer; \
 	cp -r ${ROOT}/../../fonts ${ROOT}/assets/freeminer; \
-	mkdir ${ROOT}/assets/freeminer/games; \
+	mkdir ${ROOT}/assets/freeminer/games${GAMES_VERSION}; \
 	for game in ${GAMES_TO_COPY};                                              \
 	do                                                                         \
-	    cp -Lr ${ROOT}/../../games/$$game ${ROOT}/assets/freeminer/games/; \
+	    cp -Lr ${ROOT}/../../games/$$game ${ROOT}/assets/freeminer/games${GAMES_VERSION}/; \
 	done;                                                                      \
 	mkdir ${ROOT}/assets/freeminer/mods; \
 	for mod in ${MODS_TO_COPY}; do                                             \
@@ -1007,6 +1016,7 @@ apk: $(PATHCFGFILE) assets $(IRRLICHT_LIB) $(CURL_LIB) $(GMP_LIB) $(LEVELDB_TARG
 	USE_LUAJIT=${USE_LUAJIT} \
 	USE_ENET=${USE_ENET} \
 	USE_SCTP=${USE_SCTP} \
+	GAMES_VERSION=${GAMES_VERSION} \
 	PROJECT_NAME_C=${PROJECT_NAME_C} \
 	APP_PLATFORM=${APP_PLATFORM}                                               \
 	TARGET_LIBDIR=${TARGET_LIBDIR}                                             \

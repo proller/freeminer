@@ -97,6 +97,7 @@ void Environment::addPlayer(Player *player)
 
 void Environment::removePlayer(Player* player)
 {
+	auto lock = m_players.lock_unique_rec();
 	for (std::vector<Player*>::iterator it = m_players.begin();
 			it != m_players.end(); ++it) {
 		if ((*it) == player) {
@@ -109,6 +110,7 @@ void Environment::removePlayer(Player* player)
 
 Player * Environment::getPlayer(u16 peer_id)
 {
+	auto lock = m_players.lock_shared_rec();
 	for(std::vector<Player*>::iterator i = m_players.begin();
 			i != m_players.end(); ++i) {
 		Player *player = *i;
@@ -120,6 +122,7 @@ Player * Environment::getPlayer(u16 peer_id)
 
 Player * Environment::getPlayer(const std::string &name)
 {
+	auto lock = m_players.lock_shared_rec();
 	for(auto &player : m_players) {
  		if(player->getName() == name)
 			return player;
@@ -431,6 +434,7 @@ void ServerEnvironment::kickAllPlayers(AccessDeniedCode reason,
 
 void ServerEnvironment::saveLoadedPlayers()
 {
+	auto lock = m_players.lock_unique_rec();
 	auto i = m_players.begin();
 	while (i != m_players.end())
 	{
@@ -1168,7 +1172,8 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	{
 		//TimeTaker timer_step_player("player step");
 		//ScopeProfiler sp(g_profiler, "SEnv: handle players avg", SPT_AVG);
-		for(std::vector<Player*>::iterator i = m_players.begin();
+		auto lock = m_players.lock_shared_rec();
+		for(auto i = m_players.begin();
 				i != m_players.end(); ++i)
 		{
 			Player *player = *i;
@@ -3019,9 +3024,11 @@ void ClientEnvironment::addActiveObject(u16 id, u8 type,
 
 	obj->setId(id);
 
+	bool add = false;
 	try
 	{
 		obj->initialize(init_data);
+		add = true;
 	}
 	catch(SerializationError &e)
 	{
@@ -3033,7 +3040,10 @@ void ClientEnvironment::addActiveObject(u16 id, u8 type,
 				<<std::endl;
 	}
 
+	if (add)
 	addActiveObject(obj);
+	else
+		delete obj;
 }
 
 void ClientEnvironment::removeActiveObject(u16 id)

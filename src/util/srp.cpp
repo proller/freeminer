@@ -630,7 +630,7 @@ SRP_Result srp_create_salted_verification_key( SRP_HashAlgorithm alg,
 		*bytes_s = (unsigned char*)srp_alloc(size_to_fill);
 		if (!*bytes_s)
 			goto error_and_exit;
-		memcpy(*bytes_s, &g_rand_buff + g_rand_idx, size_to_fill);
+		memcpy(*bytes_s, g_rand_buff + g_rand_idx, size_to_fill);
 		g_rand_idx += size_to_fill;
 	}
 

@@ -31,11 +31,13 @@ $0 server_gdb_nd
 # timelapse video
 $0 timelapse
 
+$0 stress_tsan  --clients_autoexit=30 --clients_runs=5 --clients_sleep=25 --options_add=headless
+
 };
 
 no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 use strict;
-use 5.16.0;
+use feature qw(say);
 use Data::Dumper;
 use Cwd;
 use POSIX ();
@@ -47,11 +49,13 @@ our $signal;
 our $script_path;
 
 BEGIN {
-    ($ENV{'SCRIPT_FILENAME'} || $0) =~ m|^(.+)[/\\].+?$|;    #v0w
-    ($script_path = (($1 and $1 ne '.') ? $1 : Cwd::cwd()) . '/') =~ tr|\\|/|;
+    ($0) =~ m|^(.+)[/\\].+?$|;    #v0w
+    $script_path = $1;
+    ($script_path = ($script_path =~ m{^/} ? $script_path . '/' : Cwd::cwd() . '/' . $script_path . '/')) =~ tr|\\|/|;
 }
 
 our $root_path = $script_path . '../../';
+1 while $root_path =~ s{[^/\.]+/\.\./}{}g;
 my $logdir_add = (@ARGV == 1 and $ARGV[0] =~ /^\w+$/) ? '.' . $ARGV[0] : '';
 our $config = {};
 our $g = {date => POSIX::strftime("%Y-%m-%dT%H-%M-%S", localtime()),};
@@ -193,7 +197,8 @@ qq{$config->{env} $config->{runner} @_ ./freeminer --gameid $config->{gameid} --
         commands_run('run_single',);
     },
     run_server => sub {
-        sy qq{$config->{env} $config->{runner} @_ ./freeminerserver $config->{tee} $config->{logdir}/autotest.$g->{task_name}.server.out.log};
+        sy
+qq{$config->{env} $config->{runner} @_ ./freeminerserver $config->{tee} $config->{logdir}/autotest.$g->{task_name}.server.out.log};
     },
     run_server_auto => sub {
         sy
@@ -240,7 +245,7 @@ our $tasks = {
     build_normal => [{build_name => '_normal'}, 'prepare', 'cmake', 'make',],
     build_debug => [sub { $g->{build_name} .= '_debug'; 0 }, {-cmake_debug => 1,}, 'prepare', 'cmake', 'make',],
     build_nothreads => [sub { $g->{build_name} .= '_nt'; 0 }, 'prepare', ['cmake', $config->{cmake_nothreads}], 'make',],
-    build_server => [{-no_build_client => 1,}, 'build_normal',],
+    build_server       => [{-no_build_client => 1,}, 'build_normal',],
     build_server_debug => [{-no_build_client => 1,}, 'build_debug',],
     #run_single => ['run_single'],
     clang => ['prepare', {-cmake_clang => 1,}, 'cmake', 'make',],
@@ -323,7 +328,11 @@ our $tasks = {
     clients     => [{ZZbuild_name => 'normal'}, 'prepare', {-no_build_client => 0, -no_build_server => 1}, 'cmake', 'make', 'run_clients'],
     stress_tsan => [
         {build_name => '_tsan', -cmake_tsan => 1, -no_build_client => 1, -no_build_server => 0}, 'prepare', 'cmake', 'make', 'cgroup',
-        'run_server_auto', ['sleep', 10], {build_name => 'normal', -cmake_tsan => 0,}, 'clients',
+        'run_server_auto', ['sleep', 10], {build_name => '_normal', -cmake_tsan => 0,}, 'clients',
+    ],
+    stress_asan => [
+        {build_name => '_asan', -cmake_asan => 1, -no_build_client => 1, -no_build_server => 0}, 'prepare', 'cmake', 'make', 'cgroup',
+        'run_server_auto', ['sleep', 10], {build_name => '_normal', -cmake_asan => 0,}, 'clients',
     ],
     debug_mapgen => [
         #{build_name => 'debug'},
@@ -332,13 +341,12 @@ our $tasks = {
             commands_run('debug');
           }
     ],
-    gdb => 
-        sub {
-            local $config->{runner} = $config->{runner} . q{gdb -ex 'run' -ex 't a a bt' -ex 'cont' -ex 'quit' --args };
-            @_ = ('debug') if !@_;
-            for (@_) { my $r = commands_run($_); return $r if $r;}
-            },
-    server_gdb => [{-no_build_client => 1,}, 'build_debug', ['gdb', 'run_server']],
+    gdb => sub {
+        local $config->{runner} = $config->{runner} . q{gdb -ex 'run' -ex 't a a bt' -ex 'cont' -ex 'quit' --args };
+        @_ = ('debug') if !@_;
+        for (@_) { my $r = commands_run($_); return $r if $r; }
+    },
+    server_gdb    => [{-no_build_client => 1,}, 'build_debug',  ['gdb', 'run_server']],
     server_gdb_nd => [{-no_build_client => 1,}, 'build_normal', ['gdb', 'run_server']],
 
     play_task => sub {
@@ -356,6 +364,14 @@ our $tasks = {
     ),    #'
     play => [{-no_build_server => 1,}, [\'play_task', 'build_normal', 'run_single']],    #'
     timelapse => [{-options_add => 'timelapse',}, \'play', 'timelapse_video'],           #'
+    up => sub {
+        my $cwd = Cwd::cwd();
+        chdir $config->{root_path};
+        sy qq{(git stash && git pull --rebase >&2) | grep -v "No local changes to save" && git stash pop}
+          and sy qq{git submodule update --init --recursive};
+        chdir $cwd;
+        return 0;
+    },
 };
 
 sub dmp (@) { say +(join ' ', (caller)[0 .. 5]), ' ', Data::Dumper::Dumper \@_ }
@@ -391,6 +407,7 @@ sub options_make(@) {
     return join ' ', map {"-$_=$r->{$_}"} sort keys %$r;
 }
 
+sub command_run(@);
 sub command_run(@) {
     my $cmd = shift;
     #say "command_run $cmd ", @_;
@@ -406,7 +423,7 @@ sub command_run(@) {
         }
     } elsif ('ARRAY' eq ref $cmd) {
         #for (@{$cmd}) {
-        my $r = __SUB__->(array $cmd, @_);
+        my $r = command_run(array $cmd, @_);
         warn("command $_ returned $r"), return $r if $r;
         #}
     } elsif ($cmd) {
@@ -417,12 +434,13 @@ sub command_run(@) {
     }
 }
 
+sub commands_run(@);
 sub commands_run(@) {
     my $name = shift;
     #say "commands_run $name ", @_;
     my $c = $commands->{$name} || $tasks->{$name};
     if ('SCALAR' eq ref $name) {
-        __SUB__->($$name, @_);
+        commands_run($$name, @_);
     } elsif ('ARRAY' eq ref $c) {
         for (@{$c}) {
             my $r = command_run $_, @_;

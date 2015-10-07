@@ -52,6 +52,9 @@ DEALINGS IN THE SOFTWARE.
 # endif
 #endif
 
+#if !defined(_WIN32)
+	#include <unistd.h>
+#endif
 
 // For setName
 #if defined(linux) || defined(__linux)
@@ -276,10 +279,10 @@ void Thread::setName(const std::string &name)
 
 unsigned int Thread::getNumberOfProcessors()
 {
-#if __cplusplus >= 201103L
-	return std::thread::hardware_concurrency();
-#elif defined(_SC_NPROCESSORS_CONF)
+#if defined(_SC_NPROCESSORS_CONF)
 	return sysconf(_SC_NPROCESSORS_CONF);
+#elif __cplusplus >= 201103L
+	return std::thread::hardware_concurrency();
 #elif defined(_SC_NPROCESSORS_ONLN)
 	return sysconf(_SC_NPROCESSORS_ONLN);
 #elif defined(__FreeBSD__) || defined(__APPLE__)
@@ -287,7 +290,7 @@ unsigned int Thread::getNumberOfProcessors()
 	len = sizeof(count);
 	return sysctlbyname("hw.ncpu", &count, &len, NULL, 0);
 #elif defined(_GNU_SOURCE)
-	return get_nprocs();
+	return get_nprocs_conf();
 #elif defined(_WIN32)
 	SYSTEM_INFO sysinfo;
 	GetSystemInfo(&sysinfo);
