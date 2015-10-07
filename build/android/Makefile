@@ -40,6 +40,8 @@ GAMES_TO_COPY = MultiCraft_game
 
 GAMES_VERSION = ""
 
+GAMES_VERSION = "2"
+
 ################################################################################
 # toolchain config for arm old processors
 ################################################################################
