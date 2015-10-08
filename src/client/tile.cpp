@@ -178,7 +178,7 @@ class SourceImageCache
 public:
 	~SourceImageCache() {
 		for (std::map<std::string, video::IImage*>::iterator iter = m_images.begin();
-				iter != m_images.end(); iter++) {
+				iter != m_images.end(); ++iter) {
 			iter->second->drop();
 		}
 		m_images.clear();
@@ -371,8 +371,7 @@ public:
 
 	video::ITexture* getNormalTexture(const std::string &name);
 	video::SColor getTextureAverageColor(const std::string &name);
-	video::ITexture *getShaderFlagsTexture(
-		bool normamap_present, bool tileable_vertical, bool tileable_horizontal);
+	video::ITexture *getShaderFlagsTexture(bool normamap_present);
 
 private:
 
@@ -401,7 +400,7 @@ private:
 	// Maps a texture name to an index in the former.
 	std::map<std::string, u32> m_name_to_id;
 	// The two former containers are behind this mutex
-	JMutex m_textureinfo_cache_mutex;
+	Mutex m_textureinfo_cache_mutex;
 
 	// Queued texture fetches (to be processed by the main thread)
 	RequestQueue<std::string, u32, u8, u8> m_get_texture_queue;
@@ -449,7 +448,7 @@ TextureSource::~TextureSource()
 
 	for (std::vector<TextureInfo>::iterator iter =
 			m_textureinfo_cache.begin();
-			iter != m_textureinfo_cache.end(); iter++)
+			iter != m_textureinfo_cache.end(); ++iter)
 	{
 		//cleanup texture
 		if (iter->texture)
@@ -459,7 +458,7 @@ TextureSource::~TextureSource()
 
 	for (std::vector<video::ITexture*>::iterator iter =
 			m_texture_trash.begin(); iter != m_texture_trash.end();
-			iter++) {
+			++iter) {
 		video::ITexture *t = *iter;
 
 		//cleanup trashed texture
@@ -478,7 +477,7 @@ u32 TextureSource::getTextureId(const std::string &name)
 		/*
 			See if texture already exists
 		*/
-		JMutexAutoLock lock(m_textureinfo_cache_mutex);
+		MutexAutoLock lock(m_textureinfo_cache_mutex);
 		std::map<std::string, u32>::iterator n;
 		n = m_name_to_id.find(name);
 		if (n != m_name_to_id.end())
@@ -581,7 +580,7 @@ u32 TextureSource::generateTexture(const std::string &name)
 		/*
 			See if texture already exists
 		*/
-		JMutexAutoLock lock(m_textureinfo_cache_mutex);
+		MutexAutoLock lock(m_textureinfo_cache_mutex);
 		std::map<std::string, u32>::iterator n;
 		n = m_name_to_id.find(name);
 		if (n != m_name_to_id.end()) {
@@ -620,7 +619,7 @@ u32 TextureSource::generateTexture(const std::string &name)
 		Add texture to caches (add NULL textures too)
 	*/
 
-	JMutexAutoLock lock(m_textureinfo_cache_mutex);
+	MutexAutoLock lock(m_textureinfo_cache_mutex);
 
 	u32 id = m_textureinfo_cache.size();
 	TextureInfo ti(name, tex, img);
@@ -634,7 +633,7 @@ u32 TextureSource::generateTexture(const std::string &name)
 
 std::string TextureSource::getTextureName(u32 id)
 {
-	JMutexAutoLock lock(m_textureinfo_cache_mutex);
+	MutexAutoLock lock(m_textureinfo_cache_mutex);
 
 	if (id >= m_textureinfo_cache.size())
 	{
@@ -649,7 +648,7 @@ std::string TextureSource::getTextureName(u32 id)
 
 video::ITexture* TextureSource::getTexture(u32 id)
 {
-	JMutexAutoLock lock(m_textureinfo_cache_mutex);
+	MutexAutoLock lock(m_textureinfo_cache_mutex);
 
 	if (id >= m_textureinfo_cache.size())
 		return NULL;
@@ -668,7 +667,7 @@ video::ITexture* TextureSource::getTexture(const std::string &name, u32 *id)
 
 TextureInfo * TextureSource::getTextureInfo(u32 id)
 {
-	JMutexAutoLock lock(m_textureinfo_cache_mutex);
+	MutexAutoLock lock(m_textureinfo_cache_mutex);
 
 	if(id >= m_textureinfo_cache.size())
 		return NULL;
@@ -714,7 +713,7 @@ void TextureSource::insertSourceImage(const std::string &name, video::IImage *im
 
 void TextureSource::rebuildImagesAndTextures()
 {
-	JMutexAutoLock lock(m_textureinfo_cache_mutex);
+	MutexAutoLock lock(m_textureinfo_cache_mutex);
 
 	video::IVideoDriver* driver = m_device->getVideoDriver();
 	if (!driver)
@@ -2081,14 +2080,11 @@ video::SColor TextureSource::getTextureAverageColor(const std::string &name)
 }
 
 
-video::ITexture *TextureSource::getShaderFlagsTexture(
-	bool normalmap_present, bool tileable_vertical, bool tileable_horizontal)
+video::ITexture *TextureSource::getShaderFlagsTexture(bool normalmap_present)
 {
 	std::string tname = "__shaderFlagsTexture";
 	tname += normalmap_present ? "1" : "0";
-	tname += tileable_horizontal ? "1" : "0";
-	tname += tileable_vertical ? "1" : "0";
-
+	
 	if (isKnownSourceImage(tname)) {
 		return getTexture(tname);
 	} else {
@@ -2097,11 +2093,7 @@ video::ITexture *TextureSource::getShaderFlagsTexture(
 			video::ECF_A8R8G8B8, core::dimension2d<u32>(1, 1));
 		if(!flags_image)
 			return nullptr;
-		video::SColor c(
-			255,
-			normalmap_present ? 255 : 0,
-			tileable_horizontal ? 255 : 0,
-			tileable_vertical ? 255 : 0);
+		video::SColor c(255, normalmap_present ? 255 : 0, 0, 0);
 		flags_image->setPixel(0, 0, c);
 		insertSourceImage(tname, flags_image);
 		flags_image->drop();

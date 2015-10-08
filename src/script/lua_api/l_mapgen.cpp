@@ -73,6 +73,7 @@ struct EnumString ModApiMapgen::es_OreType[] =
 {
 	{ORE_SCATTER, "scatter"},
 	{ORE_SHEET,   "sheet"},
+	{ORE_PUFF,    "puff"},
 	{ORE_BLOB,    "blob"},
 	{ORE_VEIN,    "vein"},
 	{0, NULL},
@@ -457,6 +458,30 @@ size_t get_biome_list(lua_State *L, int index,
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// get_biome_id(biomename)
+// returns the biome id used in biomemap
+int ModApiMapgen::l_get_biome_id(lua_State *L)
+{
+	const char *biome_str = lua_tostring(L, 1);
+	if (!biome_str)
+		return 0;
+
+	BiomeManager *bmgr = getServer(L)->getEmergeManager()->biomemgr;
+
+	if (!bmgr)
+		return 0;
+
+	Biome *biome = (Biome *) bmgr->getByName(biome_str);
+
+	if (!biome || biome->index == OBJDEF_INVALID_INDEX)
+		return 0;
+
+	lua_pushinteger(L, biome->index);
+
+	return 1;
+}
+
+
 // get_mapgen_object(objectname)
 // returns the requested object used during map generation
 int ModApiMapgen::l_get_mapgen_object(lua_State *L)
@@ -590,7 +615,7 @@ int ModApiMapgen::l_get_mapgen_params(lua_State *L)
 	lua_pushinteger(L, params->chunksize);
 	lua_setfield(L, -2, "chunksize");
 
-	std::string flagstr = writeFlagString(params->flags, flagdesc_mapgen, (u32)-1);
+	std::string flagstr = writeFlagString(params->flags, flagdesc_mapgen, U32_MAX);
 	lua_pushstring(L, flagstr.c_str());
 	lua_setfield(L, -2, "flags");
 
@@ -895,7 +920,7 @@ int ModApiMapgen::l_register_ore(lua_State *L)
 				"ore_type", es_OreType, ORE_SCATTER);
 	Ore *ore = oremgr->create(oretype);
 	if (!ore) {
-		errorstream << "register_ore: ore_type " << oretype << " not implemented";
+		errorstream << "register_ore: ore_type " << oretype << " not implemented\n";
 		return 0;
 	}
 
@@ -952,10 +977,43 @@ int ModApiMapgen::l_register_ore(lua_State *L)
 	}
 	lua_pop(L, 1);
 
-	if (oretype == ORE_VEIN) {
-		OreVein *orevein = (OreVein *)ore;
-		orevein->random_factor = getfloatfield_default(L, index,
-			"random_factor", 1.f);
+	//// Get type-specific parameters
+	switch (oretype) {
+		case ORE_SHEET: {
+			OreSheet *oresheet = (OreSheet *)ore;
+
+			oresheet->column_height_min = getintfield_default(L, index,
+				"column_height_min", 1);
+			oresheet->column_height_max = getintfield_default(L, index,
+				"column_height_max", ore->clust_size);
+			oresheet->column_midpoint_factor = getfloatfield_default(L, index,
+				"column_midpoint_factor", 0.5f);
+
+			break;
+		}
+		case ORE_PUFF: {
+			OrePuff *orepuff = (OrePuff *)ore;
+
+			lua_getfield(L, index, "np_puff_top");
+			read_noiseparams(L, -1, &orepuff->np_puff_top);
+			lua_pop(L, 1);
+
+			lua_getfield(L, index, "np_puff_bottom");
+			read_noiseparams(L, -1, &orepuff->np_puff_bottom);
+			lua_pop(L, 1);
+
+			break;
+		}
+		case ORE_VEIN: {
+			OreVein *orevein = (OreVein *)ore;
+
+			orevein->random_factor = getfloatfield_default(L, index,
+				"random_factor", 1.f);
+
+			break;
+		}
+		default:
+			break;
 	}
 
 	ObjDefHandle handle = oremgr->add(ore);
@@ -1238,6 +1296,7 @@ int ModApiMapgen::l_serialize_schematic(lua_State *L)
 
 void ModApiMapgen::Initialize(lua_State *L, int top)
 {
+	API_FCT(get_biome_id);
 	API_FCT(get_mapgen_object);
 
 	API_FCT(get_mapgen_params);

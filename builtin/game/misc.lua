@@ -49,8 +49,11 @@ core.register_globalstep(function(dtime)
 	if delay < mintime then
 		return
 	end
-	update_timers(delay)
+	-- delay must be 0 before running update_timers because
+	-- function(s) in timers may execute a minetest.after, which uses delay
+	local olddelay = delay
 	delay = 0
+	update_timers(olddelay)
 end)
 
 function core.after(time, func, ...)
@@ -109,6 +112,25 @@ function core.get_connected_players()
 	end
 	end
 	return temp_table
+end
+
+-- Returns two position vectors representing a box of `radius` in each
+-- direction centered around the player corresponding to `player_name`
+function core.get_player_radius_area(player_name, radius)
+	local player = core.get_player_by_name(player_name)
+	if player == nil then
+		return nil
+	end
+
+	local p1 = player:getpos()
+	local p2 = p1
+
+	if radius then
+		p1 = vector.subtract(p1, radius)
+		p2 = vector.add(p2, radius)
+	end
+
+	return p1, p2
 end
 
 function core.hash_node_position(pos)

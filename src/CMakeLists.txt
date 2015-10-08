@@ -221,6 +221,12 @@ mark_as_advanced(EXECUTABLE_OUTPUT_PATH LIBRARY_OUTPUT_PATH)
 
 find_package(MsgPack REQUIRED)
 
+if(NOT (BUILD_CLIENT OR BUILD_SERVER))
+	message(WARNING "Neither BUILD_CLIENT nor BUILD_SERVER is set! Setting BUILD_SERVER=true")
+	set(BUILD_SERVER TRUE)
+endif()
+
+
 option(ENABLE_CURL "Enable cURL support for fetching media" TRUE)
 set(USE_CURL FALSE)
 
@@ -234,14 +240,31 @@ else()
 	mark_as_advanced(CLEAR CURL_LIBRARY CURL_INCLUDE_DIR)
 endif()
 
-find_package(Iconv)
-if(ICONV_INCLUDE_DIR)
-set(USE_ICONV 1)
-message(STATUS "iconv.h found: ${ICONV_INCLUDE_DIR}")
-else()
-set(USE_ICONV 0)
-message(STATUS "iconv.h NOT found")
+option(ENABLE_ICONV "Enable utf8 convert via iconv " FALSE)
+
+if(ENABLE_ICONV)
+	find_package(Iconv)
+	if(ICONV_INCLUDE_DIR)
+		set(USE_ICONV 1)
+		message(STATUS "iconv.h found: ${ICONV_INCLUDE_DIR}")
+	else()
+		message(STATUS "iconv.h NOT found")
+	endif()
 endif()
+
+if(NOT USE_ICONV)
+	set(USE_ICONV 0)
+endif()
+
+if(NOT USE_CURL)
+	if(BUILD_CLIENT)
+		message(WARNING "cURL is required to load the server list")
+	endif()
+	if(BUILD_SERVER)
+		message(WARNING "cURL is required to announce to the server list")
+	endif()
+endif()
+
 
 if(BUILD_CLIENT)
 OPTION(ENABLE_GETTEXT "Use GetText for internationalization" TRUE)
@@ -561,7 +584,7 @@ add_custom_target(GenerateVersion
 	WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 
 
-add_subdirectory(jthread)
+add_subdirectory(threading)
 add_subdirectory(network)
 add_subdirectory(script)
 add_subdirectory(unittest)

@@ -132,9 +132,9 @@ struct MapgenParams {
 		water_level(1),
 		liquid_pressure(0),
 		flags(MG_TREES | MG_CAVES | MG_LIGHT),
-		np_biome_heat(NoiseParams(15, 30, v3f(1000.0, 1000.0, 1000.0), 5349, 3, 0.5, 2.0)),
+		np_biome_heat(NoiseParams(15, 30, v3f(750.0, 750.0, 750.0), 5349, 3, 0.5, 2.0)),
 		np_biome_heat_blend(NoiseParams(0, 1.5, v3f(8.0, 8.0, 8.0), 13, 2, 1.0, 2.0)),
-		np_biome_humidity(NoiseParams(50, 50, v3f(1000.0, 1000.0, 1000.0), 842, 3, 0.5, 2.0)),
+		np_biome_humidity(NoiseParams(50, 50, v3f(750.0, 750.0, 750.0), 842, 3, 0.5, 2.0)),
 		np_biome_humidity_blend(NoiseParams(0, 1.5, v3f(8.0, 8.0, 8.0), 90003, 2, 1.0, 2.0)),
 		sparams(NULL)
 	{}
@@ -184,14 +184,12 @@ public:
 	void propagateSunlight(v3s16 nmin, v3s16 nmax);
 	void spreadLight(v3s16 nmin, v3s16 nmax);
 
-	void calcLightingOld(v3s16 nmin, v3s16 nmax);
-
 	virtual void makeChunk(BlockMakeData *data) {}
 	virtual int getGroundLevelAtPoint(v2s16 p) { return 0; }
 
 	s16 liquid_pressure;
-	std::map<v3POS, s16> heat_cache;
-	std::map<v3POS, s16> humidity_cache;
+	unordered_map_v3POS<s16> heat_cache;
+	unordered_map_v3POS<s16> humidity_cache;
 };
 
 struct MapgenFactory {

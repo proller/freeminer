@@ -5,6 +5,9 @@ install:
  cpan JSON JSON::XS
  touch list_full list log.log && chmod a+rw list_full list log.log
 
+deb:
+ sudo apt-get install fcgiwrap
+
 old deb linux:
  sudo apt-get install libjson-xs-perl libjson-perl libsocket6-perl libio-socket-ip-perl
 
@@ -23,7 +26,11 @@ nginx:
             add_header Access-Control-Allow-Origin *;
         }
         location /announce {
-            fastcgi_pass   unix:/var/run/fcgiwrap/fcgiwrap.sock;
+            #freebsd:
+            #fastcgi_pass   unix:/var/run/fcgiwrap/fcgiwrap.sock;
+            #linux:
+            fastcgi_pass   unix:/var/run/fcgiwrap.socket;
+
             fastcgi_param  SCRIPT_FILENAME $document_root/master.cgi;
             include        fastcgi_params;
         }
@@ -53,21 +60,41 @@ no warnings qw(uninitialized);
 no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 use utf8;
 use Socket;
-my $getaddrinfo_noserv;
 BEGIN {
     if ($Socket::VERSION ge '2.008') {
-        eval q{use Socket qw(getaddrinfo getnameinfo NI_NUMERICHOST); $getaddrinfo_noserv = Socket::NIx_NOSERV;}; # >5.16
+        eval q{use Socket qw(getaddrinfo getnameinfo NI_NUMERICHOST); }; # >5.16
+        eval q{
+            sub get_ip ($) {
+                my $addr = $_[0];
+                (my $err, local @_) = Socket::getaddrinfo($addr);
+                return [ map{(Socket::getnameinfo($_->{addr}, Socket::NI_NUMERICHOST, Socket::NIx_NOSERV))[1]} @_];
+            };
+        };
     } else {  # <5.16
+        my $getaddrinfo_noserv;
         eval qq{use Socket6 qw(getaddrinfo getnameinfo NI_NUMERICHOST);};
         eval q{$getaddrinfo_noserv = Socket6::NIx_NOSERV;};
         eval q{$getaddrinfo_noserv = Socket6::NI_NUMERICSERV;} if $@;
+        eval q{
+            sub get_ip ($) {
+                my $addr = $_[0];
+                local @_ = getaddrinfo($addr, undef);
+                my $addrs = [];
+                while (scalar(@_) >= 5) {
+                    (my $family, my $socktype, my $proto, my $saddr, my $canonname, @_) = @_;
+                    my ($host, $port) = Socket6::getnameinfo($saddr, Socket6::NI_NUMERICHOST | $getaddrinfo_noserv);
+                    push @$addrs, $host;
+                }
+                return $addrs;
+            }
+        };
     }
 };
 use Time::HiRes qw(time sleep);
 use IO::Socket::IP;
 use JSON;
 use Net::Ping;
-use Fcntl qw();
+use Fcntl qw( );
 #use Data::Dumper;
 
 our $root_path;
@@ -127,26 +154,27 @@ sub get_params_utf8(;$$) {
     wantarray ? %$_ : $_;
 }
 
-sub file_rewrite(;$@) {
-    local $_ = shift;
-    return unless open my $fh, '>', $_;
-    return unless flock( $fh, Fcntl::LOCK_EX );
-    print $fh @_;
-    #return unless flock( $fh, Fcntl::LOCK_UN );
-    #close $fh;
-}
-
 sub printlog(;@) {
     #local $_ = shift;
     return unless open my $fh, '>>', $config{log};
     print $fh (join ' ', @_), "\n";
 }
 
+sub file_rewrite(;$@) {
+    local $_ = shift;
+    return unless open my $fh, '>', $_;
+    die 'rewrite: cant lock'  unless flock( $fh, Fcntl::LOCK_EX );
+    print $fh @_;
+    #return unless flock( $fh, Fcntl::LOCK_UN );
+    #close $fh;
+}
+
 sub file_read ($) {
-    open my $f, '<', $_[0] or return;
+    open my $fh, '<', $_[0] or return;
+    die 'read: cant lock' unless flock( $fh, Fcntl::LOCK_SH );
     local $/ = undef;
-    my $ret = <$f>;
-    close $f;
+    my $ret = <$fh>;
+    close $fh;
     return \$ret;
 }
 
@@ -255,15 +283,14 @@ sub request (;$) {
                 return if $param->{ip} ~~ $_;
             }
             $param->{address} ||= $param->{ip};
+            $param->{port} ||= 30000;
             if ($config{source_check}) {
-                (my $err, local @_) = getaddrinfo($param->{address});
-                my $addrs = [ map{(getnameinfo($_->{addr}, NI_NUMERICHOST, $getaddrinfo_noserv))[1]} @_];
+                my $addrs = get_ip($param->{address});
                 if (!($param->{ip} ~~ $addrs) and !($param->{ip} ~~ $config{trusted})) {
-                    printlog("bad address (", @$addrs, ")[$param->{address}] ne [$param->{ip}] [$err]") if $config{debug};
+                    printlog("bad address (", @$addrs, ")[$param->{address}] ne [$param->{ip}]") if $config{debug};
                     return;
                 }
             }
-            $param->{port} ||= 30000;
             $param->{key} = "$param->{ip}:$param->{port}";
             $param->{off} = time if $param->{action} ~~ 'delete';
             if ($config{ping} and $param->{action} ne 'delete') {
@@ -288,12 +315,12 @@ sub request (;$) {
             printlog "readed[$config{list_full}] list size=", scalar @{$list->{list}} if $config{debug};
             my $listk = {map { $_->{key} => $_ } @{$list->{list}}};
             my $old = $listk->{$param->{key}};
+            $param->{time} = int time;
             $param->{time} = $old->{time} if $param->{off};
-            $param->{time} ||= int time;
             $param->{start} = $param->{action} ~~ 'start' ? $param->{time} : $old->{start} || $param->{time};
             delete $param->{start} if $param->{off};
             $param->{clients} ||= scalar @{$param->{clients_list}} if ref $param->{clients_list} eq 'ARRAY';
-            $param->{first} ||= $old->{first} || $old->{time} || $param->{time};
+            $param->{first} = $old->{first} || $old->{time} || $param->{time};
             $param->{clients_top} = $old->{clients_top} if $old->{clients_top} > $param->{clients};
             $param->{clients_top} ||= $param->{clients} || 0;
             # params reported once on start, must be same as src/serverlist.cpp:~221 if(server["action"] == "start") { ...
@@ -336,16 +363,19 @@ sub request (;$) {
 sub request_cgi {
     my ($p, $after) = request(@_);
     shift @$p;
-    printu join "\n", map { join ': ', @$_ } shift @$p;
-    printu "\n\n";
-    printu join '', map { join '', @$_ } @$p;
+    printu(join "\n", map { join ': ', @$_ } shift @$p);
+    printu("\n\n");
+    printu(join '', map { join '', @$_ } @$p);
     if (fork) {
         unless ($config{debug}) {
             close STDOUT;
             close STDERR;
         }
     } else {
-        $after->() if ref $after ~~ 'CODE';
+        eval {
+            $after->() if ref $after ~~ 'CODE';
+        };
+        printlog "after error [$@]" if $@ and $config{debug};
     }
 }
 request_cgi() unless caller;

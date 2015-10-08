@@ -433,7 +433,7 @@ bool ClientLauncher::launch_game(std::string &error_message,
 	}
 
 	if (menudata.name.empty())
-		playername = menudata.name = std::string("Guest") + itos(myrand_range(10000, 90000));
+		playername = menudata.name = std::string("Guest") + itos(myrand_range(100000, 999999));
 	else
 		playername = menudata.name;
 
@@ -692,14 +692,14 @@ void ClientLauncher::speed_tests()
 		infostream << "Around 5000/ms should do well here." << std::endl;
 		TimeTaker timer("Testing mutex speed");
 
-		JMutex m;
+		Mutex m;
 		u32 n = 0;
 		u32 i = 0;
 		do {
 			n += 10000;
 			for (; i < n; i++) {
-				m.Lock();
-				m.Unlock();
+				m.lock();
+				m.unlock();
 			}
 		}
 		// Do at least 10ms

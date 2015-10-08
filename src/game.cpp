@@ -382,7 +382,7 @@ PointedThing getPointedThing(Client *client, v3f player_position,
 
 				for (std::vector<aabb3f>::const_iterator
 						i = boxes.begin();
-						i != boxes.end(); i++) {
+						i != boxes.end(); ++i) {
 					aabb3f box = *i;
 					box.MinEdge += npf;
 					box.MaxEdge += npf;
@@ -427,7 +427,7 @@ PointedThing getPointedThing(Client *client, v3f player_position,
 						if (!g_settings->getBool("enable_node_highlighting")) {
 							for (std::vector<aabb3f>::const_iterator
 									i2 = boxes.begin();
-									i2 != boxes.end(); i2++) {
+									i2 != boxes.end(); ++i2) {
 								aabb3f box = *i2;
 								box.MinEdge += npf + v3f(-d, -d, -d) - intToFloat(camera_offset, BS);
 								box.MaxEdge += npf + v3f(d, d, d) - intToFloat(camera_offset, BS);
@@ -523,11 +523,11 @@ public:
 		std::map<std::string, Meta> m_meta;
 
 		for (std::vector<Piece>::const_iterator k = m_log.begin();
-				k != m_log.end(); k++) {
+				k != m_log.end(); ++k) {
 			const Piece &piece = *k;
 
 			for (Profiler::GraphValues::const_iterator i = piece.values.begin();
-					i != piece.values.end(); i++) {
+					i != piece.values.end(); ++i) {
 				const std::string &id = i->first;
 				const float &value = i->second;
 				std::map<std::string, Meta>::iterator j =
@@ -560,7 +560,7 @@ public:
 		u32 next_color_i = 0;
 
 		for (std::map<std::string, Meta>::iterator i = m_meta.begin();
-				i != m_meta.end(); i++) {
+				i != m_meta.end(); ++i) {
 			Meta &meta = i->second;
 			video::SColor color(255, 200, 200, 200);
 
@@ -576,7 +576,7 @@ public:
 		s32 meta_i = 0;
 
 		for (std::map<std::string, Meta>::const_iterator i = m_meta.begin();
-				i != m_meta.end(); i++) {
+				i != m_meta.end(); ++i) {
 			const std::string &id = i->first;
 			const Meta &meta = i->second;
 			s32 x = x_left;
@@ -612,7 +612,7 @@ public:
 			bool lastscaledvalue_exists = false;
 
 			for (std::vector<Piece>::const_iterator j = m_log.begin();
-					j != m_log.end(); j++) {
+					j != m_log.end(); ++j) {
 				const Piece &piece = *j;
 				float value = 0;
 				bool value_exists = false;
@@ -1555,6 +1555,8 @@ protected:
 	void toggleFast(float *statustext_time);
 	void toggleNoClip(float *statustext_time);
 	void toggleCinematic(float *statustext_time);
+	void enableCinematic();
+	void disableCinematic();
 
 	void toggleChat(float *statustext_time, bool *flag);
 	void toggleHud(float *statustext_time, bool *flag);
@@ -1708,6 +1710,8 @@ private:
 	bool m_cache_enable_fog;
 	f32  m_cache_mouse_sensitivity;
 	f32  m_repeat_right_click_time;
+
+	bool m_cinematic;
 
 #ifdef __ANDROID__
 	bool m_cache_hold_aux1;
@@ -1869,6 +1873,13 @@ void Game::run()
 	flags.invert_mouse = g_settings->getBool("invert_mouse");
 	flags.first_loop_after_window_activation = true;
 
+	mapper->setMinimapMode(MINIMAP_MODE_OFF);
+	if(flags.show_minimap) {
+		u16 minimapMode = g_settings->getU16("minimap_default_mode");
+		if( minimapMode>0 && minimapMode<MINIMAP_MODE_COUNT ) {
+			mapper->setMinimapMode(MinimapMode(minimapMode));
+		}
+	}
 
 	// freeminer:
 	runData.update_draw_list_timer = 10;
@@ -1937,7 +1948,7 @@ void Game::run()
 		// Update camera before player movement to avoid camera lag of one frame
 		updateCameraDirection(&cam_view_target, &flags);
 		float cam_smoothing = 0;
-		if (g_settings->getBool("cinematic"))
+		if (m_cinematic)
 			cam_smoothing = 1 - g_settings->getFloat("cinematic_camera_smoothing");
 		else
 			cam_smoothing = 1 - g_settings->getFloat("camera_smoothing");
@@ -1957,6 +1968,10 @@ void Game::run()
 		updateFrame(highlight_boxes, &graph, &stats, &runData, dtime,
 				flags, cam_view);
 		updateProfilerGraphs(&graph);
+
+		// Update if minimap has been disabled by the server
+		flags.show_minimap &= !client->isMinimapDisabledByServer();
+
 		} catch(std::exception &e) {
 			if (!flags.errors++ || !(flags.errors % (int)(60/flags.dedicated_server_step)))
 				errorstream << "Fatal client error n=" << flags.errors << " : " << e.what() << std::endl;
@@ -3126,13 +3141,22 @@ void Game::toggleNoClip(float *statustext_time)
 void Game::toggleCinematic(float *statustext_time)
 {
 	static const wchar_t *msg[] = { L"cinematic disabled", L"cinematic enabled" };
-	bool cinematic = !g_settings->getBool("cinematic");
-	g_settings->set("cinematic", bool_to_cstr(cinematic));
+	m_cinematic = !g_settings->getBool("cinematic");
+	g_settings->set("cinematic", bool_to_cstr(m_cinematic));
 
 	*statustext_time = 0;
-	statustext = msg[cinematic];
+	statustext = msg[m_cinematic];
 }
 
+void Game::enableCinematic()
+{
+	m_cinematic = true;
+}
+
+void Game::disableCinematic()
+{
+	m_cinematic = false;
+}
 
 void Game::toggleChat(float *statustext_time, bool *flag)
 {
@@ -3441,6 +3465,9 @@ void Game::updatePlayerControl(const CameraOrientation &cam)
 		bool changed = player->zoom == false;
 		player->zoom = true;
 		if (changed) {
+			if(g_settings->getBool("enable_zoom_cinematic") && !g_settings->getBool("cinematic")) {
+				enableCinematic();
+			}
 			draw_control.fov = g_settings->getFloat("zoom_fov");
 			client->sendDrawControl();
 		}
@@ -3448,6 +3475,9 @@ void Game::updatePlayerControl(const CameraOrientation &cam)
 		bool changed = player->zoom == true;
 		player->zoom = false;
 		if (changed) {
+			if(g_settings->getBool("enable_zoom_cinematic") && !g_settings->getBool("cinematic")) {
+				disableCinematic();
+			}
 			draw_control.fov = g_settings->getFloat("fov");
 			client->sendDrawControl();
 		}
@@ -4398,7 +4428,6 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 		if (client->getEnv().getClientMap().m_drawlist_last || runData->update_draw_list_timer >= 5 ||
 				runData->update_draw_list_last_cam_pos.getDistanceFrom(camera_position) > MAP_BLOCKSIZE*BS*2 ||
 				flags.camera_offset_changed){
-			runData->update_draw_list_timer = 0;
 			bool allow = true;
 #if ENABLE_THREADS && HAVE_FUTURE
 			if (0 && g_settings->getBool("more_threads")) {
@@ -4409,14 +4438,16 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 						allow = false;
 				}
 				if (allow) {
-					updateDrawList_future = std::async(std::launch::async, [](Client * client, video::IVideoDriver* driver, float dtime){ client->getEnv().getClientMap().updateDrawList(driver, dtime, 1000); }, client, driver, dtime);
+					updateDrawList_future = std::async(std::launch::async, [](Client * client, video::IVideoDriver* driver, float dtime){ client->getEnv().getClientMap().updateDrawList(driver, dtime, 1000); }, client, driver, runData->update_draw_list_timer);
 				}
 			}
 			else
 #endif
-				client->getEnv().getClientMap().updateDrawList(driver, dtime);
+				client->getEnv().getClientMap().updateDrawList(driver, runData->update_draw_list_timer);
 			if (allow)
 				runData->update_draw_list_last_cam_pos = camera->getPosition();
+
+			runData->update_draw_list_timer = 0;
 		}
 
 	updateGui(&runData->statustext_time, *stats, *runData, dtime, flags, cam);
@@ -4782,6 +4813,8 @@ void Game::readSettings()
 	m_cache_enable_fog                = g_settings->getBool("enable_fog");
 	m_cache_mouse_sensitivity         = g_settings->getFloat("mouse_sensitivity");
 	m_repeat_right_click_time         = g_settings->getFloat("repeat_rightclick_time");
+
+	m_cinematic                       = g_settings->getBool("cinematic");
 
 	m_cache_mouse_sensitivity = rangelim(m_cache_mouse_sensitivity, 0.001, 100.0);
 }

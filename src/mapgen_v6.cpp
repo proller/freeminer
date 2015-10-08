@@ -29,8 +29,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 //#include "serverobject.h"
 #include "content_sao.h"
 #include "nodedef.h"
-#include "content_mapnode.h" // For content_mapnode_get_new_name
 #include "voxelalgorithms.h"
+//#include "profiler.h" // For TimeTaker
 #include "settings.h" // For g_settings
 #include "log_types.h"
 #include "emerge.h"
@@ -99,6 +99,7 @@ MapgenV6::MapgenV6(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 	c_snow            = ndef->getId("mapgen_snow");
 	c_snowblock       = ndef->getId("mapgen_snowblock");
 	c_ice             = ndef->getId("mapgen_ice");
+	c_clay            = ndef->getId("default:clay");
 
 	c_cobble          = ndef->getId("mapgen_cobble");
 	c_stair_cobble    = ndef->getId("mapgen_stair_cobble");
@@ -185,7 +186,7 @@ void MapgenV6Params::readParams(Settings *settings)
 
 void MapgenV6Params::writeParams(Settings *settings) const
 {
-	settings->setFlagStr("mgv6_spflags", spflags, flagdesc_mapgen_v6, (u32)-1);
+	settings->setFlagStr("mgv6_spflags", spflags, flagdesc_mapgen_v6, U32_MAX);
 	settings->setFloat("mgv6_freq_desert", freq_desert);
 	settings->setFloat("mgv6_freq_beach",  freq_beach);
 
@@ -217,7 +218,7 @@ s16 MapgenV6::find_stone_level(v2s16 p2d)
 
 	for (y = y_nodes_max; y >= y_nodes_min; y--) {
 		content_t c = vm->m_data[i].getContent();
-		if (c != CONTENT_IGNORE && (c == c_stone || c == c_desert_stone))
+		if (c != CONTENT_IGNORE && (c == c_stone || c == c_desert_stone || c == c_clay || c == c_sand || c == c_gravel || c == c_desert_sand || c == c_cobble || c == c_stair_cobble || c == c_mossycobble))
 			break;
 
 		vm->m_area.add_y(em, i, -1);
@@ -946,9 +947,11 @@ void MapgenV6::placeTreesAndJungleGrass()
 			for (u32 i = 0; i < grass_count; i++) {
 				s16 x = grassrandom.range(p2d_min.X, p2d_max.X);
 				s16 z = grassrandom.range(p2d_min.Y, p2d_max.Y);
+/* wtf
 				int mapindex = central_area_size.X * (z - node_min.Z)
 								+ (x - node_min.X);
-				//wtf s16 y = heightmap[mapindex];
+				s16 y = heightmap[mapindex];
+*/
 				s16 y = findGroundLevelFull(v2s16(x, z));
 				if (y < water_level)
 					continue;
@@ -966,9 +969,11 @@ void MapgenV6::placeTreesAndJungleGrass()
 		for (s32 i = 0; i < tree_count; i++) {
 			s16 x = myrand_range(p2d_min.X, p2d_max.X);
 			s16 z = myrand_range(p2d_min.Y, p2d_max.Y);
+/* wtf
 			int mapindex = central_area_size.X * (z - node_min.Z)
 							+ (x - node_min.X);
-			//wtf s16 y = heightmap[mapindex];
+			s16 y = heightmap[mapindex];
+*/
 			s16 y = findGroundLevelFull(v2s16(x, z));
 
 			// Don't make a tree under water level

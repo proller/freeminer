@@ -100,7 +100,7 @@ ClientMap::ClientMap(
 
 ClientMap::~ClientMap()
 {
-	/*JMutexAutoLock lock(mesh_mutex);
+	/*MutexAutoLock lock(mesh_mutex);
 
 	if(mesh != NULL)
 	{
@@ -122,7 +122,7 @@ void ClientMap::OnRegisterSceneNode()
 
 static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
 		float start_off, float end_off, u32 needed_count, INodeDefManager *nodemgr,
-		std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> & occlude_cache)
+		unordered_map_v3POS<bool> & occlude_cache)
 {
 	float d0 = (float)BS * p0.getDistanceFrom(p1);
 	v3s16 u0 = p1 - p0;
@@ -177,11 +177,11 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigne
 		max_cycle_ms = 300/getControl().fps_wanted;
 		//max_cycle_ms = 1000;
 
-	m_camera_mutex.Lock();
+	m_camera_mutex.lock();
 	v3f camera_position = m_camera_position;
 	f32 camera_fov = m_camera_fov;
 	//v3s16 camera_offset = m_camera_offset;
-	m_camera_mutex.Unlock();
+	m_camera_mutex.unlock();
 
 	// Use a higher fov to accomodate faster camera movements.
 	// Blocks are cropped better when they are drawn.
@@ -312,7 +312,7 @@ int hw_culling = 0;
 
 	u32 calls = 0, end_ms = porting::getTimeMs() + u32(max_cycle_ms);
 
-	std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> occlude_cache;
+	unordered_map_v3POS<bool> occlude_cache;
 
 	while (!draw_nearest.empty()) {
 		auto ir = draw_nearest.back();
@@ -627,10 +627,10 @@ return;
 	int crack = m_client->getCrackLevel();
 	u32 daynight_ratio = m_client->getEnv().getDayNightRatio();
 
-	m_camera_mutex.Lock();
+	m_camera_mutex.lock();
 	v3f camera_position = m_camera_position;
 	f32 camera_fov = m_camera_fov * 1.1;
-	m_camera_mutex.Unlock();
+	m_camera_mutex.unlock();
 
 	/*
 		Get all blocks and draw all visible ones
@@ -693,7 +693,7 @@ return;
 		// Mesh animation
 		if (mesh_step <= 1)
 		{
-			//JMutexAutoLock lock(block->mesh_mutex);
+			//MutexAutoLock lock(block->mesh_mutex);
 
 			mapBlockMesh->updateCameraOffset(m_camera_offset);
 
@@ -732,7 +732,7 @@ return;
 			Get the meshbuffers of the block
 		*/
 		{
-			//JMutexAutoLock lock(block->mesh_mutex);
+			//MutexAutoLock lock(block->mesh_mutex);
 
 			auto *mesh = mapBlockMesh->getMesh();
 			if (!mesh)
@@ -1006,9 +1006,9 @@ void ClientMap::renderPostFx(CameraMode cam_mode)
 	// Sadly ISceneManager has no "post effects" render pass, in that case we
 	// could just register for that and handle it in renderMap().
 
-	m_camera_mutex.Lock();
+	m_camera_mutex.lock();
 	v3f camera_position = m_camera_position;
-	m_camera_mutex.Unlock();
+	m_camera_mutex.unlock();
 
 	MapNode n = getNodeNoEx(floatToInt(camera_position, BS));
 

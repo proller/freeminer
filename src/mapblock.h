@@ -77,6 +77,7 @@ enum{
 	// The block and all its neighbors have been generated
 	BLOCKGEN_FULLY_GENERATED=6
 };*/
+static MapNode ignoreNode(CONTENT_IGNORE);
 
 #if 0
 enum
@@ -102,7 +103,7 @@ public:
 			return getNode(p);
 		}
 		catch(InvalidPositionException &e){
-			return MapNode(CONTENT_IGNORE);
+			return ignoreNode;
 		}
 	}
 };
@@ -174,7 +175,7 @@ public:
 			memset(data, 0, nodecount * sizeof(MapNode));
 		else
 		for (u32 i = 0; i < nodecount; i++)
-			data[i] = MapNode(CONTENT_IGNORE);
+			data[i] = ignoreNode;
 	}
 
 	/*
@@ -332,7 +333,7 @@ public:
 		*valid_position = isValidPosition(p.X, p.Y, p.Z);
 
 		if (!*valid_position)
-			return MapNode(CONTENT_IGNORE);
+			return ignoreNode;
 
 		auto lock = lock_shared_rec();
 		return data[p.Z * zstride + p.Y * ystride + p.X];
@@ -349,7 +350,7 @@ public:
 	{
 		auto lock = try_lock_shared_rec();
 		if (!lock->owns_lock())
-			return MapNode(CONTENT_IGNORE);
+			return ignoreNode;
 		return getNodeNoLock(p);
 	}
 
@@ -369,7 +370,7 @@ public:
 	MapNode getNodeNoLock(v3POS p)
 	{
 		if (!data)
-			return MapNode(CONTENT_IGNORE);
+			return ignoreNode;
 		return data[p.Z*zstride + p.Y*ystride + p.X];
 	}
 
@@ -381,7 +382,7 @@ public:
 	{
 		*valid_position = data != NULL;
 		if (!valid_position)
-			return MapNode(CONTENT_IGNORE);
+			return ignoreNode;
 
 		auto lock = lock_shared_rec();
 		return data[z * zstride + y * ystride + x];
@@ -394,8 +395,8 @@ public:
 
 	inline void setNodeNoCheck(v3s16 p, MapNode & n)
 	{
-		if (data == NULL)
-			throw InvalidPositionException("setNodeNoCheck data=NULL");
+		//if (data == NULL)
+		//	throw InvalidPositionException("setNodeNoCheck data=NULL");
 
 		auto lock = lock_unique_rec();
 
@@ -416,9 +417,11 @@ public:
 			setNode(v3s16(x0+x, y0+y, z0+z), node);
 	}
 
+/*
 	// See comments in mapblock.cpp
 	bool propagateSunlight(std::set<v3s16> &light_sources,
 		bool remove_light=false, bool *black_air_left=NULL);
+*/
 
 	// Copies data to VoxelManipulator to getPosRelative()
 	void copyTo(VoxelManipulator &dst);
@@ -550,7 +553,7 @@ public:
 
 	// These don't write or read version by itself
 	// Set disk to true for on-disk format, false for over-the-network format
-	// Precondition: version >= SER_FMT_CLIENT_VER_LOWEST
+	// Precondition: version >= SER_FMT_VER_LOWEST_WRITE
 	void serialize(std::ostream &os, u8 version, bool disk, bool use_content_only = false);
 	// If disk == true: In addition to doing other things, will add
 	// unknown blocks from id-name mapping to wndef
@@ -638,17 +641,21 @@ public:
 
 	// Set to content type of a node if the block consists solely of nodes of one type, otherwise set to CONTENT_IGNORE
 	content_t content_only;
+	u8 content_only_param1, content_only_param2;
 	content_t analyzeContent() {
 		auto lock = lock_shared_rec();
 		content_only = data[0].param0;
+		content_only_param1 = data[0].param1;
+		content_only_param2 = data[0].param2;
 		for (int i = 1; i<MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; ++i) {
-			if (data[i].param0 != content_only) {
+			if (data[i].param0 != content_only || data[i].param1 != content_only_param1 || data[i].param2 != content_only_param2) {
 				content_only = CONTENT_IGNORE;
 				break;
 			}
 		}
 		return content_only;
 	}
+	std::atomic_bool lighting_broken;
 
 	static const u32 ystride = MAP_BLOCKSIZE;
 	static const u32 zstride = MAP_BLOCKSIZE * MAP_BLOCKSIZE;
@@ -737,6 +744,18 @@ private:
 };
 
 typedef std::vector<MapBlock*> MapBlockVect;
+
+inline bool objectpos_over_limit(v3f p)
+{
+	const static float map_gen_limit_bs = MYMIN(MAX_MAP_GENERATION_LIMIT,
+		g_settings->getU16("map_generation_limit")) * BS;
+	return (p.X < -map_gen_limit_bs
+		|| p.X >  map_gen_limit_bs
+		|| p.Y < -map_gen_limit_bs
+		|| p.Y >  map_gen_limit_bs
+		|| p.Z < -map_gen_limit_bs
+		|| p.Z >  map_gen_limit_bs);
+}
 
 inline bool blockpos_over_limit(v3s16 p)
 {

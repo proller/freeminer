@@ -13,7 +13,8 @@ PATHCFGFILE = path.cfg
 
 ROOT = $(shell pwd)
 
-GAMES_TO_COPY = default
+GAMES_TO_COPY = default pixture
+MODS_TO_COPY =
 
 
 VERSION_MAJOR := $(shell cat $(ROOT)/../../CMakeLists.txt | \
@@ -30,12 +31,14 @@ VERSION_TWEAK := $(shell cat $(ROOT)/../../CMakeLists.txt | \
 # Increase for each build!
 ################################################################################
 # Play Store actual version (16/03/15): 11
-ANDROID_VERSION_CODE = 12
+ANDROID_VERSION_CODE = 13
 
 #and for freeminer for skip conflict:
-ANDROID_VERSION_CODE = 31
+ANDROID_VERSION_CODE = 37
 
 PROJECT_NAME_C = freeminer
+
+GAMES_VERSION = ""
 
 ################################################################################
 # toolchain config for arm old processors
@@ -73,26 +76,33 @@ USE_ENET = 1
 ################################################################################
 # toolchain config for little endian mips
 ################################################################################
-#TARGET_HOST = mipsel-linux
-#TARGET_ABI = mips
-#TARGET_LIBDIR = mips
-#TARGET_TOOLCHAIN = mipsel-linux-android-
-#TARGET_ARCH = mips32
-#CROSS_PREFIX = mipsel-linux-android-
-#COMPILER_VERSION = 4.8
-#HAVE_LEVELDB = 0
+ifeq ($(TARGET_MIPS),1)
+TARGET_HOST = mipsel-linux
+TARGET_ABI = mips
+TARGET_LIBDIR = mips
+TARGET_TOOLCHAIN = mipsel-linux-android-
+TARGET_CFLAGS_ADDON =
+TARGET_CXXFLAGS_ADDON =
+TARGET_LDFLAGS_ADDON =
+TARGET_ARCH = mips32
+CROSS_PREFIX = mipsel-linux-android-
+HAVE_LEVELDB = 0
+endif
 
 ################################################################################
 # toolchain config for x86
 ################################################################################
-#TARGET_HOST = x86-linux
-#TARGET_ABI = x86
-#TARGET_LIBDIR = x86
-#TARGET_TOOLCHAIN = x86-
-#CROSS_PREFIX = i686-linux-android-
-#TARGET_ARCH = x86
-#COMPILER_VERSION = 4.8
-#HAVE_LEVELDB = 1
+ifeq ($(TARGET_x86),1)
+TARGET_HOST = x86-linux
+TARGET_ABI = x86
+TARGET_LIBDIR = x86
+TARGET_TOOLCHAIN = x86-
+TARGET_CFLAGS_ADDON =
+TARGET_CXXFLAGS_ADDON =
+TARGET_LDFLAGS_ADDON =
+CROSS_PREFIX = i686-linux-android-
+TARGET_ARCH = x86
+endif
 
 ################################################################################
 ASSETS_TIMESTAMP = deps/assets_timestamp
@@ -101,7 +111,7 @@ LEVELDB_DIR = $(ROOT)/deps/leveldb/
 LEVELDB_LIB = $(LEVELDB_DIR)libleveldb.a
 LEVELDB_TIMESTAMP = $(LEVELDB_DIR)/timestamp
 LEVELDB_TIMESTAMP_INT = $(ROOT)/deps/leveldb_timestamp
-LEVELDB_URL_GIT = https://code.google.com/p/leveldb/
+LEVELDB_URL_GIT = https://github.com/google/leveldb
 
 OPENAL_DIR = $(ROOT)/deps/openal-soft/
 OPENAL_LIB = $(OPENAL_DIR)libs/$(TARGET_ABI)/libopenal.so
@@ -130,7 +140,7 @@ OPENSSL_TIMESTAMP = $(OPENSSL_DIR)timestamp
 OPENSSL_TIMESTAMP_INT = $(ROOT)/deps/openssl_timestamp
 OPENSSL_URL = http://www.openssl.org/source/openssl-$(OPENSSL_VERSION).tar.gz
 
-CURL_VERSION = 7.43.0
+CURL_VERSION = 7.44.0
 CURL_DIR = $(ROOT)/deps/curl-$(CURL_VERSION)
 CURL_LIB = $(CURL_DIR)/lib/.libs/libcurl.a
 CURL_TIMESTAMP = $(CURL_DIR)/timestamp
@@ -768,15 +778,18 @@ assets : $(ASSETS_TIMESTAMP) locale
 	cp -r ${ROOT}/../../client ${ROOT}/assets/freeminer; \
 	#cp -r ${ROOT}/../../doc ${ROOT}/assets/freeminer; \
 	cp -r ${ROOT}/../../fonts ${ROOT}/assets/freeminer; \
-	mkdir ${ROOT}/assets/freeminer/games; \
+	mkdir ${ROOT}/assets/freeminer/games${GAMES_VERSION}; \
 	for game in ${GAMES_TO_COPY};                                              \
 	do                                                                         \
-	    cp -Lr ${ROOT}/../../games/$$game ${ROOT}/assets/freeminer/games/; \
+	    cp -Lr ${ROOT}/../../games/$$game ${ROOT}/assets/freeminer/games${GAMES_VERSION}/; \
 	done;                                                                      \
-	cp -r ${ROOT}/../../mods ${ROOT}/assets/freeminer; \
+	mkdir ${ROOT}/assets/freeminer/mods; \
+	for mod in ${MODS_TO_COPY}; do                                             \
+	    cp -r ${ROOT}/../../mods/$$mod ${ROOT}/assets/freeminer/mods/; \
+	done;                                                                      \
 	cp -r ${ROOT}/cmake/locale ${ROOT}/assets/freeminer; \
 	cp -r ${ROOT}/../../textures ${ROOT}/assets/freeminer; \
-	mkdir -p ${ROOT}/assets/freeminer/media;                                    \
+	mkdir -p ${ROOT}/assets/freeminer/media; \
 	cp -r ${IRRLICHT_DIR}/media/Shaders ${ROOT}/assets/freeminer/media; \
 	cd ${ROOT}/assets ||  exit 1;                                              \
 	find . -name "timestamp" -exec rm {} \; ;                                  \
@@ -1001,6 +1014,7 @@ apk: $(PATHCFGFILE) assets $(IRRLICHT_LIB) $(CURL_LIB) $(GMP_LIB) $(LEVELDB_TARG
 	GPROF=${GPROF} APP_ABI=${TARGET_ABI} HAVE_LEVELDB=${HAVE_LEVELDB}          \
 	USE_LUAJIT=${USE_LUAJIT} \
 	USE_ENET=${USE_ENET} \
+	GAMES_VERSION=${GAMES_VERSION} \
 	PROJECT_NAME_C=${PROJECT_NAME_C} \
 	APP_PLATFORM=${APP_PLATFORM}                                               \
 	TARGET_LIBDIR=${TARGET_LIBDIR}                                             \
@@ -1083,7 +1097,7 @@ $(ROOT)/jni/src/android_version.h : prep_srcdir
 	fi
 
 manifest :
-	@BASE_VERSION="${VERS_MAJOR}.${VERS_MINOR}.${VERS_PATCH}.${VERS_TWEAK}"; \
+	@BASE_VERSION="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}.${VERSION_TWEAK}"; \
 	if [ "${NDEBUG}x" != "x" ] ; then                                          \
 		DBG='';                                                                \
 		DBG_FLAG="android:debuggable=\"false\"";                               \

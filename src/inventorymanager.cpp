@@ -379,8 +379,9 @@ void IMoveAction::apply(InventoryManager *mgr, ServerActiveObject *player, IGame
 		If something is wrong (source item is empty, destination is the
 		same as source), nothing happens
 	*/
+	bool did_swap = false;
 	move_count = list_from->moveItem(from_i,
-		list_to, to_i, count, !caused_by_move_somewhere);
+		list_to, to_i, count, !caused_by_move_somewhere, &did_swap);
 
 	// If source is infinite, reset it's stack
 	if (src_can_take_count == -1) {
@@ -401,7 +402,7 @@ void IMoveAction::apply(InventoryManager *mgr, ServerActiveObject *player, IGame
 				}
 			}
 		}
-		if (move_count > 0) {
+		if (move_count > 0 || did_swap) {
 			list_from->deleteItem(from_i);
 			list_from->addItem(from_i, from_stack_was);
 		}
@@ -821,9 +822,9 @@ void ICraftAction::apply(InventoryManager *mgr,
 		// Add the new replacements to the list
 		IItemDefManager *itemdef = gamedef->getItemDefManager();
 		for (std::vector<ItemStack>::iterator it = temp.begin();
-				it != temp.end(); it++) {
+				it != temp.end(); ++it) {
 			for (std::vector<ItemStack>::iterator jt = output_replacements.begin();
-					jt != output_replacements.end(); jt++) {
+					jt != output_replacements.end(); ++jt) {
 				if (it->name == jt->name) {
 					*it = jt->addItem(*it, itemdef);
 					if (it->empty())
@@ -853,7 +854,7 @@ void ICraftAction::apply(InventoryManager *mgr,
 	// Put the replacements in the inventory or drop them on the floor, if
 	// the invenotry is full
 	for (std::vector<ItemStack>::iterator it = output_replacements.begin();
-			it != output_replacements.end(); it++) {
+			it != output_replacements.end(); ++it) {
 		if (list_main)
 			*it = list_main->addItem(*it);
 		if (it->empty())

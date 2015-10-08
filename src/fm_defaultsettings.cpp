@@ -28,6 +28,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "constants.h"
 #include "porting.h"
 
+#ifndef SERVER // Only on client
+#include "minimap.h"
+#endif
+
 const bool debug =
 #ifdef NDEBUG
     false
@@ -67,15 +71,15 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("language", "");
 
 	// Screen
-#if __arm__
- #if defined(_IRR_COMPILE_WITH_OGLES1_)
-	settings->setDefault("video_driver", "ogles1");
- #elif defined(_IRR_COMPILE_WITH_OGLES2_)
-	settings->setDefault("video_driver", "ogles2");
- #else
-	settings->setDefault("video_driver", "opengl");
- #endif
+#if __ANDROID__ || __arm__
 	settings->setDefault("enable_shaders", "0");
+#if defined(_IRR_COMPILE_WITH_OGLES1_)
+	settings->setDefault("video_driver", "ogles1");
+#elif defined(_IRR_COMPILE_WITH_OGLES2_)
+	settings->setDefault("video_driver", "ogles2");
+#else
+	settings->setDefault("video_driver", "opengl");
+#endif
 #else
 	settings->setDefault("video_driver", "opengl");
 	settings->setDefault("enable_shaders", "1");
@@ -98,7 +102,7 @@ void set_default_settings(Settings *settings) {
 	// Paths
 	settings->setDefault("texture_path", "");
 	settings->setDefault("shader_path", "");
-	settings->setDefault("screenshot_path", ".");
+	settings->setDefault("screenshot_path", "screenshots");
 	settings->setDefault("timelapse", "0");
 	settings->setDefault("serverlist_file", "favoriteservers.json");
 
@@ -188,7 +192,7 @@ void set_default_settings(Settings *settings) {
 	// Connecting to server
 	settings->setDefault("address", "");
 	settings->setDefault("remote_port", "30000");
-	settings->setDefault("reconnects", win32 ? "1" : "5"); // TODO: wix windows
+	settings->setDefault("reconnects", win32 ? "1" : "10"); // TODO: wix windows
 
 	// Connecting to curl
 	settings->setDefault("curl_timeout", "5000");
@@ -273,12 +277,13 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("enable_clouds", "true");
 	settings->setDefault("enable_3d_clouds", "true");
 	settings->setDefault("cloud_height", "300");
-	settings->setDefault("cloud_radius", "36");
+	settings->setDefault("cloud_radius", "12");
 	settings->setDefault("new_style_water", "false");
 	settings->setDefault("opaque_water", "false");
 	settings->setDefault("connected_glass", "false");
 	settings->setDefault("leaves_style", "fancy");
 	settings->setDefault("enable_fog", "true");
+	settings->setDefault("enable_zoom_cinematic", "true");
 	settings->setDefault("directional_colored_fog", "true");
 
 	// Visual Features
@@ -346,7 +351,7 @@ void set_default_settings(Settings *settings) {
 	// Client Backend
 	settings->setDefault("desynchronize_mapblock_texture_animation", "true");
 	settings->setDefault("client_unload_unused_data_timeout", "200");
-	settings->setDefault("client_mapblock_limit", "1000");
+	settings->setDefault("client_mapblock_limit", "5000");
 	//settings->setDefault("unload_unused_meshes_timeout", "120");
 	settings->setDefault("enable_mesh_cache", "false");
 	settings->setDefault("repeat_rightclick_time", "0.25");
@@ -360,6 +365,10 @@ void set_default_settings(Settings *settings) {
 
 	// Mini Map
 	settings->setDefault("enable_minimap", "true");
+// TODO: refactor and resolve client/server dependencies
+#ifndef SERVER // Only on client
+	settings->setDefault("minimap_default_mode", itos(MINIMAP_MODE_SURFACEx1));
+#endif
 	settings->setDefault("minimap_shape_round", "true");
 	settings->setDefault("minimap_double_scan_height", "true");
 
@@ -372,8 +381,10 @@ void set_default_settings(Settings *settings) {
 
 #if !MINETEST_PROTO
 	settings->setDefault("serverlist_url", "servers.freeminer.org");
+	settings->setDefault("server_proto", "fm_enet");
 #else
-	settings->setDefault("serverlist_url", "servers.minetest.net"); 
+	settings->setDefault("serverlist_url", "servers.minetest.net");
+	settings->setDefault("server_proto", "mt");
 #endif
 
 	settings->setDefault("server_address", "");
@@ -435,6 +446,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("server_unload_unused_data_timeout", "310");
 	settings->setDefault("max_objects_per_block", "100");
 	settings->setDefault("full_block_send_enable_min_time_from_building", "2.0");
+	settings->setDefault("server_occlusion", "true");
 	settings->setDefault("dedicated_server_step", "0.1");
 	settings->setDefault("ignore_world_load_errors", "true");
 	settings->setDefault("emergequeue_limit_diskonly", ""); // autodetect from number of cpus
@@ -572,11 +584,14 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("farmesh_step", "1");
 	settings->setDefault("leaves_style", "opaque");
 	settings->setDefault("autojump", "1");
+	settings->setDefault("mg_name", "v7");
 
 	char lang[3] = {};
 	AConfiguration_getLanguage(porting::app_global->config, lang);
 	settings->setDefault("language", lang);
 	settings->setDefault("android_keyboard", "0");
+	settings->setDefault("texture_min_size", "16");
+	settings->setDefault("cloud_radius", "6");
 
 #else
 	settings->setDefault("screen_dpi", "72");

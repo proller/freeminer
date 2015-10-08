@@ -415,6 +415,7 @@ private:
 
 	/* mark blocks not sent for all clients */
 	void SetBlocksNotSent(std::map<v3s16, MapBlock *>& block);
+	void SetBlocksNotSent();
 
 	void SendChatMessage(u16 peer_id, const std::string &message);
 	void SendChatMessage(u16 peer_id, const std::wstring &message);
@@ -552,10 +553,7 @@ private:
 
 	// Environment
 	ServerEnvironment *m_env;
-
-public:
-	//JMutex m_env_mutex;
-private:
+	//Mutex m_env_mutex;
 
 	// server connection
 	con::Connection m_con;
@@ -603,7 +601,7 @@ private:
 public:
 	float m_step_dtime;
 private:
-	JMutex m_step_dtime_mutex;
+	Mutex m_step_dtime_mutex;
 
 	// current server step lag counter
 	float m_lag;

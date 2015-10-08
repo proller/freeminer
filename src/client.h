@@ -26,7 +26,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "network/connection.h"
 #include "environment.h"
 #include "irrlichttypes_extrabloated.h"
-#include "jthread/jmutex.h"
+#include "threading/mutex.h"
 #include <ostream>
 #include <map>
 #include <set>
@@ -94,8 +94,8 @@ public:
 	concurrent_unordered_map<v3s16, bool, v3POSHash, v3POSEqual> m_process;
 
 private:
-	concurrent_map<unsigned int, std::unordered_map<v3POS, std::shared_ptr<MeshMakeData>, v3POSHash, v3POSEqual>> m_queue;
-	std::unordered_map<v3POS, unsigned int, v3POSHash, v3POSEqual> m_ranges;
+	concurrent_map<unsigned int, unordered_map_v3POS<std::shared_ptr<MeshMakeData>>> m_queue;
+	unordered_map_v3POS<unsigned int> m_ranges;
 };
 
 struct MeshUpdateResult
@@ -116,15 +116,11 @@ private:
 	MeshUpdateQueue m_queue_in;
  
 protected:
-	const char *getName()
-	{ return "MeshUpdateThread"; }
 	virtual void doUpdate();
 
 public:
 
-	MeshUpdateThread()
-	{
-	}
+	MeshUpdateThread() : UpdateThread("Mesh") {}
 
 	void enqueueUpdate(v3s16 p, std::shared_ptr<MeshMakeData> data,
 			bool urgent);
@@ -520,6 +516,9 @@ public:
 	Mapper* getMapper ()
 	{ return m_mapper; }
 
+	bool isMinimapDisabledByServer()
+	{ return m_minimap_disabled_by_server; }
+
 	// IGameDef interface
 	virtual IItemDefManager* getItemDefManager();
 	virtual INodeDefManager* getNodeDefManager();
@@ -602,6 +601,7 @@ public:
 private:
 	IrrlichtDevice *m_device;
 	Mapper *m_mapper;
+	bool m_minimap_disabled_by_server;
 	// Server serialization version
 	u8 m_server_ser_ver;
 
