@@ -28,7 +28,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "content_sao.h"
 #include "nodedef.h"
 #include "voxelalgorithms.h"
-//#include "profiler.h" // For TimeTaker
 #include "settings.h" // For g_settings
 #include "emerge.h"
 #include "dungeongen.h"
@@ -37,46 +36,56 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "mg_biome.h"
 #include "mg_ore.h"
 #include "mg_decoration.h"
-#include "mapgen_v5.h"
-#include "util/directiontables.h"
+#include "mapgen_fractal.h"
 
 
-FlagDesc flagdesc_mapgen_v5[] = {
-	{NULL,         0}
+FlagDesc flagdesc_mapgen_fractal[] = {
+	{"julia", MGFRACTAL_JULIA},
+	{NULL,    0}
 };
 
+///////////////////////////////////////////////////////////////////////////////////////
 
-MapgenV5::MapgenV5(int mapgenid, MapgenParams *params, EmergeManager *emerge)
+
+MapgenFractal::MapgenFractal(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 	: Mapgen(mapgenid, params, emerge)
-	, Mapgen_features(mapgenid, params, emerge)
 {
 	this->m_emerge = emerge;
 	this->bmgr     = emerge->biomemgr;
 
-	// amount of elements to skip for the next index
-	// for noise/height/biome maps (not vmanip)
+	//// amount of elements to skip for the next index
+	//// for noise/height/biome maps (not vmanip)
 	this->ystride = csize.X;
 	this->zstride = csize.X * (csize.Y + 2);
 
-	this->biomemap  = new u8[csize.X * csize.Z];
-	this->heightmap = new s16[csize.X * csize.Z];
-	this->heatmap   = NULL;
-	this->humidmap  = NULL;
+	this->biomemap        = new u8[csize.X * csize.Z];
+	this->heightmap       = new s16[csize.X * csize.Z];
+	this->heatmap         = NULL;
+	this->humidmap        = NULL;
 
-	MapgenV5Params *sp = (MapgenV5Params *)params->sparams;
-	this->spflags      = sp->spflags;
+	MapgenFractalParams *sp = (MapgenFractalParams *)params->sparams;
+	this->spflags = sp->spflags;
+	this->iterations = sp->iterations;
+	this->scale_x = sp->scale_x;
+	this->scale_y = sp->scale_y;
+	this->scale_z = sp->scale_z;
+	this->offset_x = sp->offset_x;
+	this->offset_y = sp->offset_y;
+	this->offset_z = sp->offset_z;
+	this->slice_w = sp->slice_w;
+	this->julia_x = sp->julia_x;
+	this->julia_y = sp->julia_y;
+	this->julia_z = sp->julia_z;
+	this->julia_w = sp->julia_w;
 
-	// Terrain noise
-	noise_filler_depth = new Noise(&sp->np_filler_depth, seed, csize.X, csize.Z);
-	noise_factor       = new Noise(&sp->np_factor,       seed, csize.X, csize.Z);
-	noise_height       = new Noise(&sp->np_height,       seed, csize.X, csize.Z);
+	//// 2D terrain noise
+	noise_seabed = new Noise(&sp->np_seabed, seed, csize.X, csize.Z);
 
-	// 3D terrain noise
-	noise_cave1  = new Noise(&sp->np_cave1,  seed, csize.X, csize.Y + 2, csize.Z);
-	noise_cave2  = new Noise(&sp->np_cave2,  seed, csize.X, csize.Y + 2, csize.Z);
-	noise_ground = new Noise(&sp->np_ground, seed, csize.X, csize.Y + 2, csize.Z);
+	//// 3D terrain noise
+	noise_cave1 = new Noise(&sp->np_cave1, seed, csize.X, csize.Y + 2, csize.Z);
+	noise_cave2 = new Noise(&sp->np_cave2, seed, csize.X, csize.Y + 2, csize.Z);
 
-	// Biome noise
+	//// Biome noise
 	noise_heat           = new Noise(&params->np_biome_heat,           seed, csize.X, csize.Z);
 	noise_humidity       = new Noise(&params->np_biome_humidity,       seed, csize.X, csize.Z);
 	noise_heat_blend     = new Noise(&params->np_biome_heat_blend,     seed, csize.X, csize.Z);
@@ -104,17 +113,6 @@ MapgenV5::MapgenV5(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 		c_mossycobble = c_cobble;
 	if (c_stair_cobble == CONTENT_IGNORE)
 		c_stair_cobble = c_cobble;
-
-	//freeminer:
-	float_islands = sp->float_islands;
-	noise_float_islands1  = new Noise(&sp->np_float_islands1, seed, csize.X, csize.Y + 2, csize.Z);
-	noise_float_islands2  = new Noise(&sp->np_float_islands2, seed, csize.X, csize.Y + 2, csize.Z);
-	noise_float_islands3  = new Noise(&sp->np_float_islands3, seed, csize.X, csize.Z);
-
-	noise_layers          = new Noise(&sp->np_layers,         seed, csize.X, csize.Y + 2, csize.Z);
-	layers_init(emerge, sp->paramsj);
-	//===
-
 	if (c_sandstonebrick == CONTENT_IGNORE)
 		c_sandstonebrick = c_sandstone;
 	if (c_stair_sandstonebrick == CONTENT_IGNORE)
@@ -122,14 +120,12 @@ MapgenV5::MapgenV5(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 }
 
 
-MapgenV5::~MapgenV5()
+MapgenFractal::~MapgenFractal()
 {
-	delete noise_filler_depth;
-	delete noise_factor;
-	delete noise_height;
+	delete noise_seabed;
+
 	delete noise_cave1;
 	delete noise_cave2;
-	delete noise_ground;
 
 	delete noise_heat;
 	delete noise_humidity;
@@ -141,105 +137,93 @@ MapgenV5::~MapgenV5()
 }
 
 
-MapgenV5Params::MapgenV5Params()
+MapgenFractalParams::MapgenFractalParams()
 {
 	spflags = 0;
 
-	np_filler_depth = NoiseParams(0, 1,  v3f(150, 150, 150), 261,    4, 0.7,  2.0);
-	np_factor       = NoiseParams(0, 1,  v3f(250, 250, 250), 920381, 3, 0.45, 2.0);
-	np_height       = NoiseParams(0, 10, v3f(250, 250, 250), 84174,  4, 0.5,  2.0);
-	np_cave1        = NoiseParams(0, 12, v3f(50,  50,  50),  52534,  4, 0.5,  2.0);
-	np_cave2        = NoiseParams(0, 12, v3f(50,  50,  50),  10325,  4, 0.5,  2.0);
-	np_ground       = NoiseParams(0, 40, v3f(80,  80,  80),  983240, 4, 0.55, 2.0, NOISE_FLAG_EASED);
+	iterations = 9;
+	scale_x = 1024.0;
+	scale_y = 256.0;
+	scale_z = 1024.0;
+	offset_x = -1.75;
+	offset_y = 0.0;
+	offset_z = 0.0;
+	slice_w = 0.0;
+	julia_x = 0.33;
+	julia_y = 0.33;
+	julia_z = 0.33;
+	julia_w = 0.33;
 
-	//freeminer:
-	float_islands = 500;
-	np_float_islands1  = NoiseParams(0,    1,   v3f(256, 256, 256), 3683, 6, 0.6, 2.0, NOISE_FLAG_DEFAULTS, 1, 1.5);
-	np_float_islands2  = NoiseParams(0,    1,   v3f(8,   8,   8  ), 9292, 2, 0.5, 2.0, NOISE_FLAG_DEFAULTS, 1, 1.5);
-	np_float_islands3  = NoiseParams(0,    1,   v3f(256, 256, 256), 6412, 2, 0.5, 2.0, NOISE_FLAG_DEFAULTS, 1, 0.5);
-	np_layers          = NoiseParams(500,  500, v3f(100, 100, 100), 3663, 5, 0.6, 2.0, NOISE_FLAG_DEFAULTS, 1, 5,   0.5);
+	np_seabed = NoiseParams(-14, 9,  v3f(600, 600, 600), 41900, 5, 0.6, 2.0);
+	np_cave1  = NoiseParams(0,   12, v3f(128, 128, 128), 52534, 4, 0.5, 2.0);
+	np_cave2  = NoiseParams(0,   12, v3f(128, 128, 128), 10325, 4, 0.5, 2.0);
 }
 
 
-//#define CAVE_NOISE_SCALE 12.0
-//#define CAVE_NOISE_THRESHOLD (1.5/CAVE_NOISE_SCALE) = 0.125
-
-
-void MapgenV5Params::readParams(Settings *settings)
+void MapgenFractalParams::readParams(Settings *settings)
 {
-	settings->getFlagStrNoEx("mgv5_spflags", spflags, flagdesc_mapgen_v5);
+	settings->getFlagStrNoEx("mgfractal_spflags", spflags, flagdesc_mapgen_fractal);
 
-	settings->getNoiseParams("mgv5_np_filler_depth", np_filler_depth);
-	settings->getNoiseParams("mgv5_np_factor",       np_factor);
-	settings->getNoiseParams("mgv5_np_height",       np_height);
-	settings->getNoiseParams("mgv5_np_cave1",        np_cave1);
-	settings->getNoiseParams("mgv5_np_cave2",        np_cave2);
-	settings->getNoiseParams("mgv5_np_ground",       np_ground);
+	settings->getU16NoEx("mgfractal_iterations", iterations);
+	settings->getFloatNoEx("mgfractal_scale_x", scale_x);
+	settings->getFloatNoEx("mgfractal_scale_y", scale_y);
+	settings->getFloatNoEx("mgfractal_scale_z", scale_z);
+	settings->getFloatNoEx("mgfractal_offset_x", offset_x);
+	settings->getFloatNoEx("mgfractal_offset_y", offset_y);
+	settings->getFloatNoEx("mgfractal_offset_z", offset_z);
+	settings->getFloatNoEx("mgfractal_slice_w", slice_w);
+	settings->getFloatNoEx("mgfractal_julia_x", julia_x);
+	settings->getFloatNoEx("mgfractal_julia_y", julia_y);
+	settings->getFloatNoEx("mgfractal_julia_z", julia_z);
+	settings->getFloatNoEx("mgfractal_julia_w", julia_w);
 
-	//freeminer:
-	settings->getS16NoEx("mg_float_islands", float_islands);
-	settings->getNoiseParamsFromGroup("mg_np_float_islands1", np_float_islands1);
-	settings->getNoiseParamsFromGroup("mg_np_float_islands2", np_float_islands2);
-	settings->getNoiseParamsFromGroup("mg_np_float_islands3", np_float_islands3);
-	settings->getNoiseParamsFromGroup("mg_np_layers",         np_layers);
-	paramsj = settings->getJson("mg_params", paramsj);
+	settings->getNoiseParams("mgfractal_np_seabed", np_seabed);
+	settings->getNoiseParams("mgfractal_np_cave1", np_cave1);
+	settings->getNoiseParams("mgfractal_np_cave2", np_cave2);
 }
 
 
-void MapgenV5Params::writeParams(Settings *settings) const
+void MapgenFractalParams::writeParams(Settings *settings) const
 {
-	settings->setFlagStr("mgv5_spflags", spflags, flagdesc_mapgen_v5, U32_MAX);
+	settings->setFlagStr("mgfractal_spflags", spflags, flagdesc_mapgen_fractal, U32_MAX);
 
-	settings->setNoiseParams("mgv5_np_filler_depth", np_filler_depth);
-	settings->setNoiseParams("mgv5_np_factor",       np_factor);
-	settings->setNoiseParams("mgv5_np_height",       np_height);
-	settings->setNoiseParams("mgv5_np_cave1",        np_cave1);
-	settings->setNoiseParams("mgv5_np_cave2",        np_cave2);
-	settings->setNoiseParams("mgv5_np_ground",       np_ground);
+	settings->setU16("mgfractal_iterations", iterations);
+	settings->setFloat("mgfractal_scale_x", scale_x);
+	settings->setFloat("mgfractal_scale_y", scale_y);
+	settings->setFloat("mgfractal_scale_z", scale_z);
+	settings->setFloat("mgfractal_offset_x", offset_x);
+	settings->setFloat("mgfractal_offset_y", offset_y);
+	settings->setFloat("mgfractal_offset_z", offset_z);
+	settings->setFloat("mgfractal_slice_w", slice_w);
+	settings->setFloat("mgfractal_julia_x", julia_x);
+	settings->setFloat("mgfractal_julia_y", julia_y);
+	settings->setFloat("mgfractal_julia_z", julia_z);
+	settings->setFloat("mgfractal_julia_w", julia_w);
 
-	//freeminer:
-	settings->setS16("mg_float_islands", float_islands);
-	settings->setNoiseParams("mg_np_float_islands1", np_float_islands1);
-	settings->setNoiseParams("mg_np_float_islands2", np_float_islands2);
-	settings->setNoiseParams("mg_np_float_islands3", np_float_islands3);
-	settings->setNoiseParams("mg_np_layers",         np_layers);
-	settings->setJson("mg_params", paramsj);
+	settings->setNoiseParams("mgfractal_np_seabed", np_seabed);
+	settings->setNoiseParams("mgfractal_np_cave1", np_cave1);
+	settings->setNoiseParams("mgfractal_np_cave2", np_cave2);
 }
 
 
-int MapgenV5::getGroundLevelAtPoint(v2s16 p)
+/////////////////////////////////////////////////////////////////
+
+
+int MapgenFractal::getGroundLevelAtPoint(v2s16 p)
 {
-	//TimeTaker t("getGroundLevelAtPoint", NULL, PRECISION_MICRO);
-
-	float f = 0.55 + NoisePerlin2D(&noise_factor->np, p.X, p.Y, seed);
-	if (f < 0.01)
-		f = 0.01;
-	else if (f >= 1.0)
-		f *= 1.6;
-	float h = NoisePerlin2D(&noise_height->np, p.X, p.Y, seed);
-
-	s16 search_start = 128; // Only bother searching this range, actual
-	s16 search_end = -128;  // ground level is rarely higher or lower.
+	s16 search_start = 128;
+	s16 search_end = -128;
 
 	for (s16 y = search_start; y >= search_end; y--) {
-		float n_ground = NoisePerlin3D(&noise_ground->np, p.X, y, p.Y, seed);
-		// If solid
-		if (n_ground * f > y - h) {
-			// If either top 2 nodes of search are solid this is inside a
-			// mountain or floatland with no space for the player to spawn.
-			if (y >= search_start - 1)
-				return MAX_MAP_GENERATION_LIMIT;
-			else
-				return y; // Ground below at least 2 nodes of space
-		}
+		if (getFractalAtPoint(p.X, y, p.Y))
+			return y;
 	}
 
-	//printf("getGroundLevelAtPoint: %dus\n", t.stop());
 	return -MAX_MAP_GENERATION_LIMIT;
 }
 
 
-void MapgenV5::makeChunk(BlockMakeData *data)
+void MapgenFractal::makeChunk(BlockMakeData *data)
 {
 	// Pre-conditions
 	assert(data->vmanip);
@@ -251,9 +235,9 @@ void MapgenV5::makeChunk(BlockMakeData *data)
 		data->blockpos_requested.Y <= data->blockpos_max.Y &&
 		data->blockpos_requested.Z <= data->blockpos_max.Z);
 
-	generating = true;
-	vm   = data->vmanip;
-	ndef = data->nodedef;
+	this->generating = true;
+	this->vm   = data->vmanip;
+	this->ndef = data->nodedef;
 	//TimeTaker t("makeChunk");
 
 	v3s16 blockpos_min = data->blockpos_min;
@@ -263,20 +247,13 @@ void MapgenV5::makeChunk(BlockMakeData *data)
 	full_node_min = (blockpos_min - 1) * MAP_BLOCKSIZE;
 	full_node_max = (blockpos_max + 2) * MAP_BLOCKSIZE - v3s16(1, 1, 1);
 
-	// Create a block-specific seed
 	blockseed = getBlockSeed2(full_node_min, seed);
 
 	// Make some noise
 	calculateNoise();
 
-	if (float_islands && node_max.Y >= float_islands) {
-		float_islands_prepare(node_min, node_max, float_islands);
-	}
-
-	layers_prepare(node_min, node_max);
-
-	// Generate base terrain
-	s16 stone_surface_max_y = generateBaseTerrain();
+	// Generate base terrain, mountains, and ridges with initial heightmaps
+	s16 stone_surface_max_y = generateTerrain();
 
 	// Create heightmap
 	updateHeightmap(node_min, node_max);
@@ -288,11 +265,9 @@ void MapgenV5::makeChunk(BlockMakeData *data)
 	// Actually place the biome-specific nodes
 	MgStoneType stone_type = generateBiomes(noise_heat->result, noise_humidity->result);
 
-	// Generate caves
-	if ((flags & MG_CAVES) && (stone_surface_max_y >= node_min.Y))
+	if (flags & MG_CAVES)
 		generateCaves(stone_surface_max_y);
 
-	// Generate dungeons and desert temples
 	if ((flags & MG_DUNGEONS) && (stone_surface_max_y >= node_min.Y)) {
 		DungeonParams dp;
 
@@ -347,36 +322,33 @@ void MapgenV5::makeChunk(BlockMakeData *data)
 
 	//printf("makeChunk: %dms\n", t.stop());
 
-	// Add top and bottom side of water to transforming_liquid queue
 	updateLiquid(full_node_min, full_node_max);
 
-	// Calculate lighting
-	if (flags & MG_LIGHT) {
+	if (flags & MG_LIGHT)
 		calcLighting(node_min - v3s16(0, 1, 0), node_max + v3s16(0, 1, 0),
 			full_node_min, full_node_max);
-	}
+
+	//setLighting(node_min - v3s16(1, 0, 1) * MAP_BLOCKSIZE,
+	//			node_max + v3s16(1, 0, 1) * MAP_BLOCKSIZE, 0xFF);
 
 	this->generating = false;
 }
 
 
-void MapgenV5::calculateNoise()
+void MapgenFractal::calculateNoise()
 {
 	//TimeTaker t("calculateNoise", NULL, PRECISION_MICRO);
 	int x = node_min.X;
 	int y = node_min.Y - 1;
 	int z = node_min.Z;
 
-	noise_factor->perlinMap2D(x, z);
-	noise_height->perlinMap2D(x, z);
-	noise_ground->perlinMap3D(x, y, z);
+	noise_seabed->perlinMap2D(x, z);
 
 	if (flags & MG_CAVES) {
 		noise_cave1->perlinMap3D(x, y, z);
 		noise_cave2->perlinMap3D(x, y, z);
 	}
 
-	noise_filler_depth->perlinMap2D(x, z);
 	noise_heat->perlinMap2D(x, z);
 	noise_humidity->perlinMap2D(x, z);
 	noise_heat_blend->perlinMap2D(x, z);
@@ -393,55 +365,75 @@ void MapgenV5::calculateNoise()
 }
 
 
-//bool is_cave(u32 index) {
-//	double d1 = contour(noise_cave1->result[index]);
-//	double d2 = contour(noise_cave2->result[index]);
-//	return d1*d2 > CAVE_NOISE_THRESHOLD;
-//}
-
-//bool val_is_ground(v3s16 p, u32 index, u32 index2d) {
-//	double f = 0.55 + noise_factor->result[index2d];
-//	if(f < 0.01)
-//		f = 0.01;
-//	else if(f >= 1.0)
-//		f *= 1.6;
-//	double h = WATER_LEVEL + 10 * noise_height->result[index2d];
-//	return (noise_ground->result[index] * f > (double)p.Y - h);
-//}
-
-
-int MapgenV5::generateBaseTerrain()
+bool MapgenFractal::getFractalAtPoint(s16 x, s16 y, s16 z)
 {
-	u32 index = 0;
+	float cx, cy, cz, cw, ox, oy, oz, ow;
+
+	if (spflags & MGFRACTAL_JULIA) {  // Julia set
+		cx = julia_x;
+		cy = julia_y;
+		cz = julia_z;
+		cw = julia_w;
+		ox = (float)x / scale_x + offset_x;
+		oy = (float)y / scale_y + offset_y;
+		oz = (float)z / scale_z + offset_z;
+		ow = slice_w;
+	} else {  // Mandelbrot set
+		cx = (float)x / scale_x + offset_x;
+		cy = (float)y / scale_y + offset_y;
+		cz = (float)z / scale_z + offset_z;
+		cw = slice_w;
+		ox = 0.0f;
+		oy = 0.0f;
+		oz = 0.0f;
+		ow = 0.0f;
+	}
+
+	for (u16 iter = 0; iter < iterations; iter++) {
+		// 4D "Roundy" Mandelbrot set
+		float nx = ox * ox - oy * oy - oz * oz - ow * ow + cx;
+		float ny = 2.0f * (ox * oy + oz * ow) + cy;
+		float nz = 2.0f * (ox * oz + oy * ow) + cz;
+		float nw = 2.0f * (ox * ow + oy * oz) + cw;
+
+		if (nx * nx + ny * ny + nz * nz + nw * nw > 4.0f)
+			return false;
+
+		ox = nx;
+		oy = ny;
+		oz = nz;
+		ow = nw;
+	}
+
+	return true;
+}
+
+
+s16 MapgenFractal::generateTerrain()
+{
+	MapNode n_air(CONTENT_AIR);
+	MapNode n_stone(c_stone);
+	MapNode n_water(c_water_source);
+
+	s16 stone_surface_max_y = -MAX_MAP_GENERATION_LIMIT;
 	u32 index2d = 0;
-	int stone_surface_max_y = -MAX_MAP_GENERATION_LIMIT;
 
-	for (s16 z=node_min.Z; z<=node_max.Z; z++) {
-		for (s16 y=node_min.Y - 1; y<=node_max.Y + 1; y++) {
-			u32 i = vm->m_area.index(node_min.X, y, z);
-			for (s16 x=node_min.X; x<=node_max.X; x++, i++, index++, index2d++) {
-				if (vm->m_data[i].getContent() != CONTENT_IGNORE)
-					continue;
+	for (s16 z = node_min.Z; z <= node_max.Z; z++) {
+		for (s16 y = node_min.Y - 1; y <= node_max.Y + 1; y++) {
+			u32 vi = vm->m_area.index(node_min.X, y, z);
+			for (s16 x = node_min.X; x <= node_max.X; x++, vi++, index2d++) {
+				if (vm->m_data[vi].getContent() == CONTENT_IGNORE) {
+					s16 seabed_height = noise_seabed->result[index2d];
 
-				float f = 0.55 + noise_factor->result[index2d];
-				if (f < 0.01)
-					f = 0.01;
-				else if (f >= 1.0)
-					f *= 1.6;
-				float h = noise_height->result[index2d];
-
-				if (noise_ground->result[index] * f < y - h) {
-					if (y <= water_level) {
-						vm->m_data[i] = MapNode(c_water_source);
-					if (liquid_pressure && y <= 0)
-						vm->m_data[i].addLevel(m_emerge->ndef, water_level - y, 1);
+					if (y <= seabed_height || getFractalAtPoint(x, y, z)) {
+						vm->m_data[vi] = n_stone;
+						if (y > stone_surface_max_y)
+							stone_surface_max_y = y;
+					} else if (y <= water_level) {
+						vm->m_data[vi] = n_water;
+					} else {
+						vm->m_data[vi] = n_air;
 					}
-					else
-						vm->m_data[i] = MapNode(CONTENT_AIR);
-				} else {
-					vm->m_data[i] = layers_get(index);
-					if (y > stone_surface_max_y)
-						stone_surface_max_y = y;
 				}
 			}
 			index2d -= ystride;
@@ -453,7 +445,7 @@ int MapgenV5::generateBaseTerrain()
 }
 
 
-MgStoneType MapgenV5::generateBiomes(float *heat_map, float *humidity_map)
+MgStoneType MapgenFractal::generateBiomes(float *heat_map, float *humidity_map)
 {
 	v3s16 em = vm->m_area.getExtent();
 	u32 index = 0;
@@ -477,6 +469,7 @@ MgStoneType MapgenV5::generateBiomes(float *heat_map, float *humidity_map)
 		// nplaced to stone level by setting a number exceeding any possible filler depth.
 		u16 nplaced = (air_above || water_above) ? 0 : U16_MAX;
 
+
 		for (s16 y = node_max.Y; y >= node_min.Y; y--) {
 			content_t c = vm->m_data[vi].getContent();
 
@@ -491,8 +484,7 @@ MgStoneType MapgenV5::generateBiomes(float *heat_map, float *humidity_map)
 					(c == c_water_source && (air_above || !biome))) {
 				biome = bmgr->getBiome(heat_map[index], humidity_map[index], y);
 				depth_top = biome->depth_top;
-				base_filler = MYMAX(depth_top + biome->depth_filler
-						+ noise_filler_depth->result[index], 0);
+				base_filler = depth_top + biome->depth_filler;
 				depth_water_top = biome->depth_water_top;
 
 				// Detect stone type for dungeons during every biome calculation.
@@ -550,41 +542,7 @@ MgStoneType MapgenV5::generateBiomes(float *heat_map, float *humidity_map)
 }
 
 
-void MapgenV5::generateCaves(int max_stone_y)
-{
-	if (max_stone_y >= node_min.Y) {
-		u32 index = 0;
-
-		for (s16 z = node_min.Z; z <= node_max.Z; z++)
-		for (s16 y = node_min.Y - 1; y <= node_max.Y + 1; y++) {
-			u32 i = vm->m_area.index(node_min.X, y, z);
-			for (s16 x = node_min.X; x <= node_max.X; x++, i++, index++) {
-				float d1 = contour(noise_cave1->result[index]);
-				float d2 = contour(noise_cave2->result[index]);
-				if (d1*d2 > 0.125) {
-					content_t c = vm->m_data[i].getContent();
-					if (!ndef->get(c).is_ground_content || c == CONTENT_AIR)
-						continue;
-
-					vm->m_data[i] = MapNode(CONTENT_AIR);
-				}
-			}
-		}
-	}
-
-	if (node_max.Y > MGV5_LARGE_CAVE_DEPTH)
-		return;
-
-	PseudoRandom ps(blockseed + 21343);
-	u32 bruises_count = (ps.range(1, 4) == 1) ? ps.range(1, 2) : 0;
-	for (u32 i = 0; i < bruises_count; i++) {
-		CaveV5 cave(this, &ps);
-		cave.makeCave(node_min, node_max, max_stone_y);
-	}
-}
-
-
-void MapgenV5::dustTopNodes()
+void MapgenFractal::dustTopNodes()
 {
 	if (node_max.Y < water_level)
 		return;
@@ -630,5 +588,39 @@ void MapgenV5::dustTopNodes()
 			vm->m_area.add_y(em, vi, 1);
 			vm->m_data[vi] = MapNode(biome->c_dust);
 		}
+	}
+}
+
+
+void MapgenFractal::generateCaves(s16 max_stone_y)
+{
+	if (max_stone_y >= node_min.Y) {
+		u32 index = 0;
+
+		for (s16 z = node_min.Z; z <= node_max.Z; z++)
+		for (s16 y = node_min.Y - 1; y <= node_max.Y + 1; y++) {
+			u32 vi = vm->m_area.index(node_min.X, y, z);
+			for (s16 x = node_min.X; x <= node_max.X; x++, vi++, index++) {
+				float d1 = contour(noise_cave1->result[index]);
+				float d2 = contour(noise_cave2->result[index]);
+				if (d1 * d2 > 0.3) {
+					content_t c = vm->m_data[vi].getContent();
+					if (!ndef->get(c).is_ground_content || c == CONTENT_AIR)
+						continue;
+
+					vm->m_data[vi] = MapNode(CONTENT_AIR);
+				}
+			}
+		}
+	}
+
+	if (node_max.Y > MGFRACTAL_LARGE_CAVE_DEPTH)
+		return;
+
+	PseudoRandom ps(blockseed + 21343);
+	u32 bruises_count = (ps.range(1, 4) == 1) ? ps.range(1, 2) : 0;
+	for (u32 i = 0; i < bruises_count; i++) {
+		CaveFractal cave(this, &ps);
+		cave.makeCave(node_min, node_max, max_stone_y);
 	}
 }

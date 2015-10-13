@@ -126,9 +126,13 @@ void *ServerThread::run()
 
 			// Loop used only when 100% cpu load or on old slow hardware.
 			// usually only one packet recieved here
-			u32 end_ms = porting::getTimeMs() + u32(1000 * dedicated_server_step/2);
+			u32 end_ms = porting::getTimeMs();
+			int sleep = (1000 * dedicated_server_step) - (end_ms - time_now);
+			if (sleep < 10)
+				sleep = 10;
+			end_ms += sleep; //u32(1000 * dedicated_server_step/2);
 			for (u16 i = 0; i < 1000; ++i) {
-				if (!m_server->Receive())
+				if (!m_server->Receive(sleep))
 					break;
 				if (porting::getTimeMs() > end_ms)
 					break;
@@ -808,7 +812,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 			player_radius = radius;
 
 		radius *= MAP_BLOCKSIZE;
-		s16 radius_deactivate = radius*3;
+		s16 radius_deactivate = radius * 2;
 		player_radius *= MAP_BLOCKSIZE;
 
 		for(auto & client : clients) {
@@ -851,7 +855,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 			while (!removed_objects.empty()) {
 				// Get object
 				u16 id = removed_objects.front();
-				ServerActiveObject* obj = m_env->getActiveObject(id);
+				ServerActiveObject* obj = m_env->getActiveObject(id, true);
 
 				// Add to data buffer for sending
 				writeU16((u8*)buf, id);
@@ -919,7 +923,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 			while (!removed_objects.empty()) {
 				// Get object
 				u16 id = removed_objects.front();
-				ServerActiveObject* obj = m_env->getActiveObject(id);
+				ServerActiveObject* obj = m_env->getActiveObject(id, true);
 
 				// Remove from known objects
 				client->m_known_objects.erase(id);
@@ -1310,7 +1314,7 @@ int Server::save(float dtime, bool breakable) {
 	return ret;
 }
 
-u16 Server::Receive()
+u16 Server::Receive(int ms)
 {
 	DSTACK(__FUNCTION_NAME);
 	SharedBuffer<u8> data;
@@ -1318,7 +1322,7 @@ u16 Server::Receive()
 	u16 received = 0;
 	try {
 		NetworkPacket pkt;
-		auto size = m_con.Receive(&pkt, 10);
+		auto size = m_con.Receive(&pkt, ms);
 		peer_id = pkt.getPeerId();
 		if (size) {
 			ProcessData(&pkt);

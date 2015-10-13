@@ -748,7 +748,7 @@ neighbor_found:
 void MapBlock::abmTriggersRun(ServerEnvironment * m_env, u32 time, bool activate) {
 		ScopeProfiler sp(g_profiler, "ABM trigger blocks", SPT_ADD);
 
-		std::unique_lock<std::mutex> lock(abm_triggers_mutex);
+		std::unique_lock<std::mutex> lock(abm_triggers_mutex, std::try_to_lock);
 		if (!lock.owns_lock())
 			return;
 
@@ -914,8 +914,12 @@ bool ServerEnvironment::setNode(v3s16 p, const MapNode &n, s16 fast)
 	if (fast) {
 		try {
 			MapNode nn = n;
-			if (fast == 2)
-				nn.param1 = n_old.param1;
+			if (fast == 2 && !nn.param1) {
+				if (n_old.param1)
+					nn.param1 = n_old.param1;
+				else if (p.Y > 0)
+					nn.param1 = 5; // will be recalculated by next light step
+			}
 			m_map->setNode(p, nn);
 		} catch(InvalidPositionException &e) { }
 	} else {
@@ -1399,7 +1403,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 			/*infostream<<"Server: Block ("<<p.X<<","<<p.Y<<","<<p.Z
 					<<") being handled"<<std::endl;*/
 
-			MapBlock *block = m_map->getBlock(p, true);
+			MapBlock *block = m_map->getBlock(p, true, true);
 			if (!block)
 				continue;
 
@@ -1605,12 +1609,12 @@ int ServerEnvironment::analyzeBlocks(float dtime, unsigned int max_cycle_ms) {
 	return calls;
 }
 
-ServerActiveObject* ServerEnvironment::getActiveObject(u16 id)
+ServerActiveObject* ServerEnvironment::getActiveObject(u16 id, bool removed)
 {
 	auto n = m_active_objects.find(id);
 	if(n == m_active_objects.end())
 		return NULL;
-	if (!n->second || n->second->m_removed || n->second->m_pending_deactivation)
+	if (!removed && (!n->second || n->second->m_removed || n->second->m_pending_deactivation))
 		return NULL;
 	return n->second;
 }
@@ -2099,7 +2103,7 @@ void ServerEnvironment::activateObjects(MapBlock *block, u32 dtime_s)
 			i != block->m_static_objects.m_stored.end(); ++i) {
 		StaticObject &s_obj = *i;
 
-		if (s_obj.pos.X > MAX_MAP_GENERATION_LIMIT * BS || s_obj.pos.X > MAX_MAP_GENERATION_LIMIT * BS || s_obj.pos.Y > MAX_MAP_GENERATION_LIMIT * BS) {
+		if (!s_obj.type || s_obj.pos.X > MAX_MAP_GENERATION_LIMIT * BS || s_obj.pos.X > MAX_MAP_GENERATION_LIMIT * BS || s_obj.pos.Y > MAX_MAP_GENERATION_LIMIT * BS) {
 			errorstream << "activateObjects broken static object: blockpos="<<block->getPos()<<" type=" << (int)s_obj.type << " p="<<s_obj.pos<<std::endl;
 			break;
 		}
@@ -2114,7 +2118,7 @@ void ServerEnvironment::activateObjects(MapBlock *block, u32 dtime_s)
 					<<"failed to create active object from static object "
 					<<"in block "<<PP(s_obj.pos/BS)
 					<<" type="<<(int)s_obj.type<<" data:"<<std::endl;
-			continue;
+			break;
 			print_hexdump(verbosestream, s_obj.data);
 
 			new_stored.push_back(s_obj);
@@ -2145,7 +2149,7 @@ void ServerEnvironment::activateObjects(MapBlock *block, u32 dtime_s)
 			i != block->m_static_objects.m_active.end(); ++i)
 	{
 		u16 id = i->first;
-		ServerActiveObject *object = getActiveObject(id);
+		ServerActiveObject *object = getActiveObject(id, true);
 		if (!object)
 			continue;
 		object->m_pending_deactivation = false;
