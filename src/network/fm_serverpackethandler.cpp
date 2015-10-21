@@ -49,7 +49,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 void Server::ProcessData(NetworkPacket *pkt)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	// Environment is locked first.
 	//MutexAutoLock envlock(m_env_mutex);
 
@@ -337,7 +337,9 @@ void Server::ProcessData(NetworkPacket *pkt)
 		}
 
 		if(given_password != checkpwd){
-			actionstream<<"Server: "<<playername<<" supplied wrong password" <<std::endl;
+			actionstream<<"Server: "<<playername<<" supplied wrong password"
+				<< " at " << addr_s
+				<< std::endl;
 			DenyAccess(peer_id, "Wrong password");
 			return;
 		}
@@ -919,10 +921,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 			return;
 		}
 
-#if !ENABLE_THREADS
-		auto lock = m_env->getMap().m_nothread_locker.lock_unique_rec();
-#endif
-
+		MAP_NOTHREAD_LOCK((&m_env->getMap()));
 
 		v3f player_pos = playersao->getLastGoodPosition();
 

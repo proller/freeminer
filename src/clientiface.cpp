@@ -117,7 +117,7 @@ int RemoteClient::GetNextBlocks (
 		double m_uptime,
 		std::vector<PrioritySortedBlockTransfer> &dest)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	auto lock = lock_unique_rec();
 	if (!lock->owns_lock())
@@ -986,7 +986,7 @@ void ClientInterface::DeleteClient(u16 peer_id)
 	{
 		// Get object
 		u16 id = i->first;
-		ServerActiveObject* obj = m_env->getActiveObject(id);
+		ServerActiveObject* obj = m_env->getActiveObject(id, true);
 
 		if(obj && obj->m_known_by_count > 0)
 			obj->m_known_by_count--;

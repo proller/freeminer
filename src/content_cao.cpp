@@ -470,7 +470,7 @@ void ItemCAO::updateTexture()
 	}
 	catch(SerializationError &e)
 	{
-		infostream<<"WARNING: "<<__FUNCTION_NAME
+		warningstream<<FUNCTION_NAME
 				<<": error deSerializing itemstring \""
 				<<m_itemstring<<std::endl;
 	}
@@ -991,6 +991,11 @@ void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 				wname.c_str(), m_nametag_color, node);
 		m_textnode->grab();
 		m_textnode->setPosition(v3f(0, BS*1.1, 0));
+
+		// Enforce hiding nametag,
+		// because if freetype is enabled, a grey
+		// shadow can remain.
+		m_textnode->setVisible(m_nametag_color.getAlpha() > 0);
 	}
 
 	updateNodePos();
@@ -999,13 +1004,14 @@ void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 	updateAttachments();
 
 #if (IRRLICHT_VERSION_MAJOR >= 1 && IRRLICHT_VERSION_MINOR >= 8) || IRRLICHT_VERSION_MAJOR >= 2
+	const static float shadowinf = 5 * BS;
 	if (g_settings->getBool("shadows")) {
 		if (m_wield_meshnode && m_wield_meshnode->m_meshnode)
-			m_shadownode = m_wield_meshnode->m_meshnode->addShadowVolumeSceneNode();
+			m_shadownode = m_wield_meshnode->m_meshnode->addShadowVolumeSceneNode(nullptr, 0, true, shadowinf);
 		if(m_animated_meshnode)
-			m_shadownode = m_animated_meshnode->addShadowVolumeSceneNode();
+			m_shadownode = m_animated_meshnode->addShadowVolumeSceneNode(nullptr, 0, true, shadowinf);
 		else if(m_meshnode)
-			m_shadownode = m_meshnode->addShadowVolumeSceneNode();
+			m_shadownode = m_meshnode->addShadowVolumeSceneNode(nullptr, 0, true, shadowinf);
 	}
 #endif
 }

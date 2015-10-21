@@ -538,6 +538,10 @@ node definition:
       0 = y+    1 = z+    2 = z-    3 = x+    4 = x-    5 = y-
       facedir's two less significant bits are rotation around the axis
     paramtype2 == "leveled"
+    paramtype2 == "degrotate"
+    ^ The rotation of this node is stored in param2. Plants are rotated this way.
+      Values range 0 - 179. The value stored in param2 is multiplied by two to
+      get the actual rotation of the node.
     collision_box = {
       type = "fixed",
       fixed = {
@@ -1770,11 +1774,11 @@ Helper functions
       * false: return only file names.
 
 ### Logging
-* `minetest.debug(line)`
-    * Always printed to `stderr` and logfile (`print()` is redirected here)
-* `minetest.log(line)`
-* `minetest.log(loglevel, line)`
-    * `loglevel` is one of `"error"`, `"action"`, `"info"`, `"verbose"`
+* `minetest.debug(...)`
+    * Equivalent to `minetest.log(table.concat({...}, "\t"))`
+* `minetest.log([level,] text)`
+    * `level` is one of `"none"`, `"error"`, `"warning"`, `"action"`,
+      `"info"`, or `"verbose"`.  Default is `"none"`.
 
 ### Registration functions
 Call these functions only at load time!
@@ -3059,10 +3063,14 @@ Definition tables
     {
     --  In the following two fields, also group:groupname will work.
         nodenames = {"default:lava_source"},
-        neighbors = {"default:water_source", "default:water_flowing"}, -- (any of these)
-    --  ^ If left out or empty, any neighbor will do
-        interval = 1.0, -- (operation interval)
-        chance = 1, -- (chance of trigger is 1.0/this)
+        neighbors = {"default:water_source", "default:water_flowing"}, -- Any of these --[[
+        ^ If left out or empty, any neighbor will do ]]
+        interval = 1.0, -- Operation interval in seconds
+        chance = 1, -- Chance of trigger per-node per-interval is 1.0 / this
+        catch_up = true, -- If true, catch-up behaviour is enabled --[[
+        ^ The chance value is temporarily reduced when returning to
+          an area to simulate time lost by the area being unattended.
+        ^ Note chance value can often be reduced to 1 ]]
         action = func(pos, node, active_object_count, active_object_count_wider),
     }
 

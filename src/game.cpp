@@ -43,7 +43,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "guiPasswordChange.h"
 #include "guiVolumeChange.h"
 #include "hud.h"
-#include "logoutputbuffer.h"
 #include "mainmenumanager.h"
 #include "mapblock.h"
 #include "nodedef.h"         // Needed for determining pointing to nodes
@@ -1078,7 +1077,7 @@ static void show_chat_menu(GUIFormSpecMenu **cur_formspec,
 		FORMSPEC_VERSION_STRING
 		SIZE_TAG
 		"field[3,2.35;6,0.5;f_text;;" + text + "]"
-		"button_exit[4,3;3,0.5;btn_send;" + (_("Proceed")) + "]"
+		"button_exit[4,3;3,0.5;btn_send;" + strgettext("Proceed") + "]"
 		;
 
 	/* Create menu */
@@ -1119,32 +1118,32 @@ static void show_pause_menu(GUIFormSpecMenu **cur_formspec,
 		bool singleplayermode)
 {
 #ifdef __ANDROID__
-	std::string control_text = (_("Default Controls:\n"
-				   "No menu visible:\n"
-				   "- single tap: button activate\n"
-				   "- double tap: place/use\n"
-				   "- slide finger: look around\n"
-				   "Menu/Inventory visible:\n"
-				   "- double tap (outside):\n"
-				   " -->close\n"
-				   "- touch stack, touch slot:\n"
-				   " --> move stack\n"
-				   "- touch&drag, tap 2nd finger\n"
-				   " --> place single item to slot\n"
-							     ));
+	std::string control_text = strgettext("Default Controls:\n"
+		"No menu visible:\n"
+		"- single tap: button activate\n"
+		"- double tap: place/use\n"
+		"- slide finger: look around\n"
+		"Menu/Inventory visible:\n"
+		"- double tap (outside):\n"
+		" -->close\n"
+		"- touch stack, touch slot:\n"
+		" --> move stack\n"
+		"- touch&drag, tap 2nd finger\n"
+		" --> place single item to slot\n"
+		);
 #else
-	std::string control_text = (_("Default Controls:\n"
-				   "- WASD: move\n"
-				   "- Space: jump/climb\n"
-				   "- Shift: sneak/go down\n"
-				   "- Q: drop item\n"
-				   "- I: inventory\n"
-				   "- Mouse: turn/look\n"
-				   "- Mouse left: dig/punch\n"
-				   "- Mouse right: place/use\n"
-				   "- Mouse wheel: select item\n"
-				   "- T: chat\n"
-							     ));
+	std::string control_text = strgettext("Default Controls:\n"
+		"- WASD: move\n"
+		"- Space: jump/climb\n"
+		"- Shift: sneak/go down\n"
+		"- Q: drop item\n"
+		"- I: inventory\n"
+		"- Mouse: turn/look\n"
+		"- Mouse left: dig/punch\n"
+		"- Mouse right: place/use\n"
+		"- Mouse wheel: select item\n"
+		"- T: chat\n"
+		);
 #endif
 
 	float ypos = singleplayermode ? 0.5 : 0.1;
@@ -1152,23 +1151,23 @@ static void show_pause_menu(GUIFormSpecMenu **cur_formspec,
 
 	os << FORMSPEC_VERSION_STRING  << SIZE_TAG
 	   << "button_exit[4," << (ypos++) << ";3,0.5;btn_continue;"
-	   << (_("Continue"))     << "]";
+	   << strgettext("Continue") << "]";
 
 	if (!singleplayermode) {
 		os << "button_exit[4," << (ypos++) << ";3,0.5;btn_change_password;"
-		   << (_("Change Password")) << "]";
+		   << strgettext("Change Password") << "]";
 	}
 
 #ifndef __ANDROID__
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_sound;"
-			<< (_("Sound Volume")) << "]";
+			<< strgettext("Sound Volume") << "]";
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_key_config;"
-			<< (_("Change Keys"))  << "]";
+			<< strgettext("Change Keys")  << "]";
 #endif
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_exit_menu;"
-			<< (_("Exit to Menu")) << "]";
+			<< strgettext("Exit to Menu") << "]";
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_exit_os;"
-			<< (_("Exit to OS"))   << "]"
+			<< strgettext("Exit to OS")   << "]"
 ;
 /*
 			<< "textarea[7.5,0.25;3.9,6.25;;" << control_text << ";]"
@@ -1196,7 +1195,7 @@ static void updateChat(Client &client, f32 dtime, bool show_debug,
 		ChatBackend &chat_backend, gui::IGUIStaticText *guitext_chat)
 {
 	// Add chat log output for errors to be shown in chat
-	static LogOutputBuffer chat_log_error_buf(LMT_ERROR);
+	static LogOutputBuffer chat_log_error_buf(g_logger, LL_ERROR);
 
 	// Get new messages from error log buffer
 	while (!chat_log_error_buf.empty()) {
@@ -2373,6 +2372,7 @@ bool Game::connectToServer(const std::string &playername,
 	if (!client)
 		return false;
 
+	client->chat_backend = chat_backend;
 	gamedef = client;	// Client acts as our GameDef
 
 	infostream << "Connecting to server at ";
@@ -2886,7 +2886,7 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 		// Print debug stacks
 		dstream << "-----------------------------------------"
 		        << std::endl;
-		dstream << DTIME << "Printing debug stacks:" << std::endl;
+		dstream << "Printing debug stacks:" << std::endl;
 		dstream << "-----------------------------------------"
 		        << std::endl;
 		debug_stacks_print();

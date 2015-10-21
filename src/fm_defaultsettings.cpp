@@ -90,6 +90,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("fullscreen", "false");
 	settings->setDefault("fullscreen_bpp", "24");
 	settings->setDefault("workaround_window_size", "5");
+	settings->setDefault("chat_buffer_size", "6");
 
 	// Mouse
 	settings->setDefault("invert_mouse", "false");
@@ -503,6 +504,8 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("movement_liquid_fluidity_smooth", "0.5");
 	settings->setDefault("movement_liquid_sink", "10");
 	settings->setDefault("movement_gravity", "9.81");
+	settings->setDefault("movement_fall_aerodynamics", "110");
+
 	settings->setDefault("view_bobbing", "true");
 	settings->setDefault("view_bobbing_amount", "1.0");
 	settings->setDefault("fall_bobbing_amount", "0.0");
