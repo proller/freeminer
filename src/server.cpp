@@ -110,7 +110,7 @@ void *ServerThread::run()
 {
 	reg("Server", 40);
 
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	BEGIN_DEBUG_EXCEPTION_HANDLER
 
 	f32 dedicated_server_step = g_settings->getFloat("dedicated_server_step");
@@ -155,7 +155,7 @@ void *ServerThread::run()
 		}
 	}
 
-	END_DEBUG_EXCEPTION_HANDLER(errorstream)
+	END_DEBUG_EXCEPTION_HANDLER
 
 	return NULL;
 }
@@ -531,7 +531,7 @@ Server::~Server()
 
 void Server::start(Address bind_addr)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	m_bind_addr = bind_addr;
 
@@ -567,8 +567,14 @@ void Server::start(Address bind_addr)
 #if USE_SCTP
 			<< " SCTP \t"
 #endif
-			<< " cpp="<<__cplusplus<<" \t"
-			<< " cores="<< Thread::getNumberOfProcessors()
+			<< " cpp=" <<__cplusplus << " \t"
+
+			<< " cores=";
+	auto cores_online = std::thread::hardware_concurrency(), cores_avail = Thread::getNumberOfProcessors();
+	if (cores_online != cores_avail)
+		actionstream << cores_online << "/";
+	actionstream << cores_avail
+
 #if __ANDROID__
 			<< " android=" << porting::android_version_sdk_int
 #endif
@@ -582,7 +588,7 @@ void Server::start(Address bind_addr)
 
 void Server::stop()
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	infostream<<"Server: Stopping and waiting threads"<<std::endl;
 
@@ -618,7 +624,7 @@ void Server::stop()
 
 void Server::step(float dtime)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	// Limit a bit
 	if(dtime > 2.0)
 		dtime = 2.0;
@@ -650,7 +656,7 @@ void Server::step(float dtime)
 
 void Server::AsyncRunStep(float dtime, bool initial_step)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	TimeTaker timer_step("Server step");
 	g_profiler->add("Server::AsyncRunStep (num)", 1);
@@ -767,7 +773,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 	*/
 
 	if (!m_more_threads)
-		AsyncRunMapStep(dtime, false);
+		AsyncRunMapStep(dtime, dedicated_server_step, false);
 
 	m_clients.step(dtime);
 
@@ -825,7 +831,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 			Player *player = m_env->getPlayer(client->peer_id);
 			if(player == NULL) {
 				// This can happen if the client timeouts somehow
-				/*infostream<<"WARNING: "<<__FUNCTION_NAME<<": Client "
+				/*warningstream<<FUNCTION_NAME<<": Client "
 						<<client->peer_id
 						<<" has no associated player"<<std::endl;*/
 				continue;
@@ -880,7 +886,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 				// Get object type
 				u8 type = ACTIVEOBJECT_TYPE_INVALID;
 				if(obj == NULL)
-					infostream<<"WARNING: "<<__FUNCTION_NAME
+					warningstream<<FUNCTION_NAME
 							<<": NULL object"<<std::endl;
 				else
 					type = obj->getSendType();
@@ -945,7 +951,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 
 				ServerActiveObject* obj = m_env->getActiveObject(id);
 				if(!obj) {
-					infostream<<"WARNING: "<<__FUNCTION_NAME
+					warningstream<<FUNCTION_NAME
 							<<": NULL object"<<std::endl;
 					continue;
 				}
@@ -1179,8 +1185,9 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 			}
 			else {
 				prof.add("unknown", 1);
-				infostream<<"WARNING: Server: Unknown MapEditEvent "
-						<<((u32)event->type)<<std::endl;
+				warningstream << "Server: Unknown MapEditEvent "
+						<< ((u32)event->type) << std::endl;
+				//break;
 			}
 
 			/*
@@ -1274,7 +1281,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 	}
 }
 
-int Server::save(float dtime, bool breakable) {
+int Server::save(float dtime, float dedicated_server_step, bool breakable) {
 	// Save map, players and auth stuff
 	int ret = 0;
 		float &counter = m_savemap_timer;
@@ -1288,7 +1295,7 @@ int Server::save(float dtime, bool breakable) {
 			ScopeProfiler sp(g_profiler, "Server: saving stuff");
 
 			// Save changed parts of map
-			if(m_env->getMap().save(MOD_STATE_WRITE_NEEDED, breakable)) {
+			if(m_env->getMap().save(MOD_STATE_WRITE_NEEDED, dedicated_server_step, breakable)) {
 				// partial save, will continue on next step
 				counter = g_settings->getFloat("server_map_save_interval");
 				++ret;
@@ -1316,7 +1323,7 @@ int Server::save(float dtime, bool breakable) {
 
 u16 Server::Receive(int ms)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	SharedBuffer<u8> data;
 	u16 peer_id;
 	u16 received = 0;
@@ -1450,7 +1457,7 @@ inline void Server::handleCommand(NetworkPacket* pkt)
 
 void Server::ProcessData(NetworkPacket *pkt)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	// Environment is locked first.
 	//MutexAutoLock envlock(m_env_mutex);
 
@@ -1653,7 +1660,7 @@ void Server::SetBlocksNotSent()
 
 void Server::peerAdded(u16 peer_id)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	verbosestream<<"Server::peerAdded(): peer->id="
 			<<peer_id<<std::endl;
 
@@ -1666,7 +1673,7 @@ void Server::peerAdded(u16 peer_id)
 
 void Server::deletingPeer(u16 peer_id, bool timeout)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	verbosestream<<"Server::deletingPeer(): peer->id="
 			<<peer_id<<", timeout="<<timeout<<std::endl;
 
@@ -1755,7 +1762,7 @@ void Server::Send(NetworkPacket* pkt)
 
 void Server::SendMovement(u16 peer_id)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	std::ostringstream os(std::ios_base::binary);
 
 	NetworkPacket pkt(TOCLIENT_MOVEMENT, 12 * sizeof(float), peer_id);
@@ -1795,7 +1802,7 @@ void Server::SendPlayerHPOrDie(PlayerSAO *playersao)
 #if MINETEST_PROTO
 void Server::SendHP(u16 peer_id, u8 hp)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOCLIENT_HP, 1, peer_id);
 	pkt << hp;
@@ -1804,7 +1811,7 @@ void Server::SendHP(u16 peer_id, u8 hp)
 
 void Server::SendBreath(u16 peer_id, u16 breath)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOCLIENT_BREATH, 2, peer_id);
 	pkt << (u16) breath;
@@ -1829,7 +1836,7 @@ void Server::SendAccessDenied(u16 peer_id, AccessDeniedCode reason,
 
 void Server::SendAccessDenied_Legacy(u16 peer_id,const std::string &reason)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOCLIENT_ACCESS_DENIED_LEGACY, 0, peer_id);
 	pkt << narrow_to_wide(reason);
@@ -1839,7 +1846,7 @@ void Server::SendAccessDenied_Legacy(u16 peer_id,const std::string &reason)
 void Server::SendDeathscreen(u16 peer_id,bool set_camera_point_target,
 		v3f camera_point_target)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOCLIENT_DEATHSCREEN, 1 + sizeof(v3f), peer_id);
 	pkt << set_camera_point_target << camera_point_target;
@@ -1849,7 +1856,7 @@ void Server::SendDeathscreen(u16 peer_id,bool set_camera_point_target,
 void Server::SendItemDef(u16 peer_id,
 		IItemDefManager *itemdef, u16 protocol_version)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOCLIENT_ITEMDEF, 0, peer_id);
 
@@ -1874,7 +1881,7 @@ void Server::SendItemDef(u16 peer_id,
 void Server::SendNodeDef(u16 peer_id,
 		INodeDefManager *nodedef, u16 protocol_version)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOCLIENT_NODEDEF, 0, peer_id);
 
@@ -1903,7 +1910,7 @@ void Server::SendNodeDef(u16 peer_id,
 
 void Server::SendInventory(PlayerSAO* playerSAO)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	UpdateCrafting(playerSAO->getPlayer());
 
@@ -1924,7 +1931,7 @@ void Server::SendInventory(PlayerSAO* playerSAO)
 
 void Server::SendChatMessage(u16 peer_id, const std::string &message)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOCLIENT_CHAT_MESSAGE, 0, peer_id);
 	pkt << narrow_to_wide(message);
@@ -1940,7 +1947,7 @@ void Server::SendChatMessage(u16 peer_id, const std::string &message)
 void Server::SendShowFormspecMessage(u16 peer_id, const std::string &formspec,
                                      const std::string &formname)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOCLIENT_SHOW_FORMSPEC, 0 , peer_id);
 
@@ -1955,7 +1962,7 @@ void Server::SendSpawnParticle(u16 peer_id, v3f pos, v3f velocity, v3f accelerat
 				float expirationtime, float size, bool collisiondetection,
 				bool vertical, std::string texture)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOCLIENT_SPAWN_PARTICLE, 0, peer_id);
 
@@ -1977,7 +1984,7 @@ void Server::SendAddParticleSpawner(u16 peer_id, u16 amount, float spawntime, v3
 	v3f minvel, v3f maxvel, v3f minacc, v3f maxacc, float minexptime, float maxexptime,
 	float minsize, float maxsize, bool collisiondetection, bool vertical, std::string texture, u32 id)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOCLIENT_ADD_PARTICLESPAWNER, 0, peer_id);
 
@@ -1999,7 +2006,7 @@ void Server::SendAddParticleSpawner(u16 peer_id, u16 amount, float spawntime, v3
 
 void Server::SendDeleteParticleSpawner(u16 peer_id, u32 id)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOCLIENT_DELETE_PARTICLESPAWNER_LEGACY, 2, peer_id);
 
@@ -2109,7 +2116,7 @@ void Server::SendOverrideDayNightRatio(u16 peer_id, bool do_override,
 
 void Server::SendTimeOfDay(u16 peer_id, u16 time, f32 time_speed)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOCLIENT_TIME_OF_DAY, 0, peer_id);
 	pkt << time << time_speed;
@@ -2124,7 +2131,7 @@ void Server::SendTimeOfDay(u16 peer_id, u16 time, f32 time_speed)
 
 void Server::SendPlayerHP(u16 peer_id)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	PlayerSAO *playersao = getPlayerSAO(peer_id);
 	// In some rare case, if the player is disconnected
 	// while Lua call l_punch, for example, this can be NULL
@@ -2142,7 +2149,7 @@ void Server::SendPlayerHP(u16 peer_id)
 
 void Server::SendPlayerBreath(u16 peer_id)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	PlayerSAO *playersao = getPlayerSAO(peer_id);
 	assert(playersao);
 
@@ -2152,7 +2159,7 @@ void Server::SendPlayerBreath(u16 peer_id)
 
 void Server::SendMovePlayer(u16 peer_id)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	Player *player = m_env->getPlayer(peer_id);
 	assert(player);
 
@@ -2428,7 +2435,7 @@ void Server::setBlockNotSent(v3s16 p)
 
 void Server::SendBlockNoLock(u16 peer_id, MapBlock *block, u8 ver, u16 net_proto_version)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	v3s16 p = block->getPos();
 
@@ -2452,8 +2459,8 @@ void Server::SendBlockNoLock(u16 peer_id, MapBlock *block, u8 ver, u16 net_proto
 
 int Server::SendBlocks(float dtime)
 {
-	DSTACK(__FUNCTION_NAME);
 	//TimeTaker timer("SendBlocks inside");
+	DSTACK(FUNCTION_NAME);
 
 	//MutexAutoLock envlock(m_env_mutex);
 	//TODO check if one big lock could be faster then multiple small ones
@@ -2528,7 +2535,7 @@ int Server::SendBlocks(float dtime)
 
 void Server::fillMediaCache()
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	infostream<<"Server: Calculating media file checksums"<<std::endl;
 
@@ -2631,7 +2638,7 @@ void Server::fillMediaCache()
 
 void Server::sendMediaAnnouncement(u16 peer_id)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	verbosestream << "Server: Announcing files to id(" << peer_id << ")"
 		<< std::endl;
@@ -2672,7 +2679,7 @@ struct SendableMedia
 void Server::sendRequestedMedia(u16 peer_id,
 		const std::vector<std::string> &tosend)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	verbosestream<<"Server::sendRequestedMedia(): "
 			<<"Sending files to client"<<std::endl;
@@ -2779,7 +2786,7 @@ void Server::sendRequestedMedia(u16 peer_id,
 void Server::sendDetachedInventory(const std::string &name, u16 peer_id)
 {
 	if(m_detached_inventories.count(name) == 0) {
-		errorstream<<__FUNCTION_NAME<<": \""<<name<<"\" not found"<<std::endl;
+		errorstream<<FUNCTION_NAME<<": \""<<name<<"\" not found"<<std::endl;
 		return;
 	}
 	Inventory *inv = m_detached_inventories[name];
@@ -2806,7 +2813,7 @@ void Server::sendDetachedInventory(const std::string &name, u16 peer_id)
 
 void Server::sendDetachedInventories(u16 peer_id)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	for(std::map<std::string, Inventory*>::iterator
 			i = m_detached_inventories.begin();
@@ -2823,7 +2830,7 @@ void Server::sendDetachedInventories(u16 peer_id)
 
 void Server::DiePlayer(u16 peer_id)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	PlayerSAO *playersao = getPlayerSAO(peer_id);
 	if (!playersao)
@@ -2852,7 +2859,7 @@ void Server::DiePlayer(u16 peer_id)
 
 void Server::RespawnPlayer(u16 peer_id)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	PlayerSAO *playersao = getPlayerSAO(peer_id);
 	if (!playersao)
@@ -2884,7 +2891,7 @@ void Server::RespawnPlayer(u16 peer_id)
 #if MINETEST_PROTO
 void Server::DenySudoAccess(u16 peer_id)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOCLIENT_DENY_SUDO_MODE, 0, peer_id);
 	Send(&pkt);
@@ -2913,7 +2920,7 @@ void Server::DenyAccessVerCompliant(u16 peer_id, u16 proto_ver, AccessDeniedCode
 
 void Server::DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	SendAccessDenied(peer_id, reason, custom_reason);
 	m_clients.event(peer_id, CSE_SetDenied);
@@ -2935,7 +2942,7 @@ void Server::DenyAccess_Legacy(u16 peer_id, const std::wstring &custom_reason)
 #if MINETEST_PROTO
 void Server::acceptAuth(u16 peer_id, bool forSudoMode)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	if (!forSudoMode) {
 		RemoteClient* client = getClient(peer_id, CS_Invalid);
@@ -2967,7 +2974,7 @@ void Server::acceptAuth(u16 peer_id, bool forSudoMode)
 
 void Server::DeleteClient(u16 peer_id, ClientDeletionReason reason)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	std::string message;
 	{
 		/*
@@ -3051,7 +3058,7 @@ void Server::DeleteClient(u16 peer_id, ClientDeletionReason reason)
 
 void Server::UpdateCrafting(Player* player)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	// Get a preview for crafting
 	ItemStack preview;
@@ -3744,7 +3751,7 @@ PlayerSAO* Server::emergePlayer(const char *name, u16 peer_id, u16 proto_version
 
 void dedicated_server_loop(Server &server, bool &kill)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	IntervalLimiter m_profiler_interval;
 

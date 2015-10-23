@@ -80,7 +80,7 @@ Environment::~Environment()
 
 void Environment::addPlayer(Player *player)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	/*
 		Check that peer_ids are unique.
 		Also check that names are unique.
@@ -233,6 +233,8 @@ ABMWithState::ABMWithState(ActiveBlockModifier *abm_, ServerEnvironment *senv):
 		neighbors_range = 1;
 	else if (neighbors_range > nr_max)
 		neighbors_range = nr_max;
+
+	simple_catchup = abm->getSimpleCatchUp();
 
 	// Initialize timer to random value to spread processing
 	float itv = MYMAX(0.001, interval); // No less than 1ms
@@ -789,6 +791,10 @@ void MapBlock::abmTriggersRun(ServerEnvironment * m_env, u32 time, bool activate
 				continue;
 			}
 			float intervals = dtime / abm->abmws->interval;
+
+			if(!abm->abmws->simple_catchup)
+				intervals = 1;
+
 			if (!intervals) {
 				verbosestream << "abm: intervals=" << intervals << " dtime="<<dtime<< std::endl;
 				intervals = 1;
@@ -1154,7 +1160,7 @@ void ServerEnvironment::clearAllObjects()
 
 void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_ms)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	//TimeTaker timer("ServerEnv step");
 
@@ -1423,7 +1429,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 
 /*
 		if(m_active_block_abm_last) {
-			infostream<<"WARNING: active block modifiers ("
+			warningstream<<"WARNING: active block modifiers ("
 					<<calls<<"/"<<m_active_blocks.m_list.size()<<" to "<<m_active_block_abm_last<<") took "
 					<<porting::getTimeMs()-end_ms + u32(1000 * m_recommended_send_interval)<<"ms "
 					<<std::endl;
@@ -1611,6 +1617,7 @@ int ServerEnvironment::analyzeBlocks(float dtime, unsigned int max_cycle_ms) {
 
 ServerActiveObject* ServerEnvironment::getActiveObject(u16 id, bool removed)
 {
+	auto lock = m_active_objects.lock_shared_rec();
 	auto n = m_active_objects.find(id);
 	if(n == m_active_objects.end())
 		return NULL;
@@ -2371,7 +2378,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 					// reason. Unsuccessful attempts have been made to find
 					// said reason.
 					if(id && block->m_static_objects.m_active.find(id) != block->m_static_objects.m_active.end()){
-						infostream<<"ServerEnv: WARNING: Performing hack #83274"
+						warningstream<<"ServerEnv: Performing hack #83274"
 								<<std::endl;
 						block->m_static_objects.remove(id);
 					}
@@ -2505,7 +2512,7 @@ ClientMap & ClientEnvironment::getClientMap()
 
 void ClientEnvironment::addPlayer(Player *player)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	/*
 		It is a failure if player is local and there already is a local
 		player
@@ -2529,7 +2536,7 @@ LocalPlayer * ClientEnvironment::getLocalPlayer()
 
 void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_ms)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	TimeTaker timer0("ClientEnvironment::step()");
 

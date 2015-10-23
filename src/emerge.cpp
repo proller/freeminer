@@ -235,7 +235,7 @@ void EmergeManager::initMapgens()
 Mapgen *EmergeManager::getCurrentMapgen()
 {
 	for (u32 i = 0; i != m_threads.size(); i++) {
-		if (m_threads[i]->isSameThread())
+		if (m_threads[i]->isCurrentThread())
 			return m_threads[i]->m_mapgen;
 	}
 
@@ -492,7 +492,7 @@ EmergeThread::EmergeThread(Server *server, int ethreadid) :
 	m_emerge(NULL),
 	m_mapgen(NULL)
 {
-	name = "Emerge-" + itos(ethreadid);
+	m_name = "Emerge-" + itos(ethreadid);
 }
 
 
@@ -566,31 +566,40 @@ bool EmergeThread::popBlockEmerge(v3s16 *pos, BlockEmergeData *bedata)
 }
 
 
+
+
 EmergeAction EmergeThread::getBlockOrStartGen(
 	v3s16 pos, bool allow_gen, MapBlock **block, BlockMakeData *bmdata)
 {
 	//MutexAutoLock envlock(m_server->m_env_mutex);
-#if !ENABLE_THREADS
-	auto lock = m_map->m_nothread_locker.lock_unique_rec();
-#endif
 
+	{
+	MAP_NOTHREAD_LOCK(m_map);
 	// 1). Attempt to fetch block from memory
 	*block = m_map->getBlockNoCreateNoEx(pos);
+	}
 	if (*block && !(*block)->isDummy() && (*block)->isGenerated())
 		return EMERGE_FROM_MEMORY;
 
+	{
+	MAP_NOTHREAD_LOCK(m_map);
 	// 2). Attempt to load block from disk
 	*block = m_map->loadBlock(pos);
+	}
+
 	if (*block && (*block)->isGenerated())
 	{
+		MAP_NOTHREAD_LOCK(m_map);
 		m_map->prepareBlock(*block);
 		return EMERGE_FROM_DISK;
 	}
 
+	{
+	MAP_NOTHREAD_LOCK(m_map);
 	// 3). Attempt to start generation
 	if (allow_gen && m_map->initBlockMake(pos, bmdata))
 		return EMERGE_GENERATED;
-
+	}
 	// All attempts failed; cancel this block emerge
 	return EMERGE_CANCELLED;
 }
@@ -633,9 +642,7 @@ MapBlock *EmergeThread::finishGen(v3s16 pos, BlockMakeData *bmdata,
 		Run Lua on_generated callbacks
 	*/
 	try {
-#if !ENABLE_THREADS
-		auto lock = m_map->m_nothread_locker.lock_unique_rec();
-#endif
+		MAP_NOTHREAD_LOCK(m_map);
 		m_server->getScriptIface()->environment_OnGenerated(
 			minp, maxp, m_mapgen->blockseed);
 	} catch (LuaError &e) {
@@ -655,7 +662,7 @@ MapBlock *EmergeThread::finishGen(v3s16 pos, BlockMakeData *bmdata,
 
 void *EmergeThread::run()
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	BEGIN_DEBUG_EXCEPTION_HANDLER
 
 	v3s16 pos;
@@ -667,8 +674,8 @@ void *EmergeThread::run()
 
 	reg("EmergeThread" + itos(id), 5);
 
-	try {
 	while (!stopRequested()) {
+	try {
 		std::map<v3s16, MapBlock *> modified_blocks;
 		BlockEmergeData bedata;
 		BlockMakeData bmdata;
@@ -718,7 +725,6 @@ void *EmergeThread::run()
 			m_mapgen->heat_cache.clear();
 			m_mapgen->humidity_cache.clear();
 		}
-	}
 	} catch (VersionMismatchException &e) {
 		std::ostringstream err;
 		err << "World data version mismatch in MapBlock " << PP(pos) << std::endl
@@ -727,6 +733,7 @@ void *EmergeThread::run()
 			<< "See debug.txt." << std::endl
 			<< "World probably saved by a newer version of " PROJECT_NAME_C "."
 			<< std::endl;
+		debug_stacks_print();
 		m_server->setAsyncFatalError(err.str());
 	} catch (SerializationError &e) {
 		std::ostringstream err;
@@ -736,11 +743,13 @@ void *EmergeThread::run()
 			<< "See debug.txt." << std::endl
 			<< "You can ignore this using [ignore_world_load_errors = true]."
 			<< std::endl;
+		debug_stacks_print();
 		m_server->setAsyncFatalError(err.str());
 	} catch (std::exception &e) {
 		errorstream << "emerge: exception at " << pos << " : " << e.what() << std::endl;
 	}
+	}
 
-	END_DEBUG_EXCEPTION_HANDLER(errorstream)
+	END_DEBUG_EXCEPTION_HANDLER
 	return NULL;
 }

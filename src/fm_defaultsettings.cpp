@@ -90,6 +90,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("fullscreen", "false");
 	settings->setDefault("fullscreen_bpp", "24");
 	settings->setDefault("workaround_window_size", "5");
+	settings->setDefault("chat_buffer_size", "6");
 
 	// Mouse
 	settings->setDefault("invert_mouse", "false");
@@ -132,7 +133,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("deprecated_lua_api_handling", debug ? "log" : "legacy");
 	settings->setDefault("enable_mapgen_debug_info", "false");
 	settings->setDefault("profiler_print_interval", debug ? "10" : "0");
-	settings->setDefault("debug_log_level", "2");
+	settings->setDefault("debug_log_level", "action");
 	settings->setDefault("time_taker_enabled", debug ? "5" : "0");
 
 	settings->setDefault("kick_msg_shutdown", "Server shutting down.");
@@ -213,6 +214,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("fallback_font_shadow", "1");
 	settings->setDefault("fallback_font_shadow_alpha", "128");
 
+	{
 	std::stringstream fontsize;
 
 	fontsize << TTF_DEFAULT_FONT_SIZE;
@@ -220,6 +222,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("font_size", fontsize.str());
 	settings->setDefault("mono_font_size", fontsize.str());
 	settings->setDefault("fallback_font_size", fontsize.str());
+	}
 
 
 	//
@@ -231,7 +234,6 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("chunksize", "5");
 	settings->setDefault("mg_flags", "trees, caves, dungeons");
 	settings->setDefault("mgv6_spflags", "jungles, biome_blend, snowbiomes");
-	settings->setDefault("enable_floating_dungeons", "true");
 
 	settings->setDefault("mg_math", ""); // configuration in json struct
 	settings->setDefault("mg_params", ""); // configuration in json struct
@@ -514,6 +516,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("fall_bobbing_amount", "0.0");
 
 	// Player model animations (sent to client)
+/*
 	settings->setDefault("animation_default_start", "0");
 	settings->setDefault("animation_default_stop", "79");
 	settings->setDefault("animation_walk_start", "168");
@@ -522,6 +525,7 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("animation_dig_stop", "198");
 	settings->setDefault("animation_wd_start", "200");
 	settings->setDefault("animation_wd_stop", "219");
+*/
 
 	//
 	// Tweaks for windows
@@ -569,13 +573,14 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("enable_minimap", "false");
 
 	//check for device with small screen
-	float x_inches = ((double) porting::getDisplaySize().X /
-	                  (160 * porting::getDisplayDensity()));
+	float x_inches = porting::getDisplaySize().X / porting::get_dpi();
+
 	if (x_inches  < 3.5) {
 		settings->setDefault("hud_scaling", "0.6");
 	} else if (x_inches < 4.5) {
 		settings->setDefault("hud_scaling", "0.7");
 	}
+
 	settings->setDefault("curl_verify_cert", "false");
 
 	settings->setDefault("chunksize", "3");
@@ -598,6 +603,23 @@ void set_default_settings(Settings *settings) {
 	settings->setDefault("android_keyboard", "0");
 	settings->setDefault("texture_min_size", "16");
 	settings->setDefault("cloud_radius", "6");
+
+
+	{
+	std::stringstream fontsize;
+	auto density = porting::getDisplayDensity();
+	if (density > 1.6 && porting::getDisplaySize().X > 1024)
+		density = 1.6;
+	float font_size = 10 * density;
+
+	fontsize << (int)font_size;
+
+	settings->setDefault("font_size", fontsize.str());
+	settings->setDefault("mono_font_size", fontsize.str());
+	settings->setDefault("fallback_font_size", fontsize.str());
+
+	actionstream << "Autoconfig: "" displayX=" << porting::getDisplaySize().X << " density="<<porting::getDisplayDensity()<< " dpi="<< porting::get_dpi() << " x_inches=" << x_inches << " font=" << font_size << " lang=" << lang <<std::endl;
+	}
 
 #else
 	settings->setDefault("screen_dpi", "72");
