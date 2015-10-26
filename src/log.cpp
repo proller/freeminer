@@ -72,21 +72,6 @@ public:
 	void flush(const std::string &buffer);
 };
 
-
-#ifdef __ANDROID__
-static unsigned int level_to_android[] = {
-	ANDROID_LOG_INFO,     // LL_NONE
-	//ANDROID_LOG_FATAL,
-	ANDROID_LOG_ERROR,    // LL_ERROR
-	ANDROID_LOG_WARN,     // LL_WARNING
-	ANDROID_LOG_WARN,     // LL_ACTION
-	//ANDROID_LOG_INFO,
-	ANDROID_LOG_DEBUG,    // LL_INFO
-	ANDROID_LOG_VERBOSE,  // LL_VERBOSE
-
-};
-#endif
-
 ////
 //// Globals
 ////
@@ -128,6 +113,41 @@ std::ostream actionstream(&action_buf);
 std::ostream infostream(&info_buf);
 std::ostream verbosestream(&verbose_buf);
 
+// Android
+#ifdef __ANDROID__
+
+static unsigned int g_level_to_android[] = {
+	ANDROID_LOG_INFO,     // LL_NONE
+	//ANDROID_LOG_FATAL,
+	ANDROID_LOG_ERROR,    // LL_ERROR
+	ANDROID_LOG_WARN,     // LL_WARNING
+	ANDROID_LOG_WARN,     // LL_ACTION
+	//ANDROID_LOG_INFO,
+	ANDROID_LOG_DEBUG,    // LL_INFO
+	ANDROID_LOG_VERBOSE,  // LL_VERBOSE
+};
+
+class AndroidSystemLogOutput : public ICombinedLogOutput {
+	public:
+		AndroidSystemLogOutput()
+		{
+			g_logger.addOutput(this);
+		}
+		~AndroidSystemLogOutput()
+		{
+			g_logger.removeOutput(this);
+		}
+		void logRaw(LogLevel lev, const std::string &line)
+		{
+			assert(ARRLEN(g_level_to_android) == LL_MAX);
+			__android_log_print(g_level_to_android[lev],
+				PROJECT_NAME_C, "%s", line.c_str());
+		}
+};
+
+AndroidSystemLogOutput g_android_log_output;
+
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -156,7 +176,7 @@ LogLevel Logger::stringToLevel(const std::string &name)
 
 void Logger::addOutput(ILogOutput *out)
 {
-	addOutputMaxLevel(out, LL_MAX);
+	addOutputMaxLevel(out, (LogLevel)(LL_MAX - 1));
 }
 
 void Logger::addOutput(ILogOutput *out, LogLevel lev)
@@ -166,6 +186,7 @@ void Logger::addOutput(ILogOutput *out, LogLevel lev)
 
 void Logger::addOutputMaxLevel(ILogOutput *out, LogLevel lev)
 {
+	assert(lev < LL_MAX);
 	for (size_t i = 0; i <= lev; i++)
 		m_outputs[i].push_back(out);
 }
@@ -239,11 +260,11 @@ void Logger::log(LogLevel lev, const std::string &text)
 
 	const std::string thread_name = getThreadName();
 	const std::string label = getLevelLabel(lev);
+	const std::string timestamp = getTimestamp();
 	std::ostringstream os(std::ios_base::binary);
-	os << getTimestamp() << ": " << label << "[" << thread_name << "]: " << text;
+	os << timestamp << ": " << label << "[" << thread_name << "]: " << text;
 
-	logToSystem(lev, text);
-	logToOutputs(lev, os.str());
+	logToOutputs(lev, os.str(), timestamp, thread_name, text);
 }
 
 void Logger::logRaw(LogLevel lev, const std::string &text)
@@ -251,24 +272,23 @@ void Logger::logRaw(LogLevel lev, const std::string &text)
 	if (m_silenced_levels[lev])
 		return;
 
-	logToSystem(lev, text);
-	logToOutputs(lev, text);
+	logToOutputsRaw(lev, text);
 }
 
-void Logger::logToSystem(LogLevel lev, const std::string &text)
+void Logger::logToOutputsRaw(LogLevel lev, const std::string &line)
 {
-#ifdef __ANDROID__
-	assert(ARRLEN(level_to_android) == LL_MAX);
-	__android_log_print(level_to_android[lev],
-		PROJECT_NAME_C, "%s", text.c_str());
-#endif
-}
-
-void Logger::logToOutputs(LogLevel lev, const std::string &text)
-{
-	//MutexAutoLock lock(m_mutex);
+	MutexAutoLock lock(m_mutex);
 	for (size_t i = 0; i != m_outputs[lev].size(); i++)
-		m_outputs[lev][i]->log(text);
+		m_outputs[lev][i]->logRaw(lev, line);
+}
+
+void Logger::logToOutputs(LogLevel lev, const std::string &combined,
+	const std::string &time, const std::string &thread_name,
+	const std::string &payload_text)
+{
+	MutexAutoLock lock(m_mutex);
+	for (size_t i = 0; i != m_outputs[lev].size(); i++)
+		m_outputs[lev][i]->log(lev, combined, time, thread_name, payload_text);
 }
 
 
@@ -278,11 +298,11 @@ void Logger::logToOutputs(LogLevel lev, const std::string &text)
 
 void FileLogOutput::open(const std::string &filename)
 {
-	stream.open(filename.c_str(), std::ios::app | std::ios::ate);
-	if (!stream.good())
+	m_stream.open(filename.c_str(), std::ios::app | std::ios::ate);
+	if (!m_stream.good())
 		throw FileNotGoodException("Failed to open log file " +
 			filename + ": " + strerror(errno));
-	stream << "\n\n"
+	m_stream << "\n\n"
 		   "-------------" << std::endl
 		<< "  Separator" << std::endl
 		<< "-------------\n" << std::endl;
@@ -303,7 +323,7 @@ int StringBuffer::overflow(int c)
 
 std::streamsize StringBuffer::xsputn(const char *s, std::streamsize n)
 {
-	MutexAutoLock lock(m_log_mutex);
+	//MutexAutoLock lock(m_log_mutex);
 	for (int i = 0; i < n; ++i)
 		push_back(s[i]);
 	return n;
@@ -320,9 +340,10 @@ void StringBuffer::push_back(char c)
 	}
 }
 
+
 void LogBuffer::flush(const std::string &buffer)
 {
-	MutexAutoLock lock(m_log_mutex);
+	//MutexAutoLock lock(m_log_mutex);
 	logger.log(level, buffer);
 }
 
