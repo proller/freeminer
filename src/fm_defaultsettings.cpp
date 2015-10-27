@@ -620,6 +620,9 @@ void set_default_settings(Settings *settings) {
 #else
 	settings->setDefault("screen_dpi", "72");
 #endif
+
+	settings->setDefault("mg_name", "v6");
+
 }
 
 void override_default_settings(Settings *settings, Settings *from) {
