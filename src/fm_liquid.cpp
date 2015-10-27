@@ -342,11 +342,13 @@ NEXT_LIQUID:
 
 		// fill bottom block
 		if (neighbors[D_BOTTOM].liquid) {
+/*
 			if (falling++ < 100 && !liquid_levels[D_BOTTOM] && ((ItemGroupList) nodemgr->get(liquid_kind).groups)["falling_node"]) {
 				fall_down = true;
 				//m_server->getEnv().nodeUpdate(neighbors[D_SELF].pos, 2);
 				//goto NEXT_LIQUID;
 			}
+*/
 
 			liquid_levels_want[D_BOTTOM] = level_avg > level_max ? level_avg : total_level > level_max ? level_max : total_level;
 			total_level -= liquid_levels_want[D_BOTTOM];
