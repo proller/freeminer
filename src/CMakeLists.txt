@@ -398,7 +398,7 @@ if(ENABLE_LEVELDB)
 	message (STATUS "Snappy headers: ${SNAPPY_INCLUDE_DIR}")   
 	if(LEVELDB_LIBRARY AND LEVELDB_INCLUDE_DIR AND SNAPPY_LIBRARY AND SNAPPY_INCLUDE_DIR)
 		set(USE_LEVELDB TRUE)
-		message(STATUS "LevelDB backend enabled.")
+		message(STATUS "LevelDB backend enabled. ${LEVELDB_INCLUDE_DIR}")
 		include_directories(${LEVELDB_INCLUDE_DIR} ${SNAPPY_INCLUDE_DIR})
 	elseif (NOT FORCE_LEVELDB)
 		message(WARNING "LevelDB not found! Player data cannot be saved in singleplayer or server")
@@ -583,6 +583,7 @@ add_custom_target(GenerateVersion
 	-P "${CMAKE_SOURCE_DIR}/cmake/Modules/GenerateVersion.cmake"
 	WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 
+add_subdirectory(contrib)
 
 add_subdirectory(threading)
 add_subdirectory(network)
@@ -700,6 +701,7 @@ set(common_SRCS
 	version.cpp
 	voxel.cpp
 	voxelalgorithms.cpp
+	${contrib_SRCS}
 	${common_network_SRCS}
 	${JTHREAD_SRCS}
 	${common_SCRIPT_SRCS}

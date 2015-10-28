@@ -43,6 +43,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mapblock_mesh.h"
 #include "event.h"
 #endif
+
+#include "contrib/fallingsao.h"
+#include "contrib/itemsao.h"
+
 #include "server.h"
 #include "daynightratio.h"
 #include "map.h"
@@ -359,6 +363,15 @@ ServerEnvironment::ServerEnvironment(ServerMap *map,
 	if (!m_players_storage.db)
 		errorstream << "Cant open players storage: "<< m_players_storage.error << std::endl;
 
+	// Init custom SAO
+	v3f nullpos;
+	//epixel::Creature* c = new epixel::Creature(NULL, nullpos, "", "");
+	epixel::ItemSAO* i = new epixel::ItemSAO(NULL, nullpos, "", "");
+	epixel::FallingSAO* f = new epixel::FallingSAO(NULL, nullpos, "", "");
+	//delete c;
+	delete i;
+	delete f;
+
 }
 
 ServerEnvironment::~ServerEnvironment()
@@ -369,6 +382,13 @@ ServerEnvironment::~ServerEnvironment()
 
 	// Convert all objects to static and delete the active objects
 	deactivateFarObjects(true);
+
+	for (auto o : objects_to_delete) {
+		if (!o)
+			continue;
+		delete o;
+	}
+	objects_to_delete.clear();
 
 	// Drop/delete map
 	m_map->drop();
@@ -1691,6 +1711,7 @@ void ServerEnvironment::getAddedActiveObjects(Player *player, s16 radius,
 		- discard objects that are found in current_objects.
 		- add remaining objects to added_objects
 	*/
+	int count = 0;
 	auto lock = m_active_objects.try_lock_shared_rec();
 	if (!lock->owns_lock())
 		return;
@@ -1723,6 +1744,8 @@ void ServerEnvironment::getAddedActiveObjects(Player *player, s16 radius,
 			continue;
 		// Add to added_objects
 		added_objects.push(id);
+		if (++count > 20)
+			break;
 	}
 }
 
@@ -1764,7 +1787,7 @@ void ServerEnvironment::getRemovedActiveObjects(Player *player, s16 radius,
 			i != current_objects_vector.end(); ++i)
 	{
 		u16 id = *i;
-		ServerActiveObject *object = getActiveObject(id);
+		ServerActiveObject *object = getActiveObject(id, true);
 
 		if (object == NULL) {
 			//infostream<<"ServerEnvironment::getRemovedActiveObjects():"
@@ -1933,6 +1956,13 @@ void ServerEnvironment::removeRemovedObjects(unsigned int max_cycle_ms)
 	TimeTaker timer("ServerEnvironment::removeRemovedObjects()");
 	//std::list<u16> objects_to_remove;
 
+	for (auto o : objects_to_delete) {
+		if (!o)
+			continue;
+		delete o;
+	}
+	objects_to_delete.clear();
+
 	std::vector<ServerActiveObject*> objects;
 	{
 		auto lock = m_active_objects.try_lock_shared_rec();
@@ -2015,7 +2045,7 @@ void ServerEnvironment::removeRemovedObjects(unsigned int max_cycle_ms)
 		// Delete
 		if(obj->environmentDeletes()) {
 			m_active_objects.set(id, nullptr);
-			delete obj;
+			objects_to_delete.push_back(obj);
 		}
 
 		// Id to be removed from m_active_objects
@@ -2030,7 +2060,7 @@ void ServerEnvironment::removeRemovedObjects(unsigned int max_cycle_ms)
 	// Remove references from m_active_objects
 	for(auto i = objects_to_remove.begin();
 			i != objects_to_remove.end(); ++i) {
-		delete m_active_objects.get(*i);
+		objects_to_delete.push_back(m_active_objects.get(*i));
 		m_active_objects.erase(*i);
 	}
 	objects_to_remove.clear();
@@ -2347,6 +2377,8 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 				}
 			}
 
+			if(!obj->m_removed) {
+
 			// Add to the block where the object is located in
 			v3s16 blockpos = getNodeBlockPos(floatToInt(objectpos, BS));
 			// Get or generate the block
@@ -2404,6 +2436,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 					continue;
 				}
 			}
+			}
 		}
 
 		/*
@@ -2436,7 +2469,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 		if(obj->environmentDeletes())
 		{
 			m_active_objects.set(id, nullptr);
-			delete obj;
+			objects_to_delete.push_back(obj);
 		}
 
 		// Id to be removed from m_active_objects
@@ -2450,7 +2483,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 	// Remove references from m_active_objects
 		if (lock->owns_lock())
 			for(auto & i : objects_to_remove) {
-			delete m_active_objects.get(i);
+			objects_to_delete.push_back(m_active_objects.get(i));
 			m_active_objects.erase(i);
 		}
 		objects_to_remove.clear();

@@ -67,6 +67,14 @@ class GameScripting;
 class Player;
 class RemotePlayer;
 
+struct ItemStack;
+
+namespace epixel
+{
+class ItemSAO;
+class FallingSAO;
+}
+
 class Environment
 {
 public:
@@ -303,6 +311,12 @@ public:
 	*/
 	u16 addActiveObject(ServerActiveObject *object);
 
+	epixel::ItemSAO* spawnItemActiveObject(const std::string &itemName, v3f pos,
+			const ItemStack& items);
+
+	epixel::FallingSAO *spawnFallingActiveObject(const std::string &nodeName, v3f pos,
+			const MapNode n, int fast = 2);
+
 	/*
 		Add an active object as a static object to the corresponding
 		MapBlock.
@@ -396,6 +410,7 @@ public:
 	void setStaticForActiveObjectsInBlock(v3s16 blockpos,
 		bool static_exists, v3s16 static_block=v3s16(0,0,0));
 
+	void nodeUpdate(const v3s16 pos, int recurse = 5,  int fast = 2);
 private:
 
 	/*
@@ -460,6 +475,7 @@ private:
 	// Active object list
 	maybe_concurrent_map<u16, ServerActiveObject*> m_active_objects;
 	std::vector<u16> objects_to_remove;
+	std::vector<ServerActiveObject*> objects_to_delete;
 	// Outgoing network message buffer for active objects
 public:
 	Queue<ActiveObjectMessage> m_active_object_messages;

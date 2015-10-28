@@ -17,34 +17,18 @@
 
 local FILENAME = "settingtypes.txt"
 
-local function parse_setting_line(settings, line)
-	-- empty lines
-	if line:match("^[%s]*$") then
-		-- clear current_comment so only comments directly above a setting are bound to it
-		settings.current_comment = ""
-		return
-	end
+local CHAR_CLASSES = {
+	SPACE = "[%s]",
+	VARIABLE = "[%w_%-%.]",
+	INTEGER = "[-]?[%d]",
+	FLOAT = "[-]?[%d%.]",
+	FLAGS = "[%w_%-%.,]",
+}
 
-	-- category
-	local category = line:match("^%[([^%]]+)%]$")
-	if category then
-		local level = 0
-		local index = 1
-		while category:sub(index, index) == "*" do
-			level = level + 1
-			index = index + 1
-		end
-		category = category:sub(index, -1)
-		table.insert(settings, {
-			name = category,
-			level = level,
-			type = "category",
-		})
-		return
-	end
-
+-- returns error message, or nil
+local function parse_setting_line(settings, line, read_all, base_level, allow_secure)
 	-- comment
-	local comment = line:match("^#[%s]*(.*)$")
+	local comment = line:match("^#" .. CHAR_CLASSES.SPACE .. "*(.*)$")
 	if comment then
 		if settings.current_comment == "" then
 			settings.current_comment = comment
@@ -54,161 +38,305 @@ local function parse_setting_line(settings, line)
 		return
 	end
 
-	-- settings
-	local first_part, name, readable_name, setting_type =
-			line:match("^(([%w%._-]+)[%s]+%(([^%)]*)%)[%s]+([%w_]+)[%s]*)")
-
-	if first_part then
-		readable_name = readable_name:gsub("^%s+", ""):gsub("%s+$", "")
-		if readable_name == "" then
-			readable_name = name
-		end
-		local remaining_line = line:sub(first_part:len() + 1)
-
-		if setting_type == "int" then
-			local default, min, max = remaining_line:match("^([%d]+)[%s]*([%d]*)[%s]*([%d]*)$")
-			if default and tonumber(default) then
-				if min == "" then
-					min = nil
-				end
-				if max == "" then
-					max = nil
-				end
-				table.insert(settings, {
-					name = name,
-					readable_name = readable_name,
-					type = "int",
-					default = default,
-					min = min,
-					max = max,
-					comment = settings.current_comment,
-				})
-			else
-				core.log("error", "Found invalid int in " .. FILENAME .. ": " .. line)
-			end
-
-		elseif setting_type == "string" or setting_type == "flags" or setting_type == "noise_params" then
-			local default = remaining_line:match("^[%s]*(.*)$")
-			if default then
-				table.insert(settings, {
-					name = name,
-					readable_name = readable_name,
-					type = setting_type,
-					default = default,
-					comment = settings.current_comment,
-				})
-			else
-				core.log("error", "Found invalid string in " .. FILENAME .. ": " .. line)
-			end
-
-		elseif setting_type == "bool" then
-			if remaining_line == "0" then remaining_line = "false" end
-			if remaining_line == "1" then remaining_line = "true" end
-			if remaining_line == "false" or remaining_line == "true" then
-				table.insert(settings, {
-					name = name,
-					readable_name = readable_name,
-					type = "bool",
-					default = remaining_line,
-					comment = settings.current_comment,
-				})
-			else
-				core.log("error", "Found invalid bool in " .. FILENAME .. ": " .. line)
-			end
-
-		elseif setting_type == "float" then
-			local default, min, max
-					= remaining_line:match("^(-?[%d%.]+)[%s]*(-?[%d%.]*)[%s]*(-?[%d%.]*)$")
-			if default and tonumber(default) then
-				if min == "" then
-					min = nil
-				end
-				if max == "" then
-					max = nil
-				end
-				table.insert(settings, {
-					name = name,
-					readable_name = readable_name,
-					type = "float",
-					default = default,
-					min = min,
-					max = max,
-					comment = settings.current_comment,
-				})
-			else
-				core.log("error", "Found invalid float in " .. FILENAME .. ": " .. line)
-			end
-
-		elseif setting_type == "enum" then
-			local default, values = remaining_line:match("^([^%s]+)[%s]+(.+)$")
-			if default and values ~= "" then
-				table.insert(settings, {
-					name = name,
-					readable_name = readable_name,
-					type = "enum",
-					default = default,
-					values = values:split(","),
-					comment = settings.current_comment,
-				})
-			else
-				core.log("error", "Found invalid enum in " .. FILENAME .. ": " .. line)
-			end
-
-		elseif setting_type == "path" then
-			local default = remaining_line:match("^[%s]*(.*)$")
-			if default then
-				table.insert(settings, {
-					name = name,
-					readable_name = readable_name,
-					type = "path",
-					default = default,
-					comment = settings.current_comment,
-				})
-			else
-				core.log("error", "Found invalid path in " .. FILENAME .. ": " .. line)
-			end
-
-		elseif setting_type == "key" then
-			--ignore keys, since we have a special dialog for them
-
-		-- TODO: flags, noise_params (, struct)
-
-		else
-			core.log("error", "Found setting with invalid setting type in " .. FILENAME .. ": " .. line)
-		end
-	else
-		core.log("error", "Found invalid line in " .. FILENAME .. ": " .. line)
-	end
-	-- clear current_comment since we just used it
-	-- if we not just used it, then clear it since we only want comments
-	--  directly above the setting to be bound to it
+	-- clear current_comment so only comments directly above a setting are bound to it
+	-- but keep a local reference to it for variables in the current line
+	local current_comment = settings.current_comment
 	settings.current_comment = ""
+
+	-- empty lines
+	if line:match("^" .. CHAR_CLASSES.SPACE .. "*$") then
+		return
+	end
+
+	-- category
+	local stars, category = line:match("^%[([%*]*)([^%]]+)%]$")
+	if category then
+		table.insert(settings, {
+			name = category,
+			level = stars:len() + base_level,
+			type = "category",
+		})
+		return
+	end
+
+	-- settings
+	local first_part, name, readable_name, setting_type = line:match("^"
+			-- this first capture group matches the whole first part,
+			--  so we can later strip it from the rest of the line
+			.. "("
+				.. "([" .. CHAR_CLASSES.VARIABLE .. "+)" -- variable name
+				.. CHAR_CLASSES.SPACE
+				.. "+"
+				.. "%(([^%)]*)%)"  -- readable name
+				.. CHAR_CLASSES.SPACE
+				.. "+"
+				.. "(" .. CHAR_CLASSES.VARIABLE .. "+)" -- type
+				.. CHAR_CLASSES.SPACE .. "?"
+			.. ")")
+
+	if not first_part then
+		return "Invalid line"
+	end
+
+	if name:match("secure%.[.]*") and not allow_secure then
+		return "Tried to add \"secure.\" setting"
+	end
+
+	if readable_name == "" then
+		readable_name = name
+	end
+	local remaining_line = line:sub(first_part:len() + 1)
+
+	if setting_type == "int" then
+		local default, min, max = remaining_line:match("^"
+				-- first int is required, the last 2 are optional
+				.. "(" .. CHAR_CLASSES.INTEGER .. "+)" .. CHAR_CLASSES.SPACE .. "?"
+				.. "(" .. CHAR_CLASSES.INTEGER .. "*)" .. CHAR_CLASSES.SPACE .. "?"
+				.. "(" .. CHAR_CLASSES.INTEGER .. "*)"
+				.. "$")
+
+		if not default or not tonumber(default) then
+			return "Invalid integer setting"
+		end
+
+		min = tonumber(min)
+		max = tonumber(max)
+		table.insert(settings, {
+			name = name,
+			readable_name = readable_name,
+			type = "int",
+			default = default,
+			min = min,
+			max = max,
+			comment = current_comment,
+		})
+		return
+	end
+
+	if setting_type == "string" or setting_type == "noise_params"
+			or setting_type == "key" then
+		local default = remaining_line:match("^(.*)$")
+
+		if not default then
+			return "Invalid string setting"
+		end
+		if setting_type == "key" and not read_all then
+			-- ignore key type if read_all is false
+			return
+		end
+
+		table.insert(settings, {
+			name = name,
+			readable_name = readable_name,
+			type = setting_type,
+			default = default,
+			comment = current_comment,
+		})
+		return
+	end
+
+	if setting_type == "bool" then
+		if remaining_line == "0" then remaining_line = "false" end
+		if remaining_line == "1" then remaining_line = "true" end
+		if remaining_line ~= "false" and remaining_line ~= "true" then
+			return "Invalid boolean setting"
+		end
+
+		table.insert(settings, {
+			name = name,
+			readable_name = readable_name,
+			type = "bool",
+			default = remaining_line,
+			comment = current_comment,
+		})
+		return
+	end
+
+	if setting_type == "float" then
+		local default, min, max = remaining_line:match("^"
+				-- first float is required, the last 2 are optional
+				.. "(" .. CHAR_CLASSES.FLOAT .. "+)" .. CHAR_CLASSES.SPACE .. "?"
+				.. "(" .. CHAR_CLASSES.FLOAT .. "*)" .. CHAR_CLASSES.SPACE .. "?"
+				.. "(" .. CHAR_CLASSES.FLOAT .. "*)"
+				.."$")
+
+		if not default or not tonumber(default) then
+			return "Invalid float setting"
+		end
+
+		min = tonumber(min)
+		max = tonumber(max)
+		table.insert(settings, {
+			name = name,
+			readable_name = readable_name,
+			type = "float",
+			default = default,
+			min = min,
+			max = max,
+			comment = current_comment,
+		})
+		return
+	end
+
+	if setting_type == "enum" then
+		local default, values = remaining_line:match("^(.+)" .. CHAR_CLASSES.SPACE .. "(.+)$")
+
+		if not default or values == "" then
+			return "Invalid enum setting"
+		end
+
+		table.insert(settings, {
+			name = name,
+			readable_name = readable_name,
+			type = "enum",
+			default = default,
+			values = values:split(",", true),
+			comment = current_comment,
+		})
+		return
+	end
+
+	if setting_type == "path" then
+		local default = remaining_line:match("^(.*)$")
+
+		if not default then
+			return "Invalid path setting"
+		end
+
+		table.insert(settings, {
+			name = name,
+			readable_name = readable_name,
+			type = "path",
+			default = default,
+			comment = current_comment,
+		})
+		return
+	end
+
+	if setting_type == "flags" then
+		local default, possible = remaining_line:match("^"
+				.. "(" .. CHAR_CLASSES.FLAGS .. "+)" .. CHAR_CLASSES.SPACE .. ""
+				.. "(" .. CHAR_CLASSES.FLAGS .. "+)"
+				.. "$")
+
+		if not default or not possible then
+			return "Invalid flags setting"
+		end
+
+		table.insert(settings, {
+			name = name,
+			readable_name = readable_name,
+			type = "flags",
+			default = default,
+			possible = possible,
+			comment = current_comment,
+		})
+		return
+	end
+
+	return "Invalid setting type \"" .. setting_type .. "\""
 end
 
-local function parse_config_file()
-	local file = io.open(core.get_builtin_path() .. DIR_DELIM .. FILENAME, "r")
+local function parse_single_file(file, filepath, read_all, result, base_level, allow_secure)
+	-- store this helper variable in the table so it's easier to pass to parse_setting_line()
+	result.current_comment = ""
+
+	local line = file:read("*line")
+	while line do
+		local error_msg = parse_setting_line(result, line, read_all, base_level, allow_secure)
+		if error_msg then
+			core.log("error", error_msg .. " in " .. filepath .. " \"" .. line .. "\"")
+		end
+		line = file:read("*line")
+	end
+
+	result.current_comment = nil
+end
+
+-- read_all: whether to ignore certain setting types for GUI or not
+-- parse_mods: whether to parse settingtypes.txt in mods and games
+local function parse_config_file(read_all, parse_mods)
+	local builtin_path = core.get_builtin_path() .. DIR_DELIM .. FILENAME
+	local file = io.open(builtin_path, "r")
 	local settings = {}
 	if not file then
 		core.log("error", "Can't load " .. FILENAME)
 		return settings
 	end
 
-	-- store this helper variable in the table so it's easier to pass to parse_setting_line()
-	settings.current_comment = ""
-
-	local line = file:read("*line")
-	while line do
-		parse_setting_line(settings, line)
-		line = file:read("*line")
-	end
-
-	settings.current_comment = nil
+	parse_single_file(file, builtin_path, read_all, settings, 0, true)
 
 	file:close()
+
+	if parse_mods then
+		-- Parse games
+		local games_category_initialized = false
+		local index = 1
+		local game = gamemgr.get_game(index)
+		while game do
+			local path = game.path .. DIR_DELIM .. FILENAME
+			local file = io.open(path, "r")
+			if file then
+				if not games_category_initialized then
+					local translation = fgettext_ne("Games"), -- not used, but needed for xgettext
+					table.insert(settings, {
+						name = "Games",
+						level = 0,
+						type = "category",
+					})
+					games_category_initialized = true
+				end
+
+				table.insert(settings, {
+					name = game.name,
+					level = 1,
+					type = "category",
+				})
+
+				parse_single_file(file, path, read_all, settings, 2, false)
+
+				file:close()
+			end
+
+			index = index + 1
+			game = gamemgr.get_game(index)
+		end
+
+		-- Parse mods
+		local mods_category_initialized = false
+		local mods = {}
+		get_mods(core.get_modpath(), mods)
+		for _, mod in ipairs(mods) do
+			local path = mod.path .. DIR_DELIM .. FILENAME
+			local file = io.open(path, "r")
+			if file then
+				if not mods_category_initialized then
+					local translation = fgettext_ne("Mods"), -- not used, but needed for xgettext
+					table.insert(settings, {
+						name = "Mods",
+						level = 0,
+						type = "category",
+					})
+					mods_category_initialized = true
+				end
+
+				table.insert(settings, {
+					name = mod.name,
+					level = 1,
+					type = "category",
+				})
+
+				parse_single_file(file, path, read_all, settings, 2, false)
+
+				file:close()
+			end
+		end
+	end
+
 	return settings
 end
 
-local settings = parse_config_file()
+local settings = parse_config_file(false, true)
 local selected_setting = 1
 
 local function get_current_value(setting)
@@ -239,15 +367,27 @@ local function create_change_setting_formspec(dialogdata)
 
 	local comment_text = ""
 
-	-- fgettext_ne("") doesn't have to return "", according to specification of gettext(3)
 	if setting.comment == "" then
 		comment_text = fgettext_ne("(No description of setting given)")
 	else
 		comment_text = fgettext_ne(setting.comment)
 	end
-	for _, comment_line in ipairs(comment_text:split("\n")) do
+	for _, comment_line in ipairs(comment_text:split("\n", true)) do
 		formspec = formspec .. "," .. core.formspec_escape(comment_line) .. ","
 	end
+
+	if setting.type == "flags" then
+		formspec = formspec .. ",,"
+				.. "," .. fgettext("Please enter a comma seperated list of flags.") .. ","
+				.. "," .. fgettext("Possible values are: ")
+				.. core.formspec_escape(setting.possible:gsub(",", ", ")) .. ","
+	elseif setting.type == "noise_params" then
+		formspec = formspec .. ",,"
+				.. "," .. fgettext("Format: <offset>, <scale>, (<spreadX>, <spreadY>, <spreadZ>), <seed>, <octaves>, <persistence>") .. ","
+				.. "," .. fgettext("Optionally the lacunarity can be appended with a leading comma.") .. ","
+	end
+
+	formspec = formspec:sub(1, -2) -- remove trailing comma
 
 	formspec = formspec .. ";1]"
 
@@ -259,7 +399,8 @@ local function create_change_setting_formspec(dialogdata)
 			selected_index = 1
 		end
 		formspec = formspec .. "dropdown[0.5,3.5;3,1;dd_setting_value;"
-				.. fgettext("Disabled") .. "," .. fgettext("Enabled") .. ";" .. selected_index .. "]"
+				.. fgettext("Disabled") .. "," .. fgettext("Enabled") .. ";"
+				.. selected_index .. "]"
 
 	elseif setting.type == "enum" then
 		local selected_index = 0
@@ -288,8 +429,20 @@ local function create_change_setting_formspec(dialogdata)
 
 	else
 		-- TODO: fancy input for float, int, flags, noise_params
-		formspec = formspec .. "field[0.5,4;9.5,1;te_setting_value;;"
-				.. core.formspec_escape(get_current_value(setting)) .. "]"
+		local width = 10
+		local text = get_current_value(setting)
+		if dialogdata.error_message then
+			formspec = formspec .. "tablecolumns[color;text]" ..
+			"tableoptions[background=#00000000;highlight=#00000000;border=false]" ..
+			"table[5,4;5,1;error_message;#FF0000,"
+					.. core.formspec_escape(dialogdata.error_message) .. ";0]"
+			width = 5
+			if dialogdata.entered_text then
+				text = dialogdata.entered_text
+			end
+		end
+		formspec = formspec .. "field[0.5,4;" .. width .. ",1;te_setting_value;;"
+				.. core.formspec_escape(text) .. "]"
 	end
 	return formspec
 end
@@ -304,6 +457,52 @@ local function handle_change_setting_buttons(this, fields)
 
 		elseif setting.type == "enum" then
 			local new_value = fields["dd_setting_value"]
+			core.setting_set(setting.name, new_value)
+
+		elseif setting.type == "int" then
+			local new_value = tonumber(fields["te_setting_value"])
+			if not new_value or math.floor(new_value) ~= new_value then
+				this.data.error_message = fgettext_ne("Please enter a valid integer.")
+				this.data.entered_text = fields["te_setting_value"]
+				core.update_formspec(this:get_formspec())
+				return true
+			end
+			if setting.min and new_value < setting.min then
+				this.data.error_message = fgettext_ne("The value must be greater than $1.", setting.min)
+				this.data.entered_text = fields["te_setting_value"]
+				core.update_formspec(this:get_formspec())
+				return true
+			end
+			if setting.max and new_value > setting.max then
+				this.data.error_message = fgettext_ne("The value must be lower than $1.", setting.max)
+				this.data.entered_text = fields["te_setting_value"]
+				core.update_formspec(this:get_formspec())
+				return true
+			end
+			core.setting_set(setting.name, new_value)
+
+		elseif setting.type == "float" then
+			local new_value = tonumber(fields["te_setting_value"])
+			if not new_value then
+				this.data.error_message = fgettext_ne("Please enter a valid number.")
+				this.data.entered_text = fields["te_setting_value"]
+				core.update_formspec(this:get_formspec())
+				return true
+			end
+			core.setting_set(setting.name, new_value)
+
+		elseif setting.type == "flags" then
+			local new_value = fields["te_setting_value"]
+			for _,value in ipairs(new_value:split(",", true)) do
+				value = value:trim()
+				if not value:match(CHAR_CLASSES.FLAGS .. "+")
+						or not setting.possible:match("[,]?" .. value .. "[,]?") then
+					this.data.error_message = fgettext_ne("\"$1\" is not a valid flag.", value)
+					this.data.entered_text = fields["te_setting_value"]
+					core.update_formspec(this:get_formspec())
+					return true
+				end
+			end
 			core.setting_set(setting.name, new_value)
 
 		else
@@ -348,7 +547,8 @@ local function create_settings_formspec(tabview, name, tabdata)
 
 		if entry.type == "category" then
 			current_level = entry.level
-			formspec = formspec .. "#FFFF00," .. current_level .. "," .. core.formspec_escape(name) .. ",,"
+			formspec = formspec .. "#FFFF00," .. current_level .. "," .. fgettext(name) .. ",,"
+
 		elseif entry.type == "bool" then
 			local value = get_current_value(entry)
 			if core.is_yes(value) then
@@ -358,6 +558,10 @@ local function create_settings_formspec(tabview, name, tabdata)
 			end
 			formspec = formspec .. "," .. (current_level + 1) .. "," .. core.formspec_escape(name) .. ","
 					.. value .. ","
+
+		elseif entry.type == "key" then
+			-- ignore key settings, since we have a special dialog for them
+
 		else
 			formspec = formspec .. "," .. (current_level + 1) .. "," .. core.formspec_escape(name) .. ","
 					.. core.formspec_escape(get_current_value(entry)) .. ","
@@ -434,6 +638,13 @@ local function handle_settings_buttons(this, fields, tabname, tabdata)
 	return false
 end
 
+tab_settings = {
+	name = "settings",
+	caption = fgettext("Settings"),
+	cbf_formspec = create_settings_formspec,
+	cbf_button_handler = handle_settings_buttons,
+}
+
 local function create_minetest_conf_example()
 	local result = "#    This file contains a list of all available settings and their default value for freeminer.conf\n" ..
 			"\n" ..
@@ -450,6 +661,7 @@ local function create_minetest_conf_example()
 			"#    http://wiki.minetest.net/\n" ..
 			"\n"
 
+	local settings = parse_config_file(true, false)
 	for _, entry in ipairs(settings) do
 		if entry.type == "category" then
 			if entry.level == 0 then
@@ -461,8 +673,8 @@ local function create_minetest_conf_example()
 				result = result .. "# " .. entry.name .. "\n\n"
 			end
 		else
-			if entry.comment_line ~= "" then
-				for _, comment_line in ipairs(entry.comment:split("\n")) do
+			if entry.comment ~= "" then
+				for _, comment_line in ipairs(entry.comment:split("\n", true)) do
 					result = result .."#    " .. comment_line .. "\n"
 				end
 			end
@@ -476,6 +688,9 @@ local function create_minetest_conf_example()
 			if entry.values then
 				result = result .. " values: " .. table.concat(entry.values, ", ")
 			end
+			if entry.possible then
+				result = result .. " possible values: " .. entry.possible:gsub(",", ", ")
+			end
 			result = result .. "\n"
 			result = result .. "# " .. entry.name .. " = ".. entry.default .. "\n\n"
 		end
@@ -488,16 +703,21 @@ local function create_translation_file()
 			"// It conatins a bunch of fake gettext calls, to tell xgettext about the strings in config files\n" ..
 			"// To update it, refer to the bottom of builtin/mainmenu/tab_settings.lua\n\n" ..
 			"fake_function() {\n"
+
+	local settings = parse_config_file(true, false)
 	for _, entry in ipairs(settings) do
 		if entry.type == "category" then
-			result = result .. "\tgettext(\"" .. entry.name .. "\");\n"
+			local name_escaped = entry.name:gsub("\"", "\\\"")
+			result = result .. "\tgettext(\"" .. name_escaped .. "\");\n"
 		else
 			if entry.readable_name then
-				result = result .. "\tgettext(\"" .. entry.readable_name .. "\");\n"
+				local readable_name_escaped = entry.readable_name:gsub("\"", "\\\"")
+				result = result .. "\tgettext(\"" .. readable_name_escaped .. "\");\n"
 			end
 			if entry.comment ~= "" then
-				local comment = entry.comment:gsub("\n", "\\n")
-				result = result .. "\tgettext(\"" .. comment .. "\");\n"
+				local comment_escaped = entry.comment:gsub("\n", "\\n")
+				comment_escaped = comment_escaped:gsub("\"", "\\\"")
+				result = result .. "\tgettext(\"" .. comment_escaped .. "\");\n"
 			end
 		end
 	end
@@ -505,7 +725,7 @@ local function create_translation_file()
 	return result
 end
 
-if true then
+if false then
 	local file = io.open("freeminer.conf.example", "w")
 	if file then
 		file:write(create_minetest_conf_example())
@@ -514,16 +734,9 @@ if true then
 end
 
 if false then
-	local file = io.open("src/settings_translation_file.c", "w")
+	local file = io.open("src/settings_translation_file.cpp", "w")
 	if file then
 		file:write(create_translation_file())
 		file:close()
 	end
 end
-
-tab_settings = {
-	name = "settings",
-	caption = fgettext("Settings"),
-	cbf_formspec = create_settings_formspec,
-	cbf_button_handler = handle_settings_buttons,
-}
