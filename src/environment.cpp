@@ -160,20 +160,21 @@ std::vector<Player*> Environment::getPlayers(bool ignore_disconnected)
 
 u32 Environment::getDayNightRatio()
 {
-	if(m_enable_day_night_ratio_override)
+	MutexAutoLock lock(this->m_time_lock);
+	if (m_enable_day_night_ratio_override)
 		return m_day_night_ratio_override;
 	return time_to_daynight_ratio(m_time_of_day, m_cache_enable_shaders);
 }
 
 void Environment::setTimeOfDaySpeed(float speed)
 {
-	MutexAutoLock lock(this->m_timeofday_lock);
+	MutexAutoLock lock(this->m_time_lock);
 	m_time_of_day_speed = speed;
 }
 
 float Environment::getTimeOfDaySpeed()
 {
-	MutexAutoLock lock(this->m_timeofday_lock);
+	MutexAutoLock lock(this->m_time_lock);
 	float retval = m_time_of_day_speed;
 	return retval;
 }
@@ -199,17 +200,36 @@ float Environment::getTimeOfDayF()
 
 void Environment::stepTimeOfDay(float dtime)
 {
-	float day_speed = getTimeOfDaySpeed();
+	MutexAutoLock lock(this->m_time_lock);
 
 	m_time_counter += dtime;
-	f32 speed = day_speed * 24000./(24.*3600);
-	u32 units = (u32)(m_time_counter*speed);
-	if(units > 0){
+	f32 speed = m_time_of_day_speed * 24000. / (24. * 3600);
+	u32 units = (u32)(m_time_counter * speed);
+	//bool sync_f = false;
+	if (units > 0) {
+		// Sync at overflow
+/*
+		if (m_time_of_day + units >= 24000)
+			sync_f = true;
+*/
 		m_time_of_day = (m_time_of_day + units) % 24000;
+/*
+		if (sync_f)
+			m_time_of_day_f = (float)m_time_of_day / 24000.0;
+*/
 	}
 	if (speed > 0) {
 		m_time_counter -= (f32)units / speed;
 	}
+/*
+	if (!sync_f) {
+		m_time_of_day_f += m_time_of_day_speed / 24 / 3600 * dtime;
+		if (m_time_of_day_f > 1.0)
+			m_time_of_day_f -= 1.0;
+		if (m_time_of_day_f < 0.0)
+			m_time_of_day_f += 1.0;
+	}
+*/
 }
 
 /*
@@ -383,7 +403,7 @@ ServerEnvironment::~ServerEnvironment()
 	// Convert all objects to static and delete the active objects
 	deactivateFarObjects(true);
 
-	for (auto o : objects_to_delete) {
+	for (auto & o : objects_to_delete) {
 		if (!o)
 			continue;
 		delete o;
@@ -1605,7 +1625,7 @@ int ServerEnvironment::analyzeBlocks(float dtime, unsigned int max_cycle_ms) {
 			{
 				auto lock = m_map->m_blocks.try_lock_shared_rec();
 				if (lock->owns_lock())
-				for (auto ir : m_map->m_blocks) {
+				for (auto & ir : m_map->m_blocks) {
 					if (!ir.second || !ir.second->abm_triggers)
 						continue;
 					m_abm_random_blocks.emplace_back(ir.first);
@@ -1956,7 +1976,7 @@ void ServerEnvironment::removeRemovedObjects(unsigned int max_cycle_ms)
 	TimeTaker timer("ServerEnvironment::removeRemovedObjects()");
 	//std::list<u16> objects_to_remove;
 
-	for (auto o : objects_to_delete) {
+	for (auto & o : objects_to_delete) {
 		if (!o)
 			continue;
 		delete o;

@@ -30,4 +30,17 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #define CONTAINS(c, v) (std::find((c).begin(), (c).end(), (v)) != (c).end())
 
+// To disable copy constructors and assignment operations for some class
+// 'Foobar', add the macro DISABLE_CLASS_COPY(Foobar) as a private member.
+// Note this also disables copying for any classes derived from 'Foobar' as well
+// as classes having a 'Foobar' member.
+#define DISABLE_CLASS_COPY(C) \
+	C(const C &);             \
+	C &operator=(const C &)
+
+// Fail compilation if condition expr is not met.
+// Note that 'msg' must follow the format of a valid identifier, e.g.
+// STATIC_ASSERT(sizeof(foobar_t) == 40), foobar_t_is_wrong_size);
+#define STATIC_ASSERT(expr, msg) typedef char msg[!!(expr) * 2 - 1]
+
 #endif
