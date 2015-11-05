@@ -327,8 +327,8 @@ void fm_set_default_settings(Settings *settings) {
 
 #endif
 
-	settings->setDefault("default_game", "MultiCraft");
-	settings->setDefault("mg_name", "v6");
+	settings->setDefault("default_game", "pixture");
+	settings->setDefault("mg_name", "v7");
 
 }
 

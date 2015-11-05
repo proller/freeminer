@@ -1,2 +1,2 @@
-gameid = MultiCraft
+gameid = pixture
 backend = leveldb

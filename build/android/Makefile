@@ -35,12 +35,12 @@ ANDROID_VERSION_CODE = 13
 #and for freeminer for skip conflict:
 ANDROID_VERSION_CODE = 48
 
-PROJECT_NAME_C = multicraft
-GAMES_TO_COPY = MultiCraft_game
+PROJECT_NAME_C = pixelcraft
+GAMES_TO_COPY = pixture
 
 GAMES_VERSION = ""
 
-GAMES_VERSION = "3"
+GAMES_VERSION = ""
 
 ################################################################################
 # toolchain config for arm old processors
