@@ -16,6 +16,7 @@ ROOT = $(shell pwd)
 GAMES_TO_COPY = default pixture
 MODS_TO_COPY =
 
+
 VERSION_MAJOR := $(shell cat $(ROOT)/../../CMakeLists.txt | \
 	grep ^set\(VERSION_MAJOR\ | sed 's/)/ /' | cut -f2 -d' ')
 VERSION_MINOR := $(shell cat $(ROOT)/../../CMakeLists.txt | \
@@ -38,10 +39,12 @@ BUILD_NUMBER = 48
 
 ANDROID_VERSION_CODE = $(BUILD_NUMBER)
 
-PROJECT_NAME_C = pixelcraft
-GAMES_TO_COPY = pixture
+PROJECT_NAME_C = freeminer
 
 GAMES_VERSION = ""
+
+PROJECT_NAME_C = pixelcraft
+GAMES_TO_COPY = pixture
 
 GAMES_VERSION = ""
 
