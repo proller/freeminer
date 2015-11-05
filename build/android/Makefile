@@ -32,8 +32,11 @@ VERSION_TWEAK := $(shell cat $(ROOT)/../../CMakeLists.txt | \
 # Play Store actual version (16/03/15): 11
 ANDROID_VERSION_CODE = 13
 
+
 #and for freeminer for skip conflict:
-ANDROID_VERSION_CODE = 48
+BUILD_NUMBER = 48
+
+ANDROID_VERSION_CODE = $(BUILD_NUMBER)
 
 PROJECT_NAME_C = pixelcraft
 GAMES_TO_COPY = pixture
@@ -1128,6 +1131,7 @@ manifest :
 	fi;                                                                        \
 	cat ${ROOT}/AndroidManifest.xml.template |                                 \
 	sed "s/###ANDROID_VERSION###/${ANDROID_VERSION_CODE}/g" |                  \
+	sed "s/###BUILD_NUMBER###/${BUILD_NUMBER}/g" | \
 	sed "s/###BASE_VERSION###/$$BASE_VERSION/g" |                              \
 	sed -e "s@###DEBUG_BUILD###@$$DBG@g" |                                     \
 	sed -e "s@###DEBUG_FLAG###@$$DBG_FLAG@g" >${ROOT}/AndroidManifest.xml
