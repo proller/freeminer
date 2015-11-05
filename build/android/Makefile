@@ -16,6 +16,7 @@ ROOT = $(shell pwd)
 GAMES_TO_COPY = default pixture
 MODS_TO_COPY =
 
+
 VERSION_MAJOR := $(shell cat $(ROOT)/../../CMakeLists.txt | \
 	grep ^set\(VERSION_MAJOR\ | sed 's/)/ /' | cut -f2 -d' ')
 VERSION_MINOR := $(shell cat $(ROOT)/../../CMakeLists.txt | \
