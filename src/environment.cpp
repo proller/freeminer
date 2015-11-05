@@ -65,7 +65,11 @@ std::mt19937 random_gen(random_device());
 
 Environment::Environment():
 	m_time_of_day_speed(0),
-	m_time_counter(0),
+/*
+	m_time_of_day(9000),
+	m_time_of_day_f(9000./24000),
+*/
+	m_time_conversion_skew(0.0f),
 	m_enable_day_night_ratio_override(false),
 	m_day_night_ratio_override(0.0f)
 {
@@ -160,23 +164,27 @@ std::vector<Player*> Environment::getPlayers(bool ignore_disconnected)
 
 u32 Environment::getDayNightRatio()
 {
-	MutexAutoLock lock(this->m_time_lock);
 	if (m_enable_day_night_ratio_override)
 		return m_day_night_ratio_override;
+	MutexAutoLock lock(this->m_time_lock);
 	return time_to_daynight_ratio(m_time_of_day, m_cache_enable_shaders);
 }
 
 void Environment::setTimeOfDaySpeed(float speed)
 {
-	MutexAutoLock lock(this->m_time_lock);
 	m_time_of_day_speed = speed;
 }
 
 float Environment::getTimeOfDaySpeed()
 {
+	return m_time_of_day_speed;
+}
+
+void Environment::setDayNightRatioOverride(bool enable, u32 value)
+{
 	MutexAutoLock lock(this->m_time_lock);
-	float retval = m_time_of_day_speed;
-	return retval;
+	m_enable_day_night_ratio_override = enable;
+	m_day_night_ratio_override = value;
 }
 
 void Environment::setTimeOfDay(u32 time)
@@ -188,23 +196,29 @@ void Environment::setTimeOfDay(u32 time)
 u32 Environment::getTimeOfDay()
 {
 	MutexAutoLock lock(this->m_time_lock);
-	u32 retval = m_time_of_day;
-	return retval;
+	return m_time_of_day;
 }
 
 float Environment::getTimeOfDayF()
 {
-	MutexAutoLock lock(this->m_time_lock);
 	return (float)m_time_of_day / 24000.0;
+/*
+	MutexAutoLock lock(this->m_time_lock);
+	return m_time_of_day_f;
+*/
 }
 
 void Environment::stepTimeOfDay(float dtime)
 {
 	MutexAutoLock lock(this->m_time_lock);
 
-	m_time_counter += dtime;
-	f32 speed = m_time_of_day_speed * 24000. / (24. * 3600);
-	u32 units = (u32)(m_time_counter * speed);
+	// Cached in order to prevent the two reads we do to give
+	// different results (can be written by code not under the lock)
+	f32 cached_time_of_day_speed = m_time_of_day_speed;
+
+	f32 speed = cached_time_of_day_speed * 24000. / (24. * 3600);
+	m_time_conversion_skew += dtime;
+	u32 units = (u32)(m_time_conversion_skew * speed);
 	//bool sync_f = false;
 	if (units > 0) {
 		// Sync at overflow
@@ -212,18 +226,18 @@ void Environment::stepTimeOfDay(float dtime)
 		if (m_time_of_day + units >= 24000)
 			sync_f = true;
 */
-		m_time_of_day = (m_time_of_day + units) % 24000;
+		m_time_of_day = (m_time_of_day + units) /*% 24000*/;
 /*
 		if (sync_f)
 			m_time_of_day_f = (float)m_time_of_day / 24000.0;
 */
 	}
 	if (speed > 0) {
-		m_time_counter -= (f32)units / speed;
+		m_time_conversion_skew -= (f32)units / speed;
 	}
 /*
 	if (!sync_f) {
-		m_time_of_day_f += m_time_of_day_speed / 24 / 3600 * dtime;
+		m_time_of_day_f += cached_time_of_day_speed / 24 / 3600 * dtime;
 		if (m_time_of_day_f > 1.0)
 			m_time_of_day_f -= 1.0;
 		if (m_time_of_day_f < 0.0)
@@ -614,10 +628,10 @@ void ServerEnvironment::loadMeta()
 	}
 
 	try {
-		m_time_of_day = args.getU64("time_of_day");
+		setTimeOfDay(args.getU64("time_of_day"));
 	} catch (SettingNotFoundException &e) {
 		// This is not as important
-		m_time_of_day = 9000;
+		setTimeOfDay(9000);
 	}
 }
 
