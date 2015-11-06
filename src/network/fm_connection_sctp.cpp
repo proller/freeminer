@@ -126,7 +126,7 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	m_last_recieved(0),
 	m_last_recieved_warn(0) {
 
-	sock_listen = sock_connect = sctp_inited = false;
+	sock_listen = sock_connect = false;
 
 
 
@@ -136,6 +136,8 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 
 
 }
+
+bool con::Connection::sctp_inited = false;
 
 
 Connection::~Connection() {
@@ -266,6 +268,7 @@ static int sctp_recieve_callback(struct socket* sock, union sctp_sockstore addr,
 
 
 void Connection::sctp_setup(u16 port) {
+errorstream<<"sctp_setup i="<<sctp_inited<<" p="<<port<<std::endl;
 	if (sctp_inited)
 		return;
 	sctp_inited = true;
@@ -278,17 +281,17 @@ errorstream<<"sctp_setup "<<port<<std::endl;
 	usrsctp_init(port, nullptr, debug_printf);
 
 #if SCTP_DEBUG
-	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
-	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
+	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
+	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
 #endif
 
 	//usrsctp_sysctl_set_sctp_ecn_enable(0);
 
 	//usrsctp_sysctl_set_sctp_nr_outgoing_streams_default(2);
 
-	usrsctp_sysctl_set_sctp_multiple_asconfs(1);
+	//usrsctp_sysctl_set_sctp_multiple_asconfs(1);
 
-	//usrsctp_sysctl_set_sctp_inits_include_nat_friendly(1);
+	usrsctp_sysctl_set_sctp_inits_include_nat_friendly(1);
 
 	//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, receive_cb, NULL, 0, NULL)) == NULL) {
 	//struct sctp_udpencaps encaps;
@@ -301,6 +304,7 @@ errorstream<<"sctp_setup "<<port<<std::endl;
 	*/
 	//sock->so_state |= SS_NBIO;
 
+	usrsctp_sysctl_set_sctp_blackhole(0);
 }
 
 
@@ -596,8 +600,9 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 	char buffer[BUFFER_SIZE]; //move to class
 	ssize_t n = usrsctp_recvv(sock, (void*)buffer, BUFFER_SIZE, (struct sockaddr *) &addr, &from_len, (void *)&rcv_info,
 	                          &infolen, &infotype, &flags);
+	//errorstream << "receive() ... " << __LINE__ << " n=" << n << std::endl;
 	if (n > 0) {
-		verbosestream << "receive() ... " << __LINE__ << " n=" << n << std::endl;
+		//errorstream << "receive() ... " << __LINE__ << " n=" << n << std::endl;
 		if (flags & MSG_NOTIFICATION) {
 			printf("Notification of length %llu received.\n", (unsigned long long)n);
 
@@ -749,6 +754,10 @@ switch (notification.sn_assoc_change.sac_state) {
 			}
 		}
 	} else {
+
+	//if (n < 0)
+	//	perror("sctp_recvv");
+
 		// drop peer here
 //errorstream<<"receive() ... drop "<<__LINE__<< " errno="<<errno << " EINPROGRESS="<<EINPROGRESS <<std::endl;
 		//if (m_peers.count(peer_id)) { //ugly fix. todo: fix enet and remove
@@ -925,7 +934,8 @@ void Connection::connect(Address addr) {
 	errorstream << "connect() " << addr.serializeString() << " :" << addr.getPort() << std::endl;
 
 	//sctp_setup(addr.getPort()+100);
-	sctp_setup(addr.getPort() + myrand_range(1000, 10000));
+	//sctp_setup(addr.getPort() + myrand_range(1000, 10000));
+	sctp_setup(0);
 
 	m_last_recieved = porting::getTimeMs();
 	//JMutexAutoLock peerlock(m_peers_mutex);
@@ -1009,7 +1019,9 @@ void Connection::connect(Address addr) {
 	*/
 
 	//memset(&encaps, 0, sizeof(encaps));
- /*
+
+	errorstream << "connect() using encaps " << addr.getPort() << std::endl;
+
 	sctp_udpencaps encaps = {};
 	encaps.sue_address.ss_family = AF_INET6;
 	encaps.sue_port = htons(addr.getPort());
@@ -1020,7 +1032,7 @@ void Connection::connect(Address addr) {
 		ConnectionEvent ev(CONNEVENT_CONNECT_FAILED);
 		putEvent(ev);
 	}
- */
+
 	struct sockaddr_in6 addr6 = {};
 
 	//memset((void *)&addr6, 0, sizeof(addr6));
@@ -1110,7 +1122,7 @@ void Connection::sendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable) 
 
 void Connection::send(u16 peer_id, u8 channelnum,
                       SharedBuffer<u8> data, bool reliable) {
-//errorstream<<" === sending to peer_id="<<peer_id << " bytes="<<data.getSize()<<std::endl;
+//errorstream<<" === sending to peer_id="<<peer_id <<" channelnum="<<(int)channelnum<< " reliable="<<reliable<< " bytes="<<data.getSize()<<std::endl;
 	{
 		//JMutexAutoLock peerlock(m_peers_mutex);
 		if (m_peers.find(peer_id) == m_peers.end()) {
@@ -1216,7 +1228,7 @@ struct socket * Connection::getPeer(u16 peer_id) {
 }
 
 bool Connection::deletePeer(u16 peer_id, bool timeout) {
-	errorstream << "Connection::deletePeer(" << peer_id << ", " << timeout << std::endl;
+	errorstream << "Connection::deletePeer " << peer_id << ", " << timeout << std::endl;
 	//JMutexAutoLock peerlock(m_peers_mutex);
 	if (!peer_id) {
 		if (sock) {
