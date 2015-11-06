@@ -127,7 +127,7 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	m_last_recieved_warn(0) {
 
 	sock_listen = sock_connect = false;
-
+	sctp_inited_by_me = false;
 
 
 
@@ -155,6 +155,11 @@ Connection::~Connection() {
 #else
 		sleep(1);
 #endif
+	}
+
+
+	if (sctp_inited_by_me) {
+		sctp_inited = false;
 	}
 
 }
@@ -272,6 +277,7 @@ errorstream<<"sctp_setup i="<<sctp_inited<<" p="<<port<<std::endl;
 	if (sctp_inited)
 		return;
 	sctp_inited = true;
+	sctp_inited_by_me = true;
 
 errorstream<<"sctp_setup "<<port<<std::endl;
 
@@ -934,8 +940,8 @@ void Connection::connect(Address addr) {
 	errorstream << "connect() " << addr.serializeString() << " :" << addr.getPort() << std::endl;
 
 	//sctp_setup(addr.getPort()+100);
-	//sctp_setup(addr.getPort() + myrand_range(1000, 10000));
-	sctp_setup(0);
+	sctp_setup(addr.getPort() + myrand_range(1000, 10000));
+	//sctp_setup(0);
 
 	m_last_recieved = porting::getTimeMs();
 	//JMutexAutoLock peerlock(m_peers_mutex);
