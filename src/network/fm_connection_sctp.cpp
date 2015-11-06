@@ -289,7 +289,7 @@ errorstream<<"sctp_setup "<<port<<std::endl;
 
 	//usrsctp_sysctl_set_sctp_nr_outgoing_streams_default(2);
 
-	//usrsctp_sysctl_set_sctp_multiple_asconfs(1);
+	usrsctp_sysctl_set_sctp_multiple_asconfs(1);
 
 	usrsctp_sysctl_set_sctp_inits_include_nat_friendly(1);
 
@@ -304,7 +304,7 @@ errorstream<<"sctp_setup "<<port<<std::endl;
 	*/
 	//sock->so_state |= SS_NBIO;
 
-	usrsctp_sysctl_set_sctp_blackhole(0);
+	//usrsctp_sysctl_set_sctp_blackhole(0);
 }
 
 
