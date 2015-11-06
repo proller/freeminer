@@ -42,6 +42,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/numeric.h"
 #include "mapnode.h"
 #include "mapblock.h"
+
+//fm:
 #include "network/connection.h"
 #include "fmbitset.h"
 #include "util/concurrent_unordered_map.h"
@@ -52,7 +54,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "circuit.h"
 #include "key_value_storage.h"
 #include <unordered_set>
-//#include "threading/mutex.h"
+//--
+
+#include "threading/mutex.h"
+#include "threading/atomic.h"
 #include "network/networkprotocol.h" // for AccessDeniedCode
 
 class ServerEnvironment;
@@ -111,11 +116,7 @@ public:
 	void setTimeOfDaySpeed(float speed);
 	float getTimeOfDaySpeed();
 
-	void setDayNightRatioOverride(bool enable, u32 value)
-	{
-		m_enable_day_night_ratio_override = enable;
-		m_day_night_ratio_override = value;
-	}
+	void setDayNightRatioOverride(bool enable, u32 value);
 
 	// counter used internally when triggering ABMs
 	std::atomic_uint m_added_objects;
@@ -123,15 +124,25 @@ public:
 protected:
 	// peer_ids in here should be unique, except that there may be many 0s
 	concurrent_vector<Player*> m_players;
+
+	GenericAtomic<float> m_time_of_day_speed;
+
+	/*
+	 * Below: values managed by m_time_lock
+	*/
 	// Time of day in milli-hours (0-23999); determines day and night
-	std::atomic_int m_time_of_day;
+	u32 m_time_of_day;
 	// Time of day in 0...1
-	float m_time_of_day_speed;
-	// Used to buffer dtime for adding to m_time_of_day
-	float m_time_counter;
+	float m_time_of_day_f;
+	// Stores the skew created by the float -> u32 conversion
+	// to be applied at next conversion, so that there is no real skew.
+	float m_time_conversion_skew;
 	// Overriding the day-night ratio is useful for custom sky visuals
 	bool m_enable_day_night_ratio_override;
 	u32 m_day_night_ratio_override;
+	/*
+	 * Above: values managed by m_time_lock
+	*/
 
 	/* TODO: Add a callback function so these can be updated when a setting
 	 *       changes.  At this point in time it doesn't matter (e.g. /set
@@ -145,9 +156,9 @@ protected:
 	bool m_cache_enable_shaders;
 
 private:
-	Mutex m_timeofday_lock;
 	Mutex m_time_lock;
 
+	DISABLE_CLASS_COPY(Environment);
 };
 
 /*
@@ -410,7 +421,7 @@ public:
 	void setStaticForActiveObjectsInBlock(v3s16 blockpos,
 		bool static_exists, v3s16 static_block=v3s16(0,0,0));
 
-	void nodeUpdate(const v3s16 pos, int recurse = 5,  int fast = 2);
+	void nodeUpdate(const v3s16 pos, int recurse = 5,  int fast = 2, bool destroy = false);
 private:
 
 	/*

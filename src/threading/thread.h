@@ -26,6 +26,7 @@ DEALINGS IN THE SOFTWARE.
 #ifndef THREADING_THREAD_H
 #define THREADING_THREAD_H
 
+#include "util/basic_macros.h"
 #include "threading/atomic.h"
 #include "threading/mutex.h"
 #include "threads.h"
@@ -163,6 +164,7 @@ private:
 	std::thread *m_thread_obj;
 #endif
 
+	DISABLE_CLASS_COPY(Thread);
 };
 
 #endif

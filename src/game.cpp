@@ -498,7 +498,7 @@ private:
 			color(color)
 		{}
 	};
-	std::vector<Piece> m_log;
+	std::deque<Piece> m_log;
 public:
 	u32 m_log_max_size;
 
@@ -521,7 +521,7 @@ public:
 	{
 		std::map<std::string, Meta> m_meta;
 
-		for (std::vector<Piece>::const_iterator k = m_log.begin();
+		for (std::deque<Piece>::const_iterator k = m_log.begin();
 				k != m_log.end(); ++k) {
 			const Piece &piece = *k;
 
@@ -610,7 +610,7 @@ public:
 			float lastscaledvalue = 0.0;
 			bool lastscaledvalue_exists = false;
 
-			for (std::vector<Piece>::const_iterator j = m_log.begin();
+			for (std::deque<Piece>::const_iterator j = m_log.begin();
 					j != m_log.end(); ++j) {
 				const Piece &piece = *j;
 				float value = 0;
@@ -1022,7 +1022,7 @@ bool nodePlacementPrediction(Client &client,
 
 			if(player->canPlaceNode(p, n)) {
 				// This triggers the required mesh update too
-				client.addNode(p, n, nodedef->get(id).light_source ? 3 : 1); // add without liquids
+				client.addNode(p, n, true, nodedef->get(id).light_source ? 3 : 2); // add without liquids
 				return true;
 			}
 		} catch (InvalidPositionException &e) {
@@ -1267,6 +1267,7 @@ struct KeyCache {
 		KEYMAP_ID_JUMP,
 		KEYMAP_ID_SPECIAL1,
 		KEYMAP_ID_SNEAK,
+		KEYMAP_ID_AUTORUN,
 
 		// Other
 		KEYMAP_ID_DROP,
@@ -1322,6 +1323,8 @@ void KeyCache::populate()
 	key[KEYMAP_ID_JUMP]         = getKeySetting("keymap_jump");
 	key[KEYMAP_ID_SPECIAL1]     = getKeySetting("keymap_special1");
 	key[KEYMAP_ID_SNEAK]        = getKeySetting("keymap_sneak");
+
+	key[KEYMAP_ID_AUTORUN]      = getKeySetting("keymap_autorun");
 
 	key[KEYMAP_ID_DROP]         = getKeySetting("keymap_drop");
 	key[KEYMAP_ID_INVENTORY]    = getKeySetting("keymap_inventory");
@@ -2828,6 +2831,10 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 			dropSelectedItem();
 		}
 #endif
+	// Add WoW-style autorun by toggling continuous forward.
+	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_AUTORUN])) {
+		bool autorun_setting = g_settings->getBool("continuous_forward");
+		g_settings->setBool("continuous_forward", !autorun_setting);
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_INVENTORY])) {
 		openInventory();
 	} else if (input->wasKeyDown(EscapeKey) || input->wasKeyDown(CancelKey)) {
@@ -4211,7 +4218,7 @@ void Game::handleDigging(GameRunData *runData,
 		bool is_valid_position;
 		MapNode wasnode = map.getNodeNoEx(nodepos, &is_valid_position);
 		if (is_valid_position)
-			client->removeNode(nodepos, 2);
+			client->removeNode(nodepos);
 
 		if (m_cache_enable_particles) {
 			const ContentFeatures &features =

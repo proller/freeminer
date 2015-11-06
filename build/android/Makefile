@@ -13,7 +13,7 @@ PATHCFGFILE = path.cfg
 
 ROOT = $(shell pwd)
 
-GAMES_TO_COPY = default pixture
+GAMES_TO_COPY = default
 MODS_TO_COPY =
 
 
@@ -33,8 +33,11 @@ VERSION_TWEAK := $(shell cat $(ROOT)/../../CMakeLists.txt | \
 # Play Store actual version (16/03/15): 11
 ANDROID_VERSION_CODE = 13
 
+
 #and for freeminer for skip conflict:
-ANDROID_VERSION_CODE = 48
+BUILD_NUMBER = 50
+
+ANDROID_VERSION_CODE = $(BUILD_NUMBER)
 
 PROJECT_NAME_C = freeminer
 
@@ -79,6 +82,9 @@ APP_STL = gnustl       # gnustl libcxx|libc++ stlport
 # toolchain config for little endian mips
 ################################################################################
 ifeq ($(TARGET_MIPS),1)
+ifneq ($(NO_AUTO_VERSION),1)
+ANDROID_VERSION_CODE := $(shell echo $$(( $(ANDROID_VERSION_CODE) + 2 )))
+endif
 TARGET_HOST = mipsel-linux
 TARGET_ABI = mips
 TARGET_LIBDIR = mips
@@ -95,6 +101,9 @@ endif
 # toolchain config for x86
 ################################################################################
 ifeq ($(TARGET_x86),1)
+ifneq ($(NO_AUTO_VERSION),1)
+ANDROID_VERSION_CODE := $(shell echo $$(( $(ANDROID_VERSION_CODE) + 1 )))
+endif
 TARGET_HOST = x86-linux
 TARGET_ABI = x86
 TARGET_LIBDIR = x86
@@ -806,6 +815,7 @@ assets : $(ASSETS_TIMESTAMP) locale
 	find . -name "timestamp" -exec rm {} \; ;                                  \
 	find . \( -name "favoriteservers.json" -o -name "servers_public.json" \) -exec rm {} \; ;                       \
 	find . -name "*.blend" -exec rm {} \; ;                                    \
+	find . -name "*.xcf" -exec rm {} \; ; \
 	find . -name "*~" -exec rm {} \; ;                                         \
 	find . -type d -path "*.git" -exec rm -rf {} \; ;                          \
 	find . -type d -path "*.svn" -exec rm -rf {} \; ;                          \
@@ -1122,6 +1132,7 @@ manifest :
 	fi;                                                                        \
 	cat ${ROOT}/AndroidManifest.xml.template |                                 \
 	sed "s/###ANDROID_VERSION###/${ANDROID_VERSION_CODE}/g" |                  \
+	sed "s/###BUILD_NUMBER###/${BUILD_NUMBER}/g" | \
 	sed "s/###BASE_VERSION###/$$BASE_VERSION/g" |                              \
 	sed -e "s@###DEBUG_BUILD###@$$DBG@g" |                                     \
 	sed -e "s@###DEBUG_FLAG###@$$DBG_FLAG@g" >${ROOT}/AndroidManifest.xml
