@@ -229,7 +229,7 @@ void Connection::processCommand(ConnectionCommand &c) {
 	}
 }
 
-//#if 0
+#if 0
 
 static int sctp_recieve_callback(struct socket* sock, union sctp_sockstore addr,
                                  void* data, size_t length,
@@ -268,7 +268,7 @@ static int sctp_recieve_callback(struct socket* sock, union sctp_sockstore addr,
 
 }
 
-//#endif
+#endif
 
 
 
@@ -443,10 +443,30 @@ void Connection::receive() {
 			//continue;
 		}
 
-		u16 peer_id = PEER_ID_SERVER + 1;
+/*		u16 peer_id = PEER_ID_SERVER + 1;
 		if (m_peers.size() > 0)
 			// TODO: fix this shit
 			peer_id = m_peers.rbegin()->first + 1;
+*/
+
+				u16 peer_id = 0;
+				static u16 last_try = PEER_ID_SERVER + 1;
+				if (m_peers.size() > 0) {
+					for (int i = 0; i < 1000; ++i) {
+						if (last_try > 30000)
+							last_try = PEER_ID_SERVER;
+						++last_try;
+						if (!m_peers.count(last_try)) {
+							peer_id = last_try;
+							break;
+						}
+					}
+				} else {
+					peer_id = last_try;
+				}
+				if (!peer_id)
+					last_try = peer_id = m_peers.rbegin()->first + 1;
+
 
 		cs << "receive() accepted " << conn_sock << " addr_len=" << addr_len << " id=" << peer_id << std::endl;
 
@@ -634,15 +654,20 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 				errorstream << "SCTP_ASSOC_CHANGE" << std::endl;
 				//OnNotificationAssocChange(notification.sn_assoc_change);
 				{
-/*
 switch (notification.sn_assoc_change.sac_state) {
+/*
 	case SCTP_CANT_STR_ASSOC:
 		cs<<("SCTP_CANT_STR_ASSOC");
 		deletePeer(peer_id,  false);
 		break;
-
-}
 */
+		case SCTP_COMM_UP:
+							m_peers_address.set(peer_id, Address(addr.sin6_addr, addr.sin6_port));
+/*							ConnectionEvent e;
+							e.peerAdded(peer_id);
+							putEvent(e);*/
+		break;
+}
 					handle_association_change_event(peer_id, &(notification.sn_assoc_change));
 #if 0
 					const sctp_assoc_change& change = notification.sn_assoc_change;
