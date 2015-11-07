@@ -53,6 +53,7 @@ extern std::ostream *derr_con_ptr;
 struct socket;
 union sctp_sockstore;
 struct sctp_rcvinfo;
+struct sctp_assoc_change;
 
 namespace con
 {
@@ -382,6 +383,7 @@ private:
 	void sctp_setup(u16 port = 9899);
 	std::unordered_map<u16, std::string> recv_buf;
 
+	void handle_association_change_event(u16 peer_id, const struct sctp_assoc_change *sac);
 /*
 	int sctp_recieve_callback(struct socket *sock, union sctp_sockstore addr, void *data,
                                  size_t datalen, struct sctp_rcvinfo, int flags, void *ulp_info);

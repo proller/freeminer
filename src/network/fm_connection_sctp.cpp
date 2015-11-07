@@ -299,7 +299,11 @@ errorstream<<"sctp_setup "<<port<<std::endl;
 
 	usrsctp_sysctl_set_sctp_multiple_asconfs(1);
 
-	usrsctp_sysctl_set_sctp_inits_include_nat_friendly(1);
+	//usrsctp_sysctl_set_sctp_inits_include_nat_friendly(1);
+#if __ANDROID__
+	usrsctp_sysctl_set_sctp_mobility_fasthandoff(1);
+	usrsctp_sysctl_set_sctp_mobility_base(1);
+#endif
 
 	//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, receive_cb, NULL, 0, NULL)) == NULL) {
 	//struct sctp_udpencaps encaps;
@@ -465,8 +469,8 @@ void Connection::receive() {
 
 }
 
-static void
-handle_association_change_event(const struct sctp_assoc_change *sac) {
+//static
+void Connection::handle_association_change_event(u16 peer_id, const struct sctp_assoc_change *sac) {
 	unsigned int i, n;
 
 	cs<<("Association change ");
@@ -476,15 +480,18 @@ handle_association_change_event(const struct sctp_assoc_change *sac) {
 		break;
 	case SCTP_COMM_LOST:
 		cs<<("SCTP_COMM_LOST");
+		deletePeer(peer_id,  false);
 		break;
 	case SCTP_RESTART:
 		cs<<("SCTP_RESTART");
 		break;
 	case SCTP_SHUTDOWN_COMP:
 		cs<<("SCTP_SHUTDOWN_COMP");
+		deletePeer(peer_id,  false);
 		break;
 	case SCTP_CANT_STR_ASSOC:
 		cs<<("SCTP_CANT_STR_ASSOC");
+		deletePeer(peer_id,  false);
 		break;
 	default:
 		cs<<("UNKNOWN");
@@ -627,6 +634,7 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 				errorstream << "SCTP_ASSOC_CHANGE" << std::endl;
 				//OnNotificationAssocChange(notification.sn_assoc_change);
 				{
+/*
 switch (notification.sn_assoc_change.sac_state) {
 	case SCTP_CANT_STR_ASSOC:
 		cs<<("SCTP_CANT_STR_ASSOC");
@@ -634,7 +642,8 @@ switch (notification.sn_assoc_change.sac_state) {
 		break;
 
 }
-					handle_association_change_event(&(notification.sn_assoc_change));
+*/
+					handle_association_change_event(peer_id, &(notification.sn_assoc_change));
 #if 0
 					const sctp_assoc_change& change = notification.sn_assoc_change;
 					switch (change.sac_state) {
@@ -686,6 +695,7 @@ switch (notification.sn_assoc_change.sac_state) {
 				break;
 			case SCTP_SHUTDOWN_EVENT:
 				errorstream << "SCTP_SHUTDOWN_EVENT" << std::endl;
+				deletePeer(peer_id,  false);
 				break;
 			case SCTP_ADAPTATION_INDICATION:
 				errorstream << "SCTP_ADAPTATION_INDICATION" << std::endl;
