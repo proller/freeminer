@@ -115,6 +115,8 @@ debug_printf(const char *format, ...) {
 }
 
 
+auto & cs = errorstream; // remove after debug
+
 Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
                        bool ipv6, PeerHandler *peerhandler):
 	m_protocol_id(protocol_id),
@@ -149,16 +151,16 @@ Connection::~Connection() {
 		usrsctp_close(i.second);
 	}
 
-	while (usrsctp_finish() != 0) {
-#ifdef _WIN32
-		Sleep(1000);
-#else
-		sleep(1);
-#endif
+
+	if (sctp_inited_by_me) {
+
+	for (int i = 0; i < 100; ++i) {
+		if (!usrsctp_finish())
+			break;
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
 
 
-	if (sctp_inited_by_me) {
 		sctp_inited = false;
 	}
 
@@ -287,8 +289,8 @@ errorstream<<"sctp_setup "<<port<<std::endl;
 	usrsctp_init(port, nullptr, debug_printf);
 
 #if SCTP_DEBUG
-	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
-	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
+	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
+	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
 #endif
 
 	//usrsctp_sysctl_set_sctp_ecn_enable(0);
@@ -431,7 +433,7 @@ void Connection::receive() {
 				std::this_thread::sleep_for(std::chrono::milliseconds(10));
 				return;
 			} else {
-				printf("usrsctp_accept failed.  exiting...\n");
+				cs<< "usrsctp_accept failed.  exiting...\n";
 				return;
 			}
 			//continue;
@@ -442,7 +444,7 @@ void Connection::receive() {
 			// TODO: fix this shit
 			peer_id = m_peers.rbegin()->first + 1;
 
-		errorstream << "receive() accepted " << conn_sock << " addr_len=" << addr_len << " id=" << peer_id << std::endl;
+		cs << "receive() accepted " << conn_sock << " addr_len=" << addr_len << " id=" << peer_id << std::endl;
 
 		m_peers.set(peer_id, conn_sock);
 		m_peers_address.set(peer_id, Address(remote_addr.sin6_addr, remote_addr.sin6_port));
@@ -467,63 +469,62 @@ static void
 handle_association_change_event(const struct sctp_assoc_change *sac) {
 	unsigned int i, n;
 
-	printf("Association change ");
+	cs<<("Association change ");
 	switch (sac->sac_state) {
 	case SCTP_COMM_UP:
-		printf("SCTP_COMM_UP");
+		cs<<("SCTP_COMM_UP");
 		break;
 	case SCTP_COMM_LOST:
-		printf("SCTP_COMM_LOST");
+		cs<<("SCTP_COMM_LOST");
 		break;
 	case SCTP_RESTART:
-		printf("SCTP_RESTART");
+		cs<<("SCTP_RESTART");
 		break;
 	case SCTP_SHUTDOWN_COMP:
-		printf("SCTP_SHUTDOWN_COMP");
+		cs<<("SCTP_SHUTDOWN_COMP");
 		break;
 	case SCTP_CANT_STR_ASSOC:
-		printf("SCTP_CANT_STR_ASSOC");
+		cs<<("SCTP_CANT_STR_ASSOC");
 		break;
 	default:
-		printf("UNKNOWN");
+		cs<<("UNKNOWN");
 		break;
 	}
-	printf(", streams (in/out) = (%u/%u)",
-	       sac->sac_inbound_streams, sac->sac_outbound_streams);
+	cs<<", streams (in/out) = ("<<sac->sac_inbound_streams<<"/"<<sac->sac_outbound_streams<<")";
 	n = sac->sac_length - sizeof(struct sctp_assoc_change);
 	if (((sac->sac_state == SCTP_COMM_UP) ||
 	        (sac->sac_state == SCTP_RESTART)) && (n > 0)) {
-		printf(", supports");
+		cs<<(", supports");
 		for (i = 0; i < n; i++) {
 			switch (sac->sac_info[i]) {
 			case SCTP_ASSOC_SUPPORTS_PR:
-				printf(" PR");
+				cs<<(" PR");
 				break;
 			case SCTP_ASSOC_SUPPORTS_AUTH:
-				printf(" AUTH");
+				cs<<(" AUTH");
 				break;
 			case SCTP_ASSOC_SUPPORTS_ASCONF:
-				printf(" ASCONF");
+				cs<<(" ASCONF");
 				break;
 			case SCTP_ASSOC_SUPPORTS_MULTIBUF:
-				printf(" MULTIBUF");
+				cs<<(" MULTIBUF");
 				break;
 			case SCTP_ASSOC_SUPPORTS_RE_CONFIG:
-				printf(" RE-CONFIG");
+				cs<<(" RE-CONFIG");
 				break;
 			default:
-				printf(" UNKNOWN(0x%02x)", sac->sac_info[i]);
+				cs<<" UNKNOWN("<< sac->sac_info[i]<<")";
 				break;
 			}
 		}
 	} else if (((sac->sac_state == SCTP_COMM_LOST) ||
 	            (sac->sac_state == SCTP_CANT_STR_ASSOC)) && (n > 0)) {
-		printf(", ABORT =");
+		cs<<(", ABORT =");
 		for (i = 0; i < n; i++) {
-			printf(" 0x%02x", sac->sac_info[i]);
+			cs<< " " << sac->sac_info[i];
 		}
 	}
-	printf(".\n");
+	cs<<(".\n");
 	if ((sac->sac_state == SCTP_CANT_STR_ASSOC) ||
 	        (sac->sac_state == SCTP_SHUTDOWN_COMP) ||
 	        (sac->sac_state == SCTP_COMM_LOST)) {
@@ -558,31 +559,33 @@ handle_peer_address_change_event(const struct sctp_paddr_change *spc) {
 		addr = addr_buf;
 		break;
 	}
-	printf("Peer address %s is now ", addr);
+	cs<<"Peer address "<<addr<<" is now " ;
 	switch (spc->spc_state) {
 	case SCTP_ADDR_AVAILABLE:
-		printf("SCTP_ADDR_AVAILABLE");
+		cs<<("SCTP_ADDR_AVAILABLE");
 		break;
 	case SCTP_ADDR_UNREACHABLE:
-		printf("SCTP_ADDR_UNREACHABLE");
+		cs<<("SCTP_ADDR_UNREACHABLE");
 		break;
 	case SCTP_ADDR_REMOVED:
-		printf("SCTP_ADDR_REMOVED");
+		cs<<("SCTP_ADDR_REMOVED");
 		break;
 	case SCTP_ADDR_ADDED:
-		printf("SCTP_ADDR_ADDED");
+		cs<<("SCTP_ADDR_ADDED");
 		break;
 	case SCTP_ADDR_MADE_PRIM:
-		printf("SCTP_ADDR_MADE_PRIM");
+		cs<<("SCTP_ADDR_MADE_PRIM");
 		break;
 	case SCTP_ADDR_CONFIRMED:
-		printf("SCTP_ADDR_CONFIRMED");
+		cs<<("SCTP_ADDR_CONFIRMED");
 		break;
 	default:
-		printf("UNKNOWN");
+		cs<<("UNKNOWN");
 		break;
 	}
-	printf(" (error = 0x%08x).\n", spc->spc_error);
+	char buf[100] ;
+	sprintf(buf, " (error = 0x%08x).\n", spc->spc_error);
+	cs<<buf;
 	return;
 }
 
@@ -610,7 +613,7 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 	if (n > 0) {
 		//errorstream << "receive() ... " << __LINE__ << " n=" << n << std::endl;
 		if (flags & MSG_NOTIFICATION) {
-			printf("Notification of length %llu received.\n", (unsigned long long)n);
+			cs<<"Notification of length "<<n<<" received.\n";
 
 			const sctp_notification& notification =
 			    reinterpret_cast<const sctp_notification&>(buffer);
@@ -626,7 +629,7 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 				{
 switch (notification.sn_assoc_change.sac_state) {
 	case SCTP_CANT_STR_ASSOC:
-		printf("SCTP_CANT_STR_ASSOC");
+		cs<<("SCTP_CANT_STR_ASSOC");
 		deletePeer(peer_id,  false);
 		break;
 
@@ -728,7 +731,8 @@ switch (notification.sn_assoc_change.sac_state) {
 		} else {
 			char name[INET6_ADDRSTRLEN];
 			if (infotype == SCTP_RECVV_RCVINFO) {
-				printf("Msg of length %llu received from %s:%u on stream %d with SSN %u and TSN %u, PPID %d, context %u, complete %d.\n",
+				char buf[1000];
+				sprintf(buf, "Msg of length %llu received from %s:%u on stream %d with SSN %u and TSN %u, PPID %d, context %u, complete %d.\n",
 				       (unsigned long long)n,
 				       inet_ntop(AF_INET6, &addr.sin6_addr, name, INET6_ADDRSTRLEN), ntohs(addr.sin6_port),
 				       rcv_info.rcv_sid,
@@ -737,6 +741,7 @@ switch (notification.sn_assoc_change.sac_state) {
 				       ntohl(rcv_info.rcv_ppid),
 				       rcv_info.rcv_context,
 				       (flags & MSG_EOR) ? 1 : 0);
+				cs<<buf;
 			} else {
 				/*
 								printf("Msg of length %llu received from %s:%u, complete %d.\n",
@@ -813,19 +818,17 @@ void Connection::sock_setup(u16 peer_id, struct socket *sock) {
 			perror("setsockopt SCTP_EVENT");
 		}
 	}
-// /*
+ /*
 	if (usrsctp_set_non_blocking(sock, 1) < 0) {
 		errorstream << "Failed to set SCTP to non blocking." << std::endl;
 		//return false;
 	}
-// */
+ */
 
- /*
 	const int on = 1;
 	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_I_WANT_MAPPED_V4_ADDR, (const void*)&on, (socklen_t)sizeof(int)) < 0) {
 		perror("usrsctp_setsockopt SCTP_I_WANT_MAPPED_V4_ADDR");
 	}
-  */
 
 	const int one = 1;
 	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_EXPLICIT_EOR, &one, sizeof(int)) < 0) {
@@ -921,7 +924,7 @@ void Connection::serve(Address bind_addr) {
 	//addr.sin_family = AF_INET;
 	//addr.sin_port = htons(bind_addr.getPort()); //htons(13);
 	//printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
-	printf("Waiting for connections on sctp port %d\n", ntohs(addr.sin6_port));
+	cs<<"Waiting for connections on sctp port "<<ntohs(addr.sin6_port)<<"\n";
 	if (usrsctp_bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		perror("usrsctp_bind");
 	}
