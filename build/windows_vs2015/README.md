@@ -1,8 +1,16 @@
 To build Freeminer using Visual Studio for Windows you'll need:
+  virtualbox, ~25GB space
+  - [windows 10] http://www.microsoft.com/en-us/software-download/windows10
 - [CMake](http://www.cmake.org/cmake/resources/software.html) and [Git](http://msysgit.github.io/), both should be in your PATH
 - [Python 3.x](https://www.python.org/downloads/)
-- [Visual Studio 2013](http://www.visualstudio.com/downloads/download-visual-studio-vs) (if you decide to use the Express edition make sure to get Microsoft Visual Studio Express 2013 for Windows **Desktop**)
+- [Visual Studio 2015 Community](http://www.visualstudio.com/downloads/download-visual-studio-vs)
 - [DirectX SDK](http://www.microsoft.com/en-us/download/details.aspx?id=6812)
+
+Automated build:
+build.bat
+
+
+Manual build (with debug support):
 
 You'll need to allow NuGet to restore packages, otherwise it'll output the following error:
 
@@ -25,6 +33,3 @@ If you are going to develop FM using Visual Studio you'll have to change startup
 Also useful for debugging release build: http://msdn.microsoft.com/en-us/library/fsk896zz.aspx
 
 A word of warning: gettext and libintl will install themselves to `C:\usr\`. If you don't want this behavior don't build Freeminer for Windows.
-
-If you want to build without running VS: run
-build.bat 

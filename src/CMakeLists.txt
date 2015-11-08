@@ -618,7 +618,8 @@ set(FMcommon_SRCS
 	circuit_element.cpp
 	circuit_element_virtual.cpp
 	key_value_storage.cpp
-	fmbitset.cpp
+	fm_bitset.cpp
+	FMColoredString.cpp
 	mapgen_v5.cpp
 	mapgen_indev.cpp
 	mapgen_math.cpp
@@ -735,7 +736,6 @@ if(WIN32)
 endif()
 
 set(FMclient_SRCS
-	FMColoredString.cpp
 	guiTextInputMenu.cpp
 	intlGUIEditBox.cpp
 	FMStaticText.cpp
