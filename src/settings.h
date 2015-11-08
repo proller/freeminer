@@ -25,7 +25,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "irrlichttypes_bloated.h"
 #include "util/string.h"
-#include "jthread/jmutex.h"
+#include "threading/mutex.h"
 #include <string>
 #include <map>
 #include <list>
@@ -230,6 +230,12 @@ public:
 	bool readJsonFile(const std::string &filename);
 	void msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const;
 	void msgpack_unpack(msgpack::object o);
+	friend std::ostream & operator<<(std::ostream & os, Settings & settings) {
+		Json::Value json;
+		settings.toJson(json);
+		os << json;
+		return os;
+	}
 
 private:
 
@@ -247,8 +253,8 @@ private:
 
 	std::map<std::string, std::vector<std::pair<setting_changed_callback,void*> > > m_callbacks;
 
-	mutable JMutex m_callbackMutex;
-	mutable JMutex m_mutex; // All methods that access m_settings/m_defaults directly should lock this.
+	mutable Mutex m_callbackMutex;
+	mutable Mutex m_mutex; // All methods that access m_settings/m_defaults directly should lock this.
 
 };
 

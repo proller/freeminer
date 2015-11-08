@@ -33,7 +33,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "content_sao.h"
 #include "nodedef.h"
 #include "emerge.h"
-#include "content_mapnode.h" // For content_mapnode_get_new_name
 #include "voxelalgorithms.h"
 #include "porting.h"
 #include "profiler.h"
@@ -43,7 +42,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/serialize.h"
 #include "util/numeric.h"
 #include "filesys.h"
-#include "log.h"
+#include "log_types.h"
 
 FlagDesc flagdesc_mapgen[] = {
 	{"trees",    MG_TREES},
@@ -66,8 +65,9 @@ FlagDesc flagdesc_gennotify[] = {
 };
 
 
-///////////////////////////////////////////////////////////////////////////////
-
+////
+//// Mapgen
+////
 
 Mapgen::Mapgen()
 {
@@ -161,6 +161,26 @@ s16 Mapgen::findGroundLevel(v2s16 p2d, s16 ymin, s16 ymax)
 	for (y = ymax; y >= ymin; y--) {
 		MapNode &n = vm->m_data[i];
 		if (ndef->get(n).walkable)
+			break;
+
+		vm->m_area.add_y(em, i, -1);
+	}
+	return (y >= ymin) ? y : -MAX_MAP_GENERATION_LIMIT;
+}
+
+
+// Returns -MAX_MAP_GENERATION_LIMIT if not found or if ground is found first
+s16 Mapgen::findLiquidSurface(v2s16 p2d, s16 ymin, s16 ymax)
+{
+	v3s16 em = vm->m_area.getExtent();
+	u32 i = vm->m_area.index(p2d.X, ymax, p2d.Y);
+	s16 y;
+
+	for (y = ymax; y >= ymin; y--) {
+		MapNode &n = vm->m_data[i];
+		if (ndef->get(n).walkable)
+			return -MAX_MAP_GENERATION_LIMIT;
+		else if (ndef->get(n).isLiquid())
 			break;
 
 		vm->m_area.add_y(em, i, -1);
@@ -369,32 +389,9 @@ void Mapgen::spreadLight(v3s16 nmin, v3s16 nmax)
 }
 
 
-
-void Mapgen::calcLightingOld(v3s16 nmin, v3s16 nmax)
-{
-	enum LightBank banks[2] = {LIGHTBANK_DAY, LIGHTBANK_NIGHT};
-	VoxelArea a(nmin, nmax);
-	bool block_is_underground = (water_level > nmax.Y);
-	bool sunlight = !block_is_underground;
-
-	ScopeProfiler sp(g_profiler, "EmergeThread: mapgen lighting update", SPT_AVG);
-
-	for (int i = 0; i < 2; i++) {
-		enum LightBank bank = banks[i];
-		std::set<v3s16> light_sources;
-		std::map<v3s16, u8> unlight_from;
-
-		voxalgo::clearLightAndCollectSources(*vm, a, bank, ndef,
-			light_sources, unlight_from);
-		voxalgo::propagateSunlight(*vm, a, sunlight, light_sources, ndef);
-
-		vm->unspreadLight(bank, unlight_from, light_sources, ndef);
-		vm->spreadLight(bank, light_sources, ndef);
-	}
-}
-
-
-///////////////////////////////////////////////////////////////////////////////
+////
+//// GenerateNotifier
+////
 
 GenerateNotifier::GenerateNotifier()
 {
@@ -460,7 +457,10 @@ void GenerateNotifier::getEvents(
 		m_notify_events.clear();
 }
 
-///////////////////////////////////////////////////////////////////////////////
+
+////
+//// MapgenParams
+////
 
 void MapgenParams::load(Settings &settings)
 {
@@ -483,9 +483,11 @@ void MapgenParams::load(Settings &settings)
 	settings.getNoiseParams("mg_biome_np_humidity_blend", np_biome_humidity_blend);
 
 	delete sparams;
-	sparams = EmergeManager::createMapgenParams(mg_name);
-	if (sparams)
+	MapgenFactory *mgfactory = EmergeManager::getMapgenFactory(mg_name);
+	if (mgfactory) {
+		sparams = mgfactory->createMapgenParams();
 		sparams->readParams(&settings);
+	}
 }
 
 
@@ -496,7 +498,7 @@ void MapgenParams::save(Settings &settings) const
 	settings.setS16("water_level", water_level);
 	settings.setS16("liquid_pressure", liquid_pressure);
 	settings.setS16("chunksize", chunksize);
-	settings.setFlagStr("mg_flags", flags, flagdesc_mapgen, (u32)-1);
+	settings.setFlagStr("mg_flags", flags, flagdesc_mapgen, U32_MAX);
 	settings.setNoiseParams("mg_biome_np_heat", np_biome_heat);
 	settings.setNoiseParams("mg_biome_np_heat_blend", np_biome_heat_blend);
 	settings.setNoiseParams("mg_biome_np_humidity", np_biome_humidity);

@@ -24,7 +24,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <algorithm>
 #include <sstream>
 #include <IFileSystem.h>
-#include "jthread/jmutexautolock.h"
+#include "threading/mutex_auto_lock.h"
 #include "util/auth.h"
 #include "util/directiontables.h"
 #include "util/pointedthing.h"
@@ -67,6 +67,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #if !MINETEST_PROTO
 #include "network/fm_clientpacketsender.cpp"
 #endif
+#include "chat.h"
 
 
 extern gui::IGUIEnvironment* guienv;
@@ -87,7 +88,7 @@ MeshUpdateQueue::~MeshUpdateQueue()
 
 unsigned int MeshUpdateQueue::addBlock(v3POS p, std::shared_ptr<MeshMakeData> data, bool urgent)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	auto lock = m_queue.lock_unique_rec();
 	unsigned int range = urgent ? 0 : 1 + data->range + data->step * 10;
@@ -213,6 +214,7 @@ Client::Client(
 	m_particle_manager(&m_env),
 	m_con(PROTOCOL_ID, is_simple_singleplayer_game ? MAX_PACKET_SIZE_SINGLEPLAYER : MAX_PACKET_SIZE, CONNECTION_TIMEOUT, ipv6, this),
 	m_device(device),
+	m_minimap_disabled_by_server(false),
 	m_server_ser_ver(SER_FMT_VER_INVALID),
 	m_proto_ver(0),
 	m_playeritem(0),
@@ -258,25 +260,23 @@ Client::Client(
 void Client::Stop()
 {
 	//request all client managed threads to stop
-	m_mesh_update_thread.Stop();
-	m_mesh_update_thread.Wait();
+	m_mesh_update_thread.stop();
+	// Save local server map
 	if (m_localdb) {
 		actionstream << "Local map saving ended" << std::endl;
 		m_localdb->endSave();
 	}
 
-	if (m_localserver)
-		delete m_localserver;
-	if (m_localdb)
-		delete m_localdb;
+	delete m_localserver;
+	delete m_localdb;
 }
 
 Client::~Client()
 {
 	m_con.Disconnect();
 
-	m_mesh_update_thread.Stop();
-	m_mesh_update_thread.Wait();
+	m_mesh_update_thread.stop();
+	m_mesh_update_thread.wait();
 /*
 	while (!m_mesh_update_thread.m_queue_out.empty()) {
 		MeshUpdateResult r = m_mesh_update_thread.m_queue_out.pop_frontNoEx();
@@ -303,13 +303,14 @@ Client::~Client()
 	}
 
 	delete m_mapper;
+	delete m_media_downloader;
 }
 
 void Client::connect(Address address,
 		const std::string &address_name,
 		bool is_local_server)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	initLocalMapSaving(address, address_name, is_local_server);
 
@@ -318,7 +319,7 @@ void Client::connect(Address address,
 
 void Client::step(float dtime)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	m_uptime += dtime;
 
@@ -614,7 +615,8 @@ void Client::step(float dtime)
 	{
 		for(std::map<int, u16>::iterator
 				i = m_sounds_to_objects.begin();
-				i != m_sounds_to_objects.end(); i++) {
+				i != m_sounds_to_objects.end(); ++i)
+		{
 			int client_id = i->first;
 			u16 object_id = i->second;
 			ClientActiveObject *cao = m_env.getActiveObject(object_id);
@@ -640,8 +642,8 @@ void Client::step(float dtime)
 		{
 			s32 server_id = i->first;
 			int client_id = i->second;
-			i++;
-			if(!m_sound->soundExists(client_id)){
+			++i;
+			if(!m_sound->soundExists(client_id)) {
 				m_sounds_server_to_client.erase(server_id);
 				m_sounds_client_to_server.erase(client_id);
 				m_sounds_to_objects.erase(client_id);
@@ -848,7 +850,7 @@ void Client::initLocalMapSaving(const Address &address,
 
 void Client::ReceiveAll()
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	auto end_ms = porting::getTimeMs() + 10;
 	for(;;)
 	{
@@ -879,7 +881,7 @@ void Client::ReceiveAll()
 
 bool Client::Receive()
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	NetworkPacket pkt;
 	if (!m_con.Receive(&pkt))
 		return false;
@@ -902,7 +904,7 @@ inline void Client::handleCommand(NetworkPacket* pkt)
 */
 void Client::ProcessData(NetworkPacket *pkt)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	ToClientCommand command = (ToClientCommand) pkt->getCommand();
 	u32 sender_peer_id = pkt->getPeerId();
@@ -957,7 +959,7 @@ void Client::ProcessData(NetworkPacket *pkt)
 /*
 void Client::Send(u16 channelnum, SharedBuffer<u8> data, bool reliable)
 {
-	//JMutexAutoLock lock(m_con_mutex); //bulk comment-out
+	//MutexAutoLock lock(m_con_mutex); //bulk comment-out
 	m_con.Send(PEER_ID_SERVER, channelnum, data, reliable);
 }
 */
@@ -1119,8 +1121,10 @@ void Client::startAuth(AuthMechanism chosen_auth_mechanism)
 				m_password.length(), NULL, NULL);
 			char *bytes_A = 0;
 			size_t len_A = 0;
-			srp_user_start_authentication((struct SRPUser *) m_auth_data,
-				NULL, NULL, 0, (unsigned char **) &bytes_A, &len_A);
+			SRP_Result res = srp_user_start_authentication(
+				(struct SRPUser *) m_auth_data, NULL, NULL, 0,
+				(unsigned char **) &bytes_A, &len_A);
+			FATAL_ERROR_IF(res != SRP_OK, "Creating local SRP user failed.");
 
 			NetworkPacket resp_pkt(TOSERVER_SRP_BYTES_A, 0);
 			resp_pkt << std::string(bytes_A, len_A) << based_on;
@@ -1166,7 +1170,7 @@ void Client::sendRemovedSounds(std::vector<s32> &soundList)
 	pkt << (u16) (server_ids & 0xFFFF);
 
 	for(std::vector<s32>::iterator i = soundList.begin();
-			i != soundList.end(); i++)
+			i != soundList.end(); ++i)
 		pkt << *i;
 
 	Send(&pkt);
@@ -1271,7 +1275,7 @@ void Client::sendChangePassword(const std::string &oldpassword,
 
 void Client::sendDamage(u8 damage)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOSERVER_DAMAGE, sizeof(u8));
 	pkt << damage;
@@ -1280,7 +1284,7 @@ void Client::sendDamage(u8 damage)
 
 void Client::sendBreath(u16 breath)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOSERVER_BREATH, sizeof(u16));
 	pkt << breath;
@@ -1289,7 +1293,7 @@ void Client::sendBreath(u16 breath)
 
 void Client::sendRespawn()
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOSERVER_RESPAWN, 0);
 	Send(&pkt);
@@ -1297,7 +1301,7 @@ void Client::sendRespawn()
 
 void Client::sendReady()
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOSERVER_CLIENT_READY,
 			1 + 1 + 1 + 1 + 2 + sizeof(char) * strlen(g_version_hash));
@@ -1331,7 +1335,7 @@ void Client::sendPlayerPos()
 
 	u16 our_peer_id;
 	{
-		//JMutexAutoLock lock(m_con_mutex); //bulk comment-out
+		//MutexAutoLock lock(m_con_mutex); //bulk comment-out
 		our_peer_id = m_con.GetPeerID();
 	}
 
@@ -1629,15 +1633,18 @@ void Client::typeChatMessage(const std::string &message)
 	if(message.empty())
 		return;
 
-	// Send to others
-	sendChatMessage(message);
-
-	// Show locally
-	if (message[0] == '/')
-	{
-		m_chat_queue.push("issued command: " + message);
+	if (message[0] == '/') {
+		// TODO register client commands in help
+		std::string command = message.substr(1,-1);
+		// Clears on-screen chat messages
+		if (command.compare("clear") == 0) {
+			chat_backend->clearRecentChat();
+			return;
+		// it's kinda self-evident when you run a local command
+		} else {
+			m_chat_queue.push("issued command: " + message);
+		}
 	}
-
 	//freeminer display self message after recieving from server
 #if MINETEST_PROTO
 	else
@@ -1648,6 +1655,9 @@ void Client::typeChatMessage(const std::string &message)
 		m_chat_queue.push(std::string() + "<" + name + "> " + message);
 	}
 #endif
+
+	// Send to others
+	sendChatMessage(message);
 }
 
 void Client::addUpdateMeshTask(v3s16 p, bool urgent, int step)
@@ -1910,9 +1920,9 @@ void Client::afterContentReceived(IrrlichtDevice *device)
 
 	if (!headless_optimize) {
 	// Start mesh update thread after setting up content definitions
-		auto threads = !g_settings->getBool("more_threads") ? 1 : (porting::getNumberOfProcessors() - (m_simple_singleplayer_mode ? 3 : 1));
+		int threads = !g_settings->getBool("more_threads") ? 1 : (Thread::getNumberOfProcessors() - (m_simple_singleplayer_mode ? 3 : 1));
 		infostream<<"- Starting mesh update threads = "<<threads<<std::endl;
-		m_mesh_update_thread.Start(threads < 1 ? 1 : threads);
+		m_mesh_update_thread.start(threads < 1 ? 1 : threads);
 	}
 
 	m_state = LC_Ready;
@@ -1968,10 +1978,16 @@ void Client::makeScreenshot(const std::string & name, IrrlichtDevice *device)
 	char timetstamp_c[64];
 	strftime(timetstamp_c, sizeof(timetstamp_c), "%Y%m%d_%H%M%S", tm);
 
-	std::string filename_base = g_settings->get("screenshot_path")
+	std::string screenshot_path = porting::path_user + DIR_DELIM + g_settings->get("screenshot_path");
+	if (!fs::CreateDir(screenshot_path)) {
+		errorstream << "Failed to save screenshot: can't create directory for screenshots (\"" << screenshot_path << "\")." << std::endl;
+		return;
+	}
+
+	std::string screenshot_name = name + std::string(timetstamp_c);
+	std::string filename_base = screenshot_path
 			+ DIR_DELIM
-			+ name
-			+ std::string(timetstamp_c);
+			+ screenshot_name;
 	std::string filename_ext = ".png";
 	std::string filename;
 
@@ -1987,7 +2003,7 @@ void Client::makeScreenshot(const std::string & name, IrrlichtDevice *device)
 	}
 
 	if (serial == SCREENSHOT_MAX_SERIAL_TRIES) {
-		infostream << "Could not find suitable filename for screenshot" << std::endl;
+		errorstream << "Could not find suitable filename for screenshot" << std::endl;
 	} else {
 		irr::video::IImage* const image =
 				driver->createImage(video::ECF_R8G8B8, raw_image->getDimension());
@@ -1998,9 +2014,9 @@ void Client::makeScreenshot(const std::string & name, IrrlichtDevice *device)
 			std::ostringstream sstr;
 			if (driver->writeImageToFile(image, filename.c_str())) {
 				if (name == "screenshot_")
-				sstr << "Saved screenshot to '" << filename << "'";
+					sstr << "Saved screenshot to '" << screenshot_name << filename_ext << "'";
 			} else {
-				sstr << "Failed to save screenshot '" << filename << "'";
+				sstr << "Failed to save screenshot '" << screenshot_name << filename_ext << "'";
 			}
 			m_chat_queue.push(sstr.str());
 			infostream << sstr.str() << std::endl;

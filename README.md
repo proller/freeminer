@@ -14,24 +14,24 @@ It aims to make the game fun while trading off some bits of perfectionism.
 - **Windows**: https://github.com/freeminer/freeminer/releases
 - **Ubuntu**: Install http://www.ubuntuupdates.org/ppa/getdeb_games and run:
 
-	```bash
+	```sh
 	sudo apt-get install freeminer
 	```
 - **Arch Linux**:
 
-	```bash
+	```sh
 	yaourt -S freeminer
 	```
 	<sup>*Stable version*</sup>
 	
-	```bash
+	```sh
 	yaourt -S freeminer-git
 	```
 	<sup>*Development version*</sup>
 	
 - **FreeBSD**:
 
-	```bash
+	```sh
 	cd /usr/ports/games/freeminer-default && sudo make install clean
 	```
 
@@ -53,6 +53,7 @@ It aims to make the game fun while trading off some bits of perfectionism.
 - `T`: chat
 - `Z`: zoom
 - `Tab`: player list
+- `~`: toggle console
 
 ## Compiling
 Install dependencies. Here's an example for
@@ -62,54 +63,65 @@ Debian/Ubuntu:
 sudo apt-get install build-essential libirrlicht-dev cmake libbz2-dev \
 libpng12-dev libjpeg-dev libfreetype6-dev libxxf86vm-dev libgl1-mesa-dev \
 libsqlite3-dev libvorbis-dev libopenal-dev libcurl4-openssl-dev libluajit-5.1-dev \
-libleveldb-dev libsnappy-dev libgettextpo0 libmsgpack-dev libgmp-dev
+libleveldb-dev libsnappy-dev libgettextpo0 libmsgpack-dev libgmp-dev libspatialindex-dev
 # optional:
 sudo apt-get install libhiredis-dev cmake-curses-gui
 ```
 ___
 Fedora:
-```bash
+```sh
 # the first five is the closest to Debian/Ubuntu build-essential
-sudo yum install make automake gcc gcc-c++ kernel-devel cmake irrlicht-devel \
-bzip2-devel libpng-devel libjpeg-turbo-devel freetype-devel libXxf86vm-devel \
-mesa-libGL-devel sqlite-devel libvorbis-devel openal-soft-devel libcurl-devel \
-luajit-devel leveldb-devel snappy-devel gettext-devel msgpack msgpack-devel
+sudo yum install make automake gcc gcc-c++ kernel-devel cmake \
+irrlicht-devel bzip2-devel libpng-devel libjpeg-turbo-devel freetype-devel \
+libXxf86vm-devel mesa-libGL-devel sqlite-devel libvorbis-devel \
+openal-soft-devel libcurl-devel luajit-devel leveldb-devel snappy-devel \
+gettext-devel msgpack msgpack-devel spatialindex-devel
 ```
 ___
 Arch Linux:
-```bash
+```sh
 sudo pacman -S curl irrlicht leveldb libvorbis luajit openal sqlite cmake msgpack-c
 ```
 ___
 Gentoo/Funtoo:
-```bash
-emerge -av media-libs/libvorbis media-libs/openal dev-games/irrlicht dev-libs/msgpack dev-libs/leveldb
+```sh
+emerge -av media-libs/libvorbis media-libs/openal dev-games/irrlicht \
+dev-libs/msgpack dev-libs/leveldb sci-libs/libspatialindex
 ```
 ___
 OS X:
-```bash
-brew install cmake freetype gettext hiredis irrlicht jpeg leveldb libogg libvorbis luajit msgpack
+```sh
+brew install cmake freetype gettext hiredis irrlicht jpeg leveldb libogg \
+libvorbis luajit msgpack
 ```
 
 <sup>Recommended irrlicht version: `1.8.2`</sup>
 
 Download source code:
-```bash
+```sh
 git clone --recursive https://github.com/freeminer/freeminer.git
 cd freeminer
 ```
 
 <sup>Recommended minimum compiler version: `gcc 4.8` or `clang 3.3`</sup>
 
-Build it:
-```bash
+Build it (GNU/Linux):
+```sh
 mkdir _build && cd _build
 cmake ..
 nice make -j $(nproc || sysctl -n hw.ncpu || echo 2)
 ```
 
+Build it (OS X):
+```sh
+mkdir _build && cd _build
+cmake .. -DGETTEXT_LIBRARY=/usr/local/opt/gettext/lib/libgettextlib.dylib -DGETTEXT_INCLUDE_DIR=/usr/local/opt/gettext/include
+make -j8 package
+```
+(if the make command doesn't work on OS X install bsdmake)
+
 Play it!
 ```
 cd ..
-./bin/freeminer
+bin/freeminer
 ```

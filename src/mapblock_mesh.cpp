@@ -1157,7 +1157,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	if (g_settings->getBool("enable_minimap")) {
 		m_minimap_mapblock = new MinimapMapblock;
 		m_minimap_mapblock->getMinimapNodes(
-			&data->m_vmanip, data->m_blockpos * MAP_BLOCKSIZE);
+			&data->m_vmanip_store, data->m_blockpos * MAP_BLOCKSIZE);
 	}
 
 	// 4-21ms for MAP_BLOCKSIZE=16  (NOTE: probably outdated)
@@ -1436,12 +1436,15 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack, u32 daynight_rat
 	m_animation_force_timer = myrand_range(5, 100);
 #endif
 
+	m_animation_force_timer *= step;
+
 	// Cracks
+	if (step <= 1)
 	if(crack != m_last_crack)
 	{
 		for(std::map<u32, std::string>::iterator
 				i = m_crack_materials.begin();
-				i != m_crack_materials.end(); i++)
+				i != m_crack_materials.end(); ++i)
 		{
 			scene::IMeshBuffer *buf = m_mesh->getMeshBuffer(i->first);
 			std::string basename = i->second;
@@ -1471,9 +1474,10 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack, u32 daynight_rat
 	}
 
 	// Texture animation
+	if (step <= 1)
 	for(std::map<u32, TileSpec>::iterator
 			i = m_animation_tiles.begin();
-			i != m_animation_tiles.end(); i++)
+			i != m_animation_tiles.end(); ++i)
 	{
 		const TileSpec &tile = i->second;
 		// Figure out current frame
@@ -1503,14 +1507,14 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack, u32 daynight_rat
 	{
 		for(std::map<u32, std::map<u32, std::pair<u8, u8> > >::iterator
 				i = m_daynight_diffs.begin();
-				i != m_daynight_diffs.end(); i++)
+				i != m_daynight_diffs.end(); ++i)
 		{
 			scene::IMeshBuffer *buf = m_mesh->getMeshBuffer(i->first);
 			buf->setDirty(irr::scene::EBT_VERTEX);
 			video::S3DVertexTangents *vertices = (video::S3DVertexTangents *)buf->getVertices();
 			for(std::map<u32, std::pair<u8, u8 > >::iterator
 					j = i->second.begin();
-					j != i->second.end(); j++)
+					j != i->second.end(); ++j)
 			{
 				u8 day = j->second.first;
 				u8 night = j->second.second;
@@ -1521,6 +1525,7 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack, u32 daynight_rat
 	}
 
 	// Node highlighting
+	if (step <= 1)
 	if (m_enable_highlighting) {
 		u8 day = m_highlight_mesh_color.getRed();
 		u8 night = m_highlight_mesh_color.getGreen();
@@ -1535,7 +1540,7 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack, u32 daynight_rat
 
 		for(std::list<u32>::iterator
 			i = m_highlighted_materials.begin();
-			i != m_highlighted_materials.end(); i++)
+			i != m_highlighted_materials.end(); ++i)
 		{
 			scene::IMeshBuffer *buf = m_mesh->getMeshBuffer(*i);
 			video::S3DVertexTangents *vertices = (video::S3DVertexTangents*)buf->getVertices();

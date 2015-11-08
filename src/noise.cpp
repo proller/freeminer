@@ -30,6 +30,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "constants.h"
 #include "util/string.h"
 #include "exceptions.h"
+#include "log_types.h"
 
 #define NOISE_MAGIC_X    1619
 #define NOISE_MAGIC_Y    31337
@@ -118,7 +119,7 @@ u32 PcgRandom::range(u32 bound)
 s32 PcgRandom::range(s32 min, s32 max)
 {
 	if (max < min)
-		throw PrngException("Invalid range (max < min)");
+		throw PrngException("Invalid range (max < min) min=" + to_string(min) + " max=" + to_string(max));
 
 	u32 bound = max - min + 1;
 	return range(bound) + min;
@@ -157,23 +158,22 @@ s32 PcgRandom::randNormalDist(s32 min, s32 max, int num_trials)
 
 float noise2d(int x, int y, int seed)
 {
-	int n = (NOISE_MAGIC_X * x + NOISE_MAGIC_Y * y
+	unsigned int n = (NOISE_MAGIC_X * x + NOISE_MAGIC_Y * y
 			+ NOISE_MAGIC_SEED * seed) & 0x7fffffff;
 	n = (n >> 13) ^ n;
 
 	n = (n * (n * n * 60493 + 19990303) + 1376312589) & 0x7fffffff;
-	return 1.f - (float)n / 0x40000000;
+	return 1.f - (float)(int)n / 0x40000000;
 }
 
 
 float noise3d(int x, int y, int z, int seed)
 {
-	int n = (NOISE_MAGIC_X * x + NOISE_MAGIC_Y * y + NOISE_MAGIC_Z * z
+	unsigned int n = (NOISE_MAGIC_X * x + NOISE_MAGIC_Y * y + NOISE_MAGIC_Z * z
 			+ NOISE_MAGIC_SEED * seed) & 0x7fffffff;
 	n = (n >> 13) ^ n;
 	n = (n * (n * n * 60493 + 19990303) + 1376312589) & 0x7fffffff;
-
-	return 1.f - (float)n / 0x40000000;
+	return 1.f - (float)(int)n / 0x40000000;
 }
 
 
@@ -362,6 +362,14 @@ float contour(float v)
 
 
 ///////////////////////// [ New noise ] ////////////////////////////
+	std::ostream & operator<<(std::ostream & os, NoiseParams & np)
+	 {
+		os << "noiseprms[offset="<<np.offset<<",scale="<<np.scale<<",spread="<<np.spread<<",seed="<<np.seed<<",octaves="<<np.octaves<<",persist="<<np.persist<<",lacunarity="<<np.lacunarity<<",flags="<<np.flags
+		<<",farscale"<<np.farscale<<",farspread"<<np.farspread<<",farpersist"<<np.farpersist
+		<<"]";
+		return os;
+	}
+
 
 
 float NoisePerlin2D(NoiseParams *np, float x, float y, int seed)

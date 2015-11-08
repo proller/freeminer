@@ -33,7 +33,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "server.h"
 #include "scripting_game.h"
 #include "genericobject.h"
-#include "log.h"
+#include "log_types.h"
 
 std::map<u16, ServerActiveObject::Factory> ServerActiveObject::m_types;
 
@@ -297,7 +297,9 @@ void LuaEntitySAO::step(float dtime, bool send_recommended)
 		}
 	}
 
-	if(m_registered){
+	if(m_registered && (getType() < ACTIVEOBJECT_TYPE_LUACREATURE
+			|| getType() > ACTIVEOBJECT_TYPE_LUAFALLING)) {
+
 		m_env->getScriptIface()->luaentity_Step(m_id, dtime);
 	}
 
@@ -364,6 +366,7 @@ std::string LuaEntitySAO::getClientInitializationData(u16 protocol_version)
 	std::ostringstream os(std::ios::binary);
 
 	auto lock = lock_shared_rec();
+	try {
 
 	if(protocol_version >= 14)
 	{
@@ -398,6 +401,11 @@ std::string LuaEntitySAO::getClientInitializationData(u16 protocol_version)
 		os<<serializeLongString(gob_cmd_update_armor_groups(m_armor_groups)); // 2
 	}
 
+	} catch (std::exception &e){
+		errorstream << "Catn serialize object id="<<getId()<< " pos="<< getBasePosition() << std::endl;
+		return "";
+	}
+
 	// return result
 	return os.str();
 }
@@ -405,7 +413,7 @@ std::string LuaEntitySAO::getClientInitializationData(u16 protocol_version)
 std::string LuaEntitySAO::getStaticData()
 {
 /*
-	verbosestream<<__FUNCTION_NAME<<std::endl;
+	verbosestream<<FUNCTION_NAME<<std::endl;
 */
 	std::ostringstream os(std::ios::binary);
 	// version
@@ -759,13 +767,11 @@ PlayerSAO::PlayerSAO(ServerEnvironment *env_, Player *player_, u16 peer_id_,
 	m_nocheat_dig_pos(32767, 32767, 32767),
 	m_nocheat_dig_time(0),
 	m_wield_index(0),
-	m_armor_groups_sent(false),
 	m_privs(privs),
 	m_is_singleplayer(is_singleplayer),
 	m_animation_speed(0),
 	m_animation_blend(0),
 	m_animation_loop(true),
-	m_animation_sent(false),
 	m_bone_position_sent(false),
 	m_attachment_parent_id(0),
 	m_attachment_sent(false),
@@ -782,6 +788,8 @@ PlayerSAO::PlayerSAO(ServerEnvironment *env_, Player *player_, u16 peer_id_,
 	m_position_not_sent = false;
 	m_ms_from_last_respawn = 10000; //more than ignore move time (1)
 	m_physics_override_sent = false;
+	m_animation_sent = false;
+	m_armor_groups_sent = false;
 
 	assert(m_player);	// pre-condition
 	assert(m_peer_id != 0);	// pre-condition
@@ -810,6 +818,8 @@ PlayerSAO::PlayerSAO(ServerEnvironment *env_, Player *player_, u16 peer_id_,
 
 PlayerSAO::~PlayerSAO()
 {
+	if (!m_player)
+		return;
 	if(m_inventory != &m_player->inventory)
 		delete m_inventory;
 	--m_player->refs;
@@ -818,6 +828,8 @@ PlayerSAO::~PlayerSAO()
 
 std::string PlayerSAO::getDescription()
 {
+	if (!m_player)
+		return "";
 	return std::string("player ") + m_player->getName();
 }
 
@@ -825,6 +837,10 @@ std::string PlayerSAO::getDescription()
 void PlayerSAO::addedToEnvironment(u32 dtime_s)
 {
 	ServerActiveObject::addedToEnvironment(dtime_s);
+	if (!m_player) {
+		errorstream << "PlayerSAO::addedToEnvironment(): Fail id=" << m_peer_id << std::endl;
+		return;
+	}
 	ServerActiveObject::setBasePosition(m_player->getPosition());
 	m_player->setPlayerSAO(this);
 	m_player->peer_id = m_peer_id;
@@ -835,11 +851,16 @@ void PlayerSAO::addedToEnvironment(u32 dtime_s)
 void PlayerSAO::removingFromEnvironment()
 {
 	ServerActiveObject::removingFromEnvironment();
-	if(m_player->getPlayerSAO() == this)
+	if(m_player && m_player->getPlayerSAO() == this)
 	{
 		m_player->setPlayerSAO(NULL);
 		m_player->peer_id = 0;
-		m_env->savePlayer(m_player->getName());
+		m_env->savePlayer((RemotePlayer*)m_player);
+		/*
+		m_env->removePlayer(m_player);
+		*/
+		--m_player->refs;
+		m_player = nullptr;
 	}
 }
 
@@ -852,6 +873,8 @@ std::string PlayerSAO::getClientInitializationData(u16 protocol_version)
 {
 	std::ostringstream os(std::ios::binary);
 
+	if (!m_player)
+		return "";
 	if(protocol_version >= 15)
 	{
 		writeU8(os, 1); // version
@@ -914,6 +937,9 @@ bool PlayerSAO::isAttached()
 
 void PlayerSAO::step(float dtime, bool send_recommended)
 {
+	if (!m_player)
+		return;
+
 	if(!m_properties_sent)
 	{
 		std::string str = getPropertyPacket();
@@ -1058,6 +1084,9 @@ void PlayerSAO::setBasePosition(const v3f &position)
 
 void PlayerSAO::setPos(v3f pos)
 {
+	if (!m_player)
+		return;
+
 	if(isAttached())
 		return;
 	m_player->setPosition(pos);
@@ -1071,6 +1100,9 @@ void PlayerSAO::setPos(v3f pos)
 
 void PlayerSAO::moveTo(v3f pos, bool continuous)
 {
+	if (!m_player)
+		return;
+
 	if(isAttached())
 		return;
 	m_player->setPosition(pos);
@@ -1090,6 +1122,9 @@ void PlayerSAO::setYaw(float yaw)
 
 void PlayerSAO::setPitch(float pitch)
 {
+	if (!m_player)
+		return;
+
 	m_player->setPitch(pitch);
 	((Server*)m_env->getGameDef())->SendMovePlayer(m_peer_id);
 }
@@ -1099,6 +1134,9 @@ int PlayerSAO::punch(v3f dir,
 	ServerActiveObject *puncher,
 	float time_from_last_punch)
 {
+	if (!m_player)
+		return 0;
+
 	// It's best that attachments cannot be punched
 	if (isAttached())
 		return 0;
@@ -1161,6 +1199,8 @@ void PlayerSAO::rightClick(ServerActiveObject *clicker)
 
 s16 PlayerSAO::getHP() const
 {
+	if (!m_player)
+		return 0;
 	return m_player->hp;
 }
 
@@ -1173,6 +1213,9 @@ s16 PlayerSAO::readDamage()
 
 void PlayerSAO::setHP(s16 hp)
 {
+	if (!m_player)
+		return;
+
 	s16 oldhp = m_player->hp;
 
 	s16 hp_change = m_env->getScriptIface()->on_player_hpchange(this,
@@ -1202,11 +1245,15 @@ void PlayerSAO::setHP(s16 hp)
 
 u16 PlayerSAO::getBreath() const
 {
+	if (!m_player)
+		return 0;
 	return m_player->getBreath();
 }
 
 void PlayerSAO::setBreath(u16 breath)
 {
+	if (!m_player)
+		return;
 	m_player->setBreath(breath);
 }
 
@@ -1329,6 +1376,8 @@ const Inventory* PlayerSAO::getInventory() const
 InventoryLocation PlayerSAO::getInventoryLocation() const
 {
 	InventoryLocation loc;
+	if (!m_player)
+		return loc;
 	loc.setPlayer(m_player->getName());
 	return loc;
 }
@@ -1354,7 +1403,7 @@ void PlayerSAO::disconnected()
 {
 	m_peer_id = 0;
 	m_removed = true;
-	if(m_player->getPlayerSAO() == this)
+	if(m_player && m_player->getPlayerSAO() == this)
 	{
 		m_player->setPlayerSAO(NULL);
 		m_player->peer_id = 0;
@@ -1370,6 +1419,8 @@ std::string PlayerSAO::getPropertyPacket()
 bool PlayerSAO::checkMovementCheat()
 {
 	bool cheated = false;
+	if (!m_player)
+		return cheated;
 	if(isAttached() || m_is_singleplayer ||
 			g_settings->getBool("disable_anticheat"))
 	{
@@ -1419,6 +1470,8 @@ bool PlayerSAO::checkMovementCheat()
 }
 
 bool PlayerSAO::getCollisionBox(aabb3f *toset) {
+	if (!m_player)
+		return false;
 	//update collision box
 	*toset = m_player->getCollisionbox();
 

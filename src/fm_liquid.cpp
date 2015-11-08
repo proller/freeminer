@@ -29,9 +29,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #define LIQUID_DEBUG 0
 
 enum NeighborType {
-    NEIGHBOR_UPPER,
-    NEIGHBOR_SAME_LEVEL,
-    NEIGHBOR_LOWER
+	NEIGHBOR_UPPER,
+	NEIGHBOR_SAME_LEVEL,
+	NEIGHBOR_LOWER
 };
 
 struct NodeNeighbor {
@@ -73,7 +73,7 @@ u32 Map::transformLiquidsReal(Server *m_server, unsigned int max_cycle_ms) {
 
 	INodeDefManager *nodemgr = m_gamedef->ndef();
 
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	//TimeTaker timer("transformLiquidsReal()");
 	u32 loopcount = 0;
 	u32 initial_size = transforming_liquid_size();
@@ -85,15 +85,16 @@ u32 Map::transformLiquidsReal(Server *m_server, unsigned int max_cycle_ms) {
 #endif
 
 	u8 relax = g_settings->getS16("liquid_relax");
-	bool fast_flood = g_settings->getS16("liquid_fast_flood");
-	int water_level = g_settings->getS16("water_level");
+	static bool fast_flood = g_settings->getS16("liquid_fast_flood");
+	static int water_level = g_settings->getS16("water_level");
 	s16 liquid_pressure = m_server->m_emerge->params.liquid_pressure;
 	//g_settings->getS16NoEx("liquid_pressure", liquid_pressure);
 
 	// list of nodes that due to viscosity have not reached their max level height
-	//std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> must_reflow, must_reflow_second, must_reflow_third;
+	//unordered_map_v3POS<bool> must_reflow, must_reflow_second, must_reflow_third;
 	std::list<v3POS> must_reflow, must_reflow_second, must_reflow_third;
 	// List of MapBlocks that will require a lighting update (due to lava)
+	int falling = 0;
 	u16 loop_rand = myrand();
 
 	u32 end_ms = porting::getTimeMs() + max_cycle_ms;
@@ -110,7 +111,7 @@ NEXT_LIQUID:
 		*/
 		v3POS p0;
 		{
-			//JMutexAutoLock lock(m_transforming_liquid_mutex);
+			//MutexAutoLock lock(m_transforming_liquid_mutex);
 			p0 = transforming_liquid_pop();
 		}
 		s16 total_level = 0;
@@ -129,6 +130,8 @@ NEXT_LIQUID:
 		content_t melt_kind = CONTENT_IGNORE;
 		content_t melt_kind_flowing = CONTENT_IGNORE;
 		//s8 viscosity = 0;
+
+		bool fall_down = false;
 		/*
 			Collect information about the environment, start from self
 		 */
@@ -339,8 +342,15 @@ NEXT_LIQUID:
 
 		// fill bottom block
 		if (neighbors[D_BOTTOM].liquid) {
+			if (falling++ < 100 && !liquid_levels[D_BOTTOM] && ((ItemGroupList) nodemgr->get(liquid_kind).groups)["falling_node"]) {
+				fall_down = true;
+				//m_server->getEnv().nodeUpdate(neighbors[D_SELF].pos, 2);
+				//goto NEXT_LIQUID;
+			}
+
 			liquid_levels_want[D_BOTTOM] = level_avg > level_max ? level_avg : total_level > level_max ? level_max : total_level;
 			total_level -= liquid_levels_want[D_BOTTOM];
+
 			//if (pressure && total_level && liquid_levels_want[D_BOTTOM] < level_max_compressed) {
 			//	++liquid_levels_want[D_BOTTOM];
 			//	--total_level;
@@ -679,15 +689,20 @@ NEXT_LIQUID:
 			// or if node removed
 			v3POS blockpos = getNodeBlockPos(neighbors[i].pos);
 			MapBlock *block = getBlockNoCreateNoEx(blockpos, true); // remove true if light bugs
-			if(block != NULL) {
+			if(block) {
+				block->setLightingExpired(true);
 				//modified_blocks[blockpos] = block;
-				if(!nodemgr->get(neighbors[i].node).light_propagates || nodemgr->get(neighbors[i].node).light_source) // better to update always
-					lighting_modified_blocks.set_try(block->getPos(), block);
+				//if(!nodemgr->get(neighbors[i].node).light_propagates || nodemgr->get(neighbors[i].node).light_source) // better to update always
+				//	lighting_modified_blocks.set_try(block->getPos(), block);
 			}
 			// fmtodo: make here random %2 or..
 			if (total_level < level_max * can_liquid)
 				must_reflow.push_back(neighbors[i].pos);
 
+		}
+
+		if (fall_down) {
+			m_server->getEnv().nodeUpdate(neighbors[D_BOTTOM].pos, 1);
 		}
 
 #if LIQUID_DEBUG

@@ -43,7 +43,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "guiPasswordChange.h"
 #include "guiVolumeChange.h"
 #include "hud.h"
-#include "logoutputbuffer.h"
 #include "mainmenumanager.h"
 #include "mapblock.h"
 #include "nodedef.h"         // Needed for determining pointing to nodes
@@ -382,7 +381,7 @@ PointedThing getPointedThing(Client *client, v3f player_position,
 
 				for (std::vector<aabb3f>::const_iterator
 						i = boxes.begin();
-						i != boxes.end(); i++) {
+						i != boxes.end(); ++i) {
 					aabb3f box = *i;
 					box.MinEdge += npf;
 					box.MaxEdge += npf;
@@ -427,7 +426,7 @@ PointedThing getPointedThing(Client *client, v3f player_position,
 						if (!g_settings->getBool("enable_node_highlighting")) {
 							for (std::vector<aabb3f>::const_iterator
 									i2 = boxes.begin();
-									i2 != boxes.end(); i2++) {
+									i2 != boxes.end(); ++i2) {
 								aabb3f box = *i2;
 								box.MinEdge += npf + v3f(-d, -d, -d) - intToFloat(camera_offset, BS);
 								box.MaxEdge += npf + v3f(d, d, d) - intToFloat(camera_offset, BS);
@@ -499,7 +498,7 @@ private:
 			color(color)
 		{}
 	};
-	std::vector<Piece> m_log;
+	std::deque<Piece> m_log;
 public:
 	u32 m_log_max_size;
 
@@ -522,12 +521,12 @@ public:
 	{
 		std::map<std::string, Meta> m_meta;
 
-		for (std::vector<Piece>::const_iterator k = m_log.begin();
-				k != m_log.end(); k++) {
+		for (std::deque<Piece>::const_iterator k = m_log.begin();
+				k != m_log.end(); ++k) {
 			const Piece &piece = *k;
 
 			for (Profiler::GraphValues::const_iterator i = piece.values.begin();
-					i != piece.values.end(); i++) {
+					i != piece.values.end(); ++i) {
 				const std::string &id = i->first;
 				const float &value = i->second;
 				std::map<std::string, Meta>::iterator j =
@@ -560,7 +559,7 @@ public:
 		u32 next_color_i = 0;
 
 		for (std::map<std::string, Meta>::iterator i = m_meta.begin();
-				i != m_meta.end(); i++) {
+				i != m_meta.end(); ++i) {
 			Meta &meta = i->second;
 			video::SColor color(255, 200, 200, 200);
 
@@ -576,7 +575,7 @@ public:
 		s32 meta_i = 0;
 
 		for (std::map<std::string, Meta>::const_iterator i = m_meta.begin();
-				i != m_meta.end(); i++) {
+				i != m_meta.end(); ++i) {
 			const std::string &id = i->first;
 			const Meta &meta = i->second;
 			s32 x = x_left;
@@ -611,8 +610,8 @@ public:
 			float lastscaledvalue = 0.0;
 			bool lastscaledvalue_exists = false;
 
-			for (std::vector<Piece>::const_iterator j = m_log.begin();
-					j != m_log.end(); j++) {
+			for (std::deque<Piece>::const_iterator j = m_log.begin();
+					j != m_log.end(); ++j) {
 				const Piece &piece = *j;
 				float value = 0;
 				bool value_exists = false;
@@ -1023,7 +1022,7 @@ bool nodePlacementPrediction(Client &client,
 
 			if(player->canPlaceNode(p, n)) {
 				// This triggers the required mesh update too
-				client.addNode(p, n, nodedef->get(id).light_source ? 3 : 1); // add without liquids
+				client.addNode(p, n, true, nodedef->get(id).light_source ? 3 : 2); // add without liquids
 				return true;
 			}
 		} catch (InvalidPositionException &e) {
@@ -1078,7 +1077,7 @@ static void show_chat_menu(GUIFormSpecMenu **cur_formspec,
 		FORMSPEC_VERSION_STRING
 		SIZE_TAG
 		"field[3,2.35;6,0.5;f_text;;" + text + "]"
-		"button_exit[4,3;3,0.5;btn_send;" + (_("Proceed")) + "]"
+		"button_exit[4,3;3,0.5;btn_send;" + strgettext("Proceed") + "]"
 		;
 
 	/* Create menu */
@@ -1119,32 +1118,32 @@ static void show_pause_menu(GUIFormSpecMenu **cur_formspec,
 		bool singleplayermode)
 {
 #ifdef __ANDROID__
-	std::string control_text = (_("Default Controls:\n"
-				   "No menu visible:\n"
-				   "- single tap: button activate\n"
-				   "- double tap: place/use\n"
-				   "- slide finger: look around\n"
-				   "Menu/Inventory visible:\n"
-				   "- double tap (outside):\n"
-				   " -->close\n"
-				   "- touch stack, touch slot:\n"
-				   " --> move stack\n"
-				   "- touch&drag, tap 2nd finger\n"
-				   " --> place single item to slot\n"
-							     ));
+	std::string control_text = strgettext("Default Controls:\n"
+		"No menu visible:\n"
+		"- single tap: button activate\n"
+		"- double tap: place/use\n"
+		"- slide finger: look around\n"
+		"Menu/Inventory visible:\n"
+		"- double tap (outside):\n"
+		" -->close\n"
+		"- touch stack, touch slot:\n"
+		" --> move stack\n"
+		"- touch&drag, tap 2nd finger\n"
+		" --> place single item to slot\n"
+		);
 #else
-	std::string control_text = (_("Default Controls:\n"
-				   "- WASD: move\n"
-				   "- Space: jump/climb\n"
-				   "- Shift: sneak/go down\n"
-				   "- Q: drop item\n"
-				   "- I: inventory\n"
-				   "- Mouse: turn/look\n"
-				   "- Mouse left: dig/punch\n"
-				   "- Mouse right: place/use\n"
-				   "- Mouse wheel: select item\n"
-				   "- T: chat\n"
-							     ));
+	std::string control_text = strgettext("Default Controls:\n"
+		"- WASD: move\n"
+		"- Space: jump/climb\n"
+		"- Shift: sneak/go down\n"
+		"- Q: drop item\n"
+		"- I: inventory\n"
+		"- Mouse: turn/look\n"
+		"- Mouse left: dig/punch\n"
+		"- Mouse right: place/use\n"
+		"- Mouse wheel: select item\n"
+		"- T: chat\n"
+		);
 #endif
 
 	float ypos = singleplayermode ? 0.5 : 0.1;
@@ -1152,23 +1151,23 @@ static void show_pause_menu(GUIFormSpecMenu **cur_formspec,
 
 	os << FORMSPEC_VERSION_STRING  << SIZE_TAG
 	   << "button_exit[4," << (ypos++) << ";3,0.5;btn_continue;"
-	   << (_("Continue"))     << "]";
+	   << strgettext("Continue") << "]";
 
 	if (!singleplayermode) {
 		os << "button_exit[4," << (ypos++) << ";3,0.5;btn_change_password;"
-		   << (_("Change Password")) << "]";
+		   << strgettext("Change Password") << "]";
 	}
 
 #ifndef __ANDROID__
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_sound;"
-			<< (_("Sound Volume")) << "]";
+			<< strgettext("Sound Volume") << "]";
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_key_config;"
-			<< (_("Change Keys"))  << "]";
+			<< strgettext("Change Keys")  << "]";
 #endif
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_exit_menu;"
-			<< (_("Exit to Menu")) << "]";
+			<< strgettext("Exit to Menu") << "]";
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_exit_os;"
-			<< (_("Exit to OS"))   << "]"
+			<< strgettext("Exit to OS")   << "]"
 ;
 /*
 			<< "textarea[7.5,0.25;3.9,6.25;;" << control_text << ";]"
@@ -1196,7 +1195,7 @@ static void updateChat(Client &client, f32 dtime, bool show_debug,
 		ChatBackend &chat_backend, gui::IGUIStaticText *guitext_chat)
 {
 	// Add chat log output for errors to be shown in chat
-	static LogOutputBuffer chat_log_error_buf(LMT_ERROR);
+	static LogOutputBuffer chat_log_error_buf(g_logger, LL_ERROR);
 
 	// Get new messages from error log buffer
 	while (!chat_log_error_buf.empty()) {
@@ -1268,6 +1267,7 @@ struct KeyCache {
 		KEYMAP_ID_JUMP,
 		KEYMAP_ID_SPECIAL1,
 		KEYMAP_ID_SNEAK,
+		KEYMAP_ID_AUTORUN,
 
 		// Other
 		KEYMAP_ID_DROP,
@@ -1323,6 +1323,8 @@ void KeyCache::populate()
 	key[KEYMAP_ID_JUMP]         = getKeySetting("keymap_jump");
 	key[KEYMAP_ID_SPECIAL1]     = getKeySetting("keymap_special1");
 	key[KEYMAP_ID_SNEAK]        = getKeySetting("keymap_sneak");
+
+	key[KEYMAP_ID_AUTORUN]      = getKeySetting("keymap_autorun");
 
 	key[KEYMAP_ID_DROP]         = getKeySetting("keymap_drop");
 	key[KEYMAP_ID_INVENTORY]    = getKeySetting("keymap_inventory");
@@ -1557,6 +1559,8 @@ protected:
 	void toggleFast(float *statustext_time);
 	void toggleNoClip(float *statustext_time);
 	void toggleCinematic(float *statustext_time);
+	void enableCinematic();
+	void disableCinematic();
 
 	void toggleChat(float *statustext_time, bool *flag);
 	void toggleHud(float *statustext_time, bool *flag);
@@ -1710,6 +1714,8 @@ private:
 	bool m_cache_enable_fog;
 	f32  m_cache_mouse_sensitivity;
 	f32  m_repeat_right_click_time;
+
+	bool m_cinematic;
 
 #ifdef __ANDROID__
 	bool m_cache_hold_aux1;
@@ -1871,6 +1877,13 @@ void Game::run()
 	flags.invert_mouse = g_settings->getBool("invert_mouse");
 	flags.first_loop_after_window_activation = true;
 
+	mapper->setMinimapMode(MINIMAP_MODE_OFF);
+	if(flags.show_minimap) {
+		u16 minimapMode = g_settings->getU16("minimap_default_mode");
+		if( minimapMode>0 && minimapMode<MINIMAP_MODE_COUNT ) {
+			mapper->setMinimapMode(MinimapMode(minimapMode));
+		}
+	}
 
 	// freeminer:
 	runData.update_draw_list_timer = 5;
@@ -1908,7 +1921,7 @@ void Game::run()
 
 	while (device->run() && !(*kill || g_gamecallback->shutdown_requested)) {
 #ifdef __ANDROID__
-		porting::handleAndroidActivityEvents();
+		porting::handleAndroidActivityEvents(5);
 #endif
 
 		try {
@@ -1939,7 +1952,7 @@ void Game::run()
 		// Update camera before player movement to avoid camera lag of one frame
 		updateCameraDirection(&cam_view_target, &flags);
 		float cam_smoothing = 0;
-		if (g_settings->getBool("cinematic"))
+		if (m_cinematic)
 			cam_smoothing = 1 - g_settings->getFloat("cinematic_camera_smoothing");
 		else
 			cam_smoothing = 1 - g_settings->getFloat("camera_smoothing");
@@ -1959,6 +1972,10 @@ void Game::run()
 		updateFrame(highlight_boxes, &graph, &stats, &runData, dtime,
 				flags, cam_view);
 		updateProfilerGraphs(&graph);
+
+		// Update if minimap has been disabled by the server
+		flags.show_minimap &= !client->isMinimapDisabledByServer();
+
 		} catch(std::exception &e) {
 			if (!flags.errors++ || !(flags.errors % (int)(60/flags.dedicated_server_step)))
 				errorstream << "Fatal client error n=" << flags.errors << " : " << e.what() << std::endl;
@@ -2360,6 +2377,7 @@ bool Game::connectToServer(const std::string &playername,
 	if (!client)
 		return false;
 
+	client->chat_backend = chat_backend;
 	gamedef = client;	// Client acts as our GameDef
 
 	infostream << "Connecting to server at ";
@@ -2428,8 +2446,12 @@ bool Game::connectToServer(const std::string &playername,
 			showOverlayMessage((wstrgettext("Connecting to server... ") + narrow_to_wide(itos(int(wait_time)))).c_str(), dtime, 20);
 		}
 
-#ifdef NDEBUG
+	} catch (con::ConnectionException &e) {
+		showOverlayMessage(std::string("Connection error: ") + e.what(), 0, 0, false);
+		errorstream << "Connection error: "<< e.what() << std::endl;
+		return false;
 
+#ifdef NDEBUG
 	} catch (std::exception &e) {
 		showOverlayMessage(std::string("Connection error: ") + e.what(), 0, 0, false);
 		errorstream << "Connection error: "<< e.what() << std::endl;
@@ -2811,6 +2833,10 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 			dropSelectedItem();
 		}
 #endif
+	// Add WoW-style autorun by toggling continuous forward.
+	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_AUTORUN])) {
+		bool autorun_setting = g_settings->getBool("continuous_forward");
+		g_settings->setBool("continuous_forward", !autorun_setting);
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_INVENTORY])) {
 		openInventory();
 	} else if (input->wasKeyDown(EscapeKey) || input->wasKeyDown(CancelKey)) {
@@ -2873,7 +2899,7 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 		// Print debug stacks
 		dstream << "-----------------------------------------"
 		        << std::endl;
-		dstream << DTIME << "Printing debug stacks:" << std::endl;
+		dstream << "Printing debug stacks:" << std::endl;
 		dstream << "-----------------------------------------"
 		        << std::endl;
 		debug_stacks_print();
@@ -3128,13 +3154,22 @@ void Game::toggleNoClip(float *statustext_time)
 void Game::toggleCinematic(float *statustext_time)
 {
 	static const wchar_t *msg[] = { L"cinematic disabled", L"cinematic enabled" };
-	bool cinematic = !g_settings->getBool("cinematic");
-	g_settings->set("cinematic", bool_to_cstr(cinematic));
+	m_cinematic = !g_settings->getBool("cinematic");
+	g_settings->set("cinematic", bool_to_cstr(m_cinematic));
 
 	*statustext_time = 0;
-	statustext = msg[cinematic];
+	statustext = msg[m_cinematic];
 }
 
+void Game::enableCinematic()
+{
+	m_cinematic = true;
+}
+
+void Game::disableCinematic()
+{
+	m_cinematic = false;
+}
 
 void Game::toggleChat(float *statustext_time, bool *flag)
 {
@@ -3443,6 +3478,9 @@ void Game::updatePlayerControl(const CameraOrientation &cam)
 		bool changed = player->zoom == false;
 		player->zoom = true;
 		if (changed) {
+			if(g_settings->getBool("enable_zoom_cinematic") && !g_settings->getBool("cinematic")) {
+				enableCinematic();
+			}
 			draw_control.fov = g_settings->getFloat("zoom_fov");
 			client->sendDrawControl();
 		}
@@ -3450,6 +3488,9 @@ void Game::updatePlayerControl(const CameraOrientation &cam)
 		bool changed = player->zoom == true;
 		player->zoom = false;
 		if (changed) {
+			if(g_settings->getBool("enable_zoom_cinematic") && !g_settings->getBool("cinematic")) {
+				disableCinematic();
+			}
 			draw_control.fov = g_settings->getFloat("fov");
 			client->sendDrawControl();
 		}
@@ -4040,11 +4081,15 @@ void Game::handlePointingAtNode(GameRunData *runData,
 			} else {
 				soundmaker->m_player_rightpunch_sound =
 						SimpleSoundSpec();
-			}
 
-			if (playeritem_def.node_placement_prediction == "" ||
-					nodedef_manager->get(map.getNodeNoEx(nodepos)).rightclickable)
-				client->interact(3, pointed); // Report to server
+				if (playeritem_def.node_placement_prediction == "" ||
+						nodedef_manager->get(map.getNodeNoEx(nodepos)).rightclickable) {
+					client->interact(3, pointed); // Report to server
+				} else {
+					soundmaker->m_player_rightpunch_sound =
+						playeritem_def.sound_place_failed;
+				}
+			}
 		}
 	}
 }
@@ -4179,7 +4224,7 @@ void Game::handleDigging(GameRunData *runData,
 		bool is_valid_position;
 		MapNode wasnode = map.getNodeNoEx(nodepos, &is_valid_position);
 		if (is_valid_position)
-			client->removeNode(nodepos, 2);
+			client->removeNode(nodepos);
 
 		if (m_cache_enable_particles) {
 			const ContentFeatures &features =
@@ -4401,7 +4446,6 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 				runData->update_draw_list_last_cam_pos.getDistanceFrom(camera_position) > MAP_BLOCKSIZE*BS*1 ||
 				runData->update_draw_list_last_wrange != draw_control->wanted_range ||
 				flags.camera_offset_changed){
-			runData->update_draw_list_timer = 0;
 			bool allow = true;
 #if ENABLE_THREADS && HAVE_FUTURE
 			if (0 && g_settings->getBool("more_threads")) {
@@ -4412,16 +4456,18 @@ void Game::updateFrame(std::vector<aabb3f> &highlight_boxes,
 						allow = false;
 				}
 				if (allow) {
-					updateDrawList_future = std::async(std::launch::async, [](Client * client, video::IVideoDriver* driver, float dtime){ client->getEnv().getClientMap().updateDrawList(driver, dtime, 1000); }, client, driver, dtime);
+					updateDrawList_future = std::async(std::launch::async, [](Client * client, video::IVideoDriver* driver, float dtime){ client->getEnv().getClientMap().updateDrawList(driver, dtime, 1000); }, client, driver, runData->update_draw_list_timer);
 				}
 			}
 			else
 #endif
-				client->getEnv().getClientMap().updateDrawList(driver, dtime);
+				client->getEnv().getClientMap().updateDrawList(driver, runData->update_draw_list_timer);
 			if (allow) {
-				runData->update_draw_list_last_cam_pos = camera_position;
+				runData->update_draw_list_last_cam_pos = camera->getPosition();
 				runData->update_draw_list_last_wrange = draw_control->wanted_range;
 			}
+
+			runData->update_draw_list_timer = 0;
 		}
 
 	updateGui(&runData->statustext_time, *stats, *runData, dtime, flags, cam);
@@ -4788,6 +4834,8 @@ void Game::readSettings()
 	m_cache_mouse_sensitivity         = g_settings->getFloat("mouse_sensitivity");
 	m_repeat_right_click_time         = g_settings->getFloat("repeat_rightclick_time");
 
+	m_cinematic                       = g_settings->getBool("cinematic");
+
 	m_cache_mouse_sensitivity = rangelim(m_cache_mouse_sensitivity, 0.001, 100.0);
 }
 
@@ -4887,4 +4935,3 @@ bool the_game(bool *kill,
 
 	return started && game.flags.reconnect;
 }
-

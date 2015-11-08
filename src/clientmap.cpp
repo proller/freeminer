@@ -101,7 +101,7 @@ ClientMap::ClientMap(
 
 ClientMap::~ClientMap()
 {
-	/*JMutexAutoLock lock(mesh_mutex);
+	/*MutexAutoLock lock(mesh_mutex);
 
 	if(mesh != NULL)
 	{
@@ -109,6 +109,30 @@ ClientMap::~ClientMap()
 		mesh = NULL;
 	}*/
 }
+
+#if WTF
+MapSector * ClientMap::emergeSector(v2s16 p2d)
+{
+	DSTACK(FUNCTION_NAME);
+	// Check that it doesn't exist already
+	try{
+		return getSectorNoGenerate(p2d);
+	}
+	catch(InvalidPositionException &e)
+	{
+	}
+
+	// Create a sector
+	ClientMapSector *sector = new ClientMapSector(this, p2d, m_gamedef);
+
+	{
+		//MutexAutoLock lock(m_sector_mutex); // Bulk comment-out
+		m_sectors[p2d] = sector;
+	}
+
+	return sector;
+}
+#endif
 
 void ClientMap::OnRegisterSceneNode()
 {
@@ -123,7 +147,7 @@ void ClientMap::OnRegisterSceneNode()
 
 static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
 		float start_off, float end_off, u32 needed_count, INodeDefManager *nodemgr,
-		std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> & occlude_cache)
+		unordered_map_v3POS<bool> & occlude_cache)
 {
 	float d0 = (float)BS * p0.getDistanceFrom(p1);
 	v3s16 u0 = p1 - p0;
@@ -177,11 +201,11 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigne
 	if (!max_cycle_ms)
 		max_cycle_ms = 300/getControl().fps_wanted;
 
-	m_camera_mutex.Lock();
+	m_camera_mutex.lock();
 	v3f camera_position = m_camera_position;
 	f32 camera_fov = m_camera_fov;
 	//v3s16 camera_offset = m_camera_offset;
-	m_camera_mutex.Unlock();
+	m_camera_mutex.unlock();
 
 	// Use a higher fov to accomodate faster camera movements.
 	// Blocks are cropped better when they are drawn.
@@ -291,7 +315,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigne
 
 	u32 calls = 0, end_ms = porting::getTimeMs() + u32(max_cycle_ms);
 
-	std::unordered_map<v3POS, bool, v3POSHash, v3POSEqual> occlude_cache;
+	unordered_map_v3POS<bool> occlude_cache;
 
 	while (!draw_nearest.empty()) {
 		auto ir = draw_nearest.back();
@@ -508,7 +532,7 @@ struct MeshBufListList
 
 void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	ScopeProfiler sp(g_profiler, "CM::renderMap()", SPT_AVG);
 	g_profiler->add("CM::renderMap() count", 1);
@@ -538,10 +562,10 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 	int crack = m_client->getCrackLevel();
 	u32 daynight_ratio = m_client->getEnv().getDayNightRatio();
 
-	m_camera_mutex.Lock();
+	m_camera_mutex.lock();
 	v3f camera_position = m_camera_position;
 	f32 camera_fov = m_camera_fov * 1.1;
-	m_camera_mutex.Unlock();
+	m_camera_mutex.unlock();
 
 	//if(m_control.fps_avg > m_control.fps_wanted *0.7)
 	//	camera_fov = 0;
@@ -599,9 +623,9 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 		used_meshes.emplace_back(mapBlockMesh);
 
 		// Mesh animation
-		if (mesh_step <= 1)
+		//if (mesh_step <= 1)
 		{
-			//JMutexAutoLock lock(block->mesh_mutex);
+			//MutexAutoLock lock(block->mesh_mutex);
 
 			mapBlockMesh->updateCameraOffset(m_camera_offset);
 
@@ -614,11 +638,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 			//bool faraway = d >= m_control.wanted_range * BS;
 			if(mapBlockMesh->isAnimationForced() ||
 					!faraway ||
-#if __ANDROID__
-0)
-#else
 					mesh_animate_count_far < (m_control.range_all ? 200 : 50))
-#endif
 			{
 				bool animated = mapBlockMesh->animate(
 						faraway,
@@ -640,7 +660,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 			Get the meshbuffers of the block
 		*/
 		{
-			//JMutexAutoLock lock(block->mesh_mutex);
+			//MutexAutoLock lock(block->mesh_mutex);
 
 			auto *mesh = mapBlockMesh->getMesh();
 			if (!mesh)
@@ -907,9 +927,9 @@ void ClientMap::renderPostFx(CameraMode cam_mode)
 	// Sadly ISceneManager has no "post effects" render pass, in that case we
 	// could just register for that and handle it in renderMap().
 
-	m_camera_mutex.Lock();
+	m_camera_mutex.lock();
 	v3f camera_position = m_camera_position;
-	m_camera_mutex.Unlock();
+	m_camera_mutex.unlock();
 
 	MapNode n = getNodeNoEx(floatToInt(camera_position, BS));
 

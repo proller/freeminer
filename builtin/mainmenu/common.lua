@@ -67,13 +67,13 @@ function order_favorite_list(list)
 	--orders the favorite list after support
 	for i=1,#list,1 do
 		local fav = list[i]
-		if is_server_protocol_compat(fav.proto_min, fav.proto_max) then
+		if is_server_protocol_compat(fav.proto_min, fav.proto_max, fav.proto) then
 			table.insert(res, fav)
 		end
 	end
 	for i=1,#list,1 do
 		local fav = list[i]
-		if not is_server_protocol_compat(fav.proto_min, fav.proto_max) then
+		if not is_server_protocol_compat(fav.proto_min, fav.proto_max, fav.proto) then
 			table.insert(res, fav)
 		end
 	end
@@ -84,7 +84,7 @@ end
 function render_favorite(spec,render_details)
 	local text = ""
 
-	if spec.name ~= nil then
+	if spec.name ~= nil and spec.name ~= "" then
 		text = text .. core.formspec_escape(spec.name:trim())
 
 --		if spec.description ~= nil and
@@ -106,7 +106,7 @@ function render_favorite(spec,render_details)
 	end
 
 	local details = ""
-	local grey_out = not is_server_protocol_compat(spec.proto_max, spec.proto_min)
+	local grey_out = not is_server_protocol_compat(spec.proto_max, spec.proto_min, spec.proto)
 
 	if spec.clients ~= nil and spec.clients_max ~= nil then
 		local clients_color = ''
@@ -301,17 +301,31 @@ function text2textlist(xpos,ypos,width,height,tl_name,textlen,text,transparency)
 end
 
 --------------------------------------------------------------------------------
-function is_server_protocol_compat(proto_min, proto_max)
-	return not ((min_supp_proto > (tonumber(proto_max) or 24)) or (max_supp_proto < (tonumber(proto_min) or 13)))
+function is_server_protocol_compat(server_proto_min, server_proto_max, proto)
+	if proto and core.setting_get("server_proto") ~= proto then return false end
+	return not ((min_supp_proto > tonumber(server_proto_max or 24)) or (max_supp_proto < tonumber(server_proto_min or 13)))
 end
 --------------------------------------------------------------------------------
-function is_server_protocol_compat_or_error(proto_min, proto_max)
-	if not is_server_protocol_compat(proto_min, proto_max) then
-		gamedata.errormessage = fgettext_ne("Protocol version mismatch, server " ..
-			((proto_min ~= proto_max) and "supports protocols between $1 and $2" or "enforces protocol version $1") ..
-			", we " ..
-			((min_supp_proto ~= max_supp_proto) and "support protocols between version $3 and $4." or "only support protocol version $3"),
-			proto_min or 13, proto_max or 24, min_supp_proto, max_supp_proto)
+function is_server_protocol_compat_or_error(server_proto_min, server_proto_max, proto)
+	if not is_server_protocol_compat(server_proto_min, server_proto_max, proto) then
+		local server_prot_ver_info
+		local client_prot_ver_info
+		if server_proto_min ~= server_proto_max then
+			server_prot_ver_info = fgettext_ne("Server supports protocol versions between $1 and $2. ",
+				server_proto_min or 13, server_proto_max or 24)
+		else
+			server_prot_ver_info = fgettext_ne("Server enforces protocol version $1. ",
+				server_proto_min or 13)
+		end
+		if min_supp_proto ~= max_supp_proto then
+			client_prot_ver_info= fgettext_ne("We support protocol versions between version $1 and $2.",
+				min_supp_proto, max_supp_proto)
+		else
+			client_prot_ver_info = fgettext_ne("We only support protocol version $1.", min_supp_proto)
+		end
+		gamedata.errormessage = fgettext_ne("Protocol version mismatch. ")
+			.. server_prot_ver_info
+			.. client_prot_ver_info
 		return false
 	end
 

@@ -43,6 +43,7 @@ public:
 	void testStrToIntConversion();
 	void testStringReplace();
 	void testStringAllowed();
+	void testAsciiPrintableHelper();
 	void testUTF8();
 	void testWrapRows();
 	void testIsNumber();
@@ -68,6 +69,7 @@ void TestUtilities::runTests(IGameDef *gamedef)
 	TEST(testStrToIntConversion);
 	TEST(testStringReplace);
 	TEST(testStringAllowed);
+	TEST(testAsciiPrintableHelper);
 	TEST(testUTF8);
 	TEST(testWrapRows);
 	TEST(testIsNumber);
@@ -232,6 +234,18 @@ void TestUtilities::testStringAllowed()
 	UASSERT(string_allowed_blacklist("hello123", "123") == false);
 }
 
+void TestUtilities::testAsciiPrintableHelper()
+{
+	UASSERT(IS_ASCII_PRINTABLE_CHAR('e') == true);
+	UASSERT(IS_ASCII_PRINTABLE_CHAR('\0') == false);
+
+	// Ensures that there is no cutting off going on...
+	// If there were, 331 would be cut to 75 in this example
+	// and 73 is a valid ASCII char.
+	int ch = 331;
+	UASSERT(IS_ASCII_PRINTABLE_CHAR(ch) == false);
+}
+
 void TestUtilities::testUTF8()
 {
 	UASSERT(wide_to_utf8(utf8_to_wide("")) == "");
@@ -282,7 +296,7 @@ void TestUtilities::testIsPowerOfTwo()
 		UASSERT(is_power_of_two((1 << exponent)) == true);
 		UASSERT(is_power_of_two((1 << exponent) + 1) == false);
 	}
-	UASSERT(is_power_of_two((u32)-1) == false);
+	UASSERT(is_power_of_two(U32_MAX) == false);
 }
 
 void TestUtilities::testMyround()

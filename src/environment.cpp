@@ -43,15 +43,20 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mapblock_mesh.h"
 #include "event.h"
 #endif
+
+#include "contrib/fallingsao.h"
+#include "contrib/itemsao.h"
+
 #include "server.h"
 #include "daynightratio.h"
 #include "map.h"
 #include "emerge.h"
 #include "util/serialize.h"
-#include "fmbitset.h"
+#include "fm_bitset.h"
 #include "circuit.h"
 #include "key_value_storage.h"
 #include <random>
+#include "threading/mutex_auto_lock.h"
 
 #define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
@@ -60,7 +65,11 @@ std::mt19937 random_gen(random_device());
 
 Environment::Environment():
 	m_time_of_day_speed(0),
-	m_time_counter(0),
+/*
+	m_time_of_day(9000),
+	m_time_of_day_f(9000./24000),
+*/
+	m_time_conversion_skew(0.0f),
 	m_enable_day_night_ratio_override(false),
 	m_day_night_ratio_override(0.0f)
 {
@@ -75,11 +84,12 @@ Environment::~Environment()
 			i != m_players.end(); ++i) {
 		delete (*i);
 	}
+	m_players.clear();
 }
 
 void Environment::addPlayer(Player *player)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	/*
 		Check that peer_ids are unique.
 		Also check that names are unique.
@@ -94,39 +104,22 @@ void Environment::addPlayer(Player *player)
 	m_players.push_back(player);
 }
 
-/*
-void Environment::removePlayer(u16 peer_id)
+void Environment::removePlayer(Player* player)
 {
-	DSTACK(__FUNCTION_NAME);
-
-	for(std::vector<Player*>::iterator i = m_players.begin();
-			i != m_players.end();)
-	{
-		Player *player = *i;
-		if(player->peer_id == peer_id) {
-			delete player;
-			i = m_players.erase(i);
-		} else {
-			++i;
-		}
-	}
-}
-
-void Environment::removePlayer(const std::string &name)
-{
+	auto lock = m_players.lock_unique_rec();
 	for (std::vector<Player*>::iterator it = m_players.begin();
 			it != m_players.end(); ++it) {
-		if ((*it)->getName() == name) {
+		if ((*it) == player) {
 			delete *it;
 			m_players.erase(it);
 			return;
 		}
 	}
 }
-*/
 
 Player * Environment::getPlayer(u16 peer_id)
 {
+	auto lock = m_players.lock_shared_rec();
 	for(std::vector<Player*>::iterator i = m_players.begin();
 			i != m_players.end(); ++i) {
 		Player *player = *i;
@@ -138,6 +131,7 @@ Player * Environment::getPlayer(u16 peer_id)
 
 Player * Environment::getPlayer(const std::string &name)
 {
+	auto lock = m_players.lock_shared_rec();
 	for(auto &player : m_players) {
  		if(player->getName() == name)
 			return player;
@@ -171,56 +165,86 @@ std::vector<Player*> Environment::getPlayers(bool ignore_disconnected)
 
 u32 Environment::getDayNightRatio()
 {
-	if(m_enable_day_night_ratio_override)
+	if (m_enable_day_night_ratio_override)
 		return m_day_night_ratio_override;
+	MutexAutoLock lock(this->m_time_lock);
 	return time_to_daynight_ratio(m_time_of_day, m_cache_enable_shaders);
 }
 
 void Environment::setTimeOfDaySpeed(float speed)
 {
-	JMutexAutoLock lock(this->m_timeofday_lock);
 	m_time_of_day_speed = speed;
 }
 
 float Environment::getTimeOfDaySpeed()
 {
-	JMutexAutoLock lock(this->m_timeofday_lock);
-	float retval = m_time_of_day_speed;
-	return retval;
+	return m_time_of_day_speed;
+}
+
+void Environment::setDayNightRatioOverride(bool enable, u32 value)
+{
+	MutexAutoLock lock(this->m_time_lock);
+	m_enable_day_night_ratio_override = enable;
+	m_day_night_ratio_override = value;
 }
 
 void Environment::setTimeOfDay(u32 time)
 {
-	JMutexAutoLock lock(this->m_time_lock);
+	MutexAutoLock lock(this->m_time_lock);
 	m_time_of_day = time;
 }
 
 u32 Environment::getTimeOfDay()
 {
-	JMutexAutoLock lock(this->m_time_lock);
-	u32 retval = m_time_of_day;
-	return retval;
+	MutexAutoLock lock(this->m_time_lock);
+	return m_time_of_day;
 }
 
 float Environment::getTimeOfDayF()
 {
-	JMutexAutoLock lock(this->m_time_lock);
+	MutexAutoLock lock(this->m_time_lock);
 	return (float)m_time_of_day / 24000.0;
+/*
+	return m_time_of_day_f;
+*/
 }
 
 void Environment::stepTimeOfDay(float dtime)
 {
-	float day_speed = getTimeOfDaySpeed();
+	MutexAutoLock lock(this->m_time_lock);
 
-	m_time_counter += dtime;
-	f32 speed = day_speed * 24000./(24.*3600);
-	u32 units = (u32)(m_time_counter*speed);
-	if(units > 0){
-		m_time_of_day = (m_time_of_day + units) % 24000;
+	// Cached in order to prevent the two reads we do to give
+	// different results (can be written by code not under the lock)
+	f32 cached_time_of_day_speed = m_time_of_day_speed;
+
+	f32 speed = cached_time_of_day_speed * 24000. / (24. * 3600);
+	m_time_conversion_skew += dtime;
+	u32 units = (u32)(m_time_conversion_skew * speed);
+	//bool sync_f = false;
+	if (units > 0) {
+		// Sync at overflow
+/*
+		if (m_time_of_day + units >= 24000)
+			sync_f = true;
+*/
+		m_time_of_day = (m_time_of_day + units) /*% 24000*/;
+/*
+		if (sync_f)
+			m_time_of_day_f = (float)m_time_of_day / 24000.0;
+*/
 	}
 	if (speed > 0) {
-		m_time_counter -= (f32)units / speed;
+		m_time_conversion_skew -= (f32)units / speed;
 	}
+/*
+	if (!sync_f) {
+		m_time_of_day_f += cached_time_of_day_speed / 24 / 3600 * dtime;
+		if (m_time_of_day_f > 1.0)
+			m_time_of_day_f -= 1.0;
+		if (m_time_of_day_f < 0.0)
+			m_time_of_day_f += 1.0;
+	}
+*/
 }
 
 /*
@@ -248,6 +272,8 @@ ABMWithState::ABMWithState(ActiveBlockModifier *abm_, ServerEnvironment *senv):
 		neighbors_range = 1;
 	else if (neighbors_range > nr_max)
 		neighbors_range = nr_max;
+
+	simple_catchup = abm->getSimpleCatchUp();
 
 	// Initialize timer to random value to spread processing
 	float itv = MYMAX(0.001, interval); // No less than 1ms
@@ -372,6 +398,15 @@ ServerEnvironment::ServerEnvironment(ServerMap *map,
 	if (!m_players_storage.db)
 		errorstream << "Cant open players storage: "<< m_players_storage.error << std::endl;
 
+	// Init custom SAO
+	v3f nullpos;
+	//epixel::Creature* c = new epixel::Creature(NULL, nullpos, "", "");
+	epixel::ItemSAO* i = new epixel::ItemSAO(NULL, nullpos, "", "");
+	epixel::FallingSAO* f = new epixel::FallingSAO(NULL, nullpos, "", "");
+	//delete c;
+	delete i;
+	delete f;
+
 }
 
 ServerEnvironment::~ServerEnvironment()
@@ -382,6 +417,16 @@ ServerEnvironment::~ServerEnvironment()
 
 	// Convert all objects to static and delete the active objects
 	deactivateFarObjects(true);
+	removeRemovedObjects(50000);
+
+/*
+	for (auto & o : objects_to_delete) {
+		if (!o)
+			continue;
+		delete o;
+	}
+	objects_to_delete.clear();
+*/
 
 	// Drop/delete map
 	m_map->drop();
@@ -391,6 +436,7 @@ ServerEnvironment::~ServerEnvironment()
 			i = m_abms.begin(); i != m_abms.end(); ++i){
 		delete i->abm;
 	}
+	m_abms.clear();
 }
 
 Map & ServerEnvironment::getMap()
@@ -449,11 +495,12 @@ void ServerEnvironment::kickAllPlayers(AccessDeniedCode reason,
 
 void ServerEnvironment::saveLoadedPlayers()
 {
+	auto lock = m_players.lock_unique_rec();
 	auto i = m_players.begin();
 	while (i != m_players.end())
 	{
 		auto *player = *i;
-		savePlayer(player->getName());
+		savePlayer((RemotePlayer*)player);
 		if(!player->peer_id && !player->getPlayerSAO() && player->refs <= 0) {
 			delete player;
 			i = m_players.erase(i);
@@ -463,9 +510,8 @@ void ServerEnvironment::saveLoadedPlayers()
 	}
 }
 
-void ServerEnvironment::savePlayer(const std::string &playername)
+void ServerEnvironment::savePlayer(RemotePlayer *player)
 {
-	auto *player = getPlayer(playername);
 	if (!player)
 		return;
 	Json::Value player_json;
@@ -587,10 +633,10 @@ void ServerEnvironment::loadMeta()
 	}
 
 	try {
-		m_time_of_day = args.getU64("time_of_day");
+		setTimeOfDay(args.getU64("time_of_day"));
 	} catch (SettingNotFoundException &e) {
 		// This is not as important
-		m_time_of_day = 9000;
+		setTimeOfDay(9000);
 	}
 }
 
@@ -763,7 +809,7 @@ neighbor_found:
 void MapBlock::abmTriggersRun(ServerEnvironment * m_env, u32 time, bool activate) {
 		ScopeProfiler sp(g_profiler, "ABM trigger blocks", SPT_ADD);
 
-		std::unique_lock<std::mutex> lock(abm_triggers_mutex);
+		std::unique_lock<std::mutex> lock(abm_triggers_mutex, std::try_to_lock);
 		if (!lock.owns_lock())
 			return;
 
@@ -788,13 +834,30 @@ void MapBlock::abmTriggersRun(ServerEnvironment * m_env, u32 time, bool activate
 			else
 				dtime = 1;
 		}
+		if (!dtime)
+			dtime = 1;
 
-		//infostream<<"MapBlock::abmTriggersRun p="<<getPos()<<" abm_triggers="<<abm_triggers<<" size()="<<abm_triggers->size()<<" time="<<time<<" dtime="<<dtime<<" activate="<<activate<<std::endl;
+		unordered_map_v3POS<int> active_object_added;
+
+		//infostream<<"MapBlock::abmTriggersRun " << " abm_triggers="<<abm_triggers.get()<<" size()="<<abm_triggers->size()<<" time="<<time<<" dtime="<<dtime<<" activate="<<activate<<std::endl;
 		m_abm_timestamp = time;
 		for (auto abm_trigger = abm_triggers->begin(); abm_trigger != abm_triggers->end() ; ++abm_trigger) {
 			//ScopeProfiler sp2(g_profiler, "ABM trigger nodes test", SPT_ADD);
 			auto & abm = abm_trigger->abm;
+			if (!abm || !abm->abmws || !abm->abmws->interval) {
+				infostream << "remove strange abm trigger dtime=" << dtime << std::endl;
+				abm_trigger = abm_triggers->erase(abm_trigger);
+				continue;
+			}
 			float intervals = dtime / abm->abmws->interval;
+
+			if(!abm->abmws->simple_catchup)
+				intervals = 1;
+
+			if (!intervals) {
+				verbosestream << "abm: intervals=" << intervals << " dtime="<<dtime<< std::endl;
+				intervals = 1;
+			}
 			int chance = (abm->abmws->chance / intervals);
 			//infostream<<"TST: dtime="<<dtime<<" Achance="<<abm->abmws->chance<<" Ainterval="<<abm->abmws->interval<< " Rchance="<<chance<<" Rintervals="<<intervals << std::endl;
 
@@ -809,16 +872,24 @@ void MapBlock::abmTriggersRun(ServerEnvironment * m_env, u32 time, bool activate
 				continue;
 			}
 			//ScopeProfiler sp3(g_profiler, "ABM trigger nodes call", SPT_ADD);
-
+			v3POS blockpos = getNodeBlockPos(abm_trigger->pos);
+			int active_object_add = 0;
+			if (active_object_added.count(blockpos))
+				active_object_add = active_object_added[blockpos];
 			abm->abmws->abm->trigger(m_env, abm_trigger->pos, node,
-				abm_trigger->active_object_count, abm_trigger->active_object_count_wider, map->getNodeTry(abm_trigger->neighbor_pos), activate);
+				abm_trigger->active_object_count+active_object_add, abm_trigger->active_object_count_wider+active_object_add, map->getNodeTry(abm_trigger->neighbor_pos), activate);
 
 				// Count surrounding objects again if the abms added any
+				//infostream<<" m_env->m_added_objects="<<m_env->m_added_objects<<" add="<<active_object_add<<" bp="<<getNodeBlockPos(abm_trigger->pos)<<std::endl;
 				if(m_env->m_added_objects > 0) {
-					v3POS blockpos = getNodeBlockPos(abm_trigger->pos);
 					MapBlock * block = map->getBlock(blockpos);
-					if (block)
+					if (block) {
+						auto was = abm_trigger->active_object_count;
 						abm_trigger->active_object_count = m_env->m_abmhandler.countObjects(block, map, abm_trigger->active_object_count_wider);
+						//infostream<<" was="<<was<<" now abm_trigger->active_object_count="<<abm_trigger->active_object_count<<std::endl;
+						if (abm_trigger->active_object_count > was)
+							active_object_added[blockpos] = abm_trigger->active_object_count - was;
+					}
 					m_env->m_added_objects = 0;
 				}
 		}
@@ -880,7 +951,7 @@ void ServerEnvironment::activateBlock(MapBlock *block, u32 additional_dtime)
 		MapNode n;
 		for(std::map<v3s16, NodeTimer>::iterator
 				i = elapsed_timers.begin();
-				i != elapsed_timers.end(); i++){
+				i != elapsed_timers.end(); ++i){
 			n = block->getNodeNoEx(i->first);
 			v3s16 p = i->first + block->getPosRelative();
 			if(m_script->node_on_timer(p,n,i->second.elapsed))
@@ -908,8 +979,12 @@ bool ServerEnvironment::setNode(v3s16 p, const MapNode &n, s16 fast)
 	if (fast) {
 		try {
 			MapNode nn = n;
-			if (fast == 2)
-				nn.param1 = n_old.param1;
+			if (fast == 2 && !nn.param1) {
+				if (n_old.param1)
+					nn.param1 = n_old.param1;
+				else if (p.Y > 0)
+					nn.param1 = 5; // will be recalculated by next light step
+			}
 			m_map->setNode(p, nn);
 		} catch(InvalidPositionException &e) { }
 	} else {
@@ -993,9 +1068,11 @@ void ServerEnvironment::getObjectsInsideRadius(std::vector<u16> &objects, v3f po
 		ServerActiveObject* obj = i->second;
 		u16 id = i->first;
 		if (!obj) {
-			infostream<<"ServerEnvironment::getObjectsInsideRadius(): "<<"got null object"<<id<<" = "<<obj<<std::endl;
+			infostream<<"ServerEnvironment::getObjectsInsideRadius(): "<<"got null object "<<id<<" = "<<obj<<std::endl;
 			continue;
 		}
+		if (obj->m_removed || obj->m_pending_deactivation)
+			continue;
 
 		v3f objectpos = obj->getBasePosition();
 		if(objectpos.getDistanceFrom(pos) > radius)
@@ -1142,7 +1219,7 @@ void ServerEnvironment::clearAllObjects()
 
 void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_ms)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	//TimeTaker timer("ServerEnv step");
 
@@ -1175,13 +1252,14 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	{
 		//TimeTaker timer_step_player("player step");
 		//ScopeProfiler sp(g_profiler, "SEnv: handle players avg", SPT_AVG);
-		for(std::vector<Player*>::iterator i = m_players.begin();
+		auto lock = m_players.lock_shared_rec();
+		for(auto i = m_players.begin();
 				i != m_players.end(); ++i)
 		{
 			Player *player = *i;
 
 			// Ignore disconnected players
-			if(player->peer_id == 0)
+			if(!player || player->peer_id == 0)
 				continue;
 
 			// Move
@@ -1216,7 +1294,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 				i != m_players.end(); ++i) {
 			Player *player = *i;
 			// Ignore disconnected players
-			if(player->peer_id == 0)
+			if(!player || player->peer_id == 0)
 				continue;
 
 			v3s16 blockpos = getNodeBlockPos(
@@ -1232,9 +1310,11 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 				i != m_active_objects.end(); ++i)
 			{
 				ServerActiveObject* obj = i->second;
-				if(obj->getType() == ACTIVEOBJECT_TYPE_PLAYER)
+				if(!obj || obj->getType() == ACTIVEOBJECT_TYPE_PLAYER)
 					continue;
 				ObjectProperties* props = obj->accessObjectProperties();
+				if (!props)
+					continue;
 				if(props->force_load){
 					v3f objectpos = obj->getBasePosition();
 					v3s16 blockpos = getNodeBlockPos(
@@ -1344,7 +1424,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 				MapNode n;
 				for(std::map<v3s16, NodeTimer>::iterator
 						i = elapsed_timers.begin();
-						i != elapsed_timers.end(); i++){
+						i != elapsed_timers.end(); ++i){
 					n = block->getNodeNoEx(i->first);
 					p = i->first + block->getPosRelative();
 					if(m_script->node_on_timer(p,n,i->second.elapsed))
@@ -1388,7 +1468,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 			/*infostream<<"Server: Block ("<<p.X<<","<<p.Y<<","<<p.Z
 					<<") being handled"<<std::endl;*/
 
-			MapBlock *block = m_map->getBlock(p, true);
+			MapBlock *block = m_map->getBlock(p, true, true);
 			if (!block)
 				continue;
 
@@ -1408,7 +1488,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 
 /*
 		if(m_active_block_abm_last) {
-			infostream<<"WARNING: active block modifiers ("
+			warningstream<<"WARNING: active block modifiers ("
 					<<calls<<"/"<<m_active_blocks.m_list.size()<<" to "<<m_active_block_abm_last<<") took "
 					<<porting::getTimeMs()-end_ms + u32(1000 * m_recommended_send_interval)<<"ms "
 					<<std::endl;
@@ -1470,7 +1550,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 			++calls;
 
 			// Don't step if is to be removed or stored statically
-			if(obj->m_removed || obj->m_pending_deactivation)
+			if(!obj || obj->m_removed || obj->m_pending_deactivation)
 				continue;
 			// Step object
 			if (!obj->m_uptime_last)  // not very good place, but minimum modifications
@@ -1564,7 +1644,7 @@ int ServerEnvironment::analyzeBlocks(float dtime, unsigned int max_cycle_ms) {
 			{
 				auto lock = m_map->m_blocks.try_lock_shared_rec();
 				if (lock->owns_lock())
-				for (auto ir : m_map->m_blocks) {
+				for (auto & ir : m_map->m_blocks) {
 					if (!ir.second || !ir.second->abm_triggers)
 						continue;
 					m_abm_random_blocks.emplace_back(ir.first);
@@ -1594,10 +1674,13 @@ int ServerEnvironment::analyzeBlocks(float dtime, unsigned int max_cycle_ms) {
 	return calls;
 }
 
-ServerActiveObject* ServerEnvironment::getActiveObject(u16 id)
+ServerActiveObject* ServerEnvironment::getActiveObject(u16 id, bool removed)
 {
+	auto lock = m_active_objects.lock_shared_rec();
 	auto n = m_active_objects.find(id);
 	if(n == m_active_objects.end())
+		return NULL;
+	if (!removed && (!n->second || n->second->m_removed || n->second->m_pending_deactivation))
 		return NULL;
 	return n->second;
 }
@@ -1642,12 +1725,11 @@ u16 ServerEnvironment::addActiveObject(ServerActiveObject *object)
 	Finds out what new objects have been added to
 	inside a radius around a position
 */
-void ServerEnvironment::getAddedActiveObjects(v3s16 pos, s16 radius,
+void ServerEnvironment::getAddedActiveObjects(Player *player, s16 radius,
 		s16 player_radius,
 		maybe_concurrent_unordered_map<u16, bool> &current_objects_shared,
-		std::set<u16> &added_objects)
+		std::queue<u16> &added_objects)
 {
-	v3f pos_f = intToFloat(pos, BS);
 	f32 radius_f = radius * BS;
 	f32 player_radius_f = player_radius * BS;
 
@@ -1656,7 +1738,9 @@ void ServerEnvironment::getAddedActiveObjects(v3s16 pos, s16 radius,
 
 	std::unordered_map<u16, bool> current_objects;
 	{
-		auto lock = current_objects_shared.lock_shared_rec();
+		auto lock = current_objects_shared.try_lock_shared_rec();
+		if (!lock->owns_lock())
+			return;
 		current_objects = current_objects_shared;
 	}
 	/*
@@ -1666,21 +1750,26 @@ void ServerEnvironment::getAddedActiveObjects(v3s16 pos, s16 radius,
 		- discard objects that are found in current_objects.
 		- add remaining objects to added_objects
 	*/
-	auto lock = m_active_objects.lock_shared_rec();
+	int count = 0;
+	auto lock = m_active_objects.try_lock_shared_rec();
+	if (!lock->owns_lock())
+		return;
+	auto player_position = player->getPosition();
 	for(auto
 			i = m_active_objects.begin();
-			i != m_active_objects.end(); ++i)
-	{
+			i != m_active_objects.end(); ++i) {
 		u16 id = i->first;
+
 		// Get object
 		ServerActiveObject *object = i->second;
 		if(object == NULL)
 			continue;
+
 		// Discard if removed or deactivating
 		if(object->m_removed || object->m_pending_deactivation)
 			continue;
 
-		f32 distance_f = object->getBasePosition().getDistanceFrom(pos_f);
+		f32 distance_f = object->getBasePosition().getDistanceFrom(player_position);
 		if (object->getType() == ACTIVEOBJECT_TYPE_PLAYER) {
 			// Discard if too far
 			if (distance_f > player_radius_f && player_radius_f != 0)
@@ -1693,7 +1782,9 @@ void ServerEnvironment::getAddedActiveObjects(v3s16 pos, s16 radius,
 		if(n != current_objects.end())
 			continue;
 		// Add to added_objects
-		added_objects.insert(id);
+		added_objects.push(id);
+		if (++count > 20)
+			break;
 	}
 }
 
@@ -1701,12 +1792,11 @@ void ServerEnvironment::getAddedActiveObjects(v3s16 pos, s16 radius,
 	Finds out what objects have been removed from
 	inside a radius around a position
 */
-void ServerEnvironment::getRemovedActiveObjects(v3s16 pos, s16 radius,
+void ServerEnvironment::getRemovedActiveObjects(Player *player, s16 radius,
 		s16 player_radius,
 		maybe_concurrent_unordered_map<u16, bool> &current_objects,
-		std::set<u16> &removed_objects)
+		std::queue<u16> &removed_objects)
 {
-	v3f pos_f = intToFloat(pos, BS);
 	f32 radius_f = radius * BS;
 	f32 player_radius_f = player_radius * BS;
 
@@ -1729,27 +1819,28 @@ void ServerEnvironment::getRemovedActiveObjects(v3s16 pos, s16 radius,
 		- object has m_removed=true, or
 		- object is too far away
 	*/
+	auto player_position = player->getPosition();
+
 	for(auto
 			i = current_objects_vector.begin();
 			i != current_objects_vector.end(); ++i)
 	{
 		u16 id = *i;
-		ServerActiveObject *object = getActiveObject(id);
+		ServerActiveObject *object = getActiveObject(id, true);
 
-		if(object == NULL){
+		if (object == NULL) {
 			//infostream<<"ServerEnvironment::getRemovedActiveObjects():"
 			//		<<" object in current_objects is NULL"<<std::endl;
-			removed_objects.insert(id);
+			removed_objects.push(id);
 			continue;
 		}
 
-		if(object->m_removed || object->m_pending_deactivation)
-		{
-			removed_objects.insert(id);
+		if (object->m_removed || object->m_pending_deactivation) {
+			removed_objects.push(id);
 			continue;
 		}
 
-		f32 distance_f = object->getBasePosition().getDistanceFrom(pos_f);
+		f32 distance_f = object->getBasePosition().getDistanceFrom(player_position);
 		if (object->getType() == ACTIVEOBJECT_TYPE_PLAYER) {
 			if (distance_f <= player_radius_f || player_radius_f == 0)
 				continue;
@@ -1757,7 +1848,34 @@ void ServerEnvironment::getRemovedActiveObjects(v3s16 pos, s16 radius,
 			continue;
 
 		// Object is no longer visible
-		removed_objects.insert(id);
+		removed_objects.push(id);
+	}
+}
+
+void ServerEnvironment::setStaticForActiveObjectsInBlock(
+	v3s16 blockpos, bool static_exists, v3s16 static_block)
+{
+	MapBlock *block = m_map->getBlockNoCreateNoEx(blockpos);
+	if (!block)
+		return;
+
+	for (std::map<u16, StaticObject>::iterator
+			so_it = block->m_static_objects.m_active.begin();
+			so_it != block->m_static_objects.m_active.end(); ++so_it) {
+		// Get the ServerActiveObject counterpart to this StaticObject
+		std::map<u16, ServerActiveObject *>::iterator ao_it;
+		ao_it = m_active_objects.find(so_it->first);
+		if (ao_it == m_active_objects.end()) {
+			// If this ever happens, there must be some kind of nasty bug.
+			errorstream << "ServerEnvironment::setStaticForObjectsInBlock(): "
+				"Object from MapBlock::m_static_objects::m_active not found "
+				"in m_active_objects";
+			continue;
+		}
+
+		ServerActiveObject *sao = ao_it->second;
+		sao->m_static_exists = static_exists;
+		sao->m_static_block  = static_block;
 	}
 }
 
@@ -1807,6 +1925,17 @@ u16 ServerEnvironment::addActiveObjectRaw(ServerActiveObject *object,
 			delete object;
 		return 0;
 	}
+
+	if (objectpos_over_limit(object->getBasePosition())) {
+		v3f p = object->getBasePosition();
+		errorstream << "ServerEnvironment::addActiveObjectRaw(): "
+			<< "object position (" << p.X << "," << p.Y << "," << p.Z
+			<< ") outside maximum range" << std::endl;
+		if (object->environmentDeletes())
+			delete object;
+		return 0;
+	}
+
 	/*infostream<<"ServerEnvironment::addActiveObjectRaw(): "
 			<<"added (id="<<object->getId()<<")"<<std::endl;*/
 
@@ -1864,7 +1993,14 @@ u16 ServerEnvironment::addActiveObjectRaw(ServerActiveObject *object,
 void ServerEnvironment::removeRemovedObjects(unsigned int max_cycle_ms)
 {
 	TimeTaker timer("ServerEnvironment::removeRemovedObjects()");
-	std::list<u16> objects_to_remove;
+	//std::list<u16> objects_to_remove;
+
+	for (auto & o : objects_to_delete) {
+		if (!o)
+			continue;
+		delete o;
+	}
+	objects_to_delete.clear();
 
 	std::vector<ServerActiveObject*> objects;
 	{
@@ -1948,7 +2084,7 @@ void ServerEnvironment::removeRemovedObjects(unsigned int max_cycle_ms)
 		// Delete
 		if(obj->environmentDeletes()) {
 			m_active_objects.set(id, nullptr);
-			delete obj;
+			objects_to_delete.push_back(obj);
 		}
 
 		// Id to be removed from m_active_objects
@@ -1963,8 +2099,10 @@ void ServerEnvironment::removeRemovedObjects(unsigned int max_cycle_ms)
 	// Remove references from m_active_objects
 	for(auto i = objects_to_remove.begin();
 			i != objects_to_remove.end(); ++i) {
+		objects_to_delete.push_back(m_active_objects.get(*i));
 		m_active_objects.erase(*i);
 	}
+	objects_to_remove.clear();
 	}
 }
 
@@ -2041,6 +2179,12 @@ void ServerEnvironment::activateObjects(MapBlock *block, u32 dtime_s)
 			i != block->m_static_objects.m_stored.end(); ++i) {
 		StaticObject &s_obj = *i;
 
+		if (!s_obj.type || s_obj.pos.X > MAX_MAP_GENERATION_LIMIT * BS || s_obj.pos.X > MAX_MAP_GENERATION_LIMIT * BS || s_obj.pos.Y > MAX_MAP_GENERATION_LIMIT * BS) {
+			errorstream << "activateObjects broken static object: blockpos="<<block->getPos()<<" type=" << (int)s_obj.type << " p="<<s_obj.pos<<std::endl;
+			break;
+		}
+
+
 		// Create an active object from the data
 		ServerActiveObject *obj = ServerActiveObject::create
 				((ActiveObjectType) s_obj.type, this, 0, s_obj.pos, s_obj.data);
@@ -2050,6 +2194,7 @@ void ServerEnvironment::activateObjects(MapBlock *block, u32 dtime_s)
 					<<"failed to create active object from static object "
 					<<"in block "<<PP(s_obj.pos/BS)
 					<<" type="<<(int)s_obj.type<<" data:"<<std::endl;
+			break;
 			print_hexdump(verbosestream, s_obj.data);
 
 			new_stored.push_back(s_obj);
@@ -2080,7 +2225,7 @@ void ServerEnvironment::activateObjects(MapBlock *block, u32 dtime_s)
 			i != block->m_static_objects.m_active.end(); ++i)
 	{
 		u16 id = i->first;
-		ServerActiveObject *object = getActiveObject(id);
+		ServerActiveObject *object = getActiveObject(id, true);
 		if (!object)
 			continue;
 		object->m_pending_deactivation = false;
@@ -2111,7 +2256,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 {
 	//ScopeProfiler sp(g_profiler, "SEnv: deactivateFarObjects");
 
-	std::vector<u16> objects_to_remove;
+	//std::vector<u16> objects_to_remove;
 
 	std::vector<ServerActiveObject*> objects;
 	{
@@ -2145,6 +2290,11 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 
 		u16 id = obj->getId();
 		v3f objectpos = obj->getBasePosition();
+
+		if (obj->getType() == ACTIVEOBJECT_TYPE_PLAYER) {
+			//infostream<<"deactivating far object player id=" <<id<< std::endl;
+			continue;
+		}
 
 		// The block in which the object resides in
 		v3s16 blockpos_o = getNodeBlockPos(floatToInt(objectpos, BS));
@@ -2266,6 +2416,8 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 				}
 			}
 
+			if(!obj->m_removed) {
+
 			// Add to the block where the object is located in
 			v3s16 blockpos = getNodeBlockPos(floatToInt(objectpos, BS));
 			// Get or generate the block
@@ -2297,7 +2449,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 					// reason. Unsuccessful attempts have been made to find
 					// said reason.
 					if(id && block->m_static_objects.m_active.find(id) != block->m_static_objects.m_active.end()){
-						infostream<<"ServerEnv: WARNING: Performing hack #83274"
+						warningstream<<"ServerEnv: Performing hack #83274"
 								<<std::endl;
 						block->m_static_objects.remove(id);
 					}
@@ -2322,6 +2474,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 							<<" statically (pos="<<PP(p)<<")"<<std::endl;
 					continue;
 				}
+			}
 			}
 		}
 
@@ -2355,8 +2508,9 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 		if(obj->environmentDeletes())
 		{
 			m_active_objects.set(id, nullptr);
-			delete obj;
+			objects_to_delete.push_back(obj);
 		}
+
 		// Id to be removed from m_active_objects
 		objects_to_remove.push_back(id);
 	}
@@ -2364,15 +2518,17 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 	//if(m_active_objects.size()) verbosestream<<"ServerEnvironment::deactivateFarObjects(): deactivated="<<objects_to_remove.size()<< " from="<<m_active_objects.size()<<std::endl;
 
 	if (!objects_to_remove.empty()) {
-	auto lock = m_active_objects.lock_unique_rec();
+		auto lock = m_active_objects.try_lock_unique_rec();
 	// Remove references from m_active_objects
-	for(std::vector<u16>::iterator i = objects_to_remove.begin();
-			i != objects_to_remove.end(); ++i) {
-		m_active_objects.erase(*i);
+		if (lock->owns_lock())
+			for(auto & i : objects_to_remove) {
+			objects_to_delete.push_back(m_active_objects.get(i));
+			m_active_objects.erase(i);
+		}
+		objects_to_remove.clear();
 	}
-	}
-}
 
+}
 
 #ifndef SERVER
 
@@ -2428,7 +2584,7 @@ ClientMap & ClientEnvironment::getClientMap()
 
 void ClientEnvironment::addPlayer(Player *player)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 	/*
 		It is a failure if player is local and there already is a local
 		player
@@ -2452,7 +2608,7 @@ LocalPlayer * ClientEnvironment::getLocalPlayer()
 
 void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_ms)
 {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	TimeTaker timer0("ClientEnvironment::step()");
 
@@ -2496,12 +2652,18 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	if(dtime_max_increment*m_move_max_loop < dtime)
 		dtime_max_increment = dtime/m_move_max_loop;
 
-	// Don't allow overly huge dtime
-	if(dtime > 2)
-		dtime = 2;
+	//if (dtime > 1) errorstream<<" dtime="<<dtime<<" player_speed="<<player_speed<<std::endl;
 
-	if (player_speed <= 0.01)
+#define DTIME_MAX 2.0
+
+	// Don't allow overly huge dtime
+	if(dtime > DTIME_MAX)
+		dtime = DTIME_MAX;
+
+
+	if (player_speed <= 0.01 && dtime < 0.1)
 		dtime_max_increment = dtime;
+
 
 	f32 dtime_downcount = dtime;
 
@@ -2598,7 +2760,7 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	}
 	while(dtime_downcount > 0.001);
 
-	//infostream<<"loop "<<loopcount<<"/"<<m_move_max_loop<<" breaked="<<breaked<<std::endl;
+	//if (breaked) errorstream<<"loop "<<loopcount<<"/"<<m_move_max_loop<<" breaked="<<breaked<<std::endl;
 
 	if (breaked && m_move_max_loop > loopcount)
 		--m_move_max_loop;
@@ -2610,6 +2772,7 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	{
 		//TimeTaker timer2("ClientEnvironment::step() collision");
 
+	if (dtime < DTIME_MAX || lplayer->getSpeed().getLength() > PLAYER_FALL_TOLERANCE_SPEED)
 	for(auto
 			i = player_collisions.begin();
 			i != player_collisions.end(); ++i)
@@ -2793,7 +2956,7 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		ClientActiveObject* obj = i->second;
 
 		auto & draw_control = getClientMap().getControl();
-		if ((pf.getDistanceFrom(obj->getPosition()) / BS) * 1.2 > draw_control.wanted_range) {
+		if ((pf.getDistanceFrom(obj->getPosition()) / BS) * 1.2 > draw_control.wanted_range && end_ms % 300) {
 			//errorstream<<"skip "<<obj->getId() << " p="<<pf<< " o=" << obj->getPosition() << " r=" << pf.getDistanceFrom(obj->getPosition()) / BS << " wr=" << draw_control.wanted_range<< std::endl;
 			++skipped;
 			continue;
@@ -2961,9 +3124,11 @@ void ClientEnvironment::addActiveObject(u16 id, u8 type,
 
 	obj->setId(id);
 
+	bool add = false;
 	try
 	{
 		obj->initialize(init_data);
+		add = true;
 	}
 	catch(SerializationError &e)
 	{
@@ -2975,7 +3140,10 @@ void ClientEnvironment::addActiveObject(u16 id, u8 type,
 				<<std::endl;
 	}
 
+	if (add)
 	addActiveObject(obj);
+	else
+		delete obj;
 }
 
 void ClientEnvironment::removeActiveObject(u16 id)
@@ -3039,7 +3207,7 @@ void ClientEnvironment::damageLocalPlayer(u8 damage, bool handle_hp)
 	event.type = CEE_PLAYER_DAMAGE;
 	event.player_damage.amount = damage;
 	event.player_damage.send_to_server = handle_hp;
-	m_client_event_queue.push_back(event);
+	m_client_event_queue.push(event);
 }
 
 void ClientEnvironment::updateLocalPlayerBreath(u16 breath)
@@ -3047,7 +3215,7 @@ void ClientEnvironment::updateLocalPlayerBreath(u16 breath)
 	ClientEnvEvent event;
 	event.type = CEE_PLAYER_BREATH;
 	event.player_breath.amount = breath;
-	m_client_event_queue.push_back(event);
+	m_client_event_queue.push(event);
 }
 
 /*
@@ -3081,7 +3249,7 @@ ClientEnvEvent ClientEnvironment::getClientEvent()
 		event.type = CEE_NONE;
 	else {
 		event = m_client_event_queue.front();
-		m_client_event_queue.pop_front();
+		m_client_event_queue.pop();
 	}
 	return event;
 }

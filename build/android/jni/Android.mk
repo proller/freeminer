@@ -77,6 +77,7 @@ endif
 
 ifeq ($(USE_ENET), 1)
 include $(CLEAR_VARS)
+LOCAL_CFLAGS := -DHAS_INET_PTON=1 -DHAS_INET_NTOP=1 -DHAS_GETHOSTBYNAME_R=1 -DHAS_GETADDRINFO=1 -DHAS_GETNAMEINFO=1 -DHAS_FCNTL=1 -DHAS_POLL=1 -DHAS_MSGHDR_FLAGS=1
 LOCAL_MODULE := enet
 LOCAL_C_INCLUDES := jni/src/enet/include
 LOCAL_SRC_FILES := $(wildcard $(LOCAL_PATH)/jni/src/enet/*.c)
@@ -111,9 +112,9 @@ LOCAL_CFLAGS := -D_IRR_ANDROID_PLATFORM_      \
 				-DUSE_FREETYPE=1              \
 				-DUSE_LEVELDB=$(HAVE_LEVELDB) \
 				$(GPROF_DEF)                  \
-				-DHAS_INET_PTON=1 -DHAS_INET_NTOP=1 -DHAS_GETHOSTBYNAME_R=1 -DHAS_GETADDRINFO=1 -DHAS_GETNAMEINFO=1 -DHAS_FCNTL=1 -DHAS_POLL=1 -DHAS_MSGHDR_FLAGS=1 \
 				-DUSE_MANDELBULBER=1 \
 				-DHAVE_THREAD_LOCAL=1 \
+				-DGAMES_VERSION=\"$(GAMES_VERSION)\" \
 				-DUSE_GETTEXT=1 \
 				-DPROJECT_NAME_C=\"$(PROJECT_NAME_C)\" \
 				-pipe -fstrict-aliasing
@@ -167,11 +168,18 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/guiTextInputMenu.cpp              \
 		jni/src/FMColoredString.cpp               \
 		jni/src/FMStaticText.cpp                  \
-		jni/src/fmbitset.cpp                      \
+		jni/src/fm_bitset.cpp                     \
 		jni/src/fm_liquid.cpp                     \
 		jni/src/fm_map.cpp                        \
 		jni/src/key_value_storage.cpp             \
 		jni/src/log_types.cpp                     \
+		jni/src/mapgen_indev.cpp                  \
+		jni/src/mapgen_math.cpp                   \
+		jni/src/contrib/environment.cpp           \
+		jni/src/contrib/fallingsao.cpp            \
+		jni/src/contrib/itemsao.cpp               \
+		jni/src/contrib/l_env.cpp                 \
+                                                  \
 		jni/src/areastore.cpp                     \
 		jni/src/ban.cpp                           \
 		jni/src/camera.cpp                        \
@@ -233,8 +241,7 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/mapblock.cpp                      \
 		jni/src/mapblock_mesh.cpp                 \
 		jni/src/mapgen.cpp                        \
-		jni/src/mapgen_indev.cpp                  \
-		jni/src/mapgen_math.cpp                   \
+		jni/src/mapgen_fractal.cpp                \
 		jni/src/mapgen_singlenode.cpp             \
 		jni/src/mapgen_v5.cpp                     \
 		jni/src/mapgen_v6.cpp                     \
@@ -413,13 +420,14 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/lua/src/print.c
 endif
 
-# sqlite
+# SQLite3
 LOCAL_SRC_FILES += deps/sqlite/sqlite3.c
 
-# jthread
-LOCAL_SRC_FILES +=                                \
-		jni/src/jthread/pthread/jevent.cpp        \
-		jni/src/jthread/pthread/jsemaphore.cpp
+# Threading
+LOCAL_SRC_FILES += \
+		jni/src/threading/mutex.cpp \
+		jni/src/threading/semaphore.cpp \
+		jni/src/threading/thread.cpp
 
 LOCAL_SHARED_LIBRARIES := iconv openal ogg vorbis gmp
 LOCAL_STATIC_LIBRARIES := Irrlicht freetype curl ssl crypto android_native_app_glue $(PROFILER_LIBS)

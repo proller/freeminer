@@ -109,6 +109,8 @@ RollbackManager::RollbackManager(const std::string & world_path,
 
 RollbackManager::~RollbackManager()
 {
+	flush();
+
 #if USE_SQLITE3
 	SQLOK(sqlite3_finalize(stmt_insert));
 	SQLOK(sqlite3_finalize(stmt_replace));
@@ -253,8 +255,7 @@ bool RollbackManager::createTables()
 		"	FOREIGN KEY (`oldNode`)   REFERENCES `node`(`id`),\n"
 		"	FOREIGN KEY (`newNode`)   REFERENCES `node`(`id`)\n"
 		");\n"
-		"CREATE INDEX IF NOT EXISTS `actionActor` ON `action`(`actor`);\n"
-		"CREATE INDEX IF NOT EXISTS `actionTimestamp` ON `action`(`timestamp`);\n",
+		"CREATE INDEX IF NOT EXISTS `actionIndex` ON `action`(`x`,`y`,`z`,`timestamp`,`actor`);\n",
 		NULL, NULL, NULL));
 	verbosestream << "SQL Rollback: SQLite3 database structure was created" << std::endl;
 
@@ -891,7 +892,7 @@ std::string RollbackManager::getSuspect(v3s16 p, float nearness_shortcut,
 	float likely_suspect_nearness = 0;
 	for (std::list<RollbackAction>::const_reverse_iterator
 	     i = action_latest_buffer.rbegin();
-	     i != action_latest_buffer.rend(); i++) {
+	     i != action_latest_buffer.rend(); ++i) {
 		if (i->unix_time < first_time) {
 			break;
 		}
@@ -931,7 +932,7 @@ void RollbackManager::flush()
 
 	for (iter  = action_todisk_buffer.begin();
 			iter != action_todisk_buffer.end();
-			iter++) {
+			++iter) {
 		if (iter->actor == "") {
 			continue;
 		}
@@ -965,6 +966,7 @@ std::list<RollbackAction> RollbackManager::getEntriesSince(time_t first_time)
 std::list<RollbackAction> RollbackManager::getNodeActors(v3s16 pos, int range,
 		time_t seconds, int limit)
 {
+	flush();
 	time_t cur_time = time(0);
 	time_t first_time = cur_time - seconds;
 

@@ -120,12 +120,11 @@ Connection::~Connection()
 
 /* Internal stuff */
 
-void * Connection::Thread()
+void * Connection::run()
 {
-	ThreadStarted();
-	log_register_thread("Connection");
+	reg("Connection");
 
-	while(!StopRequested())
+	while(!stopRequested())
 	{
 		while(!m_command_queue.empty()){
 			ConnectionCommand c = m_command_queue.pop_frontNoEx();
@@ -198,11 +197,25 @@ void Connection::receive()
 		{
 		case ENET_EVENT_TYPE_CONNECT:
 			{
-				//JMutexAutoLock peerlock(m_peers_mutex);
-				u16 peer_id = PEER_ID_SERVER + 1;
-				if (m_peers.size() > 0)
-					// TODO: fix this shit
-					peer_id = m_peers.rbegin()->first + 1;
+				//MutexAutoLock peerlock(m_peers_mutex);
+				u16 peer_id = 0;
+				static u16 last_try = PEER_ID_SERVER + 1;
+				if (m_peers.size() > 0) {
+					for (int i = 0; i < 1000; ++i) {
+						if (last_try > 30000)
+							last_try = PEER_ID_SERVER;
+						++last_try;
+						if (!m_peers.count(last_try)) {
+							peer_id = last_try;
+							break;
+						}
+					}
+				} else {
+					peer_id = last_try;
+				}
+				if (!peer_id)
+					last_try = peer_id = m_peers.rbegin()->first + 1;
+
 				m_peers.set(peer_id, event.peer);
 				m_peers_address.set(peer_id, Address(event.peer->address.host, event.peer->address.port));
 
@@ -237,7 +250,7 @@ void Connection::receive()
 			break;
 		}
 	} else if (ret < 0) {
-		errorstream<<"recieve enet_host_service failed = "<< ret << std::endl;
+		infostream<<"recieve enet_host_service failed = "<< ret << std::endl;
 		if (m_peers.count(PEER_ID_SERVER))
 			deletePeer(PEER_ID_SERVER,  false);
 	} else { //0
@@ -291,7 +304,7 @@ void Connection::serve(Address bind_addr)
 void Connection::connect(Address addr)
 {
 	m_last_recieved = porting::getTimeMs();
-	//JMutexAutoLock peerlock(m_peers_mutex);
+	//MutexAutoLock peerlock(m_peers_mutex);
 	//m_peers.lock_unique_rec();
 	auto node = m_peers.find(PEER_ID_SERVER);
 	if(node != m_peers.end()){
@@ -343,7 +356,7 @@ void Connection::connect(Address addr)
 
 void Connection::disconnect()
 {
-	//JMutexAutoLock peerlock(m_peers_mutex);
+	//MutexAutoLock peerlock(m_peers_mutex);
 	m_peers.lock_shared_rec();
 	for (auto i = m_peers.begin();
 			i != m_peers.end(); ++i)
@@ -360,11 +373,11 @@ void Connection::send(u16 peer_id, u8 channelnum,
 		SharedBuffer<u8> data, bool reliable)
 {
 	{
-		//JMutexAutoLock peerlock(m_peers_mutex);
+		//MutexAutoLock peerlock(m_peers_mutex);
 		if (m_peers.find(peer_id) == m_peers.end())
 			return;
 	}
-	dout_con<<getDesc()<<" sending to peer_id="<<peer_id<<std::endl;
+	//dout_con<<getDesc()<<" sending to peer_id="<<peer_id<<std::endl;
 
 	assert(channelnum < CHANNEL_COUNT);
 
@@ -375,8 +388,12 @@ void Connection::send(u16 peer_id, u8 channelnum,
 		deletePeer(peer_id, false);
 		return;
 	}
-	if (enet_peer_send(peer, channelnum, packet) < 0)
-		errorstream<<"enet_peer_send failed"<<std::endl;
+	if (enet_peer_send(peer, channelnum, packet) < 0) {
+		infostream<<"enet_peer_send failed peer="<<peer_id<<" reliable="<<reliable<< " size="<<data.getSize()<<std::endl;
+		if (reliable)
+			deletePeer(peer_id, false);
+		return;
+	}
 }
 
 ENetPeer* Connection::getPeer(u16 peer_id)
@@ -391,7 +408,7 @@ ENetPeer* Connection::getPeer(u16 peer_id)
 
 bool Connection::deletePeer(u16 peer_id, bool timeout)
 {
-	//JMutexAutoLock peerlock(m_peers_mutex);
+	//MutexAutoLock peerlock(m_peers_mutex);
 	if(m_peers.find(peer_id) == m_peers.end())
 		return false;
 
@@ -450,7 +467,7 @@ void Connection::Connect(Address address)
 
 bool Connection::Connected()
 {
-	//JMutexAutoLock peerlock(m_peers_mutex);
+	//MutexAutoLock peerlock(m_peers_mutex);
 
 	auto node = m_peers.find(PEER_ID_SERVER);
 	if(node == m_peers.end())
@@ -535,6 +552,7 @@ void Connection::Send(u16 peer_id, u8 channelnum, const msgpack::sbuffer &buffer
 
 Address Connection::GetPeerAddress(u16 peer_id)
 {
+	auto lock = m_peers_address.lock_unique_rec();
 	if (!m_peers_address.count(peer_id))
 		return Address();
 	return m_peers_address.get(peer_id);
@@ -593,14 +611,21 @@ bool parse_msgpack_packet(char *data, u32 datasize, MsgpackPacket *packet, int *
 		*command = (*packet)[MSGPACK_COMMAND].as<int>();
 	}
 	catch (msgpack::type_error e) {
-		verbosestream<<"msgpack::type_error : "<<e.what()<<" datasize="<<datasize<<std::endl;
+		verbosestream<<"parse_msgpack_packet: msgpack::type_error : "<<e.what()<<" datasize="<<datasize<<std::endl;
 		return false;
 	}
 	catch (msgpack::unpack_error e) {
-		verbosestream<<"msgpack::unpack_error : "<<e.what()<<" datasize="<<datasize<<std::endl;
+		verbosestream<<"parse_msgpack_packet: msgpack::unpack_error : "<<e.what()<<" datasize="<<datasize<<std::endl;
 		//verbosestream<<"bad data:["<< std::string(data, datasize) <<"]"<<std::endl;
 		return false;
+	} catch (std::exception &e) {
+		errorstream<<"parse_msgpack_packet: exception: "<<e.what()<<" datasize="<<datasize<<std::endl;
+		return false;
+	} catch (...) {
+		errorstream<<"parse_msgpack_packet: Ooops..."<<std::endl;
+		return false;
 	}
+
 	return true;
 }
 

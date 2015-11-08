@@ -30,6 +30,7 @@ FlagDesc flagdesc_deco[] = {
 	{"place_center_y", DECO_PLACE_CENTER_Y},
 	{"place_center_z", DECO_PLACE_CENTER_Z},
 	{"force_placement", DECO_FORCE_PLACEMENT},
+	{"liquid_surface", DECO_LIQUID_SURFACE},
 	{NULL,             0}
 };
 
@@ -90,11 +91,9 @@ size_t Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 	int carea_size = nmax.X - nmin.X + 1;
 
 	// Divide area into parts
-	if (carea_size % sidelen) {
-		infostream << "Decoration::placeDeco: chunk size is not divisible by "
-			"sidelen; setting sidelen to " << carea_size << std::endl;
+	// If chunksize is changed it may no longer be divisable by sidelen
+	if (carea_size % sidelen)
 		sidelen = carea_size;
-	}
 
 	s16 divlen = carea_size / sidelen;
 	int area = sidelen * sidelen;
@@ -126,9 +125,13 @@ size_t Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 
 			int mapindex = carea_size * (z - nmin.Z) + (x - nmin.X);
 
-			s16 y = mg->heightmap ?
-					mg->heightmap[mapindex] :
-					mg->findGroundLevel(v2s16(x, z), nmin.Y, nmax.Y);
+			s16 y = -MAX_MAP_GENERATION_LIMIT;
+			if (flags & DECO_LIQUID_SURFACE)
+				y = mg->findLiquidSurface(v2s16(x, z), nmin.Y, nmax.Y);
+			else if (mg->heightmap)
+				y = mg->heightmap[mapindex];
+			else
+				y = mg->findGroundLevel(v2s16(x, z), nmin.Y, nmax.Y);
 
 			if (y < nmin.Y || y > nmax.Y ||
 				y < y_min  || y > y_max)
@@ -139,7 +142,7 @@ size_t Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 #if 0
 				printf("Decoration at (%d %d %d) cut off\n", x, y, z);
 				//add to queue
-				JMutexAutoLock cutofflock(cutoff_mutex);
+				MutexAutoLock cutofflock(cutoff_mutex);
 				cutoffs.push_back(CutoffData(x, y, z, height));
 #endif
 			}
@@ -172,7 +175,7 @@ void Decoration::placeCutoffs(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 
 	// Copy over the cutoffs we're interested in so we don't needlessly hold a lock
 	{
-		JMutexAutoLock cutofflock(cutoff_mutex);
+		MutexAutoLock cutofflock(cutoff_mutex);
 		for (std::list<CutoffData>::iterator i = cutoffs.begin();
 			i != cutoffs.end(); ++i) {
 			CutoffData cutoff = *i;
@@ -203,7 +206,7 @@ void Decoration::placeCutoffs(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 
 	// Remove cutoffs that were handled from the cutoff list
 	{
-		JMutexAutoLock cutofflock(cutoff_mutex);
+		MutexAutoLock cutofflock(cutoff_mutex);
 		for (std::list<CutoffData>::iterator i = cutoffs.begin();
 			i != cutoffs.end(); ++i) {
 
@@ -347,7 +350,7 @@ size_t DecoSchematic::generate(MMVManip *vm, PseudoRandom *pr, v3s16 p)
 
 	bool force_placement = (flags & DECO_FORCE_PLACEMENT);
 
-	schematic->blitToVManip(p, vm, rot, force_placement);
+	schematic->blitToVManip(vm, p, rot, force_placement);
 
 	return 1;
 }
