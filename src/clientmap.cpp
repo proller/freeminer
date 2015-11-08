@@ -337,6 +337,7 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigne
 			*/
 
 			auto mesh = block->getMesh(mesh_step);
+errorstream<<"getmesh "<< bp << " mesh_step="<<mesh_step<<" m="<<mesh<<std::endl;
 			if (mesh)
 				mesh->updateCameraOffset(m_camera_offset);
 

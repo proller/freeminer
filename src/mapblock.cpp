@@ -865,13 +865,22 @@ void MapBlock::pushElementsToCircuit(Circuit* circuit)
 
 #ifndef SERVER
 MapBlock::mesh_type MapBlock::getMesh(int step) {
+	--step;
+#if FARMESH_OLD
+	if (mesh[step])
+		return mesh[step];
+	int stry = step > 0 ? step - 1 : step + 1;
+	return mesh[stry];
+
+#else
 	return mesh[step];
+#endif
 }
 
 void MapBlock::setMesh(MapBlock::mesh_type & rmesh) {
-	//if (mesh[rmesh->step])
-	//	delete mesh[rmesh->step];
-	mesh[rmesh->step] = rmesh;
+	//if (mesh[rmesh->step-1])
+	//	delete mesh[rmesh->step-1];
+	mesh[rmesh->step-1] = rmesh;
 }
 
 /*

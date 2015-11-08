@@ -1669,7 +1669,11 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent, int step)
 	auto & draw_control = m_env.getClientMap().getControl();
 	if (!step)
 		step = getFarmeshStep(draw_control, getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
-	std::shared_ptr<MeshMakeData> data(new MeshMakeData(this, m_cache_enable_shaders, &m_env.getMap(), step > 1 ? &m_env.getMap() : nullptr, &draw_control));
+	std::shared_ptr<MeshMakeData> data(new MeshMakeData(this, m_cache_enable_shaders, &m_env.getMap(), (
+#if FARMESH_OLD
+		0 &&
+#endif
+		step > 1 ) ? &m_env.getMap() : nullptr, &draw_control));
 
 	if (!getFarmeshGrid(p, step)) {
 		//verbosestream<<"meshskip "<<" s="<<step<< " p="<<p<<" player="<<getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS))<<std::endl;
@@ -1775,7 +1779,11 @@ void Client::updateMeshTimestampWithEdge(v3s16 blockpos) {
 			continue;
 		block->setTimestampNoChangedFlag(m_uptime);
 	}
-	for (int step = 1; step <= FARMESH_STEP_MAX; ++step) {
+	int to = FARMESH_STEP_MAX;
+#if FARMESH_OLD
+		to = 1;
+#endif
+	for (int step = 1; step <= to; ++step) {
 		v3POS actualpos = getFarmeshActual(blockpos, step);
 		auto *block = m_env.getMap().getBlockNoCreateNoEx(actualpos); // todo maybe update bp1 too if differ
 		if(!block)

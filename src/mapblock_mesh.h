@@ -28,6 +28,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "voxel.h"
 #include <map>
 
+#define FARMESH_OLD 1
+
 class IGameDef;
 struct MapDrawControl;
 class Map;

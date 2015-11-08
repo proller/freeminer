@@ -234,6 +234,9 @@ bool isBlockInSight(v3s16 blockpos_b, v3f camera_pos, v3f camera_dir,
 	if (!camera_fov)
 		return true;
 
+	if (block_scale > 1) // todo fixme removeme
+		return true;
+
 	//camera_fov*=1.1;
 
 	// Adjust camera position, for purposes of computing the angle,
