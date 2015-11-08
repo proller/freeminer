@@ -113,11 +113,11 @@ def main():
 		os.chdir(os.path.join(irrlicht, "source", "Irrlicht"))
 		# sorry but this breaks the build
 		patch(os.path.join("zlib", "deflate.c"), "const char deflate_copyright[] =", "static const char deflate_copyright[] =")
-		os.system("devenv /upgrade Irrlicht11.0.sln")
-		patch("Irrlicht11.0.vcxproj", "; _ITERATOR_DEBUG_LEVEL=0", "")
-		if patch_toolset:
-			patch("Irrlicht11.0.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
-		os.system('MSBuild Irrlicht11.0.sln /p:Configuration="Static lib - {}"'.format(build_type))
+		os.system("devenv /upgrade Irrlicht12.0.vcxproj")
+		#patch("Irrlicht12.0.vcxproj", "; _ITERATOR_DEBUG_LEVEL=0", "")
+		#if patch_toolset:
+		#	patch("Irrlicht12.0.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v140</PlatformToolset>")
+		os.system('MSBuild Irrlicht12.0.vcxproj /p:Configuration="Static lib - {}"'.format(build_type))
 		os.chdir(os.path.join("..", "..", ".."))
 
 	if not os.path.exists(curl):
@@ -150,7 +150,7 @@ def main():
 		os.chdir(os.path.join(libogg, "win32", "VS2010"))
 
 		if patch_toolset:
-			patch("libogg_static.vcxproj", '<ConfigurationType>StaticLibrary</ConfigurationType>', '<ConfigurationType>StaticLibrary</ConfigurationType><PlatformToolset>v120</PlatformToolset>')
+			patch("libogg_static.vcxproj", '<ConfigurationType>StaticLibrary</ConfigurationType>', '<ConfigurationType>StaticLibrary</ConfigurationType><PlatformToolset>v140</PlatformToolset>')
 
 		os.system("devenv /upgrade libogg_static.vcxproj")
 		os.system("MSBuild libogg_static.vcxproj /p:Configuration={}".format(build_type))
@@ -172,8 +172,8 @@ def main():
 		patch(os.path.join("libvorbis", "libvorbis_static.vcxproj"), "<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>")
 
 		if patch_toolset:
-			patch(os.path.join("libvorbis", "libvorbis_static.vcxproj"), '<ConfigurationType>StaticLibrary</ConfigurationType>', '<ConfigurationType>StaticLibrary</ConfigurationType><PlatformToolset>v120</PlatformToolset>')
-			patch(os.path.join("libvorbisfile", "libvorbisfile_static.vcxproj"), '<ConfigurationType>StaticLibrary</ConfigurationType>', '<ConfigurationType>StaticLibrary</ConfigurationType><PlatformToolset>v120</PlatformToolset>')
+			patch(os.path.join("libvorbis", "libvorbis_static.vcxproj"), '<ConfigurationType>StaticLibrary</ConfigurationType>', '<ConfigurationType>StaticLibrary</ConfigurationType><PlatformToolset>v140</PlatformToolset>')
+			patch(os.path.join("libvorbisfile", "libvorbisfile_static.vcxproj"), '<ConfigurationType>StaticLibrary</ConfigurationType>', '<ConfigurationType>StaticLibrary</ConfigurationType><PlatformToolset>v140</PlatformToolset>')
 
 		os.system("devenv /upgrade vorbis_static.sln")
 		os.system("MSBuild vorbis_static.sln /p:Configuration={}".format(build_type))
@@ -195,12 +195,12 @@ def main():
 		os.system("devenv /upgrade zlibvc.sln")
 		patch("zlibstat.vcxproj", "MultiThreadedDebugDLL", "MultiThreadedDebug")
 		if patch_toolset:
-			patch("zlibstat.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
-			patch("zlibvc.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
-			patch("minizip.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
-			patch("testzlibdll.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
-			patch("testzlib.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
-			patch("miniunz.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
+			patch("zlibstat.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v140</PlatformToolset>")
+			patch("zlibvc.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v140</PlatformToolset>")
+			patch("minizip.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v140</PlatformToolset>")
+			patch("testzlibdll.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v140</PlatformToolset>")
+			patch("testzlib.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v140</PlatformToolset>")
+			patch("miniunz.vcxproj", "<PlatformToolset>v110</PlatformToolset>", "<PlatformToolset>v140</PlatformToolset>")
 		
 		os.system("MSBuild zlibvc.sln /p:Configuration={} /p:Platform=win32".format(build_type))
 		os.chdir(os.path.join("..", "..", "..", ".."))
@@ -214,7 +214,7 @@ def main():
 		os.chdir(os.path.join(freetype, "builds", "windows", "vc2010"))
 
 		if patch_toolset:
-			patch("freetype.vcxproj", "<PlatformToolset>v100</PlatformToolset>", "<PlatformToolset>v120</PlatformToolset>")
+			patch("freetype.vcxproj", "<PlatformToolset>v100</PlatformToolset>", "<PlatformToolset>v140</PlatformToolset>")
 
 		os.system("devenv /upgrade freetype.vcxproj")
 		os.system('MSBuild freetype.vcxproj /p:Configuration="{} Multithreaded"'.format(build_type))
@@ -283,9 +283,12 @@ def main():
 
 	if not os.path.exists("leveldb.nupkg"):
 		print("Downloading LevelDB + dependencies from NuGet")
-		download("http://www.nuget.org/api/v2/package/LevelDB/{}".format(LEVELDB_VERSION), "leveldb.nupkg")
-		download("http://www.nuget.org/api/v2/package/Crc32C/{}".format(CRC32C_VERSION), "crc32c.nupkg")
-		download("http://www.nuget.org/api/v2/package/Snappy/{}".format(SNAPPY_VERSION), "snappy.nupkg")		
+		#download("http://www.nuget.org/api/v2/package/LevelDB/{}".format(LEVELDB_VERSION), "leveldb.nupkg")
+		#download("http://www.nuget.org/api/v2/package/Crc32C/{}".format(CRC32C_VERSION), "crc32c.nupkg")
+		#download("http://www.nuget.org/api/v2/package/Snappy/{}".format(SNAPPY_VERSION), "snappy.nupkg")		
+		download("http://www.nuget.org/api/v2/package/LevelDB/", "leveldb.nupkg")
+		download("http://www.nuget.org/api/v2/package/Crc32C/", "crc32c.nupkg")
+		download("http://www.nuget.org/api/v2/package/Snappy/", "snappy.nupkg")		
 
 	#if not os.path.exists("sqlite.nupkg"):
 	#	download("http://www.nuget.org/api/v2/package/sqlite/{}".format(SQLITE_VERSION), "sqlite.nupkg")		
@@ -354,7 +357,6 @@ def main():
 		-DENABLE_LEVELDB=1
 		-DFORCE_LEVELDB=1
 		-DENABLE_SQLITE3=1
-		-DENABLE_SCTP=1
 	""".format(
 		curl_lib="libcurl_a.lib" if build_type != "Debug" else "libcurl_a_debug.lib",
 		freetype_lib="freetype261MT.lib" if build_type != "Debug" else "freetype261MT_D.lib",
@@ -380,11 +382,8 @@ def main():
 	patch(os.path.join("src", "freeminer.vcxproj"), "</AdditionalLibraryDirectories>", r";$(DXSDK_DIR)\Lib\x86</AdditionalLibraryDirectories>")
 	#patch(os.path.join("src", "sqlite", "sqlite3.vcxproj"), "MultiThreadedDebugDLL", "MultiThreadedDebug")
 	# wtf, cmake?
-	#patch(os.path.join("src", "enet", "enet.vcxproj"), "<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreaded</RuntimeLibrary>")
-	#patch(os.path.join("src", "enet", "enet.vcxproj"), "<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>")
-
-	patch(os.path.join("src", "network", "usrsctplib", "usrsctp.vcxproj"), "<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreaded</RuntimeLibrary>")
-	patch(os.path.join("src", "network", "usrsctplib", "usrsctp.vcxproj"), "<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>")
+	patch(os.path.join("src", "enet", "enet.vcxproj"), "<RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreaded</RuntimeLibrary>")
+	patch(os.path.join("src", "enet", "enet.vcxproj"), "<RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>", "<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>")
 
 	# install LevelDB package
 	os.system(r"..\NuGet.exe install LevelDB -source {}\..\deps".format(os.getcwd()))
