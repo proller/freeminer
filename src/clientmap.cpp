@@ -109,6 +109,30 @@ ClientMap::~ClientMap()
 	}*/
 }
 
+#if WTF
+MapSector * ClientMap::emergeSector(v2s16 p2d)
+{
+	DSTACK(FUNCTION_NAME);
+	// Check that it doesn't exist already
+	try{
+		return getSectorNoGenerate(p2d);
+	}
+	catch(InvalidPositionException &e)
+	{
+	}
+
+	// Create a sector
+	ClientMapSector *sector = new ClientMapSector(this, p2d, m_gamedef);
+
+	{
+		//MutexAutoLock lock(m_sector_mutex); // Bulk comment-out
+		m_sectors[p2d] = sector;
+	}
+
+	return sector;
+}
+#endif
+
 void ClientMap::OnRegisterSceneNode()
 {
 	if(IsVisible)
@@ -598,10 +622,10 @@ struct MeshBufListList
 
 void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 {
+	DSTACK(FUNCTION_NAME);
 	g_profiler->avg("CM: PrimitiveDrawn", driver->getPrimitiveCountDrawn());
 
 return;
-	DSTACK(__FUNCTION_NAME);
 	bool is_transparent_pass = pass == scene::ESNRP_TRANSPARENT;
 
 	std::string prefix;
@@ -691,7 +715,7 @@ return;
 		used_meshes.emplace_back(mapBlockMesh);
 
 		// Mesh animation
-		if (mesh_step <= 1)
+		//if (mesh_step <= 1)
 		{
 			//MutexAutoLock lock(block->mesh_mutex);
 
@@ -706,11 +730,7 @@ return;
 			//bool faraway = d >= m_control.wanted_range * BS;
 			if(mapBlockMesh->isAnimationForced() ||
 					!faraway ||
-#if __ANDROID__
-0)
-#else
 					mesh_animate_count_far < (m_control.range_all ? 200 : 50))
-#endif
 			{
 				bool animated = mapBlockMesh->animate(
 						faraway,

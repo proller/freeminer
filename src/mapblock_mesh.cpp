@@ -1397,7 +1397,10 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack, u32 daynight_rat
 	m_animation_force_timer = myrand_range(5, 100);
 #endif
 
+	m_animation_force_timer *= step;
+
 	// Cracks
+	if (step <= 1)
 	if(crack != m_last_crack)
 	{
 		for(std::map<u32, std::string>::iterator
@@ -1432,6 +1435,7 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack, u32 daynight_rat
 	}
 
 	// Texture animation
+	if (step <= 1)
 	for(std::map<u32, TileSpec>::iterator
 			i = m_animation_tiles.begin();
 			i != m_animation_tiles.end(); ++i)
@@ -1482,6 +1486,7 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack, u32 daynight_rat
 	}
 
 	// Node highlighting
+	if (step <= 1)
 	if (m_enable_highlighting) {
 		u8 day = m_highlight_mesh_color.getRed();
 		u8 night = m_highlight_mesh_color.getGreen();
