@@ -463,14 +463,24 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 					block->shadownode = nullptr;
 */
 				}
-			} else if (shadows && !block->shadownode && block->scenenode && mesh->getMesh()->getMeshBufferCount() /*&& ++shadows_added < 3*/ ) {
+			} else if (range < 4 && shadows && !block->shadownode && block->scenenode && mesh->getMesh()->getMeshBufferCount() /*&& ++shadows_added < 3*/ ) {
 				//auto shadow_step = mesh_step <= 2 ? 4 : 16;
-				auto shadow_step = mesh_step;
+				auto shadow_step = mesh_step - 2;
+				if (shadow_step < 2)
+					shadow_step = 2;
 				auto mesh_shadow = block->getMesh(shadow_step, true);
 				if (mesh_shadow) {
 					if (mesh_shadow->getMesh()->getMeshBufferCount()) {
 //infostream<<"adding shadow "<<mesh_shadow->step <<" "<<mesh_shadow->getMesh()->getMeshBufferCount()<<std::endl;
-						block->shadownode = block->scenenode->addShadowVolumeSceneNode(mesh_shadow->getMesh());
+						const static float shadowinf = 2 * MAP_BLOCKSIZE * BS;
+						block->shadownode = block->scenenode->addShadowVolumeSceneNode(mesh_shadow->getMesh(), 0, true, shadowinf);
+						block->shadownode->setMaterialFlag(video::EMF_FOG_ENABLE , true);
+/*
+						block->shadownode->setMaterialFlag(video::EMF_BACK_FACE_CULLING , false);
+						block->shadownode->setMaterialFlag(video::EMF_BILINEAR_FILTER , false);
+						block->shadownode->setMaterialFlag(video::EMF_NORMALIZE_NORMALS , true);
+*/
+						
 					}
 				} else {
 //infostream<<"req shadow "<<std::endl;
