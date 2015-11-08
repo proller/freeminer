@@ -4,11 +4,14 @@ function core.spawn_item(pos, item)
 	-- Take item in any format
 	local stack = ItemStack(item)
 	local obj = core.add_entity(pos, "__builtin:item")
-	obj:get_luaentity():set_item(stack:to_string())
+	-- Don't use obj if it couldn't be added to the map.
+	if obj then
+		obj:get_luaentity():set_item(stack:to_string())
+	end
 	return obj
 end
 
--- If item_entity_ttl is not set, enity will have default life time 
+-- If item_entity_ttl is not set, enity will have default life time
 -- Setting it to -1 disables the feature
 
 local time_to_live = tonumber(core.setting_get("item_entity_ttl"))
@@ -81,7 +84,7 @@ core.register_entity(":__builtin:item", {
 			if data and type(data) == "table" then
 				self.itemstring = data.itemstring
 				self.always_collect = data.always_collect
-				if data.age then 
+				if data.age then
 					self.age = data.age + dtime_s
 				else
 					self.age = dtime_s
@@ -208,9 +211,10 @@ core.register_entity(":__builtin:item", {
 	end,
 
 	on_punch = function(self, hitter)
-		if self.itemstring ~= '' then
-			local left = hitter:get_inventory():add_item("main", self.itemstring)
-			if not left:is_empty() then
+		local inv = hitter:get_inventory()
+		if inv and self.itemstring ~= '' then
+			local left = inv:add_item("main", self.itemstring)
+			if left and not left:is_empty() then
 				self.itemstring = left:to_string()
 				return
 			end

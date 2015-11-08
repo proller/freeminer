@@ -41,6 +41,7 @@ enum DecorationType {
 #define DECO_PLACE_CENTER_Z  0x04
 #define DECO_USE_NOISE       0x08
 #define DECO_FORCE_PLACEMENT 0x10
+#define DECO_LIQUID_SURFACE  0x20
 
 extern FlagDesc flagdesc_deco[];
 
@@ -84,7 +85,7 @@ public:
 
 	std::set<u8> biomes;
 	//std::list<CutoffData> cutoffs;
-	//JMutex cutoff_mutex;
+	//Mutex cutoff_mutex;
 };
 
 class DecoSimple : public Decoration {

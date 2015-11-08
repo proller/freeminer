@@ -18,16 +18,15 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 */
 
 #include "minimap.h"
-#include <math.h>
-#include "logoutputbuffer.h"
-#include "jthread/jmutexautolock.h"
-#include "jthread/jsemaphore.h"
+#include "threading/mutex_auto_lock.h"
+#include "threading/semaphore.h"
 #include "clientmap.h"
 #include "settings.h"
 #include "nodedef.h"
 #include "porting.h"
 #include "util/numeric.h"
 #include "util/string.h"
+#include <math.h>
 
 
 ////
@@ -52,7 +51,7 @@ MinimapUpdateThread::~MinimapUpdateThread()
 
 bool MinimapUpdateThread::pushBlockUpdate(v3s16 pos, MinimapMapblock *data)
 {
-	JMutexAutoLock lock(m_queue_mutex);
+	MutexAutoLock lock(m_queue_mutex);
 
 	// Find if block is already in queue.
 	// If it is, update the data and quit.
@@ -78,7 +77,7 @@ bool MinimapUpdateThread::pushBlockUpdate(v3s16 pos, MinimapMapblock *data)
 
 bool MinimapUpdateThread::popBlockUpdate(QueuedMinimapUpdate *update)
 {
-	JMutexAutoLock lock(m_queue_mutex);
+	MutexAutoLock lock(m_queue_mutex);
 
 	if (m_update_queue.empty())
 		return false;
@@ -121,7 +120,7 @@ void MinimapUpdateThread::doUpdate()
 
 	bool do_update;
 	{
-		JMutexAutoLock lock(data->m_mutex);
+		MutexAutoLock lock(data->m_mutex);
 		do_update = data->map_invalidated && data->mode != MINIMAP_MODE_OFF;
 	}
 	if (do_update) {
@@ -227,6 +226,8 @@ Mapper::Mapper(IrrlichtDevice *device, Client *client)
 	m_surface_mode_scan_height =
 		g_settings->getBool("minimap_double_scan_height") ? 256 : 128;
 
+	setAngle(0);
+
 	// Initialize minimap data
 	data = new MinimapData;
 	data->mode              = MINIMAP_MODE_OFF;
@@ -261,13 +262,13 @@ Mapper::Mapper(IrrlichtDevice *device, Client *client)
 	// Initialize and start thread
 	m_minimap_update_thread = new MinimapUpdateThread();
 	m_minimap_update_thread->data = data;
-	m_minimap_update_thread->Start();
+	m_minimap_update_thread->start();
 }
 
 Mapper::~Mapper()
 {
-	m_minimap_update_thread->Stop();
-	m_minimap_update_thread->Wait();
+	m_minimap_update_thread->stop();
+	m_minimap_update_thread->wait();
 
 	m_meshbuffer->drop();
 
@@ -303,7 +304,7 @@ MinimapMode Mapper::getMinimapMode()
 
 void Mapper::toggleMinimapShape()
 {
-	JMutexAutoLock lock(data->m_mutex);
+	MutexAutoLock lock(data->m_mutex);
 
 	data->minimap_shape_round = !data->minimap_shape_round;
 	g_settings->setBool("minimap_shape_round", data->minimap_shape_round);
@@ -325,7 +326,7 @@ void Mapper::setMinimapMode(MinimapMode mode)
 	if (mode >= MINIMAP_MODE_COUNT)
 		return;
 
-	JMutexAutoLock lock(data->m_mutex);
+	MutexAutoLock lock(data->m_mutex);
 
 	data->is_radar    = modedefs[mode].is_radar;
 	data->scan_height = modedefs[mode].scan_height;
@@ -340,7 +341,7 @@ void Mapper::setPos(v3s16 pos)
 	bool do_update = false;
 
 	{
-		JMutexAutoLock lock(data->m_mutex);
+		MutexAutoLock lock(data->m_mutex);
 
 		if (pos != data->old_pos) {
 			data->old_pos = data->pos;

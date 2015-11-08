@@ -82,7 +82,7 @@ static bool content_nodemeta_deserialize_legacy_body(
 			inv->getList("0")->setName("main");
 		}
 		assert(inv->getList("main") && !inv->getList("0"));
-		
+
 		meta->setString("formspec","size[8,9]"
 				"list[current_name;main;0,0;8,4;]"
 				"list[current_player;main;0,5;8,4;]");
@@ -99,7 +99,7 @@ static bool content_nodemeta_deserialize_legacy_body(
 			inv->getList("0")->setName("main");
 		}
 		assert(inv->getList("main") && !inv->getList("0"));
-		
+
 		meta->setString("formspec","size[8,9]"
 				"list[current_name;main;0,0;8,4;]"
 				"list[current_player;main;0,5;8,4;]");
@@ -148,7 +148,7 @@ static bool content_nodemeta_deserialize_legacy_meta(
 
 void content_nodemeta_deserialize_legacy(std::istream &is,
 		NodeMetadataList *meta, NodeTimerList *timers,
-		IGameDef *gamedef)
+		IItemDefManager *item_def_mgr)
 {
 	meta->clear();
 	timers->clear();
@@ -157,9 +157,9 @@ void content_nodemeta_deserialize_legacy(std::istream &is,
 
 	if(version > 1)
 	{
-		infostream<<__FUNCTION_NAME<<": version "<<version<<" not supported"
+		infostream<<FUNCTION_NAME<<": version "<<version<<" not supported"
 				<<std::endl;
-		throw SerializationError(__FUNCTION_NAME);
+		throw SerializationError(FUNCTION_NAME);
 	}
 
 	u16 count = readU16(is);
@@ -177,14 +177,14 @@ void content_nodemeta_deserialize_legacy(std::istream &is,
 
 		if(meta->get(p) != NULL)
 		{
-			infostream<<"WARNING: "<<__FUNCTION_NAME<<": "
+			warningstream<<FUNCTION_NAME<<": "
 					<<"already set data at position"
 					<<"("<<p.X<<","<<p.Y<<","<<p.Z<<"): Ignoring."
 					<<std::endl;
 			continue;
 		}
 
-		NodeMetadata *data = new NodeMetadata(gamedef);
+		NodeMetadata *data = new NodeMetadata(item_def_mgr);
 		bool need_timer = content_nodemeta_deserialize_legacy_meta(is, data);
 		meta->set(p, data);
 

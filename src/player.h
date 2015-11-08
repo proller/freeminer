@@ -26,8 +26,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "irrlichttypes_bloated.h"
 #include "inventory.h"
 #include "constants.h" // BS
-#include "jthread/jmutexautolock.h"
-#include "jthread/jmutex.h"
+#include "threading/mutex.h"
 #include <list>
 #include "util/lock.h"
 #include "json/json.h"
@@ -35,6 +34,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #define PLAYERNAME_SIZE 20
 
 #define PLAYERNAME_ALLOWED_CHARS "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+#define PLAYERNAME_ALLOWED_CHARS_USER_EXPL "'a' to 'z', 'A' to 'Z', '0' to '9', '-', '_'"
 
 struct PlayerControl
 {
@@ -309,7 +309,9 @@ public:
 
 	virtual void setPlayerSAO(PlayerSAO *sao)
 	{
+		/*
 		FATAL_ERROR("FIXME");
+		*/
 	}
 
 	/*
@@ -352,6 +354,7 @@ public:
 	f32 movement_liquid_fluidity_smooth;
 	f32 movement_liquid_sink;
 	f32 movement_gravity;
+	f32 movement_fall_aerodynamics;
 
 	float physics_override_speed;
 	float physics_override_jump;
@@ -423,7 +426,7 @@ private:
 	// Protect some critical areas
 	// hud for example can be modified by EmergeThread
 	// and ServerThread
-	JMutex m_mutex;
+	Mutex m_mutex;
 };
 
 

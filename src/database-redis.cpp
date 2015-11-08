@@ -82,14 +82,14 @@ bool Database_Redis::saveBlock(const v3s16 &pos, const std::string &data)
 	redisReply *reply = static_cast<redisReply *>(redisCommand(ctx, "HSET %s %s %b",
 			hash.c_str(), tmp.c_str(), data.c_str(), data.size()));
 	if (!reply) {
-		errorstream << "WARNING: saveBlock: redis command 'HSET' failed on "
+		warningstream << "saveBlock: redis command 'HSET' failed on "
 			"block " << PP(pos) << ": " << ctx->errstr << std::endl;
 		freeReplyObject(reply);
 		return false;
 	}
 
 	if (reply->type == REDIS_REPLY_ERROR) {
-		errorstream << "WARNING: saveBlock: saving block " << PP(pos)
+		warningstream << "saveBlock: saving block " << PP(pos)
 			<< " failed: " << reply->str << std::endl;
 		freeReplyObject(reply);
 		return false;
@@ -116,12 +116,26 @@ std::string Database_Redis::loadBlock(const v3s16 &pos)
 		freeReplyObject(reply);
 		return str;
 	}
-	case REDIS_REPLY_ERROR:
-		errorstream << "WARNING: loadBlock: loading block " << PP(pos)
-			<< " failed: " << reply->str << std::endl;
+	case REDIS_REPLY_ERROR: {
+		std::string errstr = reply->str;
+		freeReplyObject(reply);
+		errorstream << "loadBlock: loading block " << PP(pos)
+			<< " failed: " << errstr << std::endl;
+		throw FileNotGoodException(std::string(
+			"Redis command 'HGET %s %s' errored: ") + errstr);
 	}
+	case REDIS_REPLY_NIL: {
+		// block not found in database
+		freeReplyObject(reply);
+		return "";
+	}
+	}
+	errorstream << "loadBlock: loading block " << PP(pos)
+		<< " returned invalid reply type " << reply->type
+		<< ": " << reply->str << std::endl;
 	freeReplyObject(reply);
-	return "";
+	throw FileNotGoodException(std::string(
+		"Redis command 'HGET %s %s' gave invalid reply."));
 }
 
 bool Database_Redis::deleteBlock(const v3s16 &pos)
@@ -134,7 +148,7 @@ bool Database_Redis::deleteBlock(const v3s16 &pos)
 		throw FileNotGoodException(std::string(
 			"Redis command 'HDEL %s %s' failed: ") + ctx->errstr);
 	} else if (reply->type == REDIS_REPLY_ERROR) {
-		errorstream << "WARNING: deleteBlock: deleting block " << PP(pos)
+		warningstream << "deleteBlock: deleting block " << PP(pos)
 			<< " failed: " << reply->str << std::endl;
 		freeReplyObject(reply);
 		return false;

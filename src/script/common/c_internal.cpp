@@ -141,61 +141,56 @@ void script_run_callbacks_f(lua_State *L, int nargs,
 		return;
 
 	// Insert error handler
-	lua_pushcfunction(L, script_error_handler);
-	int errorhandler = lua_gettop(L) - nargs - 1;
-	lua_insert(L, errorhandler);
+	PUSH_ERROR_HANDLER(L);
+	int error_handler = lua_gettop(L) - nargs - 1;
+	lua_insert(L, error_handler);
 
 	// Insert run_callbacks between error handler and table
 	lua_getglobal(L, "core");
 	lua_getfield(L, -1, "run_callbacks");
 	lua_remove(L, -2);
-	lua_insert(L, errorhandler + 1);
+	lua_insert(L, error_handler + 1);
 
 	// Insert mode after table
 	lua_pushnumber(L, (int) mode);
-	lua_insert(L, errorhandler + 3);
+	lua_insert(L, error_handler + 3);
 
 	// Stack now looks like this:
 	// ... <error handler> <run_callbacks> <table> <mode> <arg#1> <arg#2> ... <arg#n>
 
-	int result = lua_pcall(L, nargs + 2, 1, errorhandler);
+	int result = lua_pcall(L, nargs + 2, 1, error_handler);
 	if (result != 0)
 		script_error(L, result, NULL, fxn);
 
-	lua_remove(L, -2); // Remove error handler
+	lua_remove(L, error_handler);
 }
 
 void log_deprecated(lua_State *L, const std::string &message)
 {
 	static bool configured = false;
-	static bool dolog      = false;
-	static bool doerror    = false;
+	static bool do_log     = false;
+	static bool do_error   = false;
 
-	// performance optimization to not have to read and compare setting for every logline
+	// Only read settings on first call
 	if (!configured) {
 		std::string value = g_settings->get("deprecated_lua_api_handling");
 		if (value == "log") {
-			dolog = true;
+			do_log = true;
 		} else if (value == "error") {
-			dolog = true;
-			doerror = true;
+			do_log   = true;
+			do_error = true;
 		}
 	}
 
-	if (doerror) {
-		if (L != NULL) {
-			script_error(L, LUA_ERRRUN, NULL, NULL);
-		} else {
-			FATAL_ERROR("Can't do a scripterror for this deprecated message, "
-				"so exit completely!");
-		}
-	}
-
-	if (dolog) {
-		/* abusing actionstream because of lack of file-only-logged loglevel */
-		actionstream << message << std::endl;
-		if (L != NULL) {
-			actionstream << script_get_backtrace(L) << std::endl;
+	if (do_log) {
+		warningstream << message << std::endl;
+		// L can be NULL if we get called by log_deprecated(const std::string &msg)
+		// from scripting_game.cpp.
+		if (L) {
+			if (do_error)
+				script_error(L, LUA_ERRRUN, NULL, NULL);
+			else
+				infostream << script_get_backtrace(L) << std::endl;
 		}
 	}
 }

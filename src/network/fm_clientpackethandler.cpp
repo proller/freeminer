@@ -46,7 +46,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 	sender_peer_id given to this shall be quaranteed to be a valid peer
 */
 void Client::ProcessData(NetworkPacket *pkt) {
-	DSTACK(__FUNCTION_NAME);
+	DSTACK(FUNCTION_NAME);
 
 	ScopeProfiler sp(g_profiler, "Client::ProcessData");
 
@@ -136,7 +136,16 @@ void Client::ProcessData(NetworkPacket *pkt) {
 		// to be processed even if the serialisation format has
 		// not been agreed yet, the same as TOCLIENT_INIT.
 		m_access_denied = true;
+		m_access_denied_reason = "";
 		packet[TOCLIENT_ACCESS_DENIED_CUSTOM_STRING].convert(&m_access_denied_reason);
+		packet[TOCLIENT_ACCESS_DENIED_RECONNECT].convert(m_access_denied_reconnect);
+
+		u8 denyCode = SERVER_ACCESSDENIED_UNEXPECTED_DATA;
+		packet[TOCLIENT_ACCESS_DENIED_REASON].convert(&denyCode);
+
+		if (m_access_denied_reason.empty())
+			m_access_denied_reason = accessDeniedStrings[denyCode];
+
 		return;
 	}
 
@@ -188,6 +197,8 @@ void Client::ProcessData(NetworkPacket *pkt) {
 			block = new MapBlock(&m_env.getMap(), p, this);
 
 		packet.convert_safe(TOCLIENT_BLOCKDATA_CONTENT_ONLY, &block->content_only);
+		packet.convert_safe(TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM1, &block->content_only_param1);
+		packet.convert_safe(TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM2, &block->content_only_param2);
 
 		block->deSerialize(istr, ser_version, false);
 		s32 h; // for convert to atomic
@@ -296,6 +307,7 @@ void Client::ProcessData(NetworkPacket *pkt) {
 		packet[TOCLIENT_MOVEMENT_LIQUID_FLUIDITY_SMOOTH].convert(&player->movement_liquid_fluidity_smooth);
 		packet[TOCLIENT_MOVEMENT_LIQUID_SINK].convert(&player->movement_liquid_sink);
 		packet[TOCLIENT_MOVEMENT_GRAVITY].convert(&player->movement_gravity);
+		packet_convert_safe(packet, TOCLIENT_MOVEMENT_FALL_AERODYNAMICS, &player->movement_fall_aerodynamics);
 	}
 	else if(command == TOCLIENT_HP)
 	{
@@ -382,7 +394,7 @@ void Client::ProcessData(NetworkPacket *pkt) {
 
 		// Mesh update thread must be stopped while
 		// updating content definitions
-		//assert(!m_mesh_update_thread.IsRunning());
+		//assert(!m_mesh_update_thread.isRunning());
 
 		MediaAnnounceList announce_list;
 		packet[TOCLIENT_ANNOUNCE_MEDIA_LIST].convert(&announce_list);
@@ -407,7 +419,7 @@ void Client::ProcessData(NetworkPacket *pkt) {
 
 		// Mesh update thread must be stopped while
 		// updating content definitions
-		//assert(!m_mesh_update_thread.IsRunning());
+		//assert(!m_mesh_update_thread.isRunning());
 
 		for(size_t i = 0; i < media_data.size(); ++i)
 			m_media_downloader->conventionalTransferDone(
@@ -420,7 +432,7 @@ void Client::ProcessData(NetworkPacket *pkt) {
 
 		// Mesh update thread must be stopped while
 		// updating content definitions
-		//assert(!m_mesh_update_thread.IsRunning());
+		//assert(!m_mesh_update_thread.isRunning());
 
 		if (packet_convert_safe_zip(packet, TOCLIENT_NODEDEF_DEFINITIONS_ZIP, m_nodedef)) {
 			m_nodedef_received = true;
@@ -435,7 +447,7 @@ void Client::ProcessData(NetworkPacket *pkt) {
 
 		// Mesh update thread must be stopped while
 		// updating content definitions
-		//assert(!m_mesh_update_thread.IsRunning());
+		//assert(!m_mesh_update_thread.isRunning());
 
 		if (packet_convert_safe_zip(packet, TOCLIENT_ITEMDEF_DEFINITIONS_ZIP, m_itemdef)) {
 			m_itemdef_received = true;

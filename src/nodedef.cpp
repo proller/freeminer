@@ -71,7 +71,7 @@ void NodeBox::serialize(std::ostream &os, u16 protocol_version) const
 		writeU16(os, fixed.size());
 		for(std::vector<aabb3f>::const_iterator
 				i = fixed.begin();
-				i != fixed.end(); i++)
+				i != fixed.end(); ++i)
 		{
 			writeV3F1000(os, i->MinEdge);
 			writeV3F1000(os, i->MaxEdge);
@@ -356,7 +356,7 @@ void ContentFeatures::serialize(std::ostream &os, u16 protocol_version) const
 	os<<serializeString(name);
 	writeU16(os, groups.size());
 	for(ItemGroupList::const_iterator
-			i = groups.begin(); i != groups.end(); i++){
+			i = groups.begin(); i != groups.end(); ++i){
 		os<<serializeString(i->first);
 		writeS16(os, i->second);
 	}
@@ -735,7 +735,7 @@ void CNodeDefManager::clear()
 		f.buildable_to        = true;
 		f.is_ground_content   = true;
 #ifndef SERVER
-		f.minimap_color = video::SColor(0,255,255,255);
+		f.minimap_color = video::SColor(0,0,0,0);
 #endif
 		// Insert directly into containers
 		content_t c = CONTENT_AIR;
@@ -757,7 +757,7 @@ void CNodeDefManager::clear()
 		f.buildable_to        = true; // A way to remove accidental CONTENT_IGNOREs
 		f.is_ground_content   = true;
 #ifndef SERVER
-		f.minimap_color = video::SColor(0,255,255,255);
+		f.minimap_color = video::SColor(0,0,0,0);
 #endif
 		// Insert directly into containers
 		content_t c = CONTENT_IGNORE;
@@ -899,7 +899,7 @@ content_t CNodeDefManager::set(const std::string &name, const ContentFeatures &d
 
 	// Don't allow redefining ignore (but allow air and unknown)
 	if (name == "ignore") {
-		infostream << "NodeDefManager: WARNING: Ignoring "
+		warningstream << "NodeDefManager: Ignoring "
 			"CONTENT_IGNORE redefinition"<<std::endl;
 		return CONTENT_IGNORE;
 	}
@@ -909,7 +909,7 @@ content_t CNodeDefManager::set(const std::string &name, const ContentFeatures &d
 		// Get new id
 		id = allocateId();
 		if (id == CONTENT_IGNORE) {
-			infostream << "NodeDefManager: WARNING: Absolute "
+			warningstream << "NodeDefManager: Absolute "
 				"limit reached" << std::endl;
 			return CONTENT_IGNORE;
 		}
@@ -957,7 +957,7 @@ void CNodeDefManager::updateAliases(IItemDefManager *idef)
 	std::set<std::string> all = idef->getAll();
 	m_name_id_mapping_with_aliases.clear();
 	for (std::set<std::string>::iterator
-			i = all.begin(); i != all.end(); i++) {
+			i = all.begin(); i != all.end(); ++i) {
 		std::string name = *i;
 		std::string convert_to = idef->getAlias(name);
 		content_t id;
@@ -1274,9 +1274,7 @@ void CNodeDefManager::fillTileAttribs(ITextureSource *tsrc, TileSpec *tile,
 	if (use_normal_texture) {
 		tile->normal_texture = tsrc->getNormalTexture(tiledef->name);
 	}
-	tile->flags_texture = tsrc->getShaderFlagsTexture(
-		tile->normal_texture ? true : false,
-		tiledef->tileable_vertical, tiledef->tileable_horizontal);
+	tile->flags_texture = tsrc->getShaderFlagsTexture(tile->normal_texture ? true : false);
 
 	// Material flags
 	tile->material_flags = 0;
@@ -1375,12 +1373,12 @@ void CNodeDefManager::deSerialize(std::istream &is)
 
 		// Check error conditions
 		if (i == CONTENT_IGNORE || i == CONTENT_AIR || i == CONTENT_UNKNOWN) {
-			infostream << "NodeDefManager::deSerialize(): WARNING: "
+			warningstream << "NodeDefManager::deSerialize(): "
 				"not changing builtin node " << i << std::endl;
 			continue;
 		}
 		if (f.name == "") {
-			infostream << "NodeDefManager::deSerialize(): WARNING: "
+			warningstream << "NodeDefManager::deSerialize(): "
 				"received empty name" << std::endl;
 			continue;
 		}
@@ -1388,7 +1386,7 @@ void CNodeDefManager::deSerialize(std::istream &is)
 		// Ignore aliases
 		u16 existing_id;
 		if (m_name_id_mapping.getId(f.name, existing_id) && i != existing_id) {
-			infostream << "NodeDefManager::deSerialize(): WARNING: "
+			warningstream << "NodeDefManager::deSerialize(): "
 				"already defined with different ID: " << f.name << std::endl;
 			continue;
 		}

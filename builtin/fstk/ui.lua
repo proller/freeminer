@@ -1,18 +1,18 @@
 --Minetest
 --Copyright (C) 2014 sapier
 --
---self program is free software; you can redistribute it and/or modify
+--This program is free software; you can redistribute it and/or modify
 --it under the terms of the GNU Lesser General Public License as published by
 --the Free Software Foundation; either version 2.1 of the License, or
 --(at your option) any later version.
 --
---self program is distributed in the hope that it will be useful,
+--This program is distributed in the hope that it will be useful,
 --but WITHOUT ANY WARRANTY; without even the implied warranty of
 --MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 --GNU Lesser General Public License for more details.
 --
 --You should have received a copy of the GNU Lesser General Public License along
---with self program; if not, write to the Free Software Foundation, Inc.,
+--with this program; if not, write to the Free Software Foundation, Inc.,
 --51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 ui = {}
@@ -127,11 +127,13 @@ function ui.update()
 		end
 
 		if (active_toplevel_ui_elements > 1) then
-			print("WARNING: ui manager detected more then one active ui element, self most likely isn't intended")
+			core.log("warning", "more than one active ui "..
+				"element, self most likely isn't intended")
 		end
 
 		if (active_toplevel_ui_elements == 0) then
-			print("WARNING: not a single toplevel ui element active switching to default")
+			core.log("warning", "no toplevel ui element "..
+					"active; switching to default")
 			ui.childlist[ui.default]:show()
 			formspec = ui.childlist[ui.default]:get_formspec()
 		end

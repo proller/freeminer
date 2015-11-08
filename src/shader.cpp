@@ -332,7 +332,7 @@ private:
 	// The first position contains a dummy shader.
 	std::vector<ShaderInfo> m_shaderinfo_cache;
 	// The former container is behind this mutex
-	JMutex m_shaderinfo_cache_mutex;
+	Mutex m_shaderinfo_cache_mutex;
 
 	// Queued shader fetches (to be processed by the main thread)
 	RequestQueue<std::string, u32, u8, u8> m_get_shader_queue;
@@ -371,7 +371,7 @@ ShaderSource::ShaderSource(IrrlichtDevice *device):
 
 	m_shader_callback = new ShaderCallback(this, "default");
 
-	m_main_thread = get_current_thread_id();
+	m_main_thread = thr_get_current_thread_id();
 
 	// Add a dummy ShaderInfo as the first index, named ""
 	m_shaderinfo_cache.push_back(ShaderInfo());
@@ -383,7 +383,7 @@ ShaderSource::ShaderSource(IrrlichtDevice *device):
 ShaderSource::~ShaderSource()
 {
 	for (std::vector<IShaderConstantSetter*>::iterator iter = m_global_setters.begin();
-			iter != m_global_setters.end(); iter++) {
+			iter != m_global_setters.end(); ++iter) {
 		delete *iter;
 	}
 	m_global_setters.clear();
@@ -401,7 +401,7 @@ u32 ShaderSource::getShader(const std::string &name,
 		Get shader
 	*/
 
-	if(get_current_thread_id() == m_main_thread){
+	if (thr_is_current_thread(m_main_thread)) {
 		return getShaderIdDirect(name, material_type, drawtype);
 	} else {
 		/*errorstream<<"getShader(): Queued: name=\""<<name<<"\""<<std::endl;*/
@@ -460,7 +460,7 @@ u32 ShaderSource::getShaderIdDirect(const std::string &name,
 	/*
 		Calling only allowed from main thread
 	*/
-	if(get_current_thread_id() != m_main_thread){
+	if (!thr_is_current_thread(m_main_thread)) {
 		errorstream<<"ShaderSource::getShaderIdDirect() "
 				"called not from main thread"<<std::endl;
 		return 0;
@@ -473,7 +473,7 @@ u32 ShaderSource::getShaderIdDirect(const std::string &name,
 		Add shader to caches (add dummy shaders too)
 	*/
 
-	JMutexAutoLock lock(m_shaderinfo_cache_mutex);
+	MutexAutoLock lock(m_shaderinfo_cache_mutex);
 
 	u32 id = m_shaderinfo_cache.size();
 	m_shaderinfo_cache.push_back(info);
@@ -487,7 +487,7 @@ u32 ShaderSource::getShaderIdDirect(const std::string &name,
 
 ShaderInfo ShaderSource::getShaderInfo(u32 id)
 {
-	JMutexAutoLock lock(m_shaderinfo_cache_mutex);
+	MutexAutoLock lock(m_shaderinfo_cache_mutex);
 
 	if(id >= m_shaderinfo_cache.size())
 		return ShaderInfo();
@@ -508,14 +508,14 @@ void ShaderSource::insertSourceShader(const std::string &name_of_shader,
 			"name_of_shader=\""<<name_of_shader<<"\", "
 			"filename=\""<<filename<<"\""<<std::endl;*/
 
-	sanity_check(get_current_thread_id() == m_main_thread);
+	sanity_check(thr_is_current_thread(m_main_thread));
 
 	m_sourcecache.insert(name_of_shader, filename, program, true);
 }
 
 void ShaderSource::rebuildShaders()
 {
-	JMutexAutoLock lock(m_shaderinfo_cache_mutex);
+	MutexAutoLock lock(m_shaderinfo_cache_mutex);
 
 	/*// Oh well... just clear everything, they'll load sometime.
 	m_shaderinfo_cache.clear();
