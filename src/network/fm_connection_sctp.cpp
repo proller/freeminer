@@ -143,23 +143,26 @@ bool con::Connection::sctp_inited = false;
 
 
 Connection::~Connection() {
+cs << "Connection::~Connection()" << std::endl;
 
 	join();
 	deletePeer(0);
 
-	for (auto & i : m_peers) {
+	disconnect();
+	/*for (auto & i : m_peers) {
 		usrsctp_close(i.second);
-	}
+	}*/
 
 
 	if (sctp_inited_by_me) {
+cs << "Connection::~Connection() fin" << std::endl;
 
-	for (int i = 0; i < 100; ++i) {
-		if (!usrsctp_finish())
-			break;
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-	}
-
+		for (int i = 0; i < 100; ++i) {
+			if (!usrsctp_finish())
+				break;
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		cs << "Connection::~Connection() wait " << i << std::endl;
+		}
 
 		sctp_inited = false;
 	}
@@ -176,10 +179,12 @@ void * Connection::run() {
 
 
 	while(!stopRequested()) {
+//cs <<  "qe="<< m_command_queue.empty() << std::endl;
 		while(!m_command_queue.empty()) {
 			ConnectionCommand c = m_command_queue.pop_frontNoEx();
 			processCommand(c);
 		}
+//cs <<  "rec="<< std::endl;
 		receive();
 	}
 
@@ -507,7 +512,7 @@ void Connection::handle_association_change_event(u16 peer_id, const struct sctp_
 		break;
 	case SCTP_COMM_LOST:
 		cs<<("SCTP_COMM_LOST");
-		deletePeer(peer_id,  false);
+		//deletePeer(peer_id,  false);
 		break;
 	case SCTP_RESTART:
 		cs<<("SCTP_RESTART");
@@ -1125,6 +1130,8 @@ void Connection::connect(Address addr) {
 	//addr6.sin6_port = addr.getPort(); //atoi(argv[4]));
 	//if (inet_pton(AF_INET6, argv[3], &addr6.sin6_addr) == 1) {
 
+	usrsctp_set_non_blocking(sock, 1);
+
 	//errorstream << "connect() ... " << __LINE__ << std::endl;
 	if (auto connect_result = usrsctp_connect(sock, (struct sockaddr *)&addr6, sizeof(addr6)) < 0) {
 		if (connect_result < 0 && errno != EINPROGRESS) {
@@ -1149,15 +1156,17 @@ void Connection::connect(Address addr) {
 }
 
 void Connection::disconnect() {
+//cs << "Connection::disconnect()" << std::endl;
 	//JMutexAutoLock peerlock(m_peers_mutex);
-	m_peers.lock_shared_rec();
+	auto lock = m_peers.lock_unique_rec();
 
 	for (auto i = m_peers.begin();
 	        i != m_peers.end(); ++i) {
 		usrsctp_close(i->second);
-		i->second = nullptr;
+		//i->second = nullptr;
 	}
 	m_peers.clear();
+	m_peers_address.clear();
 }
 
 void Connection::sendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable) {
