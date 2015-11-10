@@ -305,6 +305,13 @@ errorstream<<"sctp_setup "<<port<<std::endl;
 	usrsctp_sysctl_set_sctp_mobility_base(1);
 #endif
 
+	usrsctp_sysctl_set_sctp_cmt_on_off(1); //SCTP_CMT_MAX
+	usrsctp_sysctl_set_sctp_cmt_use_dac(1);
+	usrsctp_sysctl_set_sctp_buffer_splitting(1);
+
+	usrsctp_sysctl_set_sctp_max_retran_chunk(10);
+	usrsctp_sysctl_set_sctp_shutdown_guard_time_default(40);
+
 	//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, receive_cb, NULL, 0, NULL)) == NULL) {
 	//struct sctp_udpencaps encaps;
 	/*
