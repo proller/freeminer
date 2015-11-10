@@ -422,14 +422,21 @@ void Connection::receive() {
 		}
 	*/
 
+    {
+//	errorstream << "receive() pre peers s=" << sock<< " m_peers="<<m_peers.size()<<  std::endl;
+	auto lock = m_peers.lock_shared_rec();
 	for (auto & i : m_peers) {
 		recv(i.first, i.second);
 	}
+	}
 
-	//errorstream << "receive() pre accept s=" << sock<< " m_peers="<<m_peers.size()<<  std::endl;
+//	errorstream << "receive() pre accept s=" << sock<< " m_peers="<<m_peers.size()<<  std::endl;
 	if (sock_connect && sock) {
 		recv(PEER_ID_SERVER, sock);
 	}
+
+//	errorstream << "receive() pre listen s=" << sock<< " m_peers="<<m_peers.size()<<  std::endl;
+
 	if (sock_listen && sock) {
 
 //if (m_peers.size() >=1 ) return;  // NONONONONONONONONONONONONONONONONON!!!!!!!!!!!!!!!!!!!!!!!
@@ -1158,6 +1165,7 @@ void Connection::connect(Address addr) {
 void Connection::disconnect() {
 //cs << "Connection::disconnect()" << std::endl;
 	//JMutexAutoLock peerlock(m_peers_mutex);
+{
 	auto lock = m_peers.lock_unique_rec();
 
 	for (auto i = m_peers.begin();
@@ -1166,6 +1174,7 @@ void Connection::disconnect() {
 		//i->second = nullptr;
 	}
 	m_peers.clear();
+}
 	m_peers_address.clear();
 }
 
@@ -1174,7 +1183,7 @@ void Connection::sendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable) 
 		ENetPacket *packet = enet_packet_create(*data, data.getSize(), reliable ? ENET_PACKET_FLAG_RELIABLE : 0);
 		enet_host_broadcast(m_enet_host, 0, packet);
 	*/
-	m_peers.lock_shared_rec();
+	auto lock = m_peers.lock_shared_rec();
 	for (auto i = m_peers.begin();
 	        i != m_peers.end(); ++i)
 		send(i->first, channelnum, data, reliable);
@@ -1312,12 +1321,15 @@ bool Connection::deletePeer(u16 peer_id, bool timeout) {
 	e.peerRemoved(peer_id, timeout);
 	putEvent(e);
 
+{
 	auto lock = m_peers.lock_unique_rec();
-
-	usrsctp_close(m_peers.get(peer_id));
+    auto sock = m_peers.get(peer_id);
+    if (sock)
+		usrsctp_close(sock);
 
 	// delete m_peers[peer_id]; -- enet should handle this
 	m_peers.erase(peer_id);
+}
 	m_peers_address.erase(peer_id);
 	return true;
 }
