@@ -1214,7 +1214,7 @@ void Connection::send(u16 peer_id, u8 channelnum,
 
 //errorstream<<" === send to peer " << peer_id<< "sock="<< peer<<std::endl;
 
-	usrsctp_set_non_blocking(sock, 0);
+	usrsctp_set_non_blocking(sock, 1);
 
 	struct sctp_sndinfo sndinfo = {};
 	//char buffer[BUFFER_SIZE];
