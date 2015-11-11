@@ -756,21 +756,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 			MutexAutoLock lock(m_env_mutex);
 			while (!m_admin_chat->command_queue.empty()) {
 				ChatEvent *evt = m_admin_chat->command_queue.pop_frontNoEx();
-				if (evt->type == CET_NICK_ADD) {
-					// The terminal informed us of its nick choice
-					m_admin_nick = ((ChatEventNick *)evt)->nick;
-					if (!m_script->getAuth(m_admin_nick, NULL, NULL)) {
-						errorstream << "You haven't set up an account." << std::endl
-							<< "Please log in using the client as '"
-							<< m_admin_nick << "' with a secure password." << std::endl
-							<< "Until then, you can't execute admin tasks via the console," << std::endl
-							<< "and everybody can claim the user account instead of you," << std::endl
-							<< "giving them full control over this server." << std::endl;
-					}
-				} else {
-					assert(evt->type == CET_CHAT);
-					handleAdminChat((ChatEventChat *)evt);
-				}
+				handleChatInterfaceEvent(evt);
 				delete evt;
 			}
 		}
@@ -1786,7 +1772,7 @@ void Server::printToConsoleOnly(const std::string &text)
 		m_admin_chat->outgoing_queue.push_back(
 			new ChatEventChat("", utf8_to_wide(text)));
 	} else {
-		std::cout << text;
+		std::cout << text << std::endl;
 	}
 }
 
@@ -3117,6 +3103,25 @@ void Server::UpdateCrafting(Player* player)
 	assert(plist);
 	assert(plist->getSize() >= 1);
 	plist->changeItem(0, preview);
+}
+
+void Server::handleChatInterfaceEvent(ChatEvent *evt)
+{
+	if (evt->type == CET_NICK_ADD) {
+		// The terminal informed us of its nick choice
+		m_admin_nick = ((ChatEventNick *)evt)->nick;
+		if (!m_script->getAuth(m_admin_nick, NULL, NULL)) {
+			errorstream << "You haven't set up an account." << std::endl
+				<< "Please log in using the client as '"
+				<< m_admin_nick << "' with a secure password." << std::endl
+				<< "Until then, you can't execute admin tasks via the console," << std::endl
+				<< "and everybody can claim the user account instead of you," << std::endl
+				<< "giving them full control over this server." << std::endl;
+		}
+	} else {
+		assert(evt->type == CET_CHAT);
+		handleAdminChat((ChatEventChat *)evt);
+	}
 }
 
 std::wstring Server::handleChat(const std::string &name, const std::wstring &wname,
