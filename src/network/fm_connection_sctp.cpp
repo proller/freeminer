@@ -655,8 +655,8 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 	char buffer[BUFFER_SIZE]; //move to class
 	ssize_t n = usrsctp_recvv(sock, (void*)buffer, BUFFER_SIZE, (struct sockaddr *) &addr, &from_len, (void *)&rcv_info,
 	                          &infolen, &infotype, &flags);
-	//errorstream << "receive() ... " << __LINE__ << " n=" << n << std::endl;
 	if (n > 0) {
+	//errorstream << "receive() ... " << __LINE__ << " n=" << n << " rcv_sid="<<(int)rcv_info.rcv_sid<< " rcv_assoc_id="<<rcv_info.rcv_assoc_id<< std::endl;
 		//errorstream << "receive() ... " << __LINE__ << " n=" << n << std::endl;
 		if (flags & MSG_NOTIFICATION) {
 			cs<<"Notification of length "<<n<<" received.\n";
@@ -803,16 +803,17 @@ switch (notification.sn_assoc_change.sac_state) {
 								       inet_ntop(AF_INET6, &addr.sin6_addr, name, INET6_ADDRSTRLEN), ntohs(addr.sin6_port),
 								       (flags & MSG_EOR) ? 1 : 0);
 				*/
-				recv_buf[peer_id] += std::string(buffer, n); // optimize here if firs packet complete`
+				recv_buf[peer_id][rcv_info.rcv_sid] += std::string(buffer, n); // optimize here if firs packet complete`
 				//verbosestream <<  "recieved data n="<< n << " complete="<<(flags & MSG_EOR)<< " buf="<<recv_buf[peer_id].size()<<" from sock="<<sock<<std::endl;
 				if ((flags & MSG_EOR)) {
-
+//errorstream<<"msg complete s="<<recv_buf[peer_id][rcv_info.rcv_sid].size()<<std::endl;
 					ConnectionEvent e;
 					//SharedBuffer<u8> resultdata((const unsigned char*)buffer, n);
-					SharedBuffer<u8> resultdata((const unsigned char*)recv_buf[peer_id].c_str(), recv_buf[peer_id].size());
+					SharedBuffer<u8> resultdata((const unsigned char*)recv_buf[peer_id][rcv_info.rcv_sid].c_str(), recv_buf[peer_id][rcv_info.rcv_sid].size());
 					e.dataReceived(peer_id, resultdata);
 					putEvent(e);
-					recv_buf.erase(peer_id);
+					//recv_buf[rcv_info.rcv_sid].erase(peer_id);
+					recv_buf[peer_id][rcv_info.rcv_sid].clear();
 				}
 
 
@@ -1225,16 +1226,37 @@ void Connection::send(u16 peer_id, u8 channelnum,
 
 	usrsctp_set_non_blocking(sock, 1);
 
-	struct sctp_sndinfo sndinfo = {};
+	uint32_t flags = 0;
+	
+	//struct sctp_sndinfo sndinfo = {};
+
+// todo
+	//struct sctp_prinfo prinfo = {};
+	struct sctp_sendv_spa spa = {};
 	//char buffer[BUFFER_SIZE];
 	//todo
 //sndinfo.snd_sid = channelnum;
-	sndinfo.snd_sid = 1;
+	spa.sendv_sndinfo.snd_sid = channelnum + 1 + (!reliable)*4;
+	//sndinfo.snd_sid = 1;
 	//sndinfo.snd_flags = 0;
 	//sndinfo.snd_flags = SCTP_EOR;
 	//sndinfo.snd_ppid = htonl(DISCARD_PPID);
 	//sndinfo.snd_context = 0;
 	//sndinfo.snd_assoc_id = 0;
+
+	if (!reliable) {
+		spa.sendv_prinfo.pr_policy = SCTP_PR_SCTP_TTL;
+		spa.sendv_prinfo.pr_value = 1; // units?
+		spa.sendv_sndinfo.snd_flags |= SCTP_UNORDERED;
+		flags = SCTP_UNORDERED;
+		spa.sendv_flags |= SCTP_SEND_PRINFO_VALID;
+		//spa.sendv_prinfo = prinfo;
+	}
+
+	//spa.sendv_sndinfo = sndinfo;
+	spa.sendv_flags |= SCTP_SEND_SNDINFO_VALID;
+// */
+
 	/*
 		if (usrsctp_sendv(peer, *data, data.getSize(), NULL, 0, (void *)&sndinfo,
 		                  sizeof(sndinfo), SCTP_SENDV_SNDINFO, 0) < 0) {
@@ -1251,18 +1273,14 @@ void Connection::send(u16 peer_id, u8 channelnum,
 	size_t curpos = 0;
 
 	while (remlen > 0) {
-
-
 		if (remlen <= maxlen) {
-
-			sndinfo.snd_flags |= SCTP_EOR;
-
+			spa.sendv_sndinfo.snd_flags |= SCTP_EOR;
 		}
 
-//errorstream<<" psend" << " remlen=" << remlen << " curpos="<<curpos<< " sendlen="<<sendlen << " buflen="<<buflen<< " nowsent="<<(curpos+sendlen)<<" flags="<<sndinfo.snd_flags<<std::endl;
+//errorstream<<" psend" << " remlen=" << remlen << " curpos="<<curpos<< " sendlen="<<sendlen << " buflen="<<buflen<< " nowsent="<<(curpos+sendlen)<<" flags="<<sndinfo.snd_flags<< " sid="<<sndinfo.snd_sid<<std::endl;
 
-		int len = usrsctp_sendv(sock, *data + curpos, sendlen, NULL, 0, (void *)&sndinfo,
-		                        sizeof(sndinfo), SCTP_SENDV_SNDINFO, 0);
+		//int len = usrsctp_sendv(sock, *data + curpos, sendlen, NULL, 0, (void *)&spa.sendv_sndinfo, sizeof(spa.sendv_sndinfo), SCTP_SENDV_SNDINFO, 0);
+		int len = usrsctp_sendv(sock, *data + curpos, sendlen, NULL, 0, (void *)&spa, sizeof(spa), SCTP_SENDV_SPA, flags);
 		if (len < 0) {
 			perror("usrsctp_sendv");
 			deletePeer(peer_id, 0);
@@ -1270,6 +1288,9 @@ void Connection::send(u16 peer_id, u8 channelnum,
 			errorstream << " === sending FAILED to peer_id=" << peer_id << " bytes=" << data.getSize() << " sock=" << sock << std::endl;
 			break;
 		}
+
+//if(len != buflen)
+//errorstream<<" part send" << " len="<<len<< " / "<<buflen<<std::endl;
 
 
 		//ssize_t len = sendto(sock, curpos, sendlen, flags, dest_addr, addrlen);

@@ -381,7 +381,7 @@ private:
 	int recv(u16 peer_id, struct socket *sock);
 	void sock_setup(u16 peer_id, struct socket *sock);
 	void sctp_setup(u16 port = 9899);
-	std::unordered_map<u16, std::string> recv_buf;
+	std::unordered_map<u16,std::array<std::string, 10>> recv_buf;
 
 	void handle_association_change_event(u16 peer_id, const struct sctp_assoc_change *sac);
 /*
