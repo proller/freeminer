@@ -18,48 +18,43 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 */
 
-#ifndef MAPGEN_FRACTAL_HEADER
-#define MAPGEN_FRACTAL_HEADER
+#ifndef MAPGEN_FLAT_HEADER
+#define MAPGEN_FLAT_HEADER
 
 #include "mapgen.h"
 
-#define MGFRACTAL_LARGE_CAVE_DEPTH -33
-
-/////////////////// Mapgen Fractal flags
-#define MGFRACTAL_JULIA 0x01
+/////// Mapgen Flat flags
+#define MGFLAT_LAKES 0x01
+#define MGFLAT_HILLS 0x02
 
 class BiomeManager;
 
-extern FlagDesc flagdesc_mapgen_fractal[];
+extern FlagDesc flagdesc_mapgen_flat[];
 
 
-struct MapgenFractalParams : public MapgenSpecificParams {
+struct MapgenFlatParams : public MapgenSpecificParams {
 	u32 spflags;
 
-	u16 formula;
-	u16 iterations;
-	v3f scale;
-	v3f offset;
-	float slice_w;
+	s16 ground_level;
+	s16 large_cave_depth;
+	float lake_threshold;
+	float lake_steepness;
+	float hill_threshold;
+	float hill_steepness;
 
-	float julia_x;
-	float julia_y;
-	float julia_z;
-	float julia_w;
-
-	NoiseParams np_seabed;
+	NoiseParams np_terrain;
 	NoiseParams np_filler_depth;
 	NoiseParams np_cave1;
 	NoiseParams np_cave2;
 
-	MapgenFractalParams();
-	~MapgenFractalParams() {}
+	MapgenFlatParams();
+	~MapgenFlatParams() {}
 
 	void readParams(Settings *settings);
 	void writeParams(Settings *settings) const;
 };
 
-class MapgenFractal : public Mapgen {
+class MapgenFlat : public Mapgen {
 public:
 	EmergeManager *m_emerge;
 	BiomeManager *bmgr;
@@ -73,18 +68,14 @@ public:
 	v3s16 full_node_min;
 	v3s16 full_node_max;
 
-	u16 formula;
-	u16 iterations;
-	v3f scale;
-	v3f offset;
-	float slice_w;
+	s16 ground_level;
+	s16 large_cave_depth;
+	float lake_threshold;
+	float lake_steepness;
+	float hill_threshold;
+	float hill_steepness;
 
-	float julia_x;
-	float julia_y;
-	float julia_z;
-	float julia_w;
-
-	Noise *noise_seabed;
+	Noise *noise_terrain;
 	Noise *noise_filler_depth;
 	Noise *noise_cave1;
 	Noise *noise_cave2;
@@ -107,28 +98,27 @@ public:
 	content_t c_sandstonebrick;
 	content_t c_stair_sandstonebrick;
 
-	MapgenFractal(int mapgenid, MapgenParams *params, EmergeManager *emerge);
-	~MapgenFractal();
+	MapgenFlat(int mapgenid, MapgenParams *params, EmergeManager *emerge);
+	~MapgenFlat();
 
 	virtual void makeChunk(BlockMakeData *data);
 	int getGroundLevelAtPoint(v2s16 p);
 	void calculateNoise();
-	bool getFractalAtPoint(s16 x, s16 y, s16 z);
 	s16 generateTerrain();
 	MgStoneType generateBiomes(float *heat_map, float *humidity_map);
 	void dustTopNodes();
 	void generateCaves(s16 max_stone_y);
 };
 
-struct MapgenFactoryFractal : public MapgenFactory {
+struct MapgenFactoryFlat : public MapgenFactory {
 	Mapgen *createMapgen(int mgid, MapgenParams *params, EmergeManager *emerge)
 	{
-		return new MapgenFractal(mgid, params, emerge);
+		return new MapgenFlat(mgid, params, emerge);
 	};
 
 	MapgenSpecificParams *createMapgenParams()
 	{
-		return new MapgenFractalParams();
+		return new MapgenFlatParams();
 	};
 };
 

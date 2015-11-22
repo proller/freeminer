@@ -46,6 +46,8 @@ FlagDesc flagdesc_mapgen_v6[] = {
 	{"biomeblend", MGV6_BIOMEBLEND},
 	{"mudflow",    MGV6_MUDFLOW},
 	{"snowbiomes", MGV6_SNOWBIOMES},
+	{"flat",       MGV6_FLAT},
+	{"trees",      MGV6_TREES},
 	{NULL,         0}
 };
 
@@ -273,7 +275,7 @@ float MapgenV6::baseTerrainLevel(float terrain_base, float terrain_higher,
 
 float MapgenV6::baseTerrainLevelFromNoise(v2s16 p)
 {
-	if (flags & MG_FLAT)
+	if ((spflags & MGV6_FLAT) || (flags & MG_FLAT))
 		return water_level;
 
 	float terrain_base   = NoisePerlin2D_PO(&noise_terrain_base->np,
@@ -299,7 +301,7 @@ float MapgenV6::baseTerrainLevelFromMap(v2s16 p)
 
 float MapgenV6::baseTerrainLevelFromMap(int index)
 {
-	if (flags & MG_FLAT)
+	if ((spflags & MGV6_FLAT) || (flags & MG_FLAT))
 		return water_level;
 
 	float terrain_base   = noise_terrain_base->result[index];
@@ -400,7 +402,7 @@ bool MapgenV6::getHaveAppleTree(v2s16 p)
 
 float MapgenV6::getMudAmount(int index)
 {
-	if (flags & MG_FLAT)
+	if ((spflags & MGV6_FLAT) || (flags & MG_FLAT))
 		return MGV6_AVERAGE_MUD_AMOUNT;
 
 	/*return ((float)AVERAGE_MUD_AMOUNT + 2.0 * noise2d_perlin(
@@ -602,11 +604,12 @@ void MapgenV6::makeChunk(BlockMakeData *data)
 	growGrass();
 
 	// Generate some trees, and add grass, if a jungle
-	if (flags & MG_TREES)
+	if ((spflags & MGV6_TREES) || (flags & MG_TREES))
 		placeTreesAndJungleGrass();
 
 	// Generate the registered decorations
-	m_emerge->decomgr->placeAllDecos(this, blockseed, node_min, node_max);
+	if (flags & MG_DECORATIONS)
+		m_emerge->decomgr->placeAllDecos(this, blockseed, node_min, node_max);
 
 	// Generate the registered ores
 	m_emerge->oremgr->placeAllOres(this, blockseed, node_min, node_max);
@@ -626,7 +629,7 @@ void MapgenV6::calculateNoise()
 	int fx = full_node_min.X;
 	int fz = full_node_min.Z;
 
-	if (!(flags & MG_FLAT)) {
+	if (!((spflags & MGV6_FLAT) || (flags & MG_FLAT))) {
 		noise_terrain_base->perlinMap2D_PO(x, 0.5, z, 0.5);
 		noise_terrain_higher->perlinMap2D_PO(x, 0.5, z, 0.5);
 		noise_steepness->perlinMap2D_PO(x, 0.5, z, 0.5);

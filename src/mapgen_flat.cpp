@@ -37,46 +37,53 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "mg_biome.h"
 #include "mg_ore.h"
 #include "mg_decoration.h"
-#include "mapgen_v5.h"
-#include "util/directiontables.h"
+#include "mapgen_flat.h"
 
 
-FlagDesc flagdesc_mapgen_v5[] = {
-	{NULL,         0}
+FlagDesc flagdesc_mapgen_flat[] = {
+	{"lakes", MGFLAT_LAKES},
+	{"hills", MGFLAT_HILLS},
+	{NULL,    0}
 };
 
+///////////////////////////////////////////////////////////////////////////////////////
 
-MapgenV5::MapgenV5(int mapgenid, MapgenParams *params, EmergeManager *emerge)
+
+MapgenFlat::MapgenFlat(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 	: Mapgen(mapgenid, params, emerge)
-	, Mapgen_features(mapgenid, params, emerge)
 {
 	this->m_emerge = emerge;
 	this->bmgr     = emerge->biomemgr;
 
-	// amount of elements to skip for the next index
-	// for noise/height/biome maps (not vmanip)
+	//// amount of elements to skip for the next index
+	//// for noise/height/biome maps (not vmanip)
 	this->ystride = csize.X;
 	this->zstride = csize.X * (csize.Y + 2);
 
-	this->biomemap  = new u8[csize.X * csize.Z];
-	this->heightmap = new s16[csize.X * csize.Z];
-	this->heatmap   = NULL;
-	this->humidmap  = NULL;
+	this->biomemap        = new u8[csize.X * csize.Z];
+	this->heightmap       = new s16[csize.X * csize.Z];
+	this->heatmap         = NULL;
+	this->humidmap        = NULL;
 
-	MapgenV5Params *sp = (MapgenV5Params *)params->sparams;
-	this->spflags      = sp->spflags;
+	MapgenFlatParams *sp = (MapgenFlatParams *)params->sparams;
+	this->spflags = sp->spflags;
 
-	// Terrain noise
+	this->ground_level = sp->ground_level;
+	this->large_cave_depth = sp->large_cave_depth;
+	this->lake_threshold = sp->lake_threshold;
+	this->lake_steepness = sp->lake_steepness;
+	this->hill_threshold = sp->hill_threshold;
+	this->hill_steepness = sp->hill_steepness;
+
+	//// 2D noise
+	noise_terrain      = new Noise(&sp->np_terrain,      seed, csize.X, csize.Z);
 	noise_filler_depth = new Noise(&sp->np_filler_depth, seed, csize.X, csize.Z);
-	noise_factor       = new Noise(&sp->np_factor,       seed, csize.X, csize.Z);
-	noise_height       = new Noise(&sp->np_height,       seed, csize.X, csize.Z);
 
-	// 3D terrain noise
-	noise_cave1  = new Noise(&sp->np_cave1,  seed, csize.X, csize.Y + 2, csize.Z);
-	noise_cave2  = new Noise(&sp->np_cave2,  seed, csize.X, csize.Y + 2, csize.Z);
-	noise_ground = new Noise(&sp->np_ground, seed, csize.X, csize.Y + 2, csize.Z);
+	//// 3D noise
+	noise_cave1 = new Noise(&sp->np_cave1, seed, csize.X, csize.Y + 2, csize.Z);
+	noise_cave2 = new Noise(&sp->np_cave2, seed, csize.X, csize.Y + 2, csize.Z);
 
-	// Biome noise
+	//// Biome noise
 	noise_heat           = new Noise(&params->np_biome_heat,           seed, csize.X, csize.Z);
 	noise_humidity       = new Noise(&params->np_biome_humidity,       seed, csize.X, csize.Z);
 	noise_heat_blend     = new Noise(&params->np_biome_heat_blend,     seed, csize.X, csize.Z);
@@ -104,17 +111,6 @@ MapgenV5::MapgenV5(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 		c_mossycobble = c_cobble;
 	if (c_stair_cobble == CONTENT_IGNORE)
 		c_stair_cobble = c_cobble;
-
-	//freeminer:
-	float_islands = sp->float_islands;
-	noise_float_islands1  = new Noise(&sp->np_float_islands1, seed, csize.X, csize.Y + 2, csize.Z);
-	noise_float_islands2  = new Noise(&sp->np_float_islands2, seed, csize.X, csize.Y + 2, csize.Z);
-	noise_float_islands3  = new Noise(&sp->np_float_islands3, seed, csize.X, csize.Z);
-
-	noise_layers          = new Noise(&sp->np_layers,         seed, csize.X, csize.Y + 2, csize.Z);
-	layers_init(emerge, sp->paramsj);
-	//===
-
 	if (c_sandstonebrick == CONTENT_IGNORE)
 		c_sandstonebrick = c_sandstone;
 	if (c_stair_sandstonebrick == CONTENT_IGNORE)
@@ -122,14 +118,12 @@ MapgenV5::MapgenV5(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 }
 
 
-MapgenV5::~MapgenV5()
+MapgenFlat::~MapgenFlat()
 {
+	delete noise_terrain;
 	delete noise_filler_depth;
-	delete noise_factor;
-	delete noise_height;
 	delete noise_cave1;
 	delete noise_cave2;
-	delete noise_ground;
 
 	delete noise_heat;
 	delete noise_humidity;
@@ -141,105 +135,79 @@ MapgenV5::~MapgenV5()
 }
 
 
-MapgenV5Params::MapgenV5Params()
+MapgenFlatParams::MapgenFlatParams()
 {
 	spflags = 0;
 
-	np_filler_depth = NoiseParams(0, 1,  v3f(150, 150, 150), 261,    4, 0.7,  2.0);
-	np_factor       = NoiseParams(0, 1,  v3f(250, 250, 250), 920381, 3, 0.45, 2.0);
-	np_height       = NoiseParams(0, 10, v3f(250, 250, 250), 84174,  4, 0.5,  2.0);
-	np_cave1        = NoiseParams(0, 12, v3f(50,  50,  50),  52534,  4, 0.5,  2.0);
-	np_cave2        = NoiseParams(0, 12, v3f(50,  50,  50),  10325,  4, 0.5,  2.0);
-	np_ground       = NoiseParams(0, 40, v3f(80,  80,  80),  983240, 4, 0.55, 2.0, NOISE_FLAG_EASED);
+	ground_level = 8;
+	large_cave_depth = -33;
+	lake_threshold = -0.45;
+	lake_steepness = 48.0;
+	hill_threshold = 0.45;
+	hill_steepness = 64.0;
 
-	//freeminer:
-	float_islands = 500;
-	np_float_islands1  = NoiseParams(0,    1,   v3f(256, 256, 256), 3683, 6, 0.6, 2.0, NOISE_FLAG_DEFAULTS, 1, 1.5);
-	np_float_islands2  = NoiseParams(0,    1,   v3f(8,   8,   8  ), 9292, 2, 0.5, 2.0, NOISE_FLAG_DEFAULTS, 1, 1.5);
-	np_float_islands3  = NoiseParams(0,    1,   v3f(256, 256, 256), 6412, 2, 0.5, 2.0, NOISE_FLAG_DEFAULTS, 1, 0.5);
-	np_layers          = NoiseParams(500,  500, v3f(100, 100, 100), 3663, 5, 0.6, 2.0, NOISE_FLAG_DEFAULTS, 1, 5,   0.5);
+	np_terrain      = NoiseParams(0, 1,   v3f(600, 600, 600), 7244,  5, 0.6, 2.0);
+	np_filler_depth = NoiseParams(0, 1.2, v3f(150, 150, 150), 261,   3, 0.7, 2.0);
+	np_cave1        = NoiseParams(0, 12,  v3f(128, 128, 128), 52534, 4, 0.5, 2.0);
+	np_cave2        = NoiseParams(0, 12,  v3f(128, 128, 128), 10325, 4, 0.5, 2.0);
 }
 
 
-//#define CAVE_NOISE_SCALE 12.0
-//#define CAVE_NOISE_THRESHOLD (1.5/CAVE_NOISE_SCALE) = 0.125
-
-
-void MapgenV5Params::readParams(Settings *settings)
+void MapgenFlatParams::readParams(Settings *settings)
 {
-	settings->getFlagStrNoEx("mgv5_spflags", spflags, flagdesc_mapgen_v5);
+	settings->getFlagStrNoEx("mgflat_spflags", spflags, flagdesc_mapgen_flat);
 
-	settings->getNoiseParams("mgv5_np_filler_depth", np_filler_depth);
-	settings->getNoiseParams("mgv5_np_factor",       np_factor);
-	settings->getNoiseParams("mgv5_np_height",       np_height);
-	settings->getNoiseParams("mgv5_np_cave1",        np_cave1);
-	settings->getNoiseParams("mgv5_np_cave2",        np_cave2);
-	settings->getNoiseParams("mgv5_np_ground",       np_ground);
+	settings->getS16NoEx("mgflat_ground_level",     ground_level);
+	settings->getS16NoEx("mgflat_large_cave_depth", large_cave_depth);
+	settings->getFloatNoEx("mgflat_lake_threshold", lake_threshold);
+	settings->getFloatNoEx("mgflat_lake_steepness", lake_steepness);
+	settings->getFloatNoEx("mgflat_hill_threshold", hill_threshold);
+	settings->getFloatNoEx("mgflat_hill_steepness", hill_steepness);
 
-	//freeminer:
-	settings->getS16NoEx("mg_float_islands", float_islands);
-	settings->getNoiseParamsFromGroup("mg_np_float_islands1", np_float_islands1);
-	settings->getNoiseParamsFromGroup("mg_np_float_islands2", np_float_islands2);
-	settings->getNoiseParamsFromGroup("mg_np_float_islands3", np_float_islands3);
-	settings->getNoiseParamsFromGroup("mg_np_layers",         np_layers);
-	paramsj = settings->getJson("mg_params", paramsj);
+	settings->getNoiseParams("mgflat_np_terrain",      np_terrain);
+	settings->getNoiseParams("mgflat_np_filler_depth", np_filler_depth);
+	settings->getNoiseParams("mgflat_np_cave1",        np_cave1);
+	settings->getNoiseParams("mgflat_np_cave2",        np_cave2);
 }
 
 
-void MapgenV5Params::writeParams(Settings *settings) const
+void MapgenFlatParams::writeParams(Settings *settings) const
 {
-	settings->setFlagStr("mgv5_spflags", spflags, flagdesc_mapgen_v5, U32_MAX);
+	settings->setFlagStr("mgflat_spflags", spflags, flagdesc_mapgen_flat, U32_MAX);
 
-	settings->setNoiseParams("mgv5_np_filler_depth", np_filler_depth);
-	settings->setNoiseParams("mgv5_np_factor",       np_factor);
-	settings->setNoiseParams("mgv5_np_height",       np_height);
-	settings->setNoiseParams("mgv5_np_cave1",        np_cave1);
-	settings->setNoiseParams("mgv5_np_cave2",        np_cave2);
-	settings->setNoiseParams("mgv5_np_ground",       np_ground);
+	settings->setS16("mgflat_ground_level",     ground_level);
+	settings->setS16("mgflat_large_cave_depth", large_cave_depth);
+	settings->setFloat("mgflat_lake_threshold", lake_threshold);
+	settings->setFloat("mgflat_lake_steepness", lake_steepness);
+	settings->setFloat("mgflat_hill_threshold", hill_threshold);
+	settings->setFloat("mgflat_hill_steepness", hill_steepness);
 
-	//freeminer:
-	settings->setS16("mg_float_islands", float_islands);
-	settings->setNoiseParams("mg_np_float_islands1", np_float_islands1);
-	settings->setNoiseParams("mg_np_float_islands2", np_float_islands2);
-	settings->setNoiseParams("mg_np_float_islands3", np_float_islands3);
-	settings->setNoiseParams("mg_np_layers",         np_layers);
-	settings->setJson("mg_params", paramsj);
+	settings->setNoiseParams("mgflat_np_terrain",      np_terrain);
+	settings->setNoiseParams("mgflat_np_filler_depth", np_filler_depth);
+	settings->setNoiseParams("mgflat_np_cave1",        np_cave1);
+	settings->setNoiseParams("mgflat_np_cave2",        np_cave2);
 }
 
 
-int MapgenV5::getGroundLevelAtPoint(v2s16 p)
+/////////////////////////////////////////////////////////////////
+
+
+int MapgenFlat::getGroundLevelAtPoint(v2s16 p)
 {
-	//TimeTaker t("getGroundLevelAtPoint", NULL, PRECISION_MICRO);
-
-	float f = 0.55 + NoisePerlin2D(&noise_factor->np, p.X, p.Y, seed);
-	if (f < 0.01)
-		f = 0.01;
-	else if (f >= 1.0)
-		f *= 1.6;
-	float h = NoisePerlin2D(&noise_height->np, p.X, p.Y, seed);
-
-	s16 search_start = 128; // Only bother searching this range, actual
-	s16 search_end = -128;  // ground level is rarely higher or lower.
-
-	for (s16 y = search_start; y >= search_end; y--) {
-		float n_ground = NoisePerlin3D(&noise_ground->np, p.X, y, p.Y, seed);
-		// If solid
-		if (n_ground * f > y - h) {
-			// If either top 2 nodes of search are solid this is inside a
-			// mountain or floatland with no space for the player to spawn.
-			if (y >= search_start - 1)
-				return MAX_MAP_GENERATION_LIMIT;
-			else
-				return y; // Ground below at least 2 nodes of space
-		}
+	float n_terrain = NoisePerlin2D(&noise_terrain->np, p.X, p.Y, seed);
+	if ((spflags & MGFLAT_LAKES) && n_terrain < lake_threshold) {
+		s16 depress = (lake_threshold - n_terrain) * lake_steepness;
+		return ground_level - depress;
+	} else if ((spflags & MGFLAT_HILLS) && n_terrain > hill_threshold) {
+		s16 rise = (n_terrain - hill_threshold) * hill_steepness;
+		return ground_level + rise;
+	} else {
+		return ground_level;
 	}
-
-	//printf("getGroundLevelAtPoint: %dus\n", t.stop());
-	return -MAX_MAP_GENERATION_LIMIT;
 }
 
 
-void MapgenV5::makeChunk(BlockMakeData *data)
+void MapgenFlat::makeChunk(BlockMakeData *data)
 {
 	// Pre-conditions
 	assert(data->vmanip);
@@ -251,9 +219,9 @@ void MapgenV5::makeChunk(BlockMakeData *data)
 		data->blockpos_requested.Y <= data->blockpos_max.Y &&
 		data->blockpos_requested.Z <= data->blockpos_max.Z);
 
-	generating = true;
-	vm   = data->vmanip;
-	ndef = data->nodedef;
+	this->generating = true;
+	this->vm   = data->vmanip;
+	this->ndef = data->nodedef;
 	//TimeTaker t("makeChunk");
 
 	v3s16 blockpos_min = data->blockpos_min;
@@ -263,20 +231,13 @@ void MapgenV5::makeChunk(BlockMakeData *data)
 	full_node_min = (blockpos_min - 1) * MAP_BLOCKSIZE;
 	full_node_max = (blockpos_max + 2) * MAP_BLOCKSIZE - v3s16(1, 1, 1);
 
-	// Create a block-specific seed
 	blockseed = getBlockSeed2(full_node_min, seed);
 
 	// Make some noise
 	calculateNoise();
 
-	if (float_islands && node_max.Y >= float_islands) {
-		float_islands_prepare(node_min, node_max, float_islands);
-	}
-
-	layers_prepare(node_min, node_max);
-
-	// Generate base terrain
-	s16 stone_surface_max_y = generateBaseTerrain();
+	// Generate base terrain, mountains, and ridges with initial heightmaps
+	s16 stone_surface_max_y = generateTerrain();
 
 	// Create heightmap
 	updateHeightmap(node_min, node_max);
@@ -288,11 +249,9 @@ void MapgenV5::makeChunk(BlockMakeData *data)
 	// Actually place the biome-specific nodes
 	MgStoneType stone_type = generateBiomes(noise_heat->result, noise_humidity->result);
 
-	// Generate caves
-	if ((flags & MG_CAVES) && (stone_surface_max_y >= node_min.Y))
+	if (flags & MG_CAVES)
 		generateCaves(stone_surface_max_y);
 
-	// Generate dungeons and desert temples
 	if ((flags & MG_DUNGEONS) && (stone_surface_max_y >= node_min.Y)) {
 		DungeonParams dp;
 
@@ -348,36 +307,36 @@ void MapgenV5::makeChunk(BlockMakeData *data)
 
 	//printf("makeChunk: %dms\n", t.stop());
 
-	// Add top and bottom side of water to transforming_liquid queue
 	updateLiquid(full_node_min, full_node_max);
 
-	// Calculate lighting
-	if (flags & MG_LIGHT) {
+	if (flags & MG_LIGHT)
 		calcLighting(node_min - v3s16(0, 1, 0), node_max + v3s16(0, 1, 0),
 			full_node_min, full_node_max);
-	}
+
+	//setLighting(node_min - v3s16(1, 0, 1) * MAP_BLOCKSIZE,
+	//			node_max + v3s16(1, 0, 1) * MAP_BLOCKSIZE, 0xFF);
 
 	this->generating = false;
 }
 
 
-void MapgenV5::calculateNoise()
+void MapgenFlat::calculateNoise()
 {
 	//TimeTaker t("calculateNoise", NULL, PRECISION_MICRO);
 	int x = node_min.X;
 	int y = node_min.Y - 1;
 	int z = node_min.Z;
 
-	noise_factor->perlinMap2D(x, z);
-	noise_height->perlinMap2D(x, z);
-	noise_ground->perlinMap3D(x, y, z);
+	if ((spflags & MGFLAT_LAKES) || (spflags & MGFLAT_HILLS))
+		noise_terrain->perlinMap2D(x, z);
+
+	noise_filler_depth->perlinMap2D(x, z);
 
 	if (flags & MG_CAVES) {
 		noise_cave1->perlinMap3D(x, y, z);
 		noise_cave2->perlinMap3D(x, y, z);
 	}
 
-	noise_filler_depth->perlinMap2D(x, z);
 	noise_heat->perlinMap2D(x, z);
 	noise_humidity->perlinMap2D(x, z);
 	noise_heat_blend->perlinMap2D(x, z);
@@ -394,67 +353,54 @@ void MapgenV5::calculateNoise()
 }
 
 
-//bool is_cave(u32 index) {
-//	double d1 = contour(noise_cave1->result[index]);
-//	double d2 = contour(noise_cave2->result[index]);
-//	return d1*d2 > CAVE_NOISE_THRESHOLD;
-//}
-
-//bool val_is_ground(v3s16 p, u32 index, u32 index2d) {
-//	double f = 0.55 + noise_factor->result[index2d];
-//	if(f < 0.01)
-//		f = 0.01;
-//	else if(f >= 1.0)
-//		f *= 1.6;
-//	double h = WATER_LEVEL + 10 * noise_height->result[index2d];
-//	return (noise_ground->result[index] * f > (double)p.Y - h);
-//}
-
-
-int MapgenV5::generateBaseTerrain()
+s16 MapgenFlat::generateTerrain()
 {
-	u32 index = 0;
-	u32 index2d = 0;
-	int stone_surface_max_y = -MAX_MAP_GENERATION_LIMIT;
+	MapNode n_air(CONTENT_AIR);
+	MapNode n_stone(c_stone);
+	MapNode n_water(c_water_source);
 
-	for (s16 z=node_min.Z; z<=node_max.Z; z++) {
-		for (s16 y=node_min.Y - 1; y<=node_max.Y + 1; y++) {
-			u32 i = vm->m_area.index(node_min.X, y, z);
-			for (s16 x=node_min.X; x<=node_max.X; x++, i++, index++, index2d++) {
-				if (vm->m_data[i].getContent() != CONTENT_IGNORE)
-					continue;
+	v3s16 em = vm->m_area.getExtent();
+	s16 stone_surface_max_y = -MAX_MAP_GENERATION_LIMIT;
+	u32 ni2d = 0;
 
-				float f = 0.55 + noise_factor->result[index2d];
-				if (f < 0.01)
-					f = 0.01;
-				else if (f >= 1.0)
-					f *= 1.6;
-				float h = noise_height->result[index2d];
+	for (s16 z = node_min.Z; z <= node_max.Z; z++)
+	for (s16 x = node_min.X; x <= node_max.X; x++, ni2d++) {
+		s16 stone_level = ground_level;
+		float n_terrain = 0.0f;
 
-				if (noise_ground->result[index] * f < y - h) {
-					if (y <= water_level) {
-						vm->m_data[i] = MapNode(c_water_source);
-					if (liquid_pressure && y <= 0)
-						vm->m_data[i].addLevel(m_emerge->ndef, water_level - y, 1);
-					}
-					else
-						vm->m_data[i] = MapNode(CONTENT_AIR);
-				} else {
-					vm->m_data[i] = layers_get(index);
+		if ((spflags & MGFLAT_LAKES) || (spflags & MGFLAT_HILLS))
+			n_terrain = noise_terrain->result[ni2d];
+
+		if ((spflags & MGFLAT_LAKES) && n_terrain < lake_threshold) {
+			s16 depress = (lake_threshold - n_terrain) * lake_steepness;
+			stone_level = ground_level - depress;
+		} else if ((spflags & MGFLAT_HILLS) && n_terrain > hill_threshold) {
+			s16 rise = (n_terrain - hill_threshold) * hill_steepness;
+		 	stone_level = ground_level + rise;
+		}
+
+		u32 vi = vm->m_area.index(x, node_min.Y - 1, z);
+		for (s16 y = node_min.Y - 1; y <= node_max.Y + 1; y++) {
+			if (vm->m_data[vi].getContent() == CONTENT_IGNORE) {
+				if (y <= stone_level) {
+					vm->m_data[vi] = n_stone;
 					if (y > stone_surface_max_y)
 						stone_surface_max_y = y;
+				} else if (y <= water_level) {
+					vm->m_data[vi] = n_water;
+				} else {
+					vm->m_data[vi] = n_air;
 				}
 			}
-			index2d -= ystride;
+			vm->m_area.add_y(em, vi, 1);
 		}
-		index2d += ystride;
 	}
 
 	return stone_surface_max_y;
 }
 
 
-MgStoneType MapgenV5::generateBiomes(float *heat_map, float *humidity_map)
+MgStoneType MapgenFlat::generateBiomes(float *heat_map, float *humidity_map)
 {
 	v3s16 em = vm->m_area.getExtent();
 	u32 index = 0;
@@ -478,6 +424,7 @@ MgStoneType MapgenV5::generateBiomes(float *heat_map, float *humidity_map)
 		// nplaced to stone level by setting a number exceeding any possible filler depth.
 		u16 nplaced = (air_above || water_above) ? 0 : U16_MAX;
 
+
 		for (s16 y = node_max.Y; y >= node_min.Y; y--) {
 			content_t c = vm->m_data[vi].getContent();
 
@@ -493,7 +440,7 @@ MgStoneType MapgenV5::generateBiomes(float *heat_map, float *humidity_map)
 				biome = bmgr->getBiome(heat_map[index], humidity_map[index], y);
 				depth_top = biome->depth_top;
 				base_filler = MYMAX(depth_top + biome->depth_filler
-						+ noise_filler_depth->result[index], 0);
+					+ noise_filler_depth->result[index], 0);
 				depth_water_top = biome->depth_water_top;
 
 				// Detect stone type for dungeons during every biome calculation.
@@ -551,41 +498,7 @@ MgStoneType MapgenV5::generateBiomes(float *heat_map, float *humidity_map)
 }
 
 
-void MapgenV5::generateCaves(int max_stone_y)
-{
-	if (max_stone_y >= node_min.Y) {
-		u32 index = 0;
-
-		for (s16 z = node_min.Z; z <= node_max.Z; z++)
-		for (s16 y = node_min.Y - 1; y <= node_max.Y + 1; y++) {
-			u32 i = vm->m_area.index(node_min.X, y, z);
-			for (s16 x = node_min.X; x <= node_max.X; x++, i++, index++) {
-				float d1 = contour(noise_cave1->result[index]);
-				float d2 = contour(noise_cave2->result[index]);
-				if (d1*d2 > 0.125) {
-					content_t c = vm->m_data[i].getContent();
-					if (!ndef->get(c).is_ground_content || c == CONTENT_AIR)
-						continue;
-
-					vm->m_data[i] = MapNode(CONTENT_AIR);
-				}
-			}
-		}
-	}
-
-	if (node_max.Y > MGV5_LARGE_CAVE_DEPTH)
-		return;
-
-	PseudoRandom ps(blockseed + 21343);
-	u32 bruises_count = (ps.range(1, 4) == 1) ? ps.range(1, 2) : 0;
-	for (u32 i = 0; i < bruises_count; i++) {
-		CaveV5 cave(this, &ps);
-		cave.makeCave(node_min, node_max, max_stone_y);
-	}
-}
-
-
-void MapgenV5::dustTopNodes()
+void MapgenFlat::dustTopNodes()
 {
 	if (node_max.Y < water_level)
 		return;
@@ -631,5 +544,39 @@ void MapgenV5::dustTopNodes()
 			vm->m_area.add_y(em, vi, 1);
 			vm->m_data[vi] = MapNode(biome->c_dust);
 		}
+	}
+}
+
+
+void MapgenFlat::generateCaves(s16 max_stone_y)
+{
+	if (max_stone_y >= node_min.Y) {
+		u32 index = 0;
+
+		for (s16 z = node_min.Z; z <= node_max.Z; z++)
+		for (s16 y = node_min.Y - 1; y <= node_max.Y + 1; y++) {
+			u32 vi = vm->m_area.index(node_min.X, y, z);
+			for (s16 x = node_min.X; x <= node_max.X; x++, vi++, index++) {
+				float d1 = contour(noise_cave1->result[index]);
+				float d2 = contour(noise_cave2->result[index]);
+				if (d1 * d2 > 0.4f) {
+					content_t c = vm->m_data[vi].getContent();
+					if (!ndef->get(c).is_ground_content || c == CONTENT_AIR)
+						continue;
+
+					vm->m_data[vi] = MapNode(CONTENT_AIR);
+				}
+			}
+		}
+	}
+
+	if (node_max.Y > large_cave_depth)
+		return;
+
+	PseudoRandom ps(blockseed + 21343);
+	u32 bruises_count = (ps.range(1, 4) == 1) ? ps.range(1, 2) : 0;
+	for (u32 i = 0; i < bruises_count; i++) {
+		CaveV5 cave(this, &ps);
+		cave.makeCave(node_min, node_max, max_stone_y);
 	}
 }
