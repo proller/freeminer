@@ -1921,7 +1921,11 @@ Call these functions only at load time!
     * Should be called by the authentication handler if privileges changes.
     * To report everybody, set `name=nil`.
 * `minetest.get_password_hash(name, raw_password)`
-    * Convert a name-password pair to a password hash that Minetest can use
+    * Convert a name-password pair to a password hash that Minetest can use.
+    * The returned value alone is not a good basis for password checks based
+    * on comparing the password hash in the database with the password hash
+    * from the function, with an externally provided password, as the hash
+    * in the db might use the new SRP verifier format.
 * `minetest.string_to_privs(str)`: returns `{priv1=true,...}`
 * `minetest.privs_to_string(privs)`: returns `"priv1,priv2,..."`
     * Convert between two privilege representations
@@ -3303,6 +3307,11 @@ Definition tables
         --[[
         ^ Shall place item and return the leftover itemstack
         ^ default: minetest.item_place ]]
+        on_secondary_use = func(itemstack, user, pointed_thing),
+        --[[
+        ^ Same as on_place but called when pointing at nothing.
+        ^ pointed_thing : always { type = "nothing" }
+        ]]
         on_drop = func(itemstack, dropper, pos),
         --[[
         ^ Shall drop item and return the leftover itemstack
@@ -3576,6 +3585,51 @@ Definition tables
     --  ^ List of biomes in which this decoration occurs.  Occurs in all biomes if this is omitted,
     --  ^ and ignored if the Mapgen being used does not support biomes.
     --  ^ Can be a list of (or a single) biome names, IDs, or definitions.
+    }
+
+### Biome definition (`register_biome`)
+
+    {
+        name = "tundra",
+        node_dust = "default:snow",
+    --  ^ Node dropped onto upper surface after all else is generated.
+        node_top = "default:dirt_with_snow",
+        depth_top = 1,
+    --  ^ Node forming surface layer of biome and thickness of this layer.
+        node_filler = "default:permafrost",
+        depth_filler = 3,
+    --  ^ Node forming lower layer of biome and thickness of this layer.
+        node_stone = "default:bluestone",
+    --  ^ Node that replaces all stone nodes between roughly y_min and y_max.
+        node_water_top = "default:ice",
+        depth_water_top = 10,
+    --  ^ Node forming a surface layer in seawater with the defined thickness.
+        node_water = "",
+    --  ^ Node that replaces all seawater nodes not in the defined surface layer.
+        node_river_water = "default:ice",
+    --  ^ Node that replaces river water in mapgens that use default:river_water.
+        y_min = 1,
+        y_max = 31000,
+    --  ^ Lower and upper limits for biome.
+    --  ^ Because biome is not recalculated for every node in a node column
+    --  ^ some biome materials can exceed their limits, especially stone.
+    --  ^ For each node column in a mapchunk, biome is only recalculated at column
+    --  ^ top and at each of these surfaces:
+    --  ^ Ground below air, water below air, ground below water.
+    --  ^ The selected biome then stays in effect for all nodes below until
+    --  ^ column base or the next biome recalculation.
+        heat_point = 0,
+        humidity_point = 50,
+    --  ^ Characteristic average temperature and humidity for the biome.
+    --  ^ These values create 'biome points' on a voronoi diagram that has heat
+    --  ^ and humidity as axes. The resulting voronoi cells determine which
+    --  ^ heat/humidity points belong to which biome, and therefore determine
+    --  ^ the area and location of each biome in the world.
+    --  ^ The biome points need to be carefully and evenly spaced on the voronoi
+    --  ^ diagram to result in roughly equal size biomes.
+    --  ^ Heat and humidity have average values of 50, vary mostly between
+    --  ^ 0 and 100 but also often exceed these values.
+    --  ^ Heat is not in degrees celcius, both values are abstract.
     }
 
 ### Decoration definition (`register_decoration`)
