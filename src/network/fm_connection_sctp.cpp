@@ -1,6 +1,5 @@
 /*
-connection.cpp
-Copyright (C) 2013 celeron55, Perttu Ahola <celeron55@gmail.com>
+fm_connection_sctp.cpp
 */
 
 /*
@@ -131,12 +130,7 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	sock_listen = sock_connect = false;
 	sctp_inited_by_me = false;
 
-
-
 	start();
-
-
-
 }
 
 bool con::Connection::sctp_inited = false;
@@ -149,9 +143,6 @@ Connection::~Connection() {
 	deletePeer(0);
 
 	disconnect();
-	/*for (auto & i : m_peers) {
-		usrsctp_close(i.second);
-	}*/
 
 
 	if (sctp_inited_by_me) {
@@ -172,19 +163,15 @@ Connection::~Connection() {
 /* Internal stuff */
 
 void * Connection::run() {
-	//ThreadStarted();
 	reg("Connection");
 
-	errorstream << "threadstart" << std::endl;
-
+	cs << "threadstart" << std::endl;
 
 	while(!stopRequested()) {
-//cs <<  "qe="<< m_command_queue.empty() << std::endl;
 		while(!m_command_queue.empty()) {
 			ConnectionCommand c = m_command_queue.pop_frontNoEx();
 			processCommand(c);
 		}
-//cs <<  "rec="<< std::endl;
 		receive();
 	}
 
@@ -234,64 +221,21 @@ void Connection::processCommand(ConnectionCommand &c) {
 	}
 }
 
-#if 0
-
-static int sctp_recieve_callback(struct socket* sock, union sctp_sockstore addr,
-                                 void* data, size_t length,
-                                 struct sctp_rcvinfo rcv, int flags,
-                                 void* ulp_info) {
-
-	errorstream << "OnSctpInboundPacket" << sock << " l=" << length << " notif=" << (flags & MSG_NOTIFICATION) << std::endl;
-	/*
-	  SctpDataMediaChannel* channel = static_cast<SctpDataMediaChannel*>(ulp_info);
-	  // Post data to the channel's receiver thread (copying it).
-	  // TODO(ldixon): Unclear if copy is needed as this method is responsible for
-	  // memory cleanup. But this does simplify code.
-	  const SctpDataMediaChannel::PayloadProtocolIdentifier ppid =
-	      static_cast<SctpDataMediaChannel::PayloadProtocolIdentifier>(
-	          rtc::HostToNetwork32(rcv.rcv_ppid));
-	  cricket::DataMessageType type = cricket::DMT_NONE;
-	  if (!GetDataMediaType(ppid, &type) && !(flags & MSG_NOTIFICATION)) {
-	    // It's neither a notification nor a recognized data packet.  Drop it.
-	    LOG(LS_ERROR) << "Received an unknown PPID " << ppid
-	                  << " on an SCTP packet.  Dropping.";
-	  } else {
-	    SctpInboundPacket* packet = new SctpInboundPacket;
-	    packet->buffer.SetData(reinterpret_cast<uint8_t*>(data), length);
-	    packet->params.ssrc = rcv.rcv_sid;
-	    packet->params.seq_num = rcv.rcv_ssn;
-	    packet->params.timestamp = rcv.rcv_tsn;
-	    packet->params.type = type;
-	    packet->flags = flags;
-	    // The ownership of |packet| transfers to |msg|.
-	    InboundPacketMessage* msg = new InboundPacketMessage(packet);
-	    channel->worker_thread()->Post(channel, MSG_SCTPINBOUNDPACKET, msg);
-	  }
-	*/
-	free(data);
-	return 1;
-
-}
-
-#endif
-
-
-
-
-
 void Connection::sctp_setup(u16 port) {
-	errorstream << "sctp_setup i=" << sctp_inited << " p=" << port << std::endl;
+	cs << "sctp_setup i=" << sctp_inited << " p=" << port << std::endl;
 	if (sctp_inited)
 		return;
 	sctp_inited = true;
 	sctp_inited_by_me = true;
 
-	errorstream << "sctp_setup " << port << std::endl;
+	cs << "sctp_setup " << port << std::endl;
 
-	//usrsctp_init(9899, nullptr, nullptr);
-	//usrsctp_init(9899, nullptr, debug_printf);
-	//usrsctp_init(0, nullptr, debug_printf);
-	usrsctp_init(port, nullptr, debug_printf);
+auto debug_func = nullptr;
+#if SCTP_DEBUG
+debug_func = debug_printf;
+#endif
+
+	usrsctp_init(port, nullptr, debug_func);
 
 #if SCTP_DEBUG
 	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
@@ -317,18 +261,7 @@ void Connection::sctp_setup(u16 port) {
 	usrsctp_sysctl_set_sctp_max_retran_chunk(10);
 	usrsctp_sysctl_set_sctp_shutdown_guard_time_default(40);
 
-	//if ((sock = usrsctp_socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP, receive_cb, NULL, 0, NULL)) == NULL) {
-	//struct sctp_udpencaps encaps;
-	/*
-		if ((sock = usrsctp_socket(AF_INET6, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
-			errorstream<<("usrsctp_socket")<<std::endl;
-			ConnectionEvent ev(CONNEVENT_BIND_FAILED);
-			putEvent(ev);
-		}
-	*/
-	//sock->so_state |= SS_NBIO;
-
-	//usrsctp_sysctl_set_sctp_blackhole(0);
+	//usrsctp_sysctl_set_sctp_blackhole(2);
 }
 
 
