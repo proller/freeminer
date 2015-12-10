@@ -35,6 +35,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <fstream>
 #include <list>
 #include <map>
+#include <array>
+#include <string>
+#include <unordered_map>
 
 //#include "network/usrsctp/usrsctplib/usrsctp.h"
 #include "../msgpack_fix.h"

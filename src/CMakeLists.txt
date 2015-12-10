@@ -629,7 +629,7 @@ if(ENABLE_SCTP)
 	#add_definitions(-DSCTP_WITH_NO_CSUM)
 	#add_definitions(-DSCTP_DEBUG)
 	include_directories(${PROJECT_SOURCE_DIR}/network/usrsctp/usrsctplib)
-	set(SCTP_LIBRARY usrsctp)
+	set(SCTP_LIBRARY usrsctp-static)
 
 	set(USE_ENET 0)
 else()
