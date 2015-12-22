@@ -120,8 +120,7 @@ bool Map::insertBlock(MapBlock *block) {
 
 	auto block2 = getBlockNoCreateNoEx(block_p, false, true);
 	if(block2) {
-		//throw AlreadyExistsException("Block already exists");
-		infostream << "Block already exists " << block_p << std::endl;
+		verbosestream << "Block already exists " << block_p << std::endl;
 		return false;
 	}
 
@@ -428,7 +427,7 @@ u32 Map::timerUpdate(float uptime, float unload_timeout, u32 max_loaded_blocks,
 
 			} // block lock
 
-			if (porting::getTimeMs() > end_ms) {
+			if (calls > 100 && porting::getTimeMs() > end_ms) {
 				m_blocks_update_last = n;
 				break;
 			}

@@ -1305,10 +1305,12 @@ mentioned in "Nodes". However, it is possible to insert extra data into a
 node. It is called "node metadata"; See "`NodeMetaRef`".
 
 Metadata contains two things:
+
 * A key-value store
 * An inventory
 
 Some of the values in the key-value store are handled specially:
+
 * `formspec`: Defines a right-click inventory menu. See "Formspec".
 * `infotext`: Text shown on the screen when the node is pointed at
 
@@ -2542,6 +2544,19 @@ This is basically a reference to a C++ `ServerActiveObject`
 * `set_properties(object property table)`
 * `get_properties()`: returns object property table
 * `is_player()`: returns true for players, false otherwise
+* `get_nametag_attributes()`
+    * returns a table with the attributes of the nametag of an object
+    * {
+        color = {a=0..255, r=0..255, g=0..255, b=0..255},
+        text = "",
+      }
+* `set_nametag_attributes(attributes)`
+    * sets the attributes of the nametag of an object
+    * `attributes`:
+      {
+        color = ColorSpec,
+        text = "My Nametag",
+      }
 
 ##### LuaEntitySAO-only (no-op for other objects)
 * `setvelocity({x=num, y=num, z=num})`
@@ -2642,17 +2657,6 @@ This is basically a reference to a C++ `ServerActiveObject`
     * in first person view
     * in third person view (max. values `{x=-10/10,y=-10,15,z=-5/5}`)
 * `get_eye_offset()`: returns offset_first and offset_third
-* `get_nametag_attributes()`
-    * returns a table with the attributes of the nametag of the player
-    * {
-        color = {a=0..255, r=0..255, g=0..255, b=0..255},
-      }
-* `set_nametag_attributes(attributes)`
-    * sets the attributes of the nametag of the player
-    * `attributes`:
-      {
-        color = ColorSpec,
-      }
 
 ### `InvRef`
 An `InvRef` is a reference to an inventory.
@@ -2938,6 +2942,7 @@ core.CONTENT_IGNORE  (ID for "ignore" nodes)
 Inside of `on_generated()` callbacks, it is possible to retrieve the same VoxelManip object used by the
 core's Map Generator (commonly abbreviated Mapgen).  Most of the rules previously described still apply
 but with a few differences:
+
 * The Mapgen VoxelManip object is retrieved using: `minetest.get_mapgen_object("voxelmanip")`
 * This VoxelManip object already has the region of map just generated loaded into it; it's not necessary
   to call `VoxelManip:read_from_map()` before using a Mapgen VoxelManip.
@@ -2996,7 +3001,7 @@ will place the schematic inside of the VoxelManip.
 * `update_map()`: Update map after writing chunk back to map.
     * To be used only by `VoxelManip` objects created by the mod itself;
       not a `VoxelManip` that was retrieved from `minetest.get_mapgen_object`
-* `set_lighting(light, p1, p2)`: Set the lighting within the `VoxelManip` to a uniform value
+* `set_lighting(light, [p1, p2])`: Set the lighting within the `VoxelManip` to a uniform value
     * `light` is a table, `{day=<0...15>, night=<0...15>}`
     * To be used only by a `VoxelManip` object from `minetest.get_mapgen_object`
     * (`p1`, `p2`) is the area in which lighting is set;
@@ -3010,10 +3015,12 @@ will place the schematic inside of the VoxelManip.
     * expects lighting data in the same format that `get_light_data()` returns
 * `get_param2_data()`: Gets the raw `param2` data read into the `VoxelManip` object
 * `set_param2_data(param2_data)`: Sets the `param2` contents of each node in the `VoxelManip`
-* `calc_lighting(p1, p2)`:  Calculate lighting within the `VoxelManip`
+* `calc_lighting([p1, p2], [propagate_shadow])`:  Calculate lighting within the `VoxelManip`
     * To be used only by a `VoxelManip` object from `minetest.get_mapgen_object`
     * (`p1`, `p2`) is the area in which lighting is set; defaults to the whole area
-      if left out
+      if left out or nil
+    * `propagate_shadow` is an optional boolean deciding whether shadows in a generated
+      mapchunk above are propagated down into the mapchunk; defaults to `true` if left out
 * `update_liquids()`: Update liquid flow
 * `was_modified()`: Returns `true` or `false` if the data in the voxel manipulator
   had been modified since the last read from map, due to a call to
@@ -3227,6 +3234,8 @@ Definition tables
         automatic_face_movement_dir = 0.0,
     --  ^ automatically set yaw to movement direction; offset in degrees; false to disable
         backface_culling = true, -- false to disable backface_culling for model
+        nametag = "", -- by default empty, for players their name is shown if empty
+        nametag_color = <color>, -- sets color of nametag as ColorSpec
     }
 
 ### Entity definition (`register_entity`)

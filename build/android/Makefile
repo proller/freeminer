@@ -207,7 +207,7 @@ endif
 	$(ASSETS_TIMESTAMP) $(LEVELDB_TIMESTAMP) \
 	$(OPENAL_TIMESTAMP) $(OGG_TIMESTAMP) \
 	$(IRRLICHT_TIMESTAMP) $(CURL_TIMESTAMP) \
-	$(OPENSSL_TIMESTAMP) curl_binary \
+	$(OPENSSL_TIMESTAMP) \
 	$(ROOT)/jni/src/android_version.h \
 	$(ROOT)/jni/src/android_version_githash.h
 
@@ -673,18 +673,6 @@ clean_curl :
 	$(RM) -rf deps/curl-${CURL_VERSION}                                        \
 	$(RM) -f deps/curl
 
-
-curl_binary:
-	@if [ ! -d "deps/curl-${CURL_VERSION_BINARY}" ] ; then                     \
-		echo "curl binary missing, downloading...";                           \
-		mkdir -p ${ROOT}/deps;                                                 \
-		cd deps;                                                               \
-		wget http://curl.haxx.se/gknw.net/7.34.0/dist-android/curl-7.34.0-rtmp-ssh2-ssl-zlib-static-bin-android.tar.gz || exit 1;\
-		tar -xzf curl-7.34.0-rtmp-ssh2-ssl-zlib-static-bin-android.tar.gz || exit 1;\
-		mv curl-7.34.0-rtmp-ssh2-ssl-zlib-static-bin-android curl-${CURL_VERSION_BINARY};\
-		rm curl-7.34.0-rtmp-ssh2-ssl-zlib-static-bin-android.tar.gz;           \
-	fi
-
 $(GMP_TIMESTAMP) : gmp_download
 	@LAST_MODIF=$$(find ${GMP_DIR} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
 	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
@@ -801,9 +789,11 @@ assets : $(ASSETS_TIMESTAMP) locale
 	cp -r ${ROOT}/worlds ${ROOT}/assets/freeminer; \
 	cp ${ROOT}/../../README.md ${ROOT}/assets/freeminer; \
 	cp -r ${ROOT}/../../builtin ${ROOT}/assets/freeminer; \
-	cp -r ${ROOT}/../../client ${ROOT}/assets/freeminer; \
-	#cp -r ${ROOT}/../../doc ${ROOT}/assets/freeminer; \
-	cp -r ${ROOT}/../../fonts ${ROOT}/assets/freeminer; \
+	mkdir ${ROOT}/assets/freeminer/client;                                      \
+	cp -r ${ROOT}/../../client/shaders ${ROOT}/assets/freeminer/client;         \
+	#cp ${ROOT}/../../doc/lgpl-2.1.txt ${ROOT}/assets/freeminer/LICENSE.txt;     \
+	mkdir ${ROOT}/assets/freeminer/fonts; \
+	cp -r ${ROOT}/../../fonts/*.ttf ${ROOT}/assets/freeminer/fonts/; \
 	mkdir ${ROOT}/assets/freeminer/games${GAMES_VERSION}; \
 	for game in ${GAMES_TO_COPY};                                              \
 	do                                                                         \

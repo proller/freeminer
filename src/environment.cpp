@@ -374,8 +374,6 @@ ServerEnvironment::ServerEnvironment(ServerMap *map,
 	m_script(scriptIface),
 	m_gamedef(gamedef),
 	m_circuit(m_script, map, gamedef->ndef(), path_world),
-	m_key_value_storage(path_world, "key_value_storage"),
-	m_players_storage(path_world, "players"),
 	m_path_world(path_world),
 	m_send_recommended_timer(0),
 	m_active_objects_last(0),
@@ -392,11 +390,6 @@ ServerEnvironment::ServerEnvironment(ServerMap *map,
 	m_game_time = 0;
 	m_use_weather = g_settings->getBool("weather");
 	m_use_weather_biome = g_settings->getBool("weather_biome");
-
-	if (!m_key_value_storage.db)
-		errorstream << "Cant open KV storage: "<< m_key_value_storage.error << std::endl;
-	if (!m_players_storage.db)
-		errorstream << "Cant open players storage: "<< m_players_storage.error << std::endl;
 
 	// Init custom SAO
 	v3f nullpos;
@@ -449,9 +442,15 @@ ServerMap & ServerEnvironment::getServerMap()
 	return *m_map;
 }
 
-KeyValueStorage *ServerEnvironment::getKeyValueStorage()
+KeyValueStorage &ServerEnvironment::getKeyValueStorage(std::string name)
 {
-	return &m_key_value_storage;
+	if (name.empty()) {
+		name = "key_value_storage";
+	}
+	if (!m_key_value_storage.count(name)) {
+		m_key_value_storage.emplace(std::piecewise_construct, std::forward_as_tuple(name), std::forward_as_tuple(m_path_world, name));
+	}
+	return m_key_value_storage.at(name);
 }
 
 bool ServerEnvironment::line_of_sight(v3f pos1, v3f pos2, float stepsize, v3s16 *p)
@@ -516,7 +515,7 @@ void ServerEnvironment::savePlayer(RemotePlayer *player)
 		return;
 	Json::Value player_json;
 	player_json << *player;
-	m_players_storage.put_json("p." + player->getName(), player_json);
+	getPlayerStorage().put_json("p." + player->getName(), player_json);
 }
 
 Player * ServerEnvironment::loadPlayer(const std::string &playername)
@@ -532,7 +531,7 @@ Player * ServerEnvironment::loadPlayer(const std::string &playername)
 
 	try {
 		Json::Value player_json;
-		m_players_storage.get_json("p." + playername, player_json);
+		getPlayerStorage().get_json("p." + playername, player_json);
 		verbosestream<<"Reading kv player "<<playername<<std::endl;
 		if (!player_json.empty()) {
 			player_json >> *player;
@@ -1090,17 +1089,19 @@ bool ServerEnvironment::swapNode(v3s16 p, const MapNode &n)
 
 void ServerEnvironment::getObjectsInsideRadius(std::vector<u16> &objects, v3f pos, float radius)
 {
+	int obj_null = 0, obj_count = 0;
 	auto lock = m_active_objects.lock_shared_rec();
 	for(auto
 			i = m_active_objects.begin();
 			i != m_active_objects.end(); ++i)
 	{
+		++obj_count;
 		ServerActiveObject* obj = i->second;
-		u16 id = i->first;
 		if (!obj) {
-			infostream<<"ServerEnvironment::getObjectsInsideRadius(): "<<"got null object "<<id<<" = "<<obj<<std::endl;
+			++obj_null;
 			continue;
 		}
+		u16 id = i->first;
 		if (obj->m_removed || obj->m_pending_deactivation)
 			continue;
 
@@ -1109,6 +1110,8 @@ void ServerEnvironment::getObjectsInsideRadius(std::vector<u16> &objects, v3f po
 			continue;
 		objects.push_back(id);
 	}
+	if (obj_null)
+		infostream<<"ServerEnvironment::getObjectsInsideRadius(): "<<"got null objects: "<<obj_null<<"/"<<obj_count<<std::endl;
 }
 
 void ServerEnvironment::clearAllObjects()
@@ -1530,6 +1533,10 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		}
 	}
 
+	{
+	TimeTaker timer("contrib_globalstep");
+	contrib_globalstep(dtime);
+	}
 	/*
 		Step script environment (run global on_step())
 	*/
@@ -2515,9 +2522,11 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 
 		if(pending_delete && !force_delete)
 		{
+/*
 			verbosestream<<"ServerEnvironment::deactivateFarObjects(): "
 					<<"object id="<<id<<" is known by clients"
 					<<"; not deleting yet"<<std::endl;
+*/
 
 			obj->m_pending_deactivation = true;
 			continue;
