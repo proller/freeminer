@@ -121,7 +121,8 @@ Mapgen_features::Mapgen_features(int mapgenid, MapgenParams *params, EmergeManag
 	layers_node_size(0),
 	noise_float_islands1(nullptr),
 	noise_float_islands2(nullptr),
-	noise_float_islands3(nullptr)
+	noise_float_islands3(nullptr),
+	noise_cave_indev(nullptr)
 {
 	y_offset = 0;
 
@@ -182,18 +183,18 @@ void MapgenIndev::calculateNoise() {
 
 MapgenIndevParams::MapgenIndevParams() {
 	float_islands = 500;
-	np_terrain_base    = NoiseParams(-4,   20,  v3f(250, 250, 250), 82341, 5, 0.6,  2.0, NOISE_FLAG_DEFAULTS, 10,  10,  0.5);
-	np_terrain_higher  = NoiseParams(20,   16,  v3f(500, 500, 500), 85039, 5, 0.6,  2.0, NOISE_FLAG_DEFAULTS, 10,  10,  0.5);
-	np_steepness       = NoiseParams(0.85, 0.5, v3f(125, 125, 125), -932,  5, 0.7,  2.0, NOISE_FLAG_DEFAULTS, 2,   10,  0.5);
-	np_height_select   = NoiseParams(0.5,  1,   v3f(250, 250, 250), 4213,  5, 0.69, 2.0, NOISE_FLAG_DEFAULTS, 10,  10,  0.5);
+	np_terrain_base    = NoiseParams(-4,   20,  v3f(250, 250, 250), 82341, 5, 0.6,  2.0, NOISE_FLAG_DEFAULTS, 10,  1,  0.2);
+	np_terrain_higher  = NoiseParams(20,   16,  v3f(500, 500, 500), 85039, 5, 0.6,  2.0, NOISE_FLAG_DEFAULTS, 10,  1,  0.3);
+	np_steepness       = NoiseParams(0.85, 0.5, v3f(125, 125, 125), -932,  5, 0.7,  2.0, NOISE_FLAG_DEFAULTS, 2,   1,  0.5);
+	np_height_select   = NoiseParams(0.5,  1,   v3f(250, 250, 250), 4213,  5, 0.69, 2.0, NOISE_FLAG_DEFAULTS, 2,   1,  0.5);
 	np_mud             = NoiseParams(4,    2,   v3f(200, 200, 200), 91013, 3, 0.55, 2.0, NOISE_FLAG_DEFAULTS, 1,   1,   1);
 	np_beach           = NoiseParams(0,    1,   v3f(250, 250, 250), 59420, 3, 0.50, 2.0, NOISE_FLAG_DEFAULTS, 1,   1,   1);
-	np_biome           = NoiseParams(0,    1,   v3f(250, 250, 250), 9130,  3, 0.50, 2.0, NOISE_FLAG_DEFAULTS, 1,   10,  1);
-	np_float_islands1  = NoiseParams(0,    1,   v3f(256, 256, 256), 3683,  6, 0.6,  2.0, NOISE_FLAG_DEFAULTS, 1,   1.5, 1);
-	np_float_islands2  = NoiseParams(0,    1,   v3f(8,   8,   8  ), 9292,  2, 0.5,  2.0, NOISE_FLAG_DEFAULTS, 1,   1.5, 1);
-	np_float_islands3  = NoiseParams(0,    1,   v3f(256, 256, 256), 6412,  2, 0.5,  2.0, NOISE_FLAG_DEFAULTS, 1,   0.5, 1);
-	np_layers          = NoiseParams(500,  500, v3f(100, 100, 100), 3663,  5, 0.6,  2.0, NOISE_FLAG_DEFAULTS, 1,   5,   0.5);
-	np_cave_indev      = NoiseParams(0,  1000,   v3f(500, 500, 500), 3664,  4, 0.8,  2.0, NOISE_FLAG_DEFAULTS, 4, 1, 1);
+	np_biome           = NoiseParams(0,    1,   v3f(250, 250, 250), 9130,  3, 0.50, 2.0, NOISE_FLAG_DEFAULTS, 1,   1,   1);
+	np_float_islands1  = NoiseParams(0,    1,   v3f(256, 256, 256), 3683,  6, 0.6,  2.0, NOISE_FLAG_DEFAULTS, 1.5, 1,   1);
+	np_float_islands2  = NoiseParams(0,    1,   v3f(8,   8,   8  ), 9292,  2, 0.5,  2.0, NOISE_FLAG_DEFAULTS, 1.5, 1,   1);
+	np_float_islands3  = NoiseParams(0,    1,   v3f(256, 256, 256), 6412,  2, 0.5,  2.0, NOISE_FLAG_DEFAULTS, 0.5, 1,   1);
+	np_layers          = NoiseParams(500,  500, v3f(100, 100, 100), 3663,  5, 0.6,  2.0, NOISE_FLAG_DEFAULTS, 1,   1,   0.5);
+	np_cave_indev      = NoiseParams(0,   1000, v3f(500, 500, 500), 3664,  4, 0.8,  2.0, NOISE_FLAG_DEFAULTS, 4,   1,   1);
 }
 
 void MapgenIndevParams::readParams(Settings *settings) {
@@ -426,8 +427,17 @@ int MapgenIndev::generateGround() {
 					int index3 = (z - node_min.Z) * zstride + (y - node_min.Y) * ystride + (x - node_min.X) * xstride;
 					if (cave_noise_threshold && noise_cave_indev->result[index3] > cave_noise_threshold) {
 						vm->m_data[i] = n_air;
-					} else {
-						vm->m_data[i] = (y > water_level - surface_y && bt == BT_DESERT) ? n_desert_stone : layers_get(index3);
+					} else { 
+						auto n = (y > water_level - surface_y && bt == BT_DESERT) ? n_desert_stone : layers_get(index3);
+						bool protect = n.getContent() != CONTENT_AIR;
+						if (cave_noise_threshold && noise_cave_indev->result[index3] > cave_noise_threshold - 50) {
+							vm->m_data[i] = protect ? n_stone : n; //cave shell without layers
+							protect = true;
+						} else {
+							vm->m_data[i] = n;
+						}
+						if (protect)
+							vm->m_flags[i] |= VOXELFLAG_CHECKED2; // no cave liquid
 					}
 				} else if (y <= water_level) {
 					vm->m_data[i] = (heat < 0 && y > heat/3) ? n_ice : n_water_source;
