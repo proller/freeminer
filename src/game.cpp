@@ -1995,6 +1995,13 @@ void Game::shutdown()
 		g_profiler->print(actionstream);
 	}
 
+	if (g_settings->get("3d_mode") == "pageflip") {
+// fmTODO: fixme:
+#if IRRLICHT_VERSION_10000 < 10900
+		driver->setRenderTarget(irr::video::ERT_STEREO_BOTH_BUFFERS);
+#endif
+	}
+
 	showOverlayMessage(wstrgettext("Shutting down..."), 0, 0, false);
 
 	if (clouds)

@@ -518,7 +518,8 @@
 #    -    interlaced: odd/even line based polarisation screen support.
 #    -    topbottom: split screen top/bottom.
 #    -    sidebyside: split screen side by side.
-#    type: enum values: none, anaglyph, interlaced, topbottom, sidebyside
+#    -    pageflip: quadbuffer based 3d.
+#    type: enum values: none, anaglyph, interlaced, topbottom, sidebyside, pageflip
 # 3d_mode = none
 
 #    In-game chat console background color (R,G,B).
@@ -1186,8 +1187,8 @@
 #    Occasional lakes and hills added to the flat world.
 #    Flags that are not specified in the flag string are not modified from the default.
 #    Flags starting with "no" are used to explicitly disable them.
-#    type: flags possible values: lakes, hills, nolakes, nohills
-# mgflat_spflags = nolakes,nohills
+#    type: flags possible values: lakes, hills, , nolakes, nohills
+# mgflat_spflags = 
 
 #    Y of flat ground.
 #    type: int
