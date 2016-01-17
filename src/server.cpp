@@ -119,22 +119,26 @@ void *ServerThread::run()
 	auto time = porting::getTimeMs();
 	while (!stopRequested()) {
 		try {
-			//TimeTaker timer("AsyncRunStep() + Receive()");
 			u32 time_now = porting::getTimeMs();
+			{
+			TimeTaker timer("Server AsyncRunStep()");
 			m_server->AsyncRunStep((time_now - time)/1000.0f);
+			}
 			time = time_now;
 
+			TimeTaker timer("Server Receive()");
 			// Loop used only when 100% cpu load or on old slow hardware.
 			// usually only one packet recieved here
 			u32 end_ms = porting::getTimeMs();
 			int sleep = (1000 * dedicated_server_step) - (end_ms - time_now);
-			if (sleep < 10)
-				sleep = 10;
+			if (sleep < 50)
+				sleep = 50;
 			end_ms += sleep; //u32(1000 * dedicated_server_step/2);
 			for (u16 i = 0; i < 1000; ++i) {
 				if (!m_server->Receive(sleep))
 					break;
-				if (porting::getTimeMs() > end_ms)
+				if (i > 50 && porting::getTimeMs() > end_ms)
+					verbosestream<<"Server: Recieve queue overloaded: processed="  << i << " per="<<porting::getTimeMs()-(end_ms-sleep)<<" sleep="<<sleep<<std::endl;
 					break;
 			}
 		} catch (con::NoIncomingDataException &e) {

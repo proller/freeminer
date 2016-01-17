@@ -239,6 +239,20 @@ enum NodeDrawType
 	NDT_MESH, // Uses static meshes
 };
 
+struct ContentFeatureSingleDrop
+{
+	std::string item;
+	u16 rarity;
+	u16 min_items;
+	u16 max_items;
+};
+
+struct ContentFeatureDrops
+{
+	u8 max_items;
+	std::vector<ContentFeatureSingleDrop> items;
+};
+
 #define CF_SPECIAL_COUNT 6
 
 struct ContentFeatures
@@ -308,6 +322,8 @@ struct ContentFeatures
 	bool climbable;
 	// Player can build on these
 	bool buildable_to;
+	// Liquids flow into and replace node
+	bool floodable;
 	// Player cannot build to these (placement prediction disabled)
 	bool rightclickable;
 	// Flowing liquid or snow, value = default level

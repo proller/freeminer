@@ -27,19 +27,11 @@ function core.get_pointed_thing_position(pointed_thing, above)
 		if above then
 			-- The position where a node would be placed
 			return pointed_thing.above
-		else
-			-- The position where a node would be dug
-			return pointed_thing.under
 		end
+		-- The position where a node would be dug
+		return pointed_thing.under
 	elseif pointed_thing.type == "object" then
-		obj = pointed_thing.ref
-		if obj ~= nil then
-			return obj:getpos()
-		else
-			return nil
-		end
-	else
-		return nil
+		return pointed_thing.ref and pointed_thing.ref:getpos()
 	end
 end
 
@@ -357,6 +349,10 @@ function core.item_place(itemstack, placer, pointed_thing, param2)
 	return itemstack
 end
 
+function core.item_secondary_use(itemstack, placer)
+	return itemstack
+end
+
 function core.item_drop(itemstack, dropper, pos)
 	if dropper and dropper:is_player() then
 		local v = dropper:get_look_dir()
@@ -588,6 +584,7 @@ core.nodedef_default = {
 	diggable = true,
 	climbable = false,
 	buildable_to = false,
+	floodable = false,
 	liquidtype = "none",
 	liquid_alternative_flowing = "",
 	liquid_alternative_source = "",
@@ -615,6 +612,7 @@ core.craftitemdef_default = {
 	-- Interaction callbacks
 	on_place = redef_wrapper(core, 'item_place'), -- core.item_place
 	on_drop = redef_wrapper(core, 'item_drop'), -- core.item_drop
+	on_secondary_use = redef_wrapper(core, 'item_secondary_use'),
 	on_use = nil,
 }
 
@@ -632,6 +630,7 @@ core.tooldef_default = {
 
 	-- Interaction callbacks
 	on_place = redef_wrapper(core, 'item_place'), -- core.item_place
+	on_secondary_use = redef_wrapper(core, 'item_secondary_use'),
 	on_drop = redef_wrapper(core, 'item_drop'), -- core.item_drop
 	on_use = nil,
 }
@@ -650,6 +649,7 @@ core.noneitemdef_default = {  -- This is used for the hand and unknown items
 
 	-- Interaction callbacks
 	on_place = redef_wrapper(core, 'item_place'),
+	on_secondary_use = redef_wrapper(core, 'item_secondary_use'),
 	on_drop = nil,
 	on_use = nil,
 }
