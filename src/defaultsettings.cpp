@@ -332,6 +332,10 @@ void fm_set_default_settings(Settings *settings) {
 
 #endif
 
+#ifdef HAVE_TOUCHSCREENGUI
+	settings->setDefault("touchtarget", "true");
+#endif
+
 }
 
 

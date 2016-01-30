@@ -382,7 +382,7 @@ set(USE_FREETYPE FALSE)
 		set(CGUITTFONT_LIBRARY cguittfont)
 	endif()
 
-if(NOT FREETYPE_FOUND)
+if(NOT FREETYPE_FOUND AND NOT NO_BUILD)
 	message(FATAL_ERROR "FreeType was not found.")
 endif()
 
@@ -775,6 +775,11 @@ set(FMclient_SRCS
 	intlGUIEditBox.cpp
 	FMStaticText.cpp
 )
+
+if (USE_TOUCHSCREENGUI)
+	add_definitions(-DHAVE_TOUCHSCREENGUI)
+	set(FMclient_SRCS ${FMclient_SRCS} touchscreengui.cpp)
+endif()
 
 # Client sources
 if (BUILD_CLIENT)
