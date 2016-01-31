@@ -72,7 +72,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <iomanip>
 #include "msgpack_fix.h"
 #include <chrono>
-#include "util/thread_pool.h"
+#include "threading/thread_pool.h"
 #include "key_value_storage.h"
 #include "database.h"
 
@@ -2446,6 +2446,8 @@ void Server::sendAddNode(v3s16 p, MapNode n, u16 ignore_id,
 	}
 }
 
+
+void SendPunchPlayer(u16 peer_id, v3f speed) { }
 #endif
 
 void Server::SendChatMessage(u16 peer_id, const std::wstring &message) {

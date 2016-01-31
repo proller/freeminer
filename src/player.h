@@ -28,7 +28,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "constants.h" // BS
 #include "threading/mutex.h"
 #include <list>
-#include "util/lock.h"
+#include "threading/lock.h"
 #include "json/json.h"
 
 #define PLAYERNAME_SIZE 20
@@ -126,6 +126,8 @@ public:
 		auto lock = lock_unique();
 		m_speed = speed;
 	}
+
+	void addSpeed(v3f speed);
 
 	void accelerateHorizontal(v3f target_speed, f32 max_increase, float slippery=0);
 	void accelerateVertical(v3f target_speed, f32 max_increase);
@@ -380,10 +382,10 @@ public:
 	std::string inventory_formspec;
 
 	PlayerControl control;
-	std::mutex control_mutex;
+	Mutex control_mutex;
 	PlayerControl getPlayerControl()
 	{
-		std::lock_guard<std::mutex> lock(control_mutex);
+		std::lock_guard<Mutex> lock(control_mutex);
 		return control;
 	}
 
