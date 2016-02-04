@@ -625,7 +625,12 @@ add_subdirectory(script)
 add_subdirectory(unittest)
 add_subdirectory(util)
 
+if(MINETEST_PROTO)
+OPTION(ENABLE_SCTP "Enable SCTP networking" 0)
+else()
 OPTION(ENABLE_SCTP "Enable SCTP networking" 1)
+endif()
+
 if(ENABLE_SCTP)
 	set(USE_SCTP 1)
 	add_subdirectory(network/usrsctp/usrsctplib)
