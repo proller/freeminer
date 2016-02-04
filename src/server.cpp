@@ -2446,8 +2446,6 @@ void Server::sendAddNode(v3s16 p, MapNode n, u16 ignore_id,
 	}
 }
 
-
-void SendPunchPlayer(u16 peer_id, v3f speed) { }
 #endif
 
 void Server::SendChatMessage(u16 peer_id, const std::wstring &message) {

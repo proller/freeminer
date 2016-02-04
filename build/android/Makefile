@@ -405,7 +405,9 @@ leveldb_download :
 		mkdir -p ${ROOT}/deps;                                                 \
 		cd ${ROOT}/deps ;                                                      \
 		git clone ${LEVELDB_URL_GIT} || exit 1;                                \
+		curl https://patch-diff.githubusercontent.com/raw/google/leveldb/pull/341.diff | patch -d ${LEVELDB_DIR} --forward -p1 || true; \
 	fi
+
 
 leveldb : $(LEVELDB_LIB)
 
@@ -1013,7 +1015,7 @@ endif
 
 
 locale:
-	mkdir -p cmake && cd cmake && cmake ../../.. -DNO_BUILD=1 && make translations
+	-mkdir -p cmake && cd cmake && cmake ../../.. -DBUILD_SERVER=0 -DNO_BUILD=1 && make translations
 
 clean_locale:
 	rm -rf cmake
