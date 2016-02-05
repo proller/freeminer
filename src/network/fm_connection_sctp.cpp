@@ -913,7 +913,7 @@ void Connection::serve(Address bind_addr) {
 	//addr.sin_port = htons(bind_addr.getPort()); //htons(13);
 	//printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
 	cs << "Waiting for connections on sctp port " << ntohs(addr.sin6_port) << "\n";
-	if (usrsctp_bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+	if (usrsctp_bind(sock, (struct sockaddr *)&addr, sizeof(struct sockaddr_in6)) < 0) {
 		perror("usrsctp_bind");
 	}
 	if (usrsctp_listen(sock, 10) < 0) {
@@ -1010,7 +1010,7 @@ void Connection::connect(Address addr) {
 		//addr.sin_port = htons(bind_addr.getPort()); //htons(13);
 		//printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
 		//printf("Waiting for connections on port %d\n",ntohs(addr.sin6_port));
-		if (usrsctp_bind(sock, (struct sockaddr *)&addr_local, sizeof(addr)) < 0) {
+		if (usrsctp_bind(sock, (struct sockaddr *)&addr_local, sizeof(struct sockaddr_in6)) < 0) {
 			perror("usrsctp_bind");
 		}
 	*/
@@ -1039,7 +1039,7 @@ void Connection::connect(Address addr) {
 	addr6.sin6_family = AF_INET6;
 	addr6.sin6_addr = in6addr_any;
 
-	if (usrsctp_bind(sock, (struct sockaddr *)&addr6, sizeof(addr)) < 0) {
+	if (usrsctp_bind(sock, (struct sockaddr *)&addr6, sizeof(struct sockaddr_in6)) < 0) {
 		perror("usrsctp_bind");
 	}
 
