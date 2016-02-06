@@ -276,7 +276,7 @@ void LuaEntitySAO::step(float dtime, bool send_recommended)
 			v3f p_acceleration = m_acceleration;
 			moveresult = collisionMoveSimple(m_env,m_env->getGameDef(),
 					pos_max_d, box, m_prop.stepheight, dtime,
-					p_pos, p_velocity, p_acceleration,
+					&p_pos, &p_velocity, p_acceleration,
 					this, m_prop.collideWithObjects);
 
 			// Apply results
@@ -1009,15 +1009,18 @@ void PlayerSAO::step(float dtime, bool send_recommended)
 	{
 		m_position_not_sent = false;
 		float update_interval = m_env->getSendRecommendedInterval();
-		v3f pos;
+		v3f pos, vel, acc;
 		if(isAttached()) // Just in case we ever do send attachment position too
 			pos = m_env->getActiveObject(m_attachment_parent_id)->getBasePosition();
 		else
+		{
 			pos = m_player->getPosition() + v3f(0,BS*1,0);
+			vel = m_player->getSpeed();
+		}
 		std::string str = gob_cmd_update_position(
 			pos,
-			v3f(0,0,0),
-			v3f(0,0,0),
+			vel,
+			acc,
 			m_player->getYaw(),
 			true,
 			false,
@@ -1131,6 +1134,14 @@ void PlayerSAO::setPitch(float pitch)
 	((Server*)m_env->getGameDef())->SendMovePlayer(m_peer_id);
 }
 
+void PlayerSAO::addSpeed(v3f speed)
+{
+	if (!m_player)
+		return;
+	m_player->addSpeed(speed);
+	((Server*)m_env->getGameDef())->SendPunchPlayer(m_peer_id, speed);
+}
+
 int PlayerSAO::punch(v3f dir,
 	const ToolCapabilities *toolcap,
 	ServerActiveObject *puncher,
@@ -1182,6 +1193,8 @@ int PlayerSAO::punch(v3f dir,
 		}
 	}
 
+	v3f punch = dir * 5 * BS;
+	addSpeed(punch);
 
 	actionstream << "Player " << m_player->getName() << " punched by "
 			<< punchername;
@@ -1235,6 +1248,8 @@ void PlayerSAO::setHP(s16 hp)
 		return;
 	}
 
+	if (!m_player)
+		return;
 	m_player->hp = hp;
 
 	if (oldhp > hp)

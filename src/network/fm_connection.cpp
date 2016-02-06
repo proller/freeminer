@@ -96,7 +96,7 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	m_protocol_id(protocol_id),
 	m_max_packet_size(max_packet_size),
 	m_timeout(timeout),
-	m_enet_host(0),
+	m_enet_host(nullptr),
 	m_peer_id(0),
 	m_bc_peerhandler(peerhandler),
 	m_last_recieved(0),
@@ -296,7 +296,7 @@ void Connection::serve(Address bind_addr)
 	address.port = bind_addr.getPort(); // fmtodo
 
 	m_enet_host = enet_host_create(&address, g_settings->getU16("max_users"), CHANNEL_COUNT, 0, 0);
-	if (m_enet_host == NULL) {
+	if (!m_enet_host) {
 		ConnectionEvent ev(CONNEVENT_BIND_FAILED);
 		putEvent(ev);
 	}
@@ -316,6 +316,11 @@ void Connection::connect(Address addr)
 	}
 
 	m_enet_host = enet_host_create(NULL, 1, 0, 0, 0);
+	if (!m_enet_host) {
+		ConnectionEvent ev(CONNEVENT_CONNECT_FAILED);
+		putEvent(ev);
+		return;
+	}
 	ENetAddress address;
 #if defined(ENET_IPV6)
 	if (!addr.isIPv6())

@@ -35,7 +35,7 @@ ANDROID_VERSION_CODE = 13
 
 
 #and for freeminer for skip conflict:
-BUILD_NUMBER = 54
+BUILD_NUMBER = 56
 
 ANDROID_VERSION_CODE = $(BUILD_NUMBER)
 
@@ -123,7 +123,7 @@ endif
 ASSETS_TIMESTAMP = deps/assets_timestamp
 
 LEVELDB_DIR = $(ROOT)/deps/leveldb/
-LEVELDB_LIB = $(LEVELDB_DIR)libleveldb.a
+LEVELDB_LIB = $(LEVELDB_DIR)/out-static/libleveldb.a
 LEVELDB_TIMESTAMP = $(LEVELDB_DIR)/timestamp
 LEVELDB_TIMESTAMP_INT = $(ROOT)/deps/leveldb_timestamp
 LEVELDB_URL_GIT = https://github.com/google/leveldb
@@ -154,7 +154,7 @@ IRRLICHT_GIT_COMMIT = 58fa0cf
 
 #IRRLICHT_URL_SVN = http://svn.code.sf.net/p/irrlicht/code/branches/ogl-es@$(IRRLICHT_REVISION)
 
-OPENSSL_VERSION = 1.0.2e
+OPENSSL_VERSION = 1.0.2f
 OPENSSL_BASEDIR = openssl-$(OPENSSL_VERSION)
 OPENSSL_DIR = $(ROOT)/deps/$(OPENSSL_BASEDIR)/
 OPENSSL_LIB = $(OPENSSL_DIR)/libssl.so.1.0.0
@@ -162,7 +162,7 @@ OPENSSL_TIMESTAMP = $(OPENSSL_DIR)timestamp
 OPENSSL_TIMESTAMP_INT = $(ROOT)/deps/openssl_timestamp
 OPENSSL_URL = http://www.openssl.org/source/openssl-$(OPENSSL_VERSION).tar.gz
 
-CURL_VERSION = 7.46.0
+CURL_VERSION = 7.47.0
 CURL_DIR = $(ROOT)/deps/curl-$(CURL_VERSION)
 CURL_LIB = $(CURL_DIR)/lib/.libs/libcurl.a
 CURL_TIMESTAMP = $(CURL_DIR)/timestamp
@@ -189,7 +189,7 @@ ICONV_TIMESTAMP = $(ICONV_DIR)timestamp
 ICONV_TIMESTAMP_INT = $(ROOT)/deps/iconv_timestamp
 ICONV_URL_HTTP = http://ftp.gnu.org/pub/gnu/libiconv/libiconv-$(ICONV_VERSION).tar.gz
 
-SQLITE3_FOLDER = sqlite-amalgamation-3100100
+SQLITE3_FOLDER = sqlite-amalgamation-3100200
 SQLITE3_URL = http://www.sqlite.org/2016/$(SQLITE3_FOLDER).zip
 
 -include $(PATHCFGFILE)
@@ -409,7 +409,9 @@ leveldb_download :
 		mkdir -p ${ROOT}/deps;                                                 \
 		cd ${ROOT}/deps ;                                                      \
 		git clone ${LEVELDB_URL_GIT} || exit 1;                                \
+		curl https://patch-diff.githubusercontent.com/raw/google/leveldb/pull/341.diff | patch -d ${LEVELDB_DIR} --forward -p1 || true; \
 	fi
+
 
 leveldb : $(LEVELDB_LIB)
 
@@ -1017,7 +1019,7 @@ endif
 
 
 locale:
-	mkdir -p cmake && cd cmake && cmake ../../.. && make translations
+	-mkdir -p cmake && cd cmake && cmake ../../.. -DBUILD_SERVER=0 -DNO_BUILD=1 && make translations
 
 clean_locale:
 	rm -rf cmake
@@ -1028,7 +1030,7 @@ clean_locale:
 # $(ICONV_LIB)
 apk: $(PATHCFGFILE) assets $(IRRLICHT_LIB) $(CURL_LIB) $(GMP_LIB) $(LEVELDB_TARGET)       \
 	$(OPENAL_LIB) $(OGG_LIB) prep_srcdir $(ROOT)/jni/src/android_version.h     \
-	$(MSGPACK_TARGET) $(GETTEXT_LIB) $(LUAJIT_TARGET) \
+	$(MSGPACK_TARGET) $(GETTEXT_LIB) $(LUAJIT_TARGET) $(FREETYPE_LIB) \
 	$(ROOT)/jni/src/android_version_githash.h sqlite3_download
 	@export NDEBUG=$$NDEBUG; $(MAKE) manifest;                                 \
 	export PATH=$$PATH:${SDKFOLDER}/platform-tools:${ANDROID_NDK};             \

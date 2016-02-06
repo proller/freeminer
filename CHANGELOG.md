@@ -1,5 +1,22 @@
-Engine
+Freeminer version X.Y.Z.F based on minetest version X.Y.Z , minetest details at http://dev.minetest.net/Changelog
+
+Key differences from minetest:
+
+Gameplay: Real liquids, weather, seasons http://www.youtube.com/channel/UCIRUqUD0bJ2wpxTQ01gbG3g
+
+Core: fast reliable network protocol, fast multi-threaded server, utf8 chat, built in /stat command
+
+
+Changelog
 ======
+
+### 0.4.13.8 ( )
+  * Stability and speed fixes
+  * kv lua api: now possible to use any custom db:  core.kv_put('mykey', 'mydata', 'mydb'); core.kv_get('mykey', 'mydb');    'mydb' is optional
+  * Optional store auth database to leveldb, no huge auth.txt. to enable: auth_kv=1
+  * Mapgen indev: huge noise based caves
+  * Auto delete old items by default. push items up from solid blocks.
+
 
 ### 0.4.13.7 (Aug 20, 2015)
   * Stability and speed fixes

@@ -72,7 +72,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <iomanip>
 #include "msgpack_fix.h"
 #include <chrono>
-#include "util/thread_pool.h"
+#include "threading/thread_pool.h"
 #include "key_value_storage.h"
 #include "database.h"
 
@@ -2909,6 +2909,7 @@ void Server::RespawnPlayer(u16 peer_id)
 	if(!repositioned){
 		v3f pos = findSpawnPos();
 		// setPos will send the new position to client
+		playersao->getPlayer()->setSpeed(v3f(0,0,0));
 		playersao->setPos(pos);
 	}
 
@@ -3443,13 +3444,14 @@ s32 Server::hudGetHotbarItemcount(Player *player)
 	return player->getHotbarItemcount();
 }
 
-void Server::hudSetHotbarImage(Player *player, std::string name)
+void Server::hudSetHotbarImage(Player *player, std::string name, int items)
 {
 	if (!player)
 		return;
 
 	player->setHotbarImage(name);
 	SendHUDSetParam(player->peer_id, HUD_PARAM_HOTBAR_IMAGE, name);
+	SendHUDSetParam(player->peer_id, HUD_PARAM_HOTBAR_IMAGE_ITEMS, std::string() + to_string(items));
 }
 
 std::string Server::hudGetHotbarImage(Player *player)

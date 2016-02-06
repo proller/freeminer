@@ -46,7 +46,7 @@ MapBlock* Map::getBlockNoCreateNoEx(v3POS p, bool trylock, bool nocache) {
 
 	if (!nocache) {
 #if ENABLE_THREADS && !HAVE_THREAD_LOCAL
-		auto lock = try_shared_lock(m_block_cache_mutex, TRY_TO_LOCK);
+		auto lock = try_shared_lock(m_block_cache_mutex, try_to_lock);
 		if(lock.owns_lock())
 #endif
 			if(m_block_cache && p == m_block_cache_p) {
@@ -70,7 +70,7 @@ MapBlock* Map::getBlockNoCreateNoEx(v3POS p, bool trylock, bool nocache) {
 
 	if (!nocache) {
 #if ENABLE_THREADS && !HAVE_THREAD_LOCAL
-		auto lock = unique_lock(m_block_cache_mutex, TRY_TO_LOCK);
+		auto lock = unique_lock(m_block_cache_mutex, try_to_lock);
 		if(lock.owns_lock())
 #endif
 		{
@@ -173,7 +173,7 @@ MapNode Map::getNodeNoLock(v3POS p) //dont use
 }
 */
 v3POS Map::transforming_liquid_pop() {
-	std::lock_guard<std::mutex> lock(m_transforming_liquid_mutex);
+	std::lock_guard<Mutex> lock(m_transforming_liquid_mutex);
 	auto front = m_transforming_liquid.front();
 	m_transforming_liquid.pop_front();
 	return front;
@@ -639,6 +639,8 @@ bool Map::propagateSunlight(v3POS pos, std::set<v3POS> & light_sources,
                             bool remove_light) {
 	MapBlock *block = getBlockNoCreateNoEx(pos);
 
+	auto lock = block->lock_unique_rec();
+
 	INodeDefManager *nodemgr = m_gamedef->ndef();
 
 	// Whether the sunlight at the top of the bottom block is valid
@@ -802,4 +804,19 @@ unsigned int Map::updateLightingQueue(unsigned int max_cycle_ms) {
 	}
 
 	return ret;
+}
+
+MapNode Map::getNodeNoEx(v3s16 p)
+{
+#ifndef NDEBUG
+	ScopeProfiler sp(g_profiler, "Map: getNodeNoEx");
+#endif
+
+	v3s16 blockpos = getNodeBlockPos(p);
+	MapBlock *block = getBlockNoCreateNoEx(blockpos);
+	if (!block)
+		return ignoreNode;
+
+	v3s16 relpos = p - blockpos*MAP_BLOCKSIZE;
+	return block->getNode(relpos);
 }

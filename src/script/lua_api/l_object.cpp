@@ -838,9 +838,17 @@ int ObjectRef::l_setvelocity(lua_State *L)
 {
 	NO_MAP_LOCK_REQUIRED;
 	ObjectRef *ref = checkobject(L, 1);
+
+	v3f pos = checkFloatPos(L, 2);
+
+	PlayerSAO* ps = getplayersao(ref);
+	if (ps) {
+		ps->addSpeed(pos);
+		return 0;
+	}
+
 	LuaEntitySAO *co = getluaobject(ref);
 	if (co == NULL) return 0;
-	v3f pos = checkFloatPos(L, 2);
 	// Do it
 	co->setVelocity(pos);
 	return 0;
@@ -851,6 +859,16 @@ int ObjectRef::l_getvelocity(lua_State *L)
 {
 	NO_MAP_LOCK_REQUIRED;
 	ObjectRef *ref = checkobject(L, 1);
+
+	{
+		PlayerSAO* co = getplayersao(ref);
+		if (co) {
+			v3f v = co->getPlayer()->getSpeed();
+			pushFloatPos(L, v);
+			return 1;
+		}
+	}
+
 	LuaEntitySAO *co = getluaobject(ref);
 	if (co == NULL) return 0;
 	// Do it
@@ -1498,8 +1516,8 @@ int ObjectRef::l_hud_set_hotbar_image(lua_State *L)
 		return 0;
 
 	std::string name = lua_tostring(L, 2);
-
-	getServer(L)->hudSetHotbarImage(player, name);
+	auto items = lua_tonumber(L, 3);
+	getServer(L)->hudSetHotbarImage(player, name, items);
 	return 1;
 }
 

@@ -49,8 +49,11 @@ LocalPlayer::LocalPlayer(IGameDef *gamedef, const char *name):
 	last_keyPressed(0),
 	camera_impact(0.f),
 	last_animation(NO_ANIM),
+	/*
 	hotbar_image(""),
+	hotbar_image_items(0),
 	hotbar_selected_image(""),
+	*/
 	light_color(255,255,255,255),
 	m_sneak_node(32767,32767,32767),
 	m_sneak_node_exists(false),
@@ -244,8 +247,8 @@ void LocalPlayer::move(f32 dtime, Environment *env, f32 pos_max_d,
 	v3f accel_f = v3f(0,0,0);
 
 	collisionMoveResult result = collisionMoveSimple(env, m_gamedef,
-			pos_max_d, m_collisionbox, player_stepheight, dtime,
-			position, m_speed, accel_f);
+		pos_max_d, m_collisionbox, player_stepheight, dtime,
+		&position, &m_speed, accel_f);
 
 	/*
 		If the player's feet touch the topside of any node, this is

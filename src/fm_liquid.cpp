@@ -177,7 +177,7 @@ NEXT_LIQUID:
 				            !(loopcount % 2)) {
 					u8 melt_max_level = nb.node.getMaxLevel(nodemgr);
 					u8 my_max_level = MapNode(liquid_kind_flowing).getMaxLevel(nodemgr);
-					liquid_levels[i] = (float)my_max_level / melt_max_level * nb.node.getLevel(nodemgr);
+					liquid_levels[i] = ((float)my_max_level / (melt_max_level ? melt_max_level : my_max_level)) * nb.node.getLevel(nodemgr);
 					if (liquid_levels[i])
 						nb.liquid = 1;
 				} else if (	melt_kind != CONTENT_IGNORE &&
@@ -741,7 +741,7 @@ NEXT_LIQUID:
 	{
 		//TimeTaker timer13("transformLiquidsReal() reflow");
 		//auto lock = m_transforming_liquid.lock_unique_rec();
-		std::lock_guard<std::mutex> lock(m_transforming_liquid_mutex);
+		std::lock_guard<Mutex> lock(m_transforming_liquid_mutex);
 
 		//m_transforming_liquid.insert(must_reflow.begin(), must_reflow.end());
 		for (const auto & p : must_reflow)

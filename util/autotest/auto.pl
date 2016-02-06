@@ -35,11 +35,23 @@ $0 stress_tsan  --clients_autoexit=30 --clients_runs=5 --clients_sleep=25 --opti
 
 $0 --cgroup=10g bot_tsannta --address=192.168.0.1 --port=30005
 
+# debug touchscreen gui. use irrlicht branch ogl-es
+$0 --cmake_add="-DIRRLICHT_INCLUDE_DIR=../../irrlicht/include -DIRRLICHT_LIBRARY=../../irrlicht/lib/Linux/libIrrlicht.a -DENABLE_GLES=1 -DUSE_TOUCHSCREENGUI=1" play_asan
+
+# sometimes *san + debug doesnt work with leveldb
+$0 --cmake_add="-DENABLE_LEVELDB=0"
+
 #if you have installed Intel(R) VTune(TM) Amplifier
 $0 play_vtune --vtune_gui=1
 $0 bot_vtune --autoexit=60 --vtune_gui=1
 $0 bot_vtune --autoexit=60
 $0 stress_vtune
+
+# stress test of flowing liquid
+$0 --options_add=world_water
+
+# stress test of falling sand
+$0 --options_add=world_sand
 
 };
 
@@ -47,6 +59,7 @@ no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 use strict;
 use feature qw(say);
 use Data::Dumper;
+use JSON;
 use Cwd;
 use POSIX ();
 
@@ -85,6 +98,7 @@ sub init_config () {
         logdir           => $script_path . 'logs.' . $g->{date} . $logdir_add,
         screenshot_dir   => 'screenshot.' . $g->{date},
         env              => 'OPENSSL_armcap=0',
+        gdb_stay         => 0,                                                   # dont exit from gdb
         runner           => 'nice ',
         name             => 'bot',
         go               => '--go',
@@ -150,6 +164,18 @@ our $options = {
         weather_biome               => 1,
         screenshot_path             => $config->{autotest_dir_rel} . $config->{screenshot_dir},
     },
+    world_water => {
+        -world    => $script_path . 'world_water',
+        mg_name   => 'math',
+        mg_params => {"layers" => [{"name" => "default:water_source"}]},
+        mg_math => {"generator" => "mengersponge"},
+    },
+    world_sand => {
+        -world    => $script_path . 'world_sand',
+        mg_name   => 'math',
+        mg_params => {"layers" => [{"name" => "default:sand"}]},
+        mg_math => {"generator" => "mengersponge"},
+    },
 };
 
 map { /^-(\w+)(?:=(.*))/ and $options->{opt}{$1} = $2; } @ARGV;
@@ -172,9 +198,13 @@ our $commands = {
         $D{CMAKE_RUNTIME_OUTPUT_DIRECTORY} = "`pwd`";    # -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=`pwd`
         local $config->{cmake_clang} = 1, local $config->{cmake_debug} = 1, $D{SANITIZE_THREAD}  = 1, if $config->{cmake_tsan};
         local $config->{cmake_clang} = 1, local $config->{cmake_debug} = 1, $D{SANITIZE_ADDRESS} = 1, if $config->{cmake_asan};
-        local $config->{cmake_clang} = 1, local $config->{cmake_debug} = 1, $D{SANITIZE_MEMORY}  = 1, if $config->{cmake_msan};
+        local $config->{cmake_clang} = 1, local $config->{cmake_debug} = 1, $D{SANITIZE_MEMORY}  = 1,
+          if $config->{cmake_msan};
+        local $config->{cmake_clang} = 1, local $config->{cmake_debug} = 1, local $config->{keep_luajit} = 1, $D{SANITIZE_UNDEFINED} = 1,
+          if $config->{cmake_usan};
 
-        $D{ENABLE_LUAJIT} = 0, $D{DEBUG} = 1 if $config->{cmake_debug};
+        $D{ENABLE_LUAJIT} = 0 if $config->{cmake_debug} and !$config->{keep_luajit};
+        $D{DEBUG} = 1 if $config->{cmake_debug};
 
         $D{CMAKE_C_COMPILER}     = qq{`which clang$config->{clang_version}`},
           $D{CMAKE_CXX_COMPILER} = qq{`which clang++$config->{clang_version}`}
@@ -190,10 +220,9 @@ our $commands = {
 qq{nice make -j \$(nproc || sysctl -n hw.ncpu || echo 2) $config->{make_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.make.log};
     },
     run_single => sub {
-        my $args = join ' ', map { '--' . $_ . ' ' . $config->{$_} } grep { $config->{$_} } qw(gameid world address port config autoexit);
-        sy
-qq{$config->{env} $config->{runner} @_ ./freeminer $args $config->{go} --logfile $config->{logdir}/autotest.$g->{task_name}.game.log }
-          . options_make()
+        #my $args = join ' ', map { '--' . $_ . ' ' . $config->{$_} } grep { $config->{$_} } qw(gameid world address port config autoexit);
+        sy qq{$config->{env} $config->{runner} @_ ./freeminer $config->{go} --logfile $config->{logdir}/autotest.$g->{task_name}.game.log }
+          . options_make([qw(gameid world address port config autoexit)])
           . qq{$config->{run_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.out.log };
         0;
     },
@@ -213,20 +242,20 @@ qq{$config->{env} $config->{runner} @_ ./freeminer $args $config->{go} --logfile
 qq{$config->{env} $config->{runner} @_ ./freeminerserver $config->{tee} $config->{logdir}/autotest.$g->{task_name}.server.out.log};
     },
     run_server_auto => sub {
-        my $args = join ' ', map { '--' . $_ . ' ' . $config->{$_} } grep { $config->{$_} } qw(gameid world port config autoexit);
-        sy qq{$config->{env} $config->{runner} @_ ./freeminerserver $args --logfile $config->{logdir}/autotest.$g->{task_name}.game.log }
-          . options_make()
+        #my $args = join ' ', map { '--' . $_ . ' ' . $config->{$_} } grep { $config->{$_} } qw(gameid world port config autoexit);
+        sy qq{$config->{env} $config->{runner} @_ ./freeminerserver --logfile $config->{logdir}/autotest.$g->{task_name}.game.log }
+          . options_make([qw(gameid world port config autoexit)])
           . qq{ $config->{run_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.server.out.log &};
     },
     run_clients => sub {
         for (0 .. ($config->{clients_runs} || 0)) {
             my $autoexit = $config->{clients_autoexit} || $config->{autoexit};
             local $config->{address} = '::1' if not $config->{address};
-            my $args = join ' ',
-              map { '--' . $_ . ' ' . $config->{$_} } grep { $config->{$_} } qw( address gameid world address port config);
+            #my $args = join ' ',
+            #  map { '--' . $_ . ' ' . $config->{$_} } grep { $config->{$_} } qw( address gameid world address port config);
             sy
-qq{$config->{env} $config->{runner} @_ ./freeminer $args --name $config->{name}$_ --go --autoexit $autoexit --logfile $config->{logdir}/autotest.$g->{task_name}.game.log }
-              . options_make()
+qq{$config->{env} $config->{runner} @_ ./freeminer --name $config->{name}$_ --go --autoexit $autoexit --logfile $config->{logdir}/autotest.$g->{task_name}.game.log }
+              . options_make([qw( address gameid world address port config)])
               . qq{ $config->{run_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.$config->{name}$_.err.log & }
               for 0 .. $config->{clients_num};
             sleep $config->{clients_sleep} || 1;
@@ -290,6 +319,28 @@ our $tasks = {
         'cmake',
         'make',
     ],
+    build_msan => [
+        sub {
+            $g->{build_name} .= '_msan';
+            0;
+        }, {
+            -cmake_msan => 1,
+        },
+        'prepare',
+        'cmake',
+        'make',
+    ],
+    build_usan => [
+        sub {
+            $g->{build_name} .= '_usan';
+            0;
+        }, {
+            -cmake_usan => 1,
+        },
+        'prepare',
+        'cmake',
+        'make',
+    ],
     bot_asan => [
         {-no_build_server => 1,},
         'build_asan',
@@ -302,9 +353,16 @@ our $tasks = {
         commands_run('bot_asan');
     },
     bot_msan => [
-        {build_name => '_msan', -cmake_msan => 1,},
-        'prepare',
-        'cmake', 'make', $config->{run_task}, 'symbolize',
+        {-no_build_server => 1,},
+        'build_msan',
+        $config->{run_task},
+        'symbolize',
+    ],
+    bot_usan => [
+        {-no_build_server => 1, -env => 'UBSAN_OPTIONS=print_stacktrace=1',},
+        'build_usan',
+        $config->{run_task},
+        'symbolize',
     ],
     debug     => [{-no_build_server => 1,}, 'build_debug',      $config->{run_task},],
     nothreads => [{-no_build_server => 1,}, \'build_nothreads', $config->{run_task},],    #'
@@ -320,25 +378,25 @@ our $tasks = {
     ),
 
     build_minetest => [{build_name => '_minetest',}, 'prepare', {-no_build_server => 1,}, ['cmake', $config->{cmake_minetest}], 'make',],
-    bot_minetest      => ['build_minetest', $config->{run_task},],
-    bot_minetest_tsan => sub {
+    #bot_minetest      => ['build_minetest', $config->{run_task},],
+
+    bot_minetest => sub {
+        my $name = shift;
         $g->{build_name} .= '_minetest';
         local $config->{no_build_server} = 1;
         local $config->{cmake_int}       = $config->{cmake_int} . $config->{cmake_minetest};
-        commands_run('bot_tsan');
-    },
-    bot_minetest_tsannt => sub {
-        $g->{build_name} .= '_minetest';
-        local $config->{no_build_server} = 1;
-        local $config->{cmake_int}       = $config->{cmake_int} . $config->{cmake_minetest};
-        commands_run('bot_tsannt');
-    },
-    bot_minetest_asan => sub {
-        $g->{build_name} .= '_minetest';
-        local $config->{no_build_server} = 1;
-        local $config->{cmake_int}       = $config->{cmake_int} . $config->{cmake_minetest};
-        commands_run('bot_asan');
-    },
+        if ($name) {
+            commands_run('bot_' . $name);
+        } else {
+            commands_run('build_minetest');
+            commands_run($config->{run_task});
+        }
+    }, (
+        map {
+            'bot_minetest_' . $_ => [['bot_minetest', $_,]]
+        } qw(tsan tsannt asan usan gdb)
+    ),
+
     #stress => [{ZZbuild_name => 'normal'}, 'prepare', 'cmake', 'make', 'run_server_auto', 'run_clients',],
     stress => sub {
         commands_run($_[0] || 'build_normal');
@@ -379,7 +437,8 @@ our $tasks = {
           }
     ],
     gdb => sub {
-        local $config->{runner} = $config->{runner} . q{gdb -ex 'run' -ex 't a a bt' -ex 'cont' -ex 'quit' --args };
+        local $config->{runner} =
+          $config->{runner} . q{gdb -ex 'run' -ex 't a a bt' } . ($config->{gdb_stay} ? '' : q{ -ex 'cont' -ex 'quit' }) . q{ --args };
         @_ = ('debug') if !@_;
         for (@_) { my $r = commands_run($_); return $r if $r; }
     },
@@ -389,7 +448,9 @@ our $tasks = {
     bot_gdb => [{-no_build_server => 1,}, 'build_debug', ['gdb', 'run_single']],
 
     vtune => sub {
+        sy 'echo 0|sudo tee /proc/sys/kernel/yama/ptrace_scope';
         local $config->{runner} = $config->{runner} . qq{$config->{vtune_amplifier}amplxe-cl -collect hotspots -r $config->{logdir}/rh0};
+        local $config->{run_escape} = '\\\\';
         @_ = ('debug') if !@_;
         for (@_) { my $r = commands_run($_); return $r if $r; }
     },
@@ -423,9 +484,9 @@ qq{$config->{vtune_amplifier}amplxe-cl -report $report -report-width=250 -report
         for (@_) { my $r = commands_run($_); return $r if $r; }
     },
 
-    (map { 'play_' . $_ => [{-no_build_server => 1,}, [\'play_task', 'bot_'.$_]] } qw(tsan asan msan asannta)),
+    (map { 'play_' . $_ => [{-no_build_server => 1,}, [\'play_task', 'bot_' . $_]] } qw(tsan asan msan usan asannta minetest)),
     (
-        map { 'play_' . $_ => [{-no_build_server => 1,}, [\'play_task', $_]] } qw(gdb nothreads minetest vtune),
+        map { 'play_' . $_ => [{-no_build_server => 1,}, [\'play_task', $_]] } qw(debug gdb nothreads vtune),
         map { 'valgrind_' . $_ } @{$config->{valgrind_tools}},
     ),
     play => [{-no_build_server => 1,}, [\'play_task', 'build_normal', $config->{run_task}]],    #'
@@ -462,13 +523,27 @@ sub array (@) {
     wantarray ? @_ : \@_;
 }
 
-sub options_make(@) {
-    my $r;
-    @_ = ('default', $config->{options_display}, $config->{options_bot}, $config->{options_add}, 'opt') unless @_;
-    for my $name (array @_) {
-        $r->{$_} = $options->{$name}{$_} for sort keys %{$options->{$name}};
+sub options_make(;$$) {
+    my ($mm, $m) = @_;
+    my ($rm, $rmm);
+
+    $rmm = {map { $_ => $config->{$_} } grep { $config->{$_} } array(@$mm)};
+
+    $m ||= ['default', $config->{options_display}, $config->{options_bot}, (split /,;/, $config->{options_add}), 'opt'];
+    for my $name (array(@$m)) {
+        $rm->{$_} = $options->{$name}{$_} for sort keys %{$options->{$name}};
+        for my $k (keys %$rm) {
+            if ($k =~ /^-/) {
+                $rmm->{$'} = $rm->{$k};
+                delete $rm->{$k};
+                next;
+            }
+            next if !ref $rm->{$k};
+            ($rm->{$k} = JSON::encode_json($rm->{$k})) =~ s/"/$config->{run_escape}\\"/g;    #"
+        }
     }
-    return join ' ', map {"-$_=$r->{$_}"} sort keys %$r;
+
+    return join ' ', (map {"--$_ $rmm->{$_}"} sort keys %$rmm), (map {"-$_=$rm->{$_}"} sort keys %$rm);
 }
 
 sub command_run(@);
@@ -534,7 +609,9 @@ sub task_start(@) {
 }
 
 my $task_run = [grep { !/^-/ } @ARGV];
-$task_run = [qw(bot_tsan bot_asan bot_tsannt bot_tsannta valgrind_memcheck bot_minetest_tsan bot_minetest_tsannt bot_minetest_asan)]
+$task_run = [
+    qw(bot_tsan bot_asan bot_usan bot_tsannt bot_tsannta valgrind_memcheck bot_minetest_tsan bot_minetest_tsannt bot_minetest_asan bot_minetest_usan)
+  ]
   unless @$task_run;
 if ('all' ~~ $task_run) {
     $task_run = [sort keys %$tasks];
@@ -544,7 +621,7 @@ if ('all' ~~ $task_run) {
 unless (@ARGV) {
     say $help;
     say "possible tasks:";
-    say for sort keys %$tasks;
+    print "$_ " for sort keys %$tasks;
     say "\n but running default list: ", join ' ', @$task_run;
     say '';
     sleep 1;

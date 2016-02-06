@@ -183,7 +183,7 @@ void TileDef::serialize(std::ostream &os, u16 protocol_version) const
 	}
 }
 
-void TileDef::deSerialize(std::istream &is)
+void TileDef::deSerialize(std::istream &is, bool culling_ignore)
 {
 	int version = readU8(is);
 	name = deSerializeString(is);
@@ -197,6 +197,11 @@ void TileDef::deSerialize(std::istream &is)
 		tileable_horizontal = readU8(is);
 		tileable_vertical = readU8(is);
 	}
+	// when connecting to old servers - do not use
+	// provided values here since culling needs to be
+	// disabled by default for these drawtypes
+	if (culling_ignore)
+		backface_culling = false;
 }
 
 void TileDef::msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const
@@ -428,15 +433,22 @@ void ContentFeatures::deSerialize(std::istream &is)
 		groups[name] = value;
 	}
 	drawtype = (enum NodeDrawType)readU8(is);
+
+	bool ignore_culling = ((version <= 26) &&
+			((drawtype == NDT_MESH) ||
+			 (drawtype == NDT_PLANTLIKE) ||
+			 (drawtype == NDT_FIRELIKE) ||
+			 (drawtype == NDT_LIQUID)));
+
 	visual_scale = readF1000(is);
 	if(readU8(is) != 6)
 		throw SerializationError("unsupported tile count");
 	for(u32 i = 0; i < 6; i++)
-		tiledef[i].deSerialize(is);
+		tiledef[i].deSerialize(is, ignore_culling);
 	if(readU8(is) != CF_SPECIAL_COUNT)
 		throw SerializationError("unsupported CF_SPECIAL_COUNT");
 	for(u32 i = 0; i < CF_SPECIAL_COUNT; i++)
-		tiledef_special[i].deSerialize(is);
+		tiledef_special[i].deSerialize(is, ignore_culling);
 	alpha = readU8(is);
 	post_effect_color.setAlpha(readU8(is));
 	post_effect_color.setRed(readU8(is));
@@ -1094,12 +1106,7 @@ void CNodeDefManager::updateTextures(IGameDef *gamedef,
 			assert(f->liquid_type == LIQUID_SOURCE);
 			if (opaque_water)
 				f->alpha = 255;
-			if (new_style_water){
-				f->solidness = 0;
-			} else {
-				f->solidness = 1;
-				f->backface_culling = false;
-			}
+			f->solidness = new_style_water ? 0 : 1;
 			is_liquid = true;
 			break;
 		case NDT_FLOWINGLIQUID:
@@ -1154,17 +1161,14 @@ void CNodeDefManager::updateTextures(IGameDef *gamedef,
 			break;
 		case NDT_PLANTLIKE:
 			f->solidness = 0;
-			f->backface_culling = false;
 			if (f->waving == 1)
 				material_type = TILE_MATERIAL_WAVING_PLANTS;
 			break;
 		case NDT_FIRELIKE:
-			f->backface_culling = false;
 			f->solidness = 0;
 			break;
 		case NDT_MESH:
 			f->solidness = 0;
-			f->backface_culling = false;
 			break;
 		case NDT_TORCHLIKE:
 		case NDT_SIGNLIKE:
@@ -1200,7 +1204,7 @@ void CNodeDefManager::updateTextures(IGameDef *gamedef,
 		// Tiles (fill in f->tiles[])
 		for (u16 j = 0; j < 6; j++) {
 			fillTileAttribs(tsrc, &f->tiles[j], &tiledef[j], tile_shader[j],
-				use_normal_texture, f->backface_culling, f->alpha, material_type);
+				use_normal_texture, f->tiledef[j].backface_culling, f->alpha, material_type);
 		}
 
 		// Special tiles (fill in f->special_tiles[])
