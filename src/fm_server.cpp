@@ -96,9 +96,11 @@ public:
 		unsigned int max_cycle_ms = 1000;
 		while(!stopRequested()) {
 			try {
-				//concurrent_map<v3POS, MapBlock*> modified_blocks; //not used
-				int res = m_server->getEnv().getMap().transformLiquids(m_server, max_cycle_ms);
-				std::this_thread::sleep_for(std::chrono::milliseconds(std::max(300 - res, 1)));
+				auto time_start = porting::getTimeMs();
+				m_server->getEnv().getMap().transformLiquids(m_server, max_cycle_ms);
+				auto time_spend = porting::getTimeMs() - time_start;
+				std::this_thread::sleep_for(std::chrono::milliseconds(time_spend > 300 ? 1 : 300 - time_spend));
+
 #ifdef NDEBUG
 			} catch (BaseException &e) {
 				errorstream << "Liquid: exception: " << e.what() << std::endl;
@@ -214,7 +216,7 @@ int Server::AsyncRunMapStep(float dtime, float dedicated_server_step, bool async
 		}
 	*/
 
-	u32 max_cycle_ms = async ? 2000 : 300;
+	u32 max_cycle_ms = dedicated_server_step; //async ? 500 : 200;
 
 	static const float map_timer_and_unload_dtime = 10.92;
 	if(!maintenance_status && m_map_timer_and_unload_interval.step(dtime, map_timer_and_unload_dtime)) {
@@ -294,8 +296,7 @@ void Server::maintenance_start() {
 	m_env->getServerMap().m_map_saving_enabled = false;
 	m_env->getServerMap().m_map_loading_enabled = false;
 	m_env->getServerMap().dbase->close();
-	m_env->m_key_value_storage.close();
-	m_env->m_players_storage.close();
+	m_env->m_key_value_storage.clear();
 	stat.close();
 	actionstream << "Server: Starting maintenance: bases closed now." << std::endl;
 
@@ -303,11 +304,15 @@ void Server::maintenance_start() {
 
 void Server::maintenance_end() {
 	m_env->getServerMap().dbase->open();
-	m_env->m_key_value_storage.open();
-	m_env->m_players_storage.open();
 	stat.open();
 	m_env->getServerMap().m_map_saving_enabled = true;
 	m_env->getServerMap().m_map_loading_enabled = true;
 	m_emerge->startThreads();
 	actionstream << "Server: Starting maintenance: ended." << std::endl;
 };
+
+
+#if MINETEST_PROTO
+void Server::SendPunchPlayer(u16 peer_id, v3f speed) { }
+#endif
+

@@ -47,6 +47,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #define HUD_PARAM_HOTBAR_ITEMCOUNT 1
 #define HUD_PARAM_HOTBAR_IMAGE 2
+static const int  HUD_PARAM_HOTBAR_IMAGE_ITEMS = 104;
 #define HUD_PARAM_HOTBAR_SELECTED_IMAGE 3
 
 #define HUD_HOTBAR_ITEMCOUNT_DEFAULT 8
@@ -119,6 +120,7 @@ public:
 	video::SColor selectionbox_argb;
 	bool use_crosshair_image;
 	std::string hotbar_image;
+	int hotbar_image_items;
 	bool use_hotbar_image;
 	std::string hotbar_selected_image;
 	bool use_hotbar_selected_image;
@@ -140,7 +142,8 @@ private:
 	void drawItems(v2s32 upperleftpos, s32 itemcount, s32 offset,
 		InventoryList *mainlist, u16 selectitem, u16 direction);
 
-	void drawItem(const ItemStack &item, const core::rect<s32>& rect, bool selected);
+	void drawItem(const ItemStack &item, const core::rect<s32>& rect,
+		bool selected);
 
 	v2u32 m_screensize;
 	v2s32 m_displaycenter;
@@ -149,13 +152,20 @@ private:
 	video::SColor hbar_colors[4];
 };
 
+enum ItemRotationKind {
+	IT_ROT_SELECTED,
+	IT_ROT_HOVERED,
+	IT_ROT_DRAGGED,
+	IT_ROT_NONE, // Must be last, also serves as number
+};
+
 void drawItemStack(video::IVideoDriver *driver,
 		gui::IGUIFont *font,
 		const ItemStack &item,
 		const core::rect<s32> &rect,
 		const core::rect<s32> *clip,
-		IGameDef *gamedef);
-
+		IGameDef *gamedef,
+		ItemRotationKind rotation_kind);
 
 #endif
 

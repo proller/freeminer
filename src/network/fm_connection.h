@@ -39,8 +39,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "enet/enet.h"
 #include "../msgpack_fix.h"
 #include "util/msgpack_serialize.h"
-#include "util/concurrent_map.h"
-#include "util/concurrent_unordered_map.h"
+#include "threading/concurrent_map.h"
+#include "../threading/concurrent_unordered_map.h"
 
 #define CHANNEL_COUNT 3
 
@@ -349,7 +349,7 @@ private:
 	u32 m_max_packet_size;
 	float m_timeout;
 	ENetHost *m_enet_host;
-	ENetPeer *m_peer;
+	//ENetPeer *m_peer;
 	u16 m_peer_id;
 
 	concurrent_map<u16, ENetPeer*> m_peers;

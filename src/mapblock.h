@@ -34,7 +34,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "nodetimer.h"
 #include "modifiedstate.h"
 #include "util/numeric.h" // getContainerPos
-#include "util/lock.h"
+#include "threading/lock.h"
 #include "settings.h"
 
 class Map;
@@ -489,7 +489,7 @@ public:
 
 	inline void resetUsageTimer()
 	{
-		std::lock_guard<std::mutex> lock(m_usage_timer_mutex);
+		std::lock_guard<Mutex> lock(m_usage_timer_mutex);
 		m_usage_timer = 0;
 	}
 
@@ -497,7 +497,7 @@ public:
 
 	inline float getUsageTimer()
 	{
-		std::lock_guard<std::mutex> lock(m_usage_timer_mutex);
+		std::lock_guard<Mutex> lock(m_usage_timer_mutex);
 		return m_usage_timer;
 	}
 
@@ -609,6 +609,8 @@ public:
 	
 	std::atomic_short heat;
 	std::atomic_short humidity;
+	std::atomic_short heat_add;
+	std::atomic_short humidity_add;
 	std::atomic_ulong heat_last_update;
 	u32 humidity_last_update;
 	float m_uptime_timer_last;
@@ -618,7 +620,7 @@ public:
 	u32 m_next_analyze_timestamp;
 	typedef std::list<abm_trigger_one> abm_triggers_type;
 	std::unique_ptr<abm_triggers_type> abm_triggers;
-	std::mutex abm_triggers_mutex;
+	Mutex abm_triggers_mutex;
 	void abmTriggersRun(ServerEnvironment * m_env, u32 time, bool activate = false);
 	u32 m_abm_timestamp;
 
@@ -635,20 +637,8 @@ public:
 	// Set to content type of a node if the block consists solely of nodes of one type, otherwise set to CONTENT_IGNORE
 	content_t content_only;
 	u8 content_only_param1, content_only_param2;
-	content_t analyzeContent() {
-		auto lock = lock_shared_rec();
-		content_only = data[0].param0;
-		content_only_param1 = data[0].param1;
-		content_only_param2 = data[0].param2;
-		for (int i = 1; i<MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; ++i) {
-			if (data[i].param0 != content_only || data[i].param1 != content_only_param1 || data[i].param2 != content_only_param2) {
-				content_only = CONTENT_IGNORE;
-				break;
-			}
-		}
-		return content_only;
-	}
-	std::atomic_bool lighting_broken;
+	content_t analyzeContent();
+	std::atomic_short lighting_broken;
 
 	static const u32 ystride = MAP_BLOCKSIZE;
 	static const u32 zstride = MAP_BLOCKSIZE * MAP_BLOCKSIZE;
@@ -727,7 +717,7 @@ private:
 		Map will unload the block when this reaches a timeout.
 	*/
 	float m_usage_timer;
-	std::mutex m_usage_timer_mutex;
+	Mutex m_usage_timer_mutex;
 
 	/*
 		Reference count; currently used for determining if this block is in

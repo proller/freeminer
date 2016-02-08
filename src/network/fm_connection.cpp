@@ -96,7 +96,7 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	m_protocol_id(protocol_id),
 	m_max_packet_size(max_packet_size),
 	m_timeout(timeout),
-	m_enet_host(0),
+	m_enet_host(nullptr),
 	m_peer_id(0),
 	m_bc_peerhandler(peerhandler),
 	m_last_recieved(0),
@@ -132,6 +132,8 @@ void * Connection::run()
 		}
 		receive();
 	}
+
+	disconnect();
 
 	return nullptr;
 }
@@ -294,7 +296,7 @@ void Connection::serve(Address bind_addr)
 	address.port = bind_addr.getPort(); // fmtodo
 
 	m_enet_host = enet_host_create(&address, g_settings->getU16("max_users"), CHANNEL_COUNT, 0, 0);
-	if (m_enet_host == NULL) {
+	if (!m_enet_host) {
 		ConnectionEvent ev(CONNEVENT_BIND_FAILED);
 		putEvent(ev);
 	}
@@ -314,6 +316,11 @@ void Connection::connect(Address addr)
 	}
 
 	m_enet_host = enet_host_create(NULL, 1, 0, 0, 0);
+	if (!m_enet_host) {
+		ConnectionEvent ev(CONNEVENT_CONNECT_FAILED);
+		putEvent(ev);
+		return;
+	}
 	ENetAddress address;
 #if defined(ENET_IPV6)
 	if (!addr.isIPv6())
@@ -336,16 +343,14 @@ void Connection::connect(Address addr)
 	*((u16*)peer->data) = PEER_ID_SERVER;
 
 	ENetEvent event;
-	int ret = enet_host_service (m_enet_host, & event, 5000);
+	int ret = enet_host_service (m_enet_host, & event, /*CONNECTION_TIMEOUT*/ 10 * 1000);
 	if (ret > 0 && event.type == ENET_EVENT_TYPE_CONNECT) {
 		m_peers.set(PEER_ID_SERVER, peer);
 		m_peers_address.set(PEER_ID_SERVER, addr);
 	} else {
-		errorstream<<"connect enet_host_service ret="<<ret<<std::endl;
-		if (ret == 0) {
-			ConnectionEvent ev(CONNEVENT_CONNECT_FAILED);
-			putEvent(ev);
-		}
+		errorstream << "connect enet_host_service ret=" << ret << " event.type=" << event.type << std::endl;
+		ConnectionEvent ev(CONNEVENT_CONNECT_FAILED);
+		putEvent(ev);
 
 		/* Either the 5 seconds are up or a disconnect event was */
 		/* received. Reset the peer in the event the 5 seconds   */
@@ -357,10 +362,12 @@ void Connection::connect(Address addr)
 void Connection::disconnect()
 {
 	//MutexAutoLock peerlock(m_peers_mutex);
-	m_peers.lock_shared_rec();
+	auto lock = m_peers.lock_unique_rec();
 	for (auto i = m_peers.begin();
 			i != m_peers.end(); ++i)
 		enet_peer_disconnect(i->second, 0);
+	m_peers.clear();
+	m_peers_address.clear();
 }
 
 void Connection::sendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable)

@@ -276,6 +276,7 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 busytime,
 		// Smoothen and invert the above
 		fall_bobbing = sin(fall_bobbing * 0.5 * M_PI) * -1;
 		// Amplify according to the intensity of the impact
+		if (player->camera_impact)
 		fall_bobbing *= (1 - rangelim(50 / player->camera_impact, 0, 1)) * 5;
 
 		fall_bobbing *= m_cache_fall_bobbing_amount;
@@ -731,7 +732,7 @@ void Camera::drawWieldedTool(irr::core::matrix4* translation)
 	scene::ICameraSceneNode* cam = m_wieldmgr->getActiveCamera();
 	cam->setAspectRatio(m_cameranode->getAspectRatio());
 	cam->setFOV(72.0*M_PI/180.0);
-	cam->setNearValue(0.1);
+	cam->setNearValue(10);
 	cam->setFarValue(1000);
 	if (translation != NULL)
 	{

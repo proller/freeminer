@@ -28,6 +28,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "util/string.h"
 #include <math.h>
 
+#include "profiler.h"
+#include "log_types.h"
+
 
 ////
 //// MinimapUpdateThread
@@ -35,7 +38,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 MinimapUpdateThread::~MinimapUpdateThread()
 {
-	for (std::map<v3s16, MinimapMapblock *>::iterator
+	for (auto
 			it = m_blocks_cache.begin();
 			it != m_blocks_cache.end(); ++it) {
 		delete it->second;
@@ -97,25 +100,33 @@ void MinimapUpdateThread::enqueueBlock(v3s16 pos, MinimapMapblock *data)
 
 void MinimapUpdateThread::doUpdate()
 {
+	ScopeProfiler sp(g_profiler, "Client minimap");
 	QueuedMinimapUpdate update;
 
 	while (popBlockUpdate(&update)) {
+		getmap_cache.erase(v2POS(update.pos.X, update.pos.Z));
 		if (update.data) {
 			// Swap two values in the map using single lookup
-			std::pair<std::map<v3s16, MinimapMapblock*>::iterator, bool>
+			auto
 			    result = m_blocks_cache.insert(std::make_pair(update.pos, update.data));
 			if (result.second == false) {
 				delete result.first->second;
 				result.first->second = update.data;
 			}
 		} else {
-			std::map<v3s16, MinimapMapblock *>::iterator it;
-			it = m_blocks_cache.find(update.pos);
+			auto it = m_blocks_cache.find(update.pos);
 			if (it != m_blocks_cache.end()) {
 				delete it->second;
 				m_blocks_cache.erase(it);
 			}
 		}
+	}
+
+	auto now = porting::getTimeMs();
+	if (next_update < now) {
+		next_update = now + 333;
+	} else {
+		return;
 	}
 
 	bool do_update;
@@ -143,7 +154,7 @@ MinimapPixel *MinimapUpdateThread::getMinimapPixel(v3s16 pos,
 		blockpos_max, relpos);
 
 	for (s16 i = blockpos_max.Y; i > blockpos_min.Y - 1; i--) {
-		std::map<v3s16, MinimapMapblock *>::iterator it =
+		auto it =
 			m_blocks_cache.find(v3s16(blockpos_max.X, i, blockpos_max.Z));
 		if (it != m_blocks_cache.end()) {
 			MinimapMapblock *mmblock = it->second;
@@ -173,7 +184,7 @@ s16 MinimapUpdateThread::getAirCount(v3s16 pos, s16 height)
 		blockpos_max, relpos);
 
 	for (s16 i = blockpos_max.Y; i > blockpos_min.Y - 1; i--) {
-		std::map<v3s16, MinimapMapblock *>::iterator it =
+		auto it =
 			m_blocks_cache.find(v3s16(blockpos_max.X, i, blockpos_max.Z));
 		if (it != m_blocks_cache.end()) {
 			MinimapMapblock *mmblock = it->second;
@@ -185,6 +196,7 @@ s16 MinimapUpdateThread::getAirCount(v3s16 pos, s16 height)
 	return air_count;
 }
 
+#if 0
 void MinimapUpdateThread::getMap(v3s16 pos, s16 size, s16 height, bool is_radar)
 {
 	v3s16 p = v3s16(pos.X - size / 2, pos.Y, pos.Z - size / 2);
@@ -209,6 +221,8 @@ void MinimapUpdateThread::getMap(v3s16 pos, s16 size, s16 height, bool is_radar)
 		mmpixel->id = id;
 	}
 }
+#endif
+
 
 ////
 //// Mapper
@@ -220,6 +234,8 @@ Mapper::Mapper(IrrlichtDevice *device, Client *client)
 	this->m_tsrc    = client->getTextureSource();
 	this->m_shdrsrc = client->getShaderSource();
 	this->m_ndef    = client->getNodeDefManager();
+
+	m_angle = 0.f;
 
 	// Initialize static settings
 	m_enable_shaders = g_settings->getBool("enable_shaders");
@@ -306,6 +322,7 @@ void Mapper::toggleMinimapShape()
 {
 	MutexAutoLock lock(data->m_mutex);
 
+	m_minimap_update_thread->next_update = 0;
 	data->minimap_shape_round = !data->minimap_shape_round;
 	g_settings->setBool("minimap_shape_round", data->minimap_shape_round);
 	m_minimap_update_thread->deferUpdate();
@@ -332,6 +349,8 @@ void Mapper::setMinimapMode(MinimapMode mode)
 	data->scan_height = modedefs[mode].scan_height;
 	data->map_size    = modedefs[mode].map_size;
 	data->mode        = mode;
+
+	m_minimap_update_thread->next_update = 0;
 
 	m_minimap_update_thread->deferUpdate();
 }
@@ -572,4 +591,73 @@ void MinimapMapblock::getMinimapNodes(VoxelManipulator *vmanip, v3s16 pos)
 
 		mmpixel->air_count = air_count;
 	}
+}
+
+
+///freeminer:
+
+void MinimapUpdateThread::getMap(v3POS pos, s16 size, s16 scan_height, bool is_radar) {
+	v3POS p(pos.X - size / 2, pos.Y, pos.Z - size / 2);
+
+	v3POS blockpos_player, relpos;
+	getNodeBlockPosWithOffset(pos, blockpos_player, relpos);
+
+	for (s16 x = 0; x < size; x++)
+		for (s16 z = 0; z < size; z++) {
+			auto mmpixel = &data->minimap_scan[x + z * size];
+			mmpixel->air_count = 0;
+			mmpixel->id = CONTENT_AIR;
+
+			v3POS pos(p.X + x, p.Y, p.Z + z);
+			v3POS blockpos_max, blockpos_min;
+			getNodeBlockPosWithOffset(v3POS(pos.X, pos.Y - scan_height / 2, pos.Z), blockpos_min, relpos);
+			getNodeBlockPosWithOffset(v3POS(pos.X, pos.Y + scan_height / 2, pos.Z), blockpos_max, relpos);
+
+			s16 pixel_height = 0;
+			s16 height = scan_height - MAP_BLOCKSIZE;
+
+			v2POS top_block_xz(blockpos_max.X, blockpos_max.Z);
+
+			if (!getmap_cache.count(top_block_xz)) {
+				getmap_cache.emplace(std::piecewise_construct, std::forward_as_tuple(top_block_xz), std::forward_as_tuple());
+				auto & vec = getmap_cache[top_block_xz];
+
+/* simple:
+				for (auto i = blockpos_max.Y; i > blockpos_min.Y - 1; --i) {
+					auto it = m_blocks_cache.find(v3POS(blockpos_max.X, i, blockpos_max.Z));
+					if (it == m_blocks_cache.end())
+						continue;
+					vec.emplace(i, it->second);
+				}
+*/
+				int c = 0;
+				for (auto i = blockpos_player.Y; i > blockpos_min.Y - 1; --i) {
+					auto it = m_blocks_cache.find(v3POS(blockpos_max.X, i, blockpos_max.Z));
+					if (it == m_blocks_cache.end())
+						continue;
+					vec.emplace(c++, it->second);
+				}
+				for (auto i = blockpos_max.Y; i > blockpos_player.Y; --i) {
+					auto it = m_blocks_cache.find(v3POS(blockpos_max.X, i, blockpos_max.Z));
+					if (it == m_blocks_cache.end())
+						continue;
+					vec.emplace(c++, it->second);
+				}
+			}
+
+			//simple: for (auto & mmblock : getmap_cache[top_block_xz]) {
+			for (auto & it : getmap_cache[top_block_xz]) {
+				auto & mmblock = it.second;
+				auto pixel = &mmblock->data[relpos.Z * MAP_BLOCKSIZE + relpos.X];
+				mmpixel->air_count += pixel->air_count;
+				if (pixel->id != CONTENT_AIR) {
+					pixel_height = height + pixel->height;
+					mmpixel->id = pixel->id;
+					mmpixel->height = pixel_height;
+					if (!is_radar)
+						break;
+				}
+				height -= MAP_BLOCKSIZE;
+			}
+		}
 }

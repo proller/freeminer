@@ -354,7 +354,7 @@ public:
 	bool hudSetFlags(Player *player, u32 flags, u32 mask);
 	bool hudSetHotbarItemcount(Player *player, s32 hotbar_itemcount);
 	s32 hudGetHotbarItemcount(Player *player);
-	void hudSetHotbarImage(Player *player, std::string name);
+	void hudSetHotbarImage(Player *player, std::string name, int items = 0);
 	std::string hudGetHotbarImage(Player *player);
 	void hudSetHotbarSelectedImage(Player *player, std::string name);
 	std::string hudGetHotbarSelectedImage(Player *player);
@@ -511,9 +511,12 @@ private:
 	void DeleteClient(u16 peer_id, ClientDeletionReason reason);
 	void UpdateCrafting(Player *player);
 
+	void handleChatInterfaceEvent(ChatEvent *evt);
+
 	// This returns the answer to the sender of wmessage, or "" if there is none
 	std::wstring handleChat(const std::string &name, const std::wstring &wname,
 		const std::wstring &wmessage,
+		bool check_shout_priv = false,
 		u16 peer_id_to_avoid_sending = PEER_ID_INEXISTENT);
 	void handleAdminChat(const ChatEventChat *evt);
 
@@ -727,6 +730,7 @@ public:
 	void maintenance_start();
 	void maintenance_end();
 	int maintenance_status;
+	void SendPunchPlayer(u16 peer_id, v3f speed);
 
 
 private:

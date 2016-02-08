@@ -254,9 +254,14 @@ void fm_set_default_settings(Settings *settings) {
 		settings->setDefault("server_unload_unused_data_timeout", "65");
 	}
 
+	settings->setDefault("minimap_shape_round", "false");
+
 
 
 #ifdef __ANDROID__
+	//check for device with small screen
+	float x_inches = porting::getDisplaySize().X / porting::get_dpi();
+
 	settings->setDefault("smooth_lighting", "false");
 	settings->setDefault("enable_3d_clouds", "false");
 
@@ -273,10 +278,9 @@ void fm_set_default_settings(Settings *settings) {
 	*/
 	settings->setDefault("num_emerge_threads", "1"); // too unstable when > 1
 	settings->setDefault("inventory_image_hack", "false");
-	settings->setDefault("enable_minimap", "false");
-
-	//check for device with small screen
-	float x_inches = porting::getDisplaySize().X / porting::get_dpi();
+	if (x_inches  < 7) {
+		settings->setDefault("enable_minimap", "false");
+	}
 
 	if (x_inches  < 3.5) {
 		settings->setDefault("hud_scaling", "0.6");
@@ -326,6 +330,10 @@ void fm_set_default_settings(Settings *settings) {
 	actionstream << "Autoconfig: "" displayX=" << porting::getDisplaySize().X << " density="<<porting::getDisplayDensity()<< " dpi="<< porting::get_dpi() << " densityDpi=" << porting::get_densityDpi()<< " x_inches=" << x_inches << " font=" << font_size << " lang=" << lang <<std::endl;
 	}
 
+#endif
+
+#ifdef HAVE_TOUCHSCREENGUI
+	settings->setDefault("touchtarget", "true");
 #endif
 
 }
@@ -448,6 +456,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("console_alpha", "200");
 	settings->setDefault("selectionbox_color", "(0,0,0)");
 	settings->setDefault("enable_node_highlighting", "false");
+	settings->setDefault("inventory_items_animations", "false");
 	settings->setDefault("crosshair_color", "(255,255,255)");
 	settings->setDefault("crosshair_alpha", "255");
 	settings->setDefault("hud_scaling", "1.0");
@@ -623,7 +632,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("water_level", "1");
 	settings->setDefault("chunksize", "5");
 	settings->setDefault("mg_flags", "dungeons");
-	settings->setDefault("mgv6_spflags", "jungles, snowbiomes");
+	settings->setDefault("mgv6_spflags", "jungles, snowbiomes, trees");
 
 	// IPv6
 	settings->setDefault("enable_ipv6", "true");

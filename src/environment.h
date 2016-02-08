@@ -46,8 +46,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 //fm:
 #include "network/connection.h"
 #include "fm_bitset.h"
-#include "util/concurrent_unordered_map.h"
-#include "util/concurrent_vector.h"
+#include "threading/concurrent_unordered_map.h"
+#include "threading/concurrent_vector.h"
 #include <unordered_set>
 #include "util/container.h" // Queue
 #include <array>
@@ -73,6 +73,7 @@ class Player;
 class RemotePlayer;
 
 struct ItemStack;
+class PlayerSAO;
 
 namespace epixel
 {
@@ -290,7 +291,8 @@ public:
 	//Player * getPlayer(u16 peer_id) { return Environment::getPlayer(peer_id); };
 	//Player * getPlayer(const std::string &name);
 
-	KeyValueStorage *getKeyValueStorage();
+	KeyValueStorage &getKeyValueStorage(std::string name = "key_value_storage");
+	KeyValueStorage &getPlayerStorage() { return getKeyValueStorage("players"); };
 
 	void kickAllPlayers(AccessDeniedCode reason,
 		const std::string &str_reason, bool reconnect);
@@ -398,8 +400,8 @@ public:
 
 	u32 getGameTime() { return m_game_time; }
 
-	void reportMaxLagEstimate(float f) { std::unique_lock<std::mutex> lock(m_max_lag_estimate_mutex); m_max_lag_estimate = f; }
-	float getMaxLagEstimate() { std::unique_lock<std::mutex> lock(m_max_lag_estimate_mutex); return m_max_lag_estimate; }
+	void reportMaxLagEstimate(float f) { std::unique_lock<Mutex> lock(m_max_lag_estimate_mutex); m_max_lag_estimate = f; }
+	float getMaxLagEstimate() { std::unique_lock<Mutex> lock(m_max_lag_estimate_mutex); return m_max_lag_estimate; }
 
 	// is weather active in this environment?
 	bool m_use_weather;
@@ -421,7 +423,8 @@ public:
 	void setStaticForActiveObjectsInBlock(v3s16 blockpos,
 		bool static_exists, v3s16 static_block=v3s16(0,0,0));
 
-	void nodeUpdate(const v3s16 pos, int recurse = 5,  int fast = 2, bool destroy = false);
+	void nodeUpdate(const v3s16 pos, u16 recursion_limit = 5, int fast = 2, bool destroy = false);
+	void handleNodeDrops(const ContentFeatures &f, v3f pos, PlayerSAO* player=NULL);
 private:
 
 	/*
@@ -462,6 +465,21 @@ private:
 	*/
 	void deactivateFarObjects(bool force_delete);
 
+
+/*
+	void contrib_player_globalstep(RemotePlayer *player, float dtime);
+	void contrib_lookupitemtogather(RemotePlayer* player, v3f playerPos,
+			Inventory* inv, ServerActiveObject* obj);
+*/
+	void contrib_globalstep(const float dtime);
+	bool checkAttachedNode(v3s16 pos, MapNode n, const ContentFeatures &f);
+/*
+	void explodeNode(const v3s16 pos);
+*/
+
+	std::deque<v3s16> m_nodeupdate_queue;
+	Mutex m_nodeupdate_queue_mutex;
+
 	/*
 		Member variables
 	*/
@@ -477,8 +495,7 @@ private:
 	Circuit m_circuit;
 	// Key-value storage
 public:
-	KeyValueStorage m_key_value_storage;
-	KeyValueStorage m_players_storage;
+	std::unordered_map<std::string, KeyValueStorage> m_key_value_storage;
 private:
 
 	// World path
@@ -511,7 +528,7 @@ private:
 	// Time from the beginning of the game in seconds.
 	// Incremented in step().
 	std::atomic_uint m_game_time;
-	std::mutex m_max_lag_estimate_mutex;
+	Mutex m_max_lag_estimate_mutex;
 	// A helper variable for incrementing the latter
 	float m_game_time_fraction_counter;
 public:

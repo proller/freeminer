@@ -563,7 +563,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 		u32 keyPressed = packet[TOSERVER_PLAYERPOS_KEY_PRESSED].as<u32>();
 		player->keyPressed = keyPressed;
 		{
-		std::lock_guard<std::mutex> lock(player->control_mutex);
+		std::lock_guard<Mutex> lock(player->control_mutex);
 		player->control.up = (bool)(keyPressed&1);
 		player->control.down = (bool)(keyPressed&2);
 		player->control.left = (bool)(keyPressed&4);
@@ -794,9 +794,9 @@ void Server::ProcessData(NetworkPacket *pkt)
 		{
 			if(checkPriv(player->getName(), "shout")){
 				line += "<";
-				if (name.size() > 15) {
+				if (name.size() > 25) {
 					auto cutted = name;
-					cutted.resize(15);
+					cutted.resize(25);
 					line += cutted + ".";
 				} else {
 					line += name;
@@ -963,8 +963,9 @@ void Server::ProcessData(NetworkPacket *pkt)
 			Check that target is reasonably close
 			(only when digging or placing things)
 		*/
-		if(action == 0 || action == 2 || action == 3)
-		{
+		static const bool enable_anticheat = !g_settings->getBool("disable_anticheat");
+		if ((action == 0 || action == 2 || action == 3) &&
+			(enable_anticheat && !isSingleplayer())) {
 			float d = player_pos.getDistanceFrom(pointed_pos_under);
 			float max_d = BS * 14; // Just some large enough value
 			if(d > max_d){
@@ -1025,13 +1026,9 @@ void Server::ProcessData(NetworkPacket *pkt)
 					NOTE: This can be used in the future to check if
 					somebody is cheating, by checking the timing.
 				*/
-				MapNode n(CONTENT_IGNORE);
-				bool pos_ok;
-				n = m_env->getMap().getNodeNoEx(p_under, &pos_ok);
-				if (pos_ok)
-					n = m_env->getMap().getNodeNoEx(p_under, &pos_ok);
+				MapNode n = m_env->getMap().getNode(p_under);
 
-				if (!pos_ok) {
+				if (!n) {
 					infostream<<"Server: Not punching: Node not found."
 							<<" Adding block to emerge queue."
 							<<std::endl;
@@ -1099,9 +1096,8 @@ void Server::ProcessData(NetworkPacket *pkt)
 			// Only digging of nodes
 			if(pointed.type == POINTEDTHING_NODE)
 			{
-				bool pos_ok;
-				MapNode n = m_env->getMap().getNodeNoEx(p_under, &pos_ok);
-				if (!pos_ok) {
+				MapNode n = m_env->getMap().getNode(p_under);
+				if (!n) {
 					infostream << "Server: Not finishing digging: Node not found."
 					           << " Adding block to emerge queue."
 					           << std::endl;
@@ -1110,8 +1106,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 
 				/* Cheat prevention */
 				bool is_valid_dig = true;
-				if(!isSingleplayer() && !g_settings->getBool("disable_anticheat"))
-				{
+				if (enable_anticheat && !isSingleplayer()) {
 					v3s16 nocheat_p = playersao->getNoCheatDigPos();
 					float nocheat_t = playersao->getNoCheatDigTime();
 					playersao->noCheatDigEnd();
@@ -1191,7 +1186,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 				v3s16 blockpos = getNodeBlockPos(floatToInt(pointed_pos_under, BS));
 				RemoteClient *client = getClient(peer_id);
 				// Send unusual result (that is, node not being removed)
-				if(m_env->getMap().getNodeNoEx(p_under).getContent() != CONTENT_AIR)
+				if(m_env->getMap().getNode(p_under).getContent() != CONTENT_AIR)
 				{
 					// Re-send block to revert change on client-side
 					client->SetBlockNotSent(blockpos);
@@ -1289,6 +1284,23 @@ void Server::ProcessData(NetworkPacket *pkt)
 			}
 
 		} // action == 4
+
+	/*
+		5: rightclick air
+	*/
+	else if (action == 5) {
+		ItemStack item = playersao->getWieldedItem();
+		
+		actionstream << player->getName() << " activates " 
+				<< item.name << std::endl;
+		
+		if (m_script->item_OnSecondaryUse(
+				item, playersao)) {
+			if( playersao->setWieldedItem(item)) {
+				SendInventory(playersao);
+			}
+		}
+	}
 
 
 		/*

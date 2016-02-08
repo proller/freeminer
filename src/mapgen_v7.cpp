@@ -53,6 +53,7 @@ FlagDesc flagdesc_mapgen_v7[] = {
 	{NULL,        0}
 };
 
+
 ///////////////////////////////////////////////////////////////////////////////
 
 
@@ -118,13 +119,17 @@ MapgenV7::MapgenV7(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 		c_ice = c_water_source;
 
 	//freeminer:
+	y_offset = 1;
+
 	float_islands = sp->float_islands;
-	noise_float_islands1  = new Noise(&sp->np_float_islands1, seed, csize.X, csize.Y + 2, csize.Z);
-	noise_float_islands2  = new Noise(&sp->np_float_islands2, seed, csize.X, csize.Y + 2, csize.Z);
+	noise_float_islands1  = new Noise(&sp->np_float_islands1, seed, csize.X, csize.Y + y_offset * 2, csize.Z);
+	noise_float_islands2  = new Noise(&sp->np_float_islands2, seed, csize.X, csize.Y + y_offset * 2, csize.Z);
 	noise_float_islands3  = new Noise(&sp->np_float_islands3, seed, csize.X, csize.Z);
 
-	noise_layers          = new Noise(&sp->np_layers,         seed, csize.X, csize.Y + 2, csize.Z);
+	noise_layers          = new Noise(&sp->np_layers,         seed, csize.X, csize.Y + y_offset * 2, csize.Z);
 	layers_init(emerge, sp->paramsj);
+	//noise_cave_indev      = new Noise(&sp->np_cave_indev,     seed, csize.X, csize.Y + y_offset * 2, csize.Z);
+
 
 	if (c_mossycobble == CONTENT_IGNORE)
 		c_mossycobble = c_cobble;
@@ -183,8 +188,8 @@ MapgenV7Params::MapgenV7Params()
 	np_ridge_uwater    = NoiseParams(0,    1,   v3f(1000, 1000, 1000), 85039, 5, 0.6,  2.0);
 	np_mountain        = NoiseParams(-0.6, 1,   v3f(250,  350,  250),  5333,  5, 0.63, 2.0);
 	np_ridge           = NoiseParams(0,    1,   v3f(100,  100,  100),  6467,  4, 0.75, 2.0);
-	np_cave1           = NoiseParams(0,    12,  v3f(100,  100,  100),  52534, 4, 0.5,  2.0);
-	np_cave2           = NoiseParams(0,    12,  v3f(100,  100,  100),  10325, 4, 0.5,  2.0);
+	np_cave1           = NoiseParams(0,    12,  v3f(96,   96,   96),   52534, 4, 0.5,  2.0);
+	np_cave2           = NoiseParams(0,    12,  v3f(96,   96,   96),   10325, 4, 0.5,  2.0);
 }
 
 
@@ -371,7 +376,8 @@ void MapgenV7::makeChunk(BlockMakeData *data)
 	}
 
 	// Generate the registered decorations
-	m_emerge->decomgr->placeAllDecos(this, blockseed, node_min, node_max);
+	if (flags & MG_DECORATIONS)
+		m_emerge->decomgr->placeAllDecos(this, blockseed, node_min, node_max);
 
 	// Generate the registered ores
 	m_emerge->oremgr->placeAllOres(this, blockseed, node_min, node_max);
@@ -397,9 +403,9 @@ void MapgenV7::makeChunk(BlockMakeData *data)
 void MapgenV7::calculateNoise()
 {
 	//TimeTaker t("calculateNoise", NULL, PRECISION_MICRO);
-	int x = node_min.X;
-	int y = node_min.Y - 1;
-	int z = node_min.Z;
+	s16 x = node_min.X;
+	s16 y = node_min.Y - 1;
+	s16 z = node_min.Z;
 
 	noise_terrain_persist->perlinMap2D(x, z);
 	float *persistmap = noise_terrain_persist->result;
@@ -408,17 +414,16 @@ void MapgenV7::calculateNoise()
 	noise_terrain_alt->perlinMap2D(x, z, persistmap);
 	noise_height_select->perlinMap2D(x, z);
 
-	if (flags & MG_CAVES) {
-		noise_cave1->perlinMap3D(x, y, z);
-		noise_cave2->perlinMap3D(x, y, z);
-	}
-
 	if ((spflags & MGV7_RIDGES) && node_max.Y >= water_level) {
 		noise_ridge->perlinMap3D(x, y, z);
 		noise_ridge_uwater->perlinMap2D(x, z);
 	}
 
+	// Cave noises are calculated in generateCaves()
+	// only if solid terrain is present in mapchunk
+
 	// Mountain noises are calculated in generateMountainTerrain()
+	// only if solid terrain surface dips into mapchunk
 
 	noise_filler_depth->perlinMap2D(x, z);
 	noise_heat->perlinMap2D(x, z);
@@ -586,27 +591,27 @@ void MapgenV7::generateBaseTerrain(s16 *stone_surface_min_y, s16 *stone_surface_
 
 		s16 heat = m_emerge->env->m_use_weather ? m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env, v3POS(x,node_max.Y,z), nullptr, &heat_cache) : 0;
 
-		u32 i = vm->m_area.index(x, node_min.Y - 1, z);
+		u32 vi = vm->m_area.index(x, node_min.Y - 1, z);
 		for (s16 y = node_min.Y - 1; y <= node_max.Y + 1; y++) {
-			if (vm->m_data[i].getContent() == CONTENT_IGNORE) {
+			if (vm->m_data[vi].getContent() == CONTENT_IGNORE) {
 				if (y <= surface_y) {
 
 					int index3 = (z - node_min.Z) * zstride +
 						(y - node_min.Y + 1) * ystride +
 						(x - node_min.X);
 
-					vm->m_data[i] = layers_get(index3);
+					vm->m_data[vi] = layers_get(index3);
 				}
 				else if (y <= water_level)
 				{
-					vm->m_data[i] = (heat < 0 && y > heat/3) ? n_ice : n_water;
+					vm->m_data[vi] = (heat < 0 && y > heat/3) ? n_ice : n_water;
 					if (liquid_pressure && y <= 0)
-						vm->m_data[i].addLevel(m_emerge->ndef, water_level - y, 1);
+						vm->m_data[vi].addLevel(m_emerge->ndef, water_level - y, 1);
 				}
 				else
-					vm->m_data[i] = n_air;
+					vm->m_data[vi] = n_air;
 			}
-			vm->m_area.add_y(em, i, 1);
+			vm->m_area.add_y(em, vi, 1);
 		}
 	}
 
@@ -655,7 +660,7 @@ void MapgenV7::generateRidgeTerrain()
 	MapNode n_ice(c_ice);
 	MapNode n_air(CONTENT_AIR);
 	u32 index = 0;
-	float width = 0.2; // TODO: figure out acceptable perlin noise values
+	float width = 0.2;
 
 	for (s16 z = node_min.Z; z <= node_max.Z; z++)
 	for (s16 y = node_min.Y - 1; y <= node_max.Y + 1; y++) {
@@ -949,28 +954,51 @@ void MapgenV7::addTopNodes()
 
 void MapgenV7::generateCaves(s16 max_stone_y)
 {
-	if (max_stone_y >= node_min.Y) {
-		u32 index   = 0;
+	if (max_stone_y < node_min.Y)
+		return;
 
-		for (s16 z = node_min.Z; z <= node_max.Z; z++)
-		for (s16 y = node_min.Y - 1; y <= node_max.Y + 1; y++) {
-			u32 i = vm->m_area.index(node_min.X, y, z);
-			for (s16 x = node_min.X; x <= node_max.X; x++, i++, index++) {
-				float d1 = contour(noise_cave1->result[index]);
-				float d2 = contour(noise_cave2->result[index]);
-				if (d1 * d2 > 0.3) {
-					content_t c = vm->m_data[i].getContent();
-					if (!ndef->get(c).is_ground_content || c == CONTENT_AIR)
-						continue;
+	noise_cave1->perlinMap3D(node_min.X, node_min.Y - 1, node_min.Z);
+	noise_cave2->perlinMap3D(node_min.X, node_min.Y - 1, node_min.Z);
 
-					vm->m_data[i] = MapNode(CONTENT_AIR);
-				}
+	v3s16 em = vm->m_area.getExtent();
+	u32 index2d = 0;
+
+	for (s16 z = node_min.Z; z <= node_max.Z; z++)
+	for (s16 x = node_min.X; x <= node_max.X; x++, index2d++) {
+		bool column_is_open = false;  // Is column open to overground
+		u32 vi = vm->m_area.index(x, node_max.Y + 1, z);
+		u32 index3d = (z - node_min.Z) * zstride + (csize.Y + 1) * ystride +
+			(x - node_min.X);
+		// Biome of column
+		Biome *biome = (Biome *)bmgr->getRaw(biomemap[index2d]);
+
+		for (s16 y = node_max.Y + 1; y >= node_min.Y - 1;
+				y--, index3d -= ystride, vm->m_area.add_y(em, vi, -1)) {
+			content_t c = vm->m_data[vi].getContent();
+			if (c == CONTENT_AIR || c == biome->c_water_top ||
+					c == biome->c_water) {
+				column_is_open = true;
+				continue;
+			}
+			// Ground
+			float d1 = contour(noise_cave1->result[index3d]);
+			float d2 = contour(noise_cave2->result[index3d]);
+			if (d1 * d2 > 0.3f && ndef->get(c).is_ground_content) {
+				// In tunnel and ground content, excavate
+				vm->m_data[vi] = MapNode(CONTENT_AIR);
+			} else if (column_is_open &&
+					(c == biome->c_filler || c == biome->c_stone)) {
+				// Tunnel entrance floor
+				vm->m_data[vi] = MapNode(biome->c_top);
+				column_is_open = false;
+			} else {
+				column_is_open = false;
 			}
 		}
 	}
 
 	PseudoRandom ps(blockseed + 21343);
-	u32 bruises_count = (ps.range(1, 4) == 1) ? ps.range(1, 2) : 0;
+	u32 bruises_count = ps.range(0, 2);
 	for (u32 i = 0; i < bruises_count; i++) {
 		CaveV7 cave(this, &ps);
 		cave.makeCave(node_min, node_max, max_stone_y);

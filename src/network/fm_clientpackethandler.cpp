@@ -24,7 +24,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "util/base64.h"
 #include "clientmedia.h"
-#include "log.h"
+#include "log_types.h"
 #include "map.h"
 #include "mapsector.h"
 #include "nodedef.h"
@@ -162,7 +162,7 @@ void Client::ProcessData(NetworkPacket *pkt) {
 	*/
 	// there's no sane reason why we shouldn't have a player and
 	// almost everyone needs a player reference
-	Player *player = m_env.getLocalPlayer();
+	auto *player = m_env.getLocalPlayer();
 	if(!player)
 		return;
 
@@ -211,18 +211,23 @@ void Client::ProcessData(NetworkPacket *pkt) {
 			m_localserver->getMap().saveBlock(block);
 		}
 
-		if (new_block)
-			if (!m_env.getMap().insertBlock(block))
+		if (new_block) {
+			if (!m_env.getMap().insertBlock(block)) {
 				delete block;
+				block = nullptr;
+			}
+		}
 
 		/*
 			//Add it to mesh update queue and set it to be acknowledged after update.
 		*/
 		//infostream<<"Adding mesh update task for received block "<<p<<std::endl;
-		updateMeshTimestampWithEdge(p);
-		if (block->content_only != CONTENT_IGNORE && block->content_only != CONTENT_AIR) {
-			if (getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p) <= 1)
-				addUpdateMeshTaskWithEdge(p);
+		if (block) {
+			updateMeshTimestampWithEdge(p);
+			if (block->content_only != CONTENT_IGNORE && block->content_only != CONTENT_AIR) {
+				if (getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p) <= 1)
+					addUpdateMeshTaskWithEdge(p);
+			}
 		}
 
 /*
@@ -344,10 +349,19 @@ void Client::ProcessData(NetworkPacket *pkt) {
 		f32 yaw = packet[TOCLIENT_MOVE_PLAYER_YAW].as<f32>();
 		player->setPosition(pos);
 
+/*
+		v3f speed;
+		if (packet.count(TOCLIENT_MOVE_PLAYER_SPEED)) {
+			speed = packet[TOCLIENT_MOVE_PLAYER_SPEED].as<v3f>();
+			player->setSpeed(speed);
+		}
+*/
+
 		infostream<<"Client got TOCLIENT_MOVE_PLAYER"
 				<<" pos=("<<pos.X<<","<<pos.Y<<","<<pos.Z<<")"
 				<<" pitch="<<pitch
 				<<" yaw="<<yaw
+				//<<" speed="<<speed
 				<<std::endl;
 
 		/*
@@ -365,6 +379,16 @@ void Client::ProcessData(NetworkPacket *pkt) {
 		// Ignore damage for a few seconds, so that the player doesn't
 		// get damage from falling on ground
 		m_ignore_damage_timer = 3.0;
+	}
+
+	else if(command == TOCLIENT_PUNCH_PLAYER)
+	{
+		Player *player = m_env.getLocalPlayer();
+		if(!player)
+			return;
+
+		v3f speed = packet[TOCLIENT_PUNCH_PLAYER_SPEED].as<v3f>();
+		player->addSpeed(speed);
 	}
 	else if(command == TOCLIENT_DEATHSCREEN)
 	{
@@ -732,9 +756,11 @@ void Client::ProcessData(NetworkPacket *pkt) {
 			if(hotbar_itemcount > 0 && hotbar_itemcount <= HUD_HOTBAR_ITEMCOUNT_MAX)
 				player->hud_hotbar_itemcount = hotbar_itemcount;
 		} else if (param == HUD_PARAM_HOTBAR_IMAGE) {
-			((LocalPlayer *) player)->hotbar_image = value;
+			player->hotbar_image = value;
+		} else if (param == HUD_PARAM_HOTBAR_IMAGE_ITEMS) {
+			player->hotbar_image_items = stoi(value);
 		} else if (param == HUD_PARAM_HOTBAR_SELECTED_IMAGE) {
-			((LocalPlayer *) player)->hotbar_selected_image = value;
+			player->hotbar_selected_image = value;
 		}
 	}
 /*
