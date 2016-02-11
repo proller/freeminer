@@ -119,13 +119,17 @@ MapBlock::~MapBlock()
 	//delMesh();
 #endif
 
-	{
-		std::unique_lock<Mutex> lock(abm_triggers_mutex);
-		abm_triggers.reset(nullptr);
+	for (int i = 0; i <= 100; ++i) {
+		std::unique_lock<Mutex> lock(abm_triggers_mutex, std::try_to_lock);
+		if (!lock.owns_lock()) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			continue;
+		}
+		abm_triggers.reset();
+		break;
 	}
 
-	if(data)
-		delete data;
+	delete data;
 	data = nullptr;
 }
 
@@ -756,7 +760,7 @@ bool MapBlock::deSerialize(std::istream &is, u8 version, bool disk)
 			content_nodemeta_deserialize_legacy(iss,
 				&m_node_metadata, &m_node_timers,
 				m_gamedef->idef());
-	} catch(SerializationError &e) {
+	} catch(std::exception &e) {
 		warningstream<<"MapBlock::deSerialize(): Ignoring an error"
 				<<" while deserializing node metadata at ("
 				<<PP(getPos())<<": "<<e.what()<<std::endl;
@@ -1032,7 +1036,7 @@ void MapBlock::deSerialize_pre22(std::istream &is, u8 version, bool disk)
 						&m_node_metadata, &m_node_timers,
 						m_gamedef->idef());
 				}
-			} catch(SerializationError &e) {
+			} catch(std::exception &e) {
 				warningstream<<"MapBlock::deSerialize(): Ignoring an error"
 						<<" while deserializing node metadata"<<std::endl;
 			}

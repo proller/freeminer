@@ -117,13 +117,13 @@ public:
 
 	v3f getSpeed()
 	{
-		auto lock = lock_shared();
+		auto lock = lock_shared_rec();
 		return m_speed;
 	}
 
 	void setSpeed(v3f speed)
 	{
-		auto lock = lock_unique();
+		auto lock = lock_unique_rec();
 		m_speed = speed;
 	}
 
@@ -134,7 +134,7 @@ public:
 
 	v3f getPosition()
 	{
-		auto lock = lock_shared();
+		auto lock = lock_shared_rec();
 		return m_position;
 	}
 
@@ -148,49 +148,49 @@ public:
 
 	v3f getEyePosition()
 	{
-		auto lock = lock_shared();
+		auto lock = lock_shared_rec();
 		return m_position + getEyeOffset();
 	}
 
 	virtual void setPosition(const v3f &position)
 	{
-		auto lock = lock_unique();
+		auto lock = lock_unique_rec();
 		m_position = position;
 	}
 
 	void setPitch(f32 pitch)
 	{
-		auto lock = lock_unique();
+		auto lock = lock_unique_rec();
 		m_pitch = pitch;
 	}
 
 	virtual void setYaw(f32 yaw)
 	{
-		auto lock = lock_unique();
+		auto lock = lock_unique_rec();
 		m_yaw = yaw;
 	}
 
 	f32 getPitch()
 	{
-		auto lock = lock_shared();
+		auto lock = lock_shared_rec();
 		return m_pitch;
 	}
 
 	f32 getYaw()
 	{
-		auto lock = lock_shared();
+		auto lock = lock_shared_rec();
 		return m_yaw;
 	}
 
 	u16 getBreath()
 	{
-		auto lock = lock_shared();
+		auto lock = lock_shared_rec();
 		return m_breath;
 	}
 
 	virtual void setBreath(u16 breath)
 	{
-		auto lock = lock_unique();
+		auto lock = lock_unique_rec();
 		m_breath = breath;
 	}
 
@@ -214,7 +214,7 @@ public:
 		return m_name;
 	}
 
-	core::aabbox3d<f32> getCollisionbox()
+	aabb3f getCollisionbox()
 	{
 		return m_collisionbox;
 	}
@@ -415,7 +415,7 @@ public:
 	f32 m_yaw;
 	v3f m_speed;
 	v3f m_position;
-	core::aabbox3d<f32> m_collisionbox;
+	aabb3f m_collisionbox;
 
 	std::vector<HudElement *> hud;
 

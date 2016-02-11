@@ -353,6 +353,12 @@
 #    type: bool
 # enable_shaders = true
 
+##### Tone mapping
+#    Enables filmic tone mapping.
+#    Requires shaders to be enabled.
+#    type: bool
+# tone_mapping = false
+
 ##### Bumpmapping
 
 #    Enables bumpmapping for textures. Normalmaps need to be supplied by the texture pack
@@ -555,9 +561,9 @@
 #    type: float
 # hud_hotbar_max_width = 1.0
 
-#    Enable selection highlighting for nodes (disables selectionbox).
-#    type: bool
-# enable_node_highlighting = false
+#    Selection highlighting method (box or halo)
+#    type: string
+# node_highlighting = box
 
 #    Enables caching of facedir rotated meshes.
 #    type: bool
@@ -587,6 +593,9 @@
 #    set to the nearest valid value.
 #    type: float min: 0.25 max: 4
 # ambient_occlusion_gamma = 2.2
+
+#    Enable animation of inventory items.
+# inventory_items_animations = false
 
 ### Menus
 
@@ -829,13 +838,6 @@
 #    If this is set, players will always (re)spawn at the given position.
 #    type: string
 # static_spawnpoint = 
-
-#    Maximum distance above water level for player spawn.
-#    Larger values result in spawn points closer to (x = 0, z = 0).
-#    Smaller values may result in a suitable spawn point not being found,
-#    resulting in a spawn at (0, 0, 0) possibly buried underground.
-#    type: int
-# vertical_spawn_range = 16
 
 #    If enabled, new players cannot join with an empty password.
 #    type: bool
