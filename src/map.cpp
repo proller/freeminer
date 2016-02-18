@@ -567,7 +567,7 @@ void Map::spreadLight(enum LightBank bank,
 			<<" for "<<from_nodes.size()<<" nodes"
 			<<std::endl;*/
 
-	if(!lighted_nodes.empty() && porting::getTimeMs() <= end_ms) { // maybe 32 too small
+	if(!lighted_nodes.empty() && (!end_ms || porting::getTimeMs() <= end_ms)) { // maybe 32 too small
 /*
 		infostream<<"spreadLight(): recursive("<<recursive<<"): changed=" <<blockchangecount
 			<<" from="<<from_nodes.size()
@@ -3318,12 +3318,12 @@ MapBlock * ServerMap::loadBlock(v3s16 p3d)
 	DSTACK(FUNCTION_NAME);
 	ScopeProfiler sp(g_profiler, "ServerMap::loadBlock");
 	const auto sector = this;
+	MapBlock *block = nullptr;
+	try {
 	auto blob = dbase->loadBlock(p3d);
 	if(!blob.length())
 		return nullptr;
 
-	MapBlock *block = nullptr;
-	try {
 		std::istringstream is(blob, std::ios_base::binary);
 
 		u8 version = SER_FMT_VER_INVALID;
@@ -3373,7 +3373,7 @@ MapBlock * ServerMap::loadBlock(v3s16 p3d)
 
 		return block;
 	}
-	catch(SerializationError &e)
+	catch(std::exception &e)
 	{
 		if (block)
 			delete block;

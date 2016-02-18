@@ -59,7 +59,7 @@ no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 use strict;
 use feature qw(say);
 use Data::Dumper;
-use JSON;
+#use JSON;
 use Cwd;
 use POSIX ();
 
@@ -117,6 +117,7 @@ sub init_config () {
         #make_add     => '',
         #run_add       => '',
         vtune_amplifier => '~/intel/vtune_amplifier_xe/bin64/',
+        vtune_collect   => 'hotspots',                            # for full list: ~/intel/vtune_amplifier_xe/bin64/amplxe-cl -help collect
     };
 
     map { /^--(\w+)(?:=(.*))/ and $config->{$1} = $2; } @ARGV;
@@ -237,15 +238,16 @@ qq{nice make -j \$(nproc || sysctl -n hw.ncpu || echo 2) $config->{make_add} $co
         local $config->{runner} = $config->{runner} . " valgrind @_";
         commands_run($config->{run_task});
     },
-    run_server => sub {
+    run_server_simple => sub {
         sy
 qq{$config->{env} $config->{runner} @_ ./freeminerserver $config->{tee} $config->{logdir}/autotest.$g->{task_name}.server.out.log};
     },
-    run_server_auto => sub {
+    run_server => sub {
+        my $fork = $config->{server_fg} ? '' : '&';
         #my $args = join ' ', map { '--' . $_ . ' ' . $config->{$_} } grep { $config->{$_} } qw(gameid world port config autoexit);
         sy qq{$config->{env} $config->{runner} @_ ./freeminerserver --logfile $config->{logdir}/autotest.$g->{task_name}.game.log }
           . options_make([qw(gameid world port config autoexit)])
-          . qq{ $config->{run_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.server.out.log &};
+          . qq{ $config->{run_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.server.out.log $fork};
     },
     run_clients => sub {
         for (0 .. ($config->{clients_runs} || 0)) {
@@ -291,6 +293,7 @@ our $tasks = {
     build_nothreads => [sub { $g->{build_name} .= '_nt'; 0 }, 'prepare', ['cmake', $config->{cmake_nothreads}], 'make',],
     build_server       => [{-no_build_client => 1,}, 'build_normal',],
     build_server_debug => [{-no_build_client => 1,}, 'build_debug',],
+    bot => [{-no_build_server => 1,}, 'build_normal', 'run_single'],
     #run_single => ['run_single'],
     clang => ['prepare', {-cmake_clang => 1,}, 'cmake', 'make',],
     build_tsan => [sub { $g->{build_name} .= '_tsan'; 0 }, {-cmake_tsan => 1,}, 'prepare', 'cmake', 'make',],
@@ -397,10 +400,10 @@ our $tasks = {
         } qw(tsan tsannt asan usan gdb)
     ),
 
-    #stress => [{ZZbuild_name => 'normal'}, 'prepare', 'cmake', 'make', 'run_server_auto', 'run_clients',],
+    #stress => [{ZZbuild_name => 'normal'}, 'prepare', 'cmake', 'make', 'run_server', 'run_clients',],
     stress => sub {
         commands_run($_[0] || 'build_normal');
-        for ('run_server_auto', 'run_clients') { my $r = commands_run($_); return $r if $r; }
+        for ('run_server', 'run_clients') { my $r = commands_run($_); return $r if $r; }
         return 0;
     },
     #clients     => [{ZZbuild_name => 'normal'}, 'prepare', {-no_build_client => 0, -no_build_server => 1}, 'cmake', 'make', 'run_clients'],
@@ -410,24 +413,24 @@ our $tasks = {
 
     stress_tsan => [
         {-no_build_client => 1, -no_build_server => 0}, 'build_tsan', 'cgroup',
-        'run_server_auto', ['sleep', 10], {build_name => '_normal', -cmake_tsan => 0,}, 'clients',
+        'run_server', ['sleep', 10], {build_name => '_normal', -cmake_tsan => 0,}, 'clients',
     ],
     stress_asan => [
         {-no_build_client => 1, -no_build_server => 0}, 'build_asan', 'cgroup',
-        'run_server_auto', ['sleep', 10], {build_name => '_normal', -cmake_asan => 0,}, 'clients',
+        'run_server', ['sleep', 10], {build_name => '_normal', -cmake_asan => 0,}, 'clients',
     ],
 
     stress_massif => [
         'clients_build',
         sub {
-            local $config->{run_task} = 'run_server_auto';
+            local $config->{run_task} = 'run_server';
             commands_run('valgrind_massif');
         },
         ['sleep', 10],
         'clients_run',
     ],
 
-    stress => ['build_normal', 'run_server_auto', ['sleep', 5], 'clients_run'],
+    stress => ['build_normal', 'run_server', ['sleep', 5], 'clients_run'],
 
     debug_mapgen => [
         #{build_name => 'debug'},
@@ -442,14 +445,17 @@ our $tasks = {
         @_ = ('debug') if !@_;
         for (@_) { my $r = commands_run($_); return $r if $r; }
     },
-    server_gdb    => [{-no_build_client => 1,}, 'build_debug',  ['gdb', 'run_server']],
+
+    server => [{-no_build_client => 1,}, 'build_debug', 'run_server'],
+    server_gdb => [['gdb', 'server']],
     server_gdb_nd => [{-no_build_client => 1,}, 'build_normal', ['gdb', 'run_server']],
 
     bot_gdb => [{-no_build_server => 1,}, 'build_debug', ['gdb', 'run_single']],
 
     vtune => sub {
         sy 'echo 0|sudo tee /proc/sys/kernel/yama/ptrace_scope';
-        local $config->{runner} = $config->{runner} . qq{$config->{vtune_amplifier}amplxe-cl -collect hotspots -r $config->{logdir}/rh0};
+        local $config->{runner} =
+          $config->{runner} . qq{$config->{vtune_amplifier}amplxe-cl -collect $config->{vtune_collect} -r $config->{logdir}/rh0};
         local $config->{run_escape} = '\\\\';
         @_ = ('debug') if !@_;
         for (@_) { my $r = commands_run($_); return $r if $r; }
@@ -469,7 +475,7 @@ qq{$config->{vtune_amplifier}amplxe-cl -report $report -report-width=250 -report
     stress_vtune => [
         'build_debug',
         sub {
-            commands_run('vtune', 'run_server_auto');
+            commands_run('vtune', 'run_server');
         },
         ['sleep', 10],
         'clients_run',
@@ -489,13 +495,17 @@ qq{$config->{vtune_amplifier}amplxe-cl -report $report -report-width=250 -report
         map { 'play_' . $_ => [{-no_build_server => 1,}, [\'play_task', $_]] } qw(debug gdb nothreads vtune),
         map { 'valgrind_' . $_ } @{$config->{valgrind_tools}},
     ),
+
+    (map { 'gdb_' . $_ => [[\'gdb', $_]] } map { $_, 'bot_' . $_, 'play_' . $_ } qw(tsan asan msan usan asannta minetest)),
+    (map { 'gdb_' . $_ => [[\'gdb', $_]] } map {$_} qw(server)),
+
     play => [{-no_build_server => 1,}, [\'play_task', 'build_normal', $config->{run_task}]],    #'
     timelapse => [{-options_add => 'timelapse',}, \'play', 'timelapse_video'],                  #'
     up => sub {
         my $cwd = Cwd::cwd();
         chdir $config->{root_path};
-        sy qq{(git stash && git pull --rebase >&2) | grep -v "No local changes to save" && git stash pop}
-          and sy qq{git submodule update --init --recursive};
+        sy qq{(git stash && git pull --rebase >&2) | grep -v "No local changes to save" && git stash pop};
+        sy qq{git submodule update --init --recursive};
         chdir $cwd;
         return 0;
     },
@@ -523,6 +533,14 @@ sub array (@) {
     wantarray ? @_ : \@_;
 }
 
+sub json (@){
+    local *Data::Dumper::qquote = sub {
+        $_[0] =~ s/\\/\\\\/g, s/"/\\"/g for $_[0];
+        return ( '"' . $_[0] . '"' );
+    };
+    return \( Data::Dumper->new( \@_ )->Pair(':')->Terse(1)->Indent(0)->Useqq(1)->Useperl(1)->Dump() );
+}
+
 sub options_make(;$$) {
     my ($mm, $m) = @_;
     my ($rm, $rmm);
@@ -539,7 +557,8 @@ sub options_make(;$$) {
                 next;
             }
             next if !ref $rm->{$k};
-            ($rm->{$k} = JSON::encode_json($rm->{$k})) =~ s/"/$config->{run_escape}\\"/g;    #"
+            #($rm->{$k} = JSON::encode_json($rm->{$k})) =~ s/"/$config->{run_escape}\\"/g;    #"
+            ($rm->{$k} = ${json($rm->{$k})}) =~ s/"/$config->{run_escape}\\"/g;    #"
         }
     }
 
@@ -622,7 +641,7 @@ unless (@ARGV) {
     say $help;
     say "possible tasks:";
     print "$_ " for sort keys %$tasks;
-    say "\n but running default list: ", join ' ', @$task_run;
+    say "\n\n but running default list: ", join ' ', @$task_run;
     say '';
     sleep 1;
 }

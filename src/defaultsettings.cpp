@@ -148,6 +148,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("farmesh_step", "2");
 	settings->setDefault("farmesh_wanted", "500");
 	settings->setDefault("headless_optimize", "false");
+	//settings->setDefault("node_highlighting", "halo");
 
 	// Liquid
 	settings->setDefault("liquid_real", "true");
@@ -266,7 +267,11 @@ void fm_set_default_settings(Settings *settings) {
 
 	settings->setDefault("wanted_fps", "20");
 	settings->setDefault("fps_max", "30");
-	settings->setDefault("mouse_sensitivity", "0.05");
+	settings->setDefault("mouse_sensitivity", "0.1");
+
+	settings->setDefault("sound_volume", "1");
+	settings->setDefault("doubletap_jump", "1");
+	settings->setDefault("enable_mesh_cache", "1");
 
 	/*
 	settings->setDefault("max_simultaneous_block_sends_per_client", "3");
@@ -457,7 +462,9 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("console_color", "(0,0,0)");
 	settings->setDefault("console_alpha", "200");
 	settings->setDefault("selectionbox_color", "(0,0,0)");
-	settings->setDefault("enable_node_highlighting", "false");
+	settings->setDefault("selectionbox_width", "2");
+	settings->setDefault("inventory_items_animations", "false");
+	settings->setDefault("node_highlighting", "box");
 	settings->setDefault("crosshair_color", "(255,255,255)");
 	settings->setDefault("crosshair_alpha", "255");
 	settings->setDefault("hud_scaling", "1.0");
@@ -468,8 +475,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("enable_sound", "true");
 	settings->setDefault("sound_volume", "0.8");
 	settings->setDefault("desynchronize_mapblock_texture_animation", "true");
-	settings->setDefault("selectionbox_width","2");
-	settings->setDefault("hud_hotbar_max_width","1.0");
+	settings->setDefault("hud_hotbar_max_width", "1.0");
 	settings->setDefault("enable_local_map_saving", "false");
 
 	settings->setDefault("mip_map", "false");
@@ -479,6 +485,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("texture_clean_transparent", "false");
 	settings->setDefault("texture_min_size", "64");
 	settings->setDefault("preload_item_visuals", "false");
+	settings->setDefault("tone_mapping", "false");
 	settings->setDefault("enable_bumpmapping", "false");
 	settings->setDefault("enable_parallax_occlusion", "false");
 	settings->setDefault("generate_normalmaps", "false");
@@ -566,7 +573,6 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("default_privs", "interact, shout");
 	settings->setDefault("player_transfer_distance", "0");
 	settings->setDefault("enable_pvp", "true");
-	settings->setDefault("vertical_spawn_range", "16");
 	settings->setDefault("disallow_empty_password", "false");
 	settings->setDefault("disable_anticheat", "false");
 	settings->setDefault("enable_rollback_recording", "false");

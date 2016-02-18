@@ -265,7 +265,7 @@ int ServerMap::getSurface(v3POS basepos, int searchup, bool walkable_only) {
 
 	s16 max = MYMIN(searchup + basepos.Y, 0x7FFF);
 
-	MapNode last_node = getNodeNoEx(basepos);
+	MapNode last_node = getNode(basepos);
 	MapNode node = last_node;
 	v3POS runpos = basepos;
 	INodeDefManager *nodemgr = m_gamedef->ndef();
@@ -275,7 +275,7 @@ int ServerMap::getSurface(v3POS basepos, int searchup, bool walkable_only) {
 	while ((runpos.Y < max) && (node.param0 != CONTENT_AIR)) {
 		runpos.Y += 1;
 		last_node = node;
-		node = getNodeNoEx(runpos);
+		node = getNode(runpos);
 
 		if (!walkable_only) {
 			if ((last_node.param0 != CONTENT_AIR) &&
@@ -336,13 +336,14 @@ u32 Map::timerUpdate(float uptime, float unload_timeout, u32 max_loaded_blocks,
 	// Profile modified reasons
 	Profiler modprofiler;
 
-	if (/*!m_blocks_update_last && */ m_blocks_delete->size() > 1000) {
+	if (porting::getTimeMs() > m_blocks_delete_time) {
 		m_blocks_delete = (m_blocks_delete == &m_blocks_delete_1 ? &m_blocks_delete_2 : &m_blocks_delete_1);
 		verbosestream << "Deleting blocks=" << m_blocks_delete->size() << std::endl;
 		for (auto & ir : *m_blocks_delete)
 			delete ir.first;
 		m_blocks_delete->clear();
 		getBlockCacheFlush();
+		m_blocks_delete_time = porting::getTimeMs() + 30000;
 	}
 
 	u32 deleted_blocks_count = 0;
@@ -639,7 +640,7 @@ bool Map::propagateSunlight(v3POS pos, std::set<v3POS> & light_sources,
                             bool remove_light) {
 	MapBlock *block = getBlockNoCreateNoEx(pos);
 
-	auto lock = block->lock_unique_rec();
+	//auto lock = block->lock_unique_rec(); //no: in block_below_is_valid getnode outside block
 
 	INodeDefManager *nodemgr = m_gamedef->ndef();
 

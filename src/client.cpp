@@ -159,7 +159,7 @@ void MeshUpdateThread::doUpdate()
 		sleep_ms(1); // dont overflow gpu, fix lag and spikes on drawtime
 #endif
 
-#ifdef NDEBUG
+#if !EXEPTION_DEBUG
 		} catch (BaseException &e) {
 			errorstream<<"MeshUpdateThread: exception: "<<e.what()<<std::endl;
 		} catch(std::exception &e) {
@@ -222,11 +222,9 @@ Client::Client(
 	m_inventory_updated(false),
 	m_inventory_from_server(NULL),
 	m_inventory_from_server_age(0.0),
-	m_show_highlighted(false),
 	m_animation_time(0),
 	m_crack_level(-1),
 	m_crack_pos(0,0,0),
-	m_highlighted_pos(0,0,0),
 	m_map_seed(0),
 	m_password(password),
 	m_chosen_auth_mech(AUTH_MECHANISM_NONE),
@@ -255,6 +253,9 @@ Client::Client(
 
 	m_cache_smooth_lighting = g_settings->getBool("smooth_lighting");
 	m_cache_enable_shaders  = g_settings->getBool("enable_shaders");
+	m_cache_use_tangent_vertices = m_cache_enable_shaders && (
+		g_settings->getBool("enable_bumpmapping") || 
+		g_settings->getBool("enable_parallax_occlusion"));
 }
 
 void Client::Stop()
@@ -1536,13 +1537,13 @@ ClientActiveObject * Client::getSelectedActiveObject(
 	{
 		ClientActiveObject *obj = objects[i].obj;
 
-		core::aabbox3d<f32> *selection_box = obj->getSelectionBox();
+		aabb3f *selection_box = obj->getSelectionBox();
 		if(selection_box == NULL)
 			continue;
 
 		v3f pos = obj->getPosition();
 
-		core::aabbox3d<f32> offsetted_box(
+		aabb3f offsetted_box(
 				selection_box->MinEdge + pos,
 				selection_box->MaxEdge + pos
 		);
@@ -1569,15 +1570,6 @@ float Client::getAnimationTime()
 int Client::getCrackLevel()
 {
 	return m_crack_level;
-}
-
-void Client::setHighlighted(v3s16 pos, bool show_highlighted)
-{
-	m_show_highlighted = show_highlighted;
-	v3s16 old_highlighted_pos = m_highlighted_pos;
-	m_highlighted_pos = pos;
-	addUpdateMeshTaskForNode(old_highlighted_pos, true);
-	addUpdateMeshTaskForNode(m_highlighted_pos, true);
 }
 
 void Client::setCrack(int level, v3s16 pos)
@@ -1666,7 +1658,9 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent, int step)
 		Create a task to update the mesh of the block
 	*/
 	auto & draw_control = m_env.getClientMap().getControl();
-	std::shared_ptr<MeshMakeData> data(new MeshMakeData(this, m_cache_enable_shaders, m_env.getMap(), draw_control));
+	std::shared_ptr<MeshMakeData> data(new MeshMakeData(this, m_cache_enable_shaders,
+		m_cache_use_tangent_vertices,
+		m_env.getMap(), draw_control));
 
 	{
 		//TimeTaker timer("data fill");
@@ -1680,7 +1674,6 @@ void Client::addUpdateMeshTask(v3s16 p, bool urgent, int step)
 #endif
 
 		data->setCrack(m_crack_level, m_crack_pos);
-		data->setHighlighted(m_highlighted_pos, m_show_highlighted);
 		data->setSmoothLighting(m_cache_smooth_lighting);
 		data->step = step ? step : getFarmeshStep(data->draw_control, getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)), p);
 		data->range = getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(p);
