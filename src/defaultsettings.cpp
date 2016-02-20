@@ -148,6 +148,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("farmesh_step", "2");
 	settings->setDefault("farmesh_wanted", "500");
 	settings->setDefault("headless_optimize", "false");
+	//settings->setDefault("node_highlighting", "halo");
 
 	// Liquid
 	settings->setDefault("liquid_real", "true");
@@ -259,7 +260,7 @@ void fm_set_default_settings(Settings *settings) {
 	}
 
 	settings->setDefault("minimap_shape_round", "false");
-
+	settings->setDefault("mainmenu_last_selected_world", "1");
 
 
 #ifdef __ANDROID__
@@ -271,7 +272,11 @@ void fm_set_default_settings(Settings *settings) {
 
 	settings->setDefault("wanted_fps", "20");
 	settings->setDefault("fps_max", "30");
-	settings->setDefault("mouse_sensitivity", "0.05");
+	settings->setDefault("mouse_sensitivity", "0.1");
+
+	settings->setDefault("sound_volume", "1");
+	settings->setDefault("doubletap_jump", "1");
+	settings->setDefault("enable_mesh_cache", "1");
 
 	/*
 	settings->setDefault("max_simultaneous_block_sends_per_client", "3");
