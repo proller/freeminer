@@ -8,3 +8,11 @@ git pull
 git push
 git submodule update --init --recursive
 git status
+
+
+cd src/network/usrsctp
+git co master
+git pull
+cd ../../..
+git commit src/network/usrsctp -m "update submodules"
+git push
