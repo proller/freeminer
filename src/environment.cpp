@@ -1297,7 +1297,10 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	// Update this one
 	// NOTE: This is kind of funny on a singleplayer game, but doesn't
 	// really matter that much.
-	//m_recommended_send_interval = g_settings->getFloat("dedicated_server_step");
+/*
+	static const float server_step = g_settings->getFloat("dedicated_server_step");
+	m_recommended_send_interval = server_step;
+*/
 
 	/*
 		Increment game time
@@ -1395,7 +1398,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		/*
 			Update list of active blocks, collecting changes
 		*/
-		const s16 active_block_range = g_settings->getS16("active_block_range");
+		static const s16 active_block_range = g_settings->getS16("active_block_range");
 		std::set<v3s16> blocks_removed;
 		m_active_blocks.update(players_blockpos, active_block_range,
 				blocks_removed, m_blocks_added);
@@ -1408,6 +1411,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		deactivateFarObjects(false);
 
 		} // if (!m_blocks_added_last)
+
 		/*
 			Handle added blocks
 		*/
@@ -2348,6 +2352,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 		}
 	}
 
+	static const auto max_objects_per_block = g_settings->getU16("max_objects_per_block");
 	if (objects.size())
 	for (auto & obj : objects)
 	{
@@ -2506,7 +2511,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 
 			if(block)
 			{
-				if(block->m_static_objects.m_stored.size() >= g_settings->getU16("max_objects_per_block")){
+				if(block->m_static_objects.m_stored.size() >= max_objects_per_block){
 					infostream<<"ServerEnv: Trying to store id="<<obj->getId()
 							<<" statically but block "<<PP(blockpos)
 							<<" already contains "
@@ -3018,6 +3023,7 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	bool update_lighting = m_active_object_light_update_interval.step(dtime, 1);
 	u32 n = 0, calls = 0, end_ms = porting::getTimeMs() + u32(500/g_settings->getFloat("wanted_fps"));
 	int skipped = 0;
+	static unsigned int cnt = 0;
 	for(std::map<u16, ClientActiveObject*>::iterator
 			i = m_active_objects.begin();
 			i != m_active_objects.end(); ++i)
@@ -3032,10 +3038,13 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		ClientActiveObject* obj = i->second;
 
 		auto & draw_control = getClientMap().getControl();
-		if ((pf.getDistanceFrom(obj->getPosition()) / BS) * 1.2 > draw_control.wanted_range && end_ms % 300) {
-			//errorstream<<"skip "<<obj->getId() << " p="<<pf<< " o=" << obj->getPosition() << " r=" << pf.getDistanceFrom(obj->getPosition()) / BS << " wr=" << draw_control.wanted_range<< std::endl;
-			++skipped;
-			continue;
+		if ((pf.getDistanceFrom(obj->getPosition()) / BS) * 1.2 > draw_control.wanted_range ) {
+			if (++cnt % int((draw_control.fps_avg+1)*5.0)) {
+				//errorstream<<"skip "<<obj->getId() << " p="<<pf<< " o=" << obj->getPosition() << " r=" << pf.getDistanceFrom(obj->getPosition()) / BS << " wr=" << draw_control.wanted_range<< std::endl;
+				++skipped;
+				continue;
+			}
+			//errorstream<<"step "<<obj->getId() <<" cnt="<< cnt << " m="<<m<< " p="<<pf<< " o=" << obj->getPosition() << " r=" << pf.getDistanceFrom(obj->getPosition()) / BS << " wr=" << draw_control.wanted_range<< std::endl;
 		}
 
 		// Step object

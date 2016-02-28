@@ -681,7 +681,7 @@ static void makeFastFace(TileSpec tile, u16 li0, u16 li1, u16 li2, u16 li3,
 	TODO: Add 3: Both faces drawn with backface culling, remove equivalent
 */
 static u8 face_contents(content_t m1, content_t m2, bool *equivalent,
-		INodeDefManager *ndef)
+		INodeDefManager *ndef, int step)
 {
 	*equivalent = false;
 
@@ -697,8 +697,8 @@ static u8 face_contents(content_t m1, content_t m2, bool *equivalent,
 	if(f1.sameLiquid(f2))
 		contents_differ = false;
 
-	u8 c1 = f1.solidness;
-	u8 c2 = f2.solidness;
+	u8 c1 = (step > 1 && f1.isLiquid()) ? 1 : f1.solidness;
+	u8 c2 = (step > 1 && f2.isLiquid()) ? 1 : f2.solidness;
 
 	bool solidness_differs = (c1 != c2);
 	bool makes_face = contents_differ && solidness_differs;
@@ -843,7 +843,7 @@ static void getTileInfo(
 	// This is hackish
 	bool equivalent = false;
 	u8 mf = face_contents(n0.getContent(), n1.getContent(),
-			&equivalent, ndef);
+			&equivalent, ndef, step);
 
 	if(mf == 0)
 	{
@@ -958,8 +958,9 @@ static void updateFastFaceRow(
 					&& next_lights[3] == lights[3]
 					&& next_tile == tile
 					&& tile.rotation == 0
-					&& next_light_source == light_source)
-			{
+					&& next_light_source == light_source
+					&& (tile.material_flags & MATERIAL_FLAG_TILEABLE_HORIZONTAL)
+					&& (tile.material_flags & MATERIAL_FLAG_TILEABLE_VERTICAL)) {
 				next_is_different = false;
 			}
 			else{
@@ -1096,12 +1097,12 @@ static void updateAllFastFaceRows(MeshMakeData *data,
 */
 
 MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
-	clearHardwareBuffer(false),
 	step(data->step),
 	no_draw(data->no_draw),
 	m_mesh(nullptr),
 	m_minimap_mapblock(NULL),
 	m_gamedef(data->m_gamedef),
+	m_driver(m_gamedef->tsrc()->getDevice()->getVideoDriver()),
 	m_tsrc(m_gamedef->getTextureSource()),
 	m_shdrsrc(m_gamedef->getShaderSource()),
 	m_animation_force_timer(0), // force initial animation
@@ -1115,6 +1116,8 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 	m_enable_shaders = data->m_use_shaders;
 	m_use_tangent_vertices = data->m_use_tangent_vertices;
+	m_enable_vbo = g_settings->getBool("enable_vbo");
+	
 
 	if (!data->fill_data())
 		return;
@@ -1358,6 +1361,11 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 				<<"and uses "<<m_mesh->getMeshBufferCount()
 				<<" materials "<<" step="<<step<<" range="<<data->range<< " mesh="<<m_mesh<<std::endl;
 #endif
+
+		// Use VBO for mesh (this just would set this for ever buffer)
+		if (m_enable_vbo) {
+			m_mesh->setHardwareMappingHint(scene::EHM_STATIC);
+		}
 	}
 
 	//std::cout<<"added "<<fastfaces.getSize()<<" faces."<<std::endl;
@@ -1374,22 +1382,15 @@ MapBlockMesh::~MapBlockMesh()
 	if (!m_mesh)
 		return;
 
-	if(clearHardwareBuffer)
-		for(u32 i=0; i<m_mesh->getMeshBufferCount(); i++){
+	if (m_enable_vbo && m_mesh) {
+		for (u32 i = 0; i < m_mesh->getMeshBufferCount(); i++) {
 			scene::IMeshBuffer *buf = m_mesh->getMeshBuffer(i);
-			m_gamedef->tsrc()->getDevice()->getVideoDriver()->removeHardwareBuffer(buf);
+			m_driver->removeHardwareBuffer(buf);
 		}
+	}
 	m_mesh->drop();
 	m_mesh = NULL;
 	delete m_minimap_mapblock;
-}
-
-void MapBlockMesh::setStatic()
-{
-	if(g_settings->getBool("enable_vbo")){
-		m_mesh->setHardwareMappingHint(scene::EHM_STATIC);
-		clearHardwareBuffer = true;
-	}
 }
 
 bool MapBlockMesh::animate(bool faraway, float time, int crack, u32 daynight_ratio)
@@ -1475,6 +1476,10 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack, u32 daynight_rat
 	// Day-night transition
 	if(!m_enable_shaders && (daynight_ratio != m_last_daynight_ratio))
 	{
+		// Force reload mesh to VBO
+		if (m_enable_vbo) {
+			m_mesh->setDirty();
+		}
 		for(std::map<u32, std::map<u32, std::pair<u8, u8> > >::iterator
 				i = m_daynight_diffs.begin();
 				i != m_daynight_diffs.end(); ++i)
@@ -1501,6 +1506,9 @@ bool MapBlockMesh::updateCameraOffset(v3s16 camera_offset)
 {
 	if (camera_offset != m_camera_offset) {
 		translateMesh(m_mesh, intToFloat(m_camera_offset-camera_offset, BS));
+		if (m_enable_vbo) {
+			m_mesh->setDirty();
+		}
 		m_camera_offset = camera_offset;
 		return true;
 	}
