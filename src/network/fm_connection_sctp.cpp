@@ -41,6 +41,7 @@ https://chromium.googlesource.com/external/webrtc/+/master/talk/media/sctp/sctpd
 namespace con {
 
 #define BUFFER_SIZE (1<<16)
+//#define BUFFER_SIZE (4096)
 
 //very ugly windows hack
 #if defined(_WIN32)
@@ -106,6 +107,9 @@ const char *inet_ntop(int af, const void *src, char *dst, socklen_t size) {
 */
 void
 debug_printf(const char *format, ...) {
+
+	printf("SCTP_DEBUG: ");
+
 	va_list ap;
 
 	va_start(ap, format);
@@ -230,7 +234,8 @@ void Connection::sctp_setup(u16 port) {
 
 	cs << "sctp_setup " << port << std::endl;
 
-auto debug_func = nullptr;
+auto debug_func = debug_printf;
+debug_func = nullptr;
 #if SCTP_DEBUG
 debug_func = debug_printf;
 #endif
@@ -260,6 +265,8 @@ debug_func = debug_printf;
 
 	usrsctp_sysctl_set_sctp_max_retran_chunk(10);
 	usrsctp_sysctl_set_sctp_shutdown_guard_time_default(40);
+
+	usrsctp_sysctl_set_sctp_no_csum_on_loopback(1);
 
 	//usrsctp_sysctl_set_sctp_blackhole(2);
 }
@@ -737,10 +744,10 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 								       (flags & MSG_EOR) ? 1 : 0);
 				*/
 				recv_buf[peer_id][rcv_info.rcv_sid] += std::string(buffer, n); // optimize here if firs packet complete`
-				//verbosestream <<  "recieved data n="<< n << " complete="<<(flags & MSG_EOR)<< " buf="<<recv_buf[peer_id].size()<<" from sock="<<sock<<std::endl;
+				//cs <<  "recieved data n="<< n << " peer="<<peer_id<<" sid="<<rcv_info.rcv_sid<< " complete="<<(flags & MSG_EOR)<< " buf="<<recv_buf[peer_id].size()<<" from sock="<<sock<<std::endl;
 				if ((flags & MSG_EOR)) {
-//errorstream<<"msg complete s="<<recv_buf[peer_id][rcv_info.rcv_sid].size()<<std::endl;
-					ConnectionEvent e;
+cs<<"recv: msg complete peer="<<peer_id<<" sid="<<rcv_info.rcv_sid<<" size="<<recv_buf[peer_id][rcv_info.rcv_sid].size()<<std::endl;
+					ConnectionEvent e; 
 					//SharedBuffer<u8> resultdata((const unsigned char*)buffer, n);
 					SharedBuffer<u8> resultdata((const unsigned char*)recv_buf[peer_id][rcv_info.rcv_sid].c_str(), recv_buf[peer_id][rcv_info.rcv_sid].size());
 					e.dataReceived(peer_id, resultdata);
@@ -1125,7 +1132,7 @@ void Connection::sendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable) 
 
 void Connection::send(u16 peer_id, u8 channelnum,
                       SharedBuffer<u8> data, bool reliable) {
-//errorstream<<" === sending to peer_id="<<peer_id <<" channelnum="<<(int)channelnum<< " reliable="<<reliable<< " bytes="<<data.getSize()<<std::endl;
+errorstream<<" === sending to peer_id="<<peer_id <<" channelnum="<<(int)channelnum<< " reliable="<<reliable<< " bytes="<<data.getSize()<<std::endl;
 	{
 		//JMutexAutoLock peerlock(m_peers_mutex);
 		if (m_peers.find(peer_id) == m_peers.end()) {
@@ -1157,7 +1164,8 @@ void Connection::send(u16 peer_id, u8 channelnum,
 
 //errorstream<<" === send to peer " << peer_id<< "sock="<< peer<<std::endl;
 
-	usrsctp_set_non_blocking(sock, 1);
+	usrsctp_set_non_blocking(sock, 0);
+	//usrsctp_set_non_blocking(sock, 1);
 
 	uint32_t flags = 0;
 
@@ -1210,15 +1218,25 @@ void Connection::send(u16 peer_id, u8 channelnum,
 			spa.sendv_sndinfo.snd_flags |= SCTP_EOR;
 		}
 
-//errorstream<<" psend" << " remlen=" << remlen << " curpos="<<curpos<< " sendlen="<<sendlen << " buflen="<<buflen<< " nowsent="<<(curpos+sendlen)<<" flags="<<sndinfo.snd_flags<< " sid="<<sndinfo.snd_sid<<std::endl;
+errorstream<<" psend" << " remlen=" << remlen << " curpos="<<curpos<< " sendlen="<<sendlen << " buflen="<<buflen<< " nowsent="<<(curpos+sendlen)<<" flags="<<spa.sendv_sndinfo.snd_flags<< " sid="<<spa.sendv_sndinfo.snd_sid<<std::endl;
 
 		//int len = usrsctp_sendv(sock, *data + curpos, sendlen, NULL, 0, (void *)&spa.sendv_sndinfo, sizeof(spa.sendv_sndinfo), SCTP_SENDV_SNDINFO, 0);
-		int len = usrsctp_sendv(sock, *data + curpos, sendlen, NULL, 0, (void *)&spa, sizeof(spa), SCTP_SENDV_SPA, flags);
+		int len = usrsctp_sendv(sock, *data, sendlen, NULL, 0, (void *)&spa, sizeof(spa), SCTP_SENDV_SPA, flags);
+if (len > 0) {
+		curpos += len;
+		remlen -= len;
+		sendlen = std::min(remlen, maxlen);
+}
+if (errno == EWOULDBLOCK){cs<<"send EWOULDBLOCK len="<<len<<std::endl; 
+		//usrsctp_set_non_blocking(sock, 0);
+
+continue;}
+if (errno == EAGAIN) {cs<<"send EAGAIN len="<<len<<std::endl; continue; }
 		if (len < 0) {
 			perror("usrsctp_sendv");
 			deletePeer(peer_id, 0);
 
-			errorstream << " === sending FAILED to peer_id=" << peer_id << " bytes=" << data.getSize() << " sock=" << sock << std::endl;
+			errorstream << " === sending FAILED to peer_id=" << peer_id << " bytes=" << data.getSize() << " sock=" << sock << " len="<<len<< " curpos="<<curpos<< std::endl;
 			break;
 		}
 
@@ -1230,9 +1248,7 @@ void Connection::send(u16 peer_id, u8 channelnum,
 		//if (len == -1)
 		//    return -1;
 
-		curpos += len;
-		remlen -= len;
-		sendlen = std::min(remlen, maxlen);
+
 	}
 
 	//return buflen;
