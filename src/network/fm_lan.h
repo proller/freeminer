@@ -31,6 +31,7 @@ public:
 
 	lan_adv();
 	void ask();
+	void send_string(std::string str);
 	std::string get();
 
 	void serve(unsigned short port);

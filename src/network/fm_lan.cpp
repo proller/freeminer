@@ -24,42 +24,31 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <sys/socket.h>
 #include <netdb.h>
 
-const static std::string ask_str = "{\"cmd\":\"ask\"}";
 const static unsigned short int adv_port = 29998;
+const static std::string ask_str = "{\"cmd\":\"ask\"}";
 
-lan_adv::lan_adv() /*: socket(true)*/ { }
+lan_adv::lan_adv() { }
 
 void lan_adv::ask() {
-	errorstream << "ASK\n";
 	reanimate();
+	send_string(ask_str);
+}
+
+void lan_adv::send_string(std::string str) {
 	try {
 		struct addrinfo hints { };
-		//{.ai_family = AF_UNSPEC};
-		//hints.ai_family = AF_UNSPEC;
 		struct addrinfo *info;
 
-		//errorstream<<__LINE__<<": "<< " " << "\n";
-
 		if(getaddrinfo("ff02::1", nullptr, &hints, &info)) {
-			//errorstream<<__LINE__<<": "<< " " << "\n";
-			errorstream << "getaddrinfo fail:";
-			perror("getaddrinfo");
 			return;
 		}
-		//errorstream<<__LINE__<<": "<< " " << "\n";
 		sockaddr_in6 addr = *((struct sockaddr_in6*)info->ai_addr);
-		//errorstream<<__LINE__<<": "<< " " << "\n";
 		addr.sin6_port = adv_port;
-		//errorstream<<__LINE__<<": "<< " " << "\n";
-//errorstream<<"fam="<<addr.sin6_family<< " i6="<<AF_INET6<<std::endl;
-//errorstream<<ask_str << " : " << ask_str.size()<<"\n";
 		UDPSocket socket_send(true);
-		socket_send.Send(Address(addr), ask_str.c_str(), ask_str.size());
+		socket_send.Send(Address(addr), str.c_str(), str.size());
 		freeaddrinfo(info);
-//#"ff02::1"
 	} catch(std::exception e) {
-		errorstream << "ask fail " << e.what() << "\n";
-
+		//errorstream << send fail " << e.what() << "\n";
 	}
 }
 
@@ -78,7 +67,6 @@ void lan_adv::serve(unsigned short port) {
 void * lan_adv::run() {
 
 	reg("LanAdv" + (server ? std::string("Server") : std::string("Client")));
-	errorstream << " run thread " << m_name << "\n";
 
 	UDPSocket socket_recv(true);
 	int set_option_on = 1;
@@ -93,15 +81,15 @@ void * lan_adv::run() {
 	unsigned int packet_maxsize = 16384;
 	char buffer [packet_maxsize];
 	Json::Reader reader;
+	Json::FastWriter writer;
 	std::string answer_str;
 	if (server) {
-		Json::FastWriter writer;
 		Json::Value answer_json;
 		answer_json["port"] = server;
 		answer_str = writer.write(answer_json);
+		send_string(answer_str);
 	}
 	while(!stopRequested()) {
-		//auto time_now = porting::getTimeMs();
 		try {
 			Address addr;
 			int rlen = socket_recv.Receive(addr, buffer, packet_maxsize);
@@ -112,7 +100,6 @@ void * lan_adv::run() {
 			//errorstream << " a=" << addr.serializeString() << " : " << addr.getPort() << " l=" << rlen << " b=" << recd << " ;  server=" << server << "\n";
 			if (server) {
 				if (ask_str == recd) {
-					//errorstream << " answ! " << recd << "\n";
 					UDPSocket socket_send(true);
 					addr.setPort(adv_port);
 					socket_send.Send(addr, answer_str.c_str(), answer_str.size());
@@ -123,7 +110,12 @@ void * lan_adv::run() {
 					continue;
 				if (s["port"].isInt()) {
 					s["address"] = addr.serializeString();
-					collected.set(addr.serializeString() + ":" + s["port"].asString(), s);
+					auto key = addr.serializeString() + ":" + s["port"].asString();
+					if (s["cmd"].asString() == "shutdown") {
+						collected.erase(key);
+					} else {
+						collected.set(key, s);
+					}
 				}
 			}
 
@@ -137,6 +129,14 @@ void * lan_adv::run() {
 #endif
 		}
 	}
+
+	if (server) {
+		Json::Value answer_json;
+		answer_json["port"] = server;
+		answer_json["cmd"] = "shutdown";
+		send_string(writer.write(answer_json));
+	}
+
 	return nullptr;
 
 }
