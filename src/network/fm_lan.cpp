@@ -35,21 +35,24 @@ void lan_adv::ask() {
 }
 
 void lan_adv::send_string(std::string str) {
-	try {
 		struct addrinfo hints { };
-		struct addrinfo *info;
+		struct addrinfo *result;
 
-		if(getaddrinfo("ff02::1", nullptr, &hints, &info)) {
+		if(getaddrinfo("ff02::1", nullptr, &hints, &result)) {
 			return;
 		}
+		for (auto info = result; info; info = info->ai_next) {
+	try {
+
 		sockaddr_in6 addr = *((struct sockaddr_in6*)info->ai_addr);
 		addr.sin6_port = adv_port;
 		UDPSocket socket_send(true);
 		socket_send.Send(Address(addr), str.c_str(), str.size());
-		freeaddrinfo(info);
 	} catch(std::exception e) {
-		//errorstream << send fail " << e.what() << "\n";
+		errorstream << " send fail " << e.what() << "\n";
 	}
+		}
+		freeaddrinfo(result);
 }
 
 std::string lan_adv::get() {
@@ -58,9 +61,7 @@ std::string lan_adv::get() {
 
 void lan_adv::serve(unsigned short port) {
 	server = port;
-
-	errorstream << m_name << "Serve!: " << port <<  std::endl;
-
+	//errorstream << m_name << "Serve!: " << port <<  std::endl;
 	reanimate();
 }
 
@@ -97,6 +98,9 @@ void * lan_adv::run() {
 				continue;
 			std::string recd(buffer, rlen);
 
+			if (ask_str == recd) {
+				errorstream << " " << addr.serializeString() << " want play " << "\n";
+			}
 			//errorstream << " a=" << addr.serializeString() << " : " << addr.getPort() << " l=" << rlen << " b=" << recd << " ;  server=" << server << "\n";
 			if (server) {
 				if (ask_str == recd) {
@@ -112,8 +116,11 @@ void * lan_adv::run() {
 					s["address"] = addr.serializeString();
 					auto key = addr.serializeString() + ":" + s["port"].asString();
 					if (s["cmd"].asString() == "shutdown") {
+						errorstream << "server shutdown "<< key << "\n";
 						collected.erase(key);
 					} else {
+						if (!collected.count(key))
+							errorstream << "server start "<< key << "\n";
 						collected.set(key, s);
 					}
 				}

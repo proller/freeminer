@@ -274,8 +274,10 @@ void applyLan(std::vector<ServerListSpec> & servers) {
 	Json::Value test;
 	auto lock = lan_adv_client.collected.lock_unique_rec();
 	if (lan_adv_client.collected.size()) {
-		test["name"] = "-----lan-servers-end-----";
-		servers.insert(servers.begin(), test);
+		if (servers.size()) {
+			test["name"] = "-----lan-servers-end-----";
+			servers.insert(servers.begin(), test);
+		}
 		for (auto & i : lan_adv_client.collected) {
 			servers.insert(servers.begin(), i.second);
 		}
