@@ -27,29 +27,29 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 //copypaste from ../socket.cpp
 #ifdef _WIN32
-	#ifndef WIN32_LEAN_AND_MEAN
-		#define WIN32_LEAN_AND_MEAN
-	#endif
-	// Without this some of the network functions are not found on mingw
-	#ifndef _WIN32_WINNT
-		#define _WIN32_WINNT 0x0501
-	#endif
-	#include <windows.h>
-	#include <winsock2.h>
-	#include <ws2tcpip.h>
-	#define LAST_SOCKET_ERR() WSAGetLastError()
-	typedef SOCKET socket_t;
-	typedef int socklen_t;
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+// Without this some of the network functions are not found on mingw
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0501
+#endif
+#include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#define LAST_SOCKET_ERR() WSAGetLastError()
+typedef SOCKET socket_t;
+typedef int socklen_t;
 #else
-	#include <sys/types.h>
-	#include <sys/socket.h>
-	#include <netinet/in.h>
-	#include <fcntl.h>
-	#include <netdb.h>
-	#include <unistd.h>
-	#include <arpa/inet.h>
-	#define LAST_SOCKET_ERR() (errno)
-	typedef int socket_t;
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#define LAST_SOCKET_ERR() (errno)
+typedef int socket_t;
 #endif
 
 
@@ -89,7 +89,7 @@ void lan_adv::send_string(std::string str) {
 		setsockopt(socket_send.GetHandle(), SOL_SOCKET, SO_BROADCAST, (const char*) &set_option_on, sizeof(set_option_on));
 		socket_send.Send(Address(addr), str.c_str(), str.size());
 	} catch(std::exception e) {
-		// errorstream << " send4 fail " << e.what() << "\n";
+		// errorstream << "udp broadcast send4 fail " << e.what() << "\n";
 	}
 
 	struct addrinfo hints { };
@@ -105,7 +105,7 @@ void lan_adv::send_string(std::string str) {
 				setsockopt(socket_send.GetHandle(), SOL_SOCKET, SO_BROADCAST, (const char*) &set_option_on, sizeof(set_option_on));
 				socket_send.Send(Address(addr), str.c_str(), str.size());
 			} catch(std::exception e) {
-				// errorstream << " send6 fail " << e.what() << "\n";
+				// errorstream << "udp broadcast send6 fail " << e.what() << "\n";
 			}
 		}
 		freeaddrinfo(result);
@@ -128,10 +128,12 @@ void * lan_adv::run() {
 	setsockopt(socket_recv.GetHandle(), SOL_SOCKET, SO_REUSEPORT, (const char*) &set_option_on, sizeof(set_option_on));
 #endif
 	setsockopt(socket_recv.GetHandle(), SOL_SOCKET, SO_BROADCAST, (const char*) &set_option_on, sizeof(set_option_on));
-	socket_recv.setTimeoutMs(100);
+	socket_recv.setTimeoutMs(200);
 	Address addr_bind(in6addr_any, adv_port);
 	socket_recv.Bind(addr_bind);
 	std::unordered_map<std::string, unsigned int> limiter;
+
+	const auto proto = g_settings->get("server_proto");
 
 	const unsigned int packet_maxsize = 16384;
 	char buffer [packet_maxsize];
@@ -153,6 +155,8 @@ void * lan_adv::run() {
 		server["password"]     = g_settings->getBool("disallow_empty_password");
 		server["pvp"]          = g_settings->getBool("enable_pvp");
 		server["port"] = server_port;
+		server["proto"] = g_settings->get("server_proto");
+
 		answer_str = writer.write(server);
 
 		send_string(answer_str);
@@ -170,7 +174,7 @@ void * lan_adv::run() {
 			}
 			auto addr_str = addr.serializeString();
 			auto now = porting::getTimeMs();
-			//errorstream << " a=" << addr.serializeString() << " : " << addr.getPort() << " l=" << rlen << " b=" << recd << " ;  server=" << server_port << "\n";
+			//errorstream << " a=" << addr.serializeString() << " : " << addr.getPort() << " l=" << rlen << " b=" << p << " ;  server=" << server_port << "\n";
 			if (server_port) {
 				if (p["cmd"] == "ask" && limiter[addr_str] < now) {
 					limiter[addr_str] = now + 3000;
@@ -181,7 +185,7 @@ void * lan_adv::run() {
 				}
 			} else {
 				if (p["cmd"] == "ask") {
-					actionstream << "lan: want play " << addr_str << std::endl;
+					actionstream << "lan: want play " << addr_str << " " << p["proto"] << std::endl;
 				}
 				if (p["port"].isInt()) {
 					p["address"] = addr_str;
@@ -189,7 +193,7 @@ void * lan_adv::run() {
 					if (p["cmd"].asString() == "shutdown") {
 						//infostream << "server shutdown " << key << "\n";
 						collected.erase(key);
-					} else {
+					} else if (p["proto"] == proto) {
 						if (!collected.count(key))
 							actionstream << "lan server start " << key << "\n";
 						collected.set(key, p);
