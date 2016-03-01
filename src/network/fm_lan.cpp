@@ -41,7 +41,7 @@ void lan_adv::ask() {
 		Json::FastWriter writer;
 		Json::Value j;
 		j["cmd"] = "ask";
-		j["proto"] =g_settings->get("server_proto");
+		j["proto"] = g_settings->get("server_proto");
 		ask_str = writer.write(j);
 	}
 
@@ -103,6 +103,7 @@ void * lan_adv::run() {
 	socket_recv.setTimeoutMs(1000);
 	Address addr_bind(in6addr_any, adv_port);
 	socket_recv.Bind(addr_bind);
+	std::unordered_map<std::string, unsigned int> limiter;
 
 	unsigned int packet_maxsize = 16384;
 	char buffer [packet_maxsize];
@@ -139,22 +140,24 @@ void * lan_adv::run() {
 				//errorstream << "cant parse "<< s << "\n";
 				continue;
 			}
-
+			auto addr_str = addr.serializeString();
+			auto now = porting::getTimeMs();
 			//errorstream << " a=" << addr.serializeString() << " : " << addr.getPort() << " l=" << rlen << " b=" << recd << " ;  server=" << server_port << "\n";
 			if (server_port) {
-				if (p["cmd"] == "ask") {
+				if (p["cmd"] == "ask" && limiter[addr_str] < now) {
+					limiter[addr_str] = now + 3000;
 					UDPSocket socket_send(true);
 					addr.setPort(adv_port);
 					socket_send.Send(addr, answer_str.c_str(), answer_str.size());
-					infostream << "lan: want play " << addr.serializeString() << std::endl;
+					infostream << "lan: want play " << addr_str << std::endl;
 				}
 			} else {
 				if (p["cmd"] == "ask") {
-					actionstream << "lan: want play " << addr.serializeString() << std::endl;
+					actionstream << "lan: want play " << addr_str << std::endl;
 				}
 				if (p["port"].isInt()) {
-					p["address"] = addr.serializeString();
-					auto key = addr.serializeString() + ":" + p["port"].asString();
+					p["address"] = addr_str;
+					auto key = addr_str + ":" + p["port"].asString();
 					if (p["cmd"].asString() == "shutdown") {
 						//infostream << "server shutdown " << key << "\n";
 						collected.erase(key);
