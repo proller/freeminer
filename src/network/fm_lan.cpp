@@ -129,7 +129,7 @@ void * lan_adv::run() {
 	socket_recv.Bind(addr_bind);
 	std::unordered_map<std::string, unsigned int> limiter;
 
-	unsigned int packet_maxsize = 16384;
+	const unsigned int packet_maxsize = 16384;
 	char buffer [packet_maxsize];
 	Json::Reader reader;
 	Json::FastWriter writer;
