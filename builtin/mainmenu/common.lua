@@ -64,6 +64,7 @@ end
 --------------------------------------------------------------------------------
 function order_favorite_list(list)
 	local res = {}
+	if not list then list = {} end
 	--orders the favorite list after support
 	for i=1,#list,1 do
 		local fav = list[i]

@@ -1,4 +1,6 @@
 /*
+Copyright (C) 2016 proller
+
 This file is part of Freeminer.
 
 Freeminer is free software: you can redistribute it and/or modify
@@ -15,59 +17,81 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "fm_lan.h"
-#include "../socket.h"
-#include "../util/string.h"
-#include "../log_types.h"
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 
+#include "fm_lan.h"
+#include "../socket.h"
+#include "../util/string.h"
+#include "../log_types.h"
+#include "../settings.h"
+#include "../version.h"
+#include "networkprotocol.h"
+
 const static unsigned short int adv_port = 29998;
-const static std::string ask_str = "{\"cmd\":\"ask\"}";
+static std::string ask_str;
 
 lan_adv::lan_adv() { }
 
 void lan_adv::ask() {
-	reanimate();
+	restart();
+
+	if (ask_str.empty()) {
+		Json::FastWriter writer;
+		Json::Value j;
+		j["cmd"] = "ask";
+		j["proto"] =g_settings->get("server_proto");
+		ask_str = writer.write(j);
+	}
+
 	send_string(ask_str);
 }
 
 void lan_adv::send_string(std::string str) {
-		struct addrinfo hints { };
-		struct addrinfo *result;
+	struct addrinfo hints { };
+	struct addrinfo *result;
 
-		if(getaddrinfo("ff02::1", nullptr, &hints, &result)) {
-			return;
-		}
-		for (auto info = result; info; info = info->ai_next) {
 	try {
-
-		sockaddr_in6 addr = *((struct sockaddr_in6*)info->ai_addr);
-		addr.sin6_port = adv_port;
-		UDPSocket socket_send(true);
+		sockaddr_in addr = {};
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons(adv_port);
+		addr.sin_port = adv_port;
+		addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+		UDPSocket socket_send(false);
+		int set_option_on = 1;
+		setsockopt(socket_send.GetHandle(), SOL_SOCKET, SO_BROADCAST, (const char*) &set_option_on, sizeof(set_option_on));
 		socket_send.Send(Address(addr), str.c_str(), str.size());
 	} catch(std::exception e) {
-		errorstream << " send fail " << e.what() << "\n";
+		// errorstream << " send4 fail " << e.what() << "\n";
 	}
+
+	if (!getaddrinfo("ff02::1", nullptr, &hints, &result)) {
+		for (auto info = result; info; info = info->ai_next) {
+			try {
+				sockaddr_in6 addr = *((struct sockaddr_in6*)info->ai_addr);
+				addr.sin6_port = adv_port;
+				UDPSocket socket_send(true);
+				int set_option_on = 1;
+				setsockopt(socket_send.GetHandle(), SOL_SOCKET, SO_BROADCAST, (const char*) &set_option_on, sizeof(set_option_on));
+				socket_send.Send(Address(addr), str.c_str(), str.size());
+				break;
+			} catch(std::exception e) {
+				// errorstream << " send6 fail " << e.what() << "\n";
+			}
 		}
 		freeaddrinfo(result);
-}
-
-std::string lan_adv::get() {
-	return "";
+	}
 }
 
 void lan_adv::serve(unsigned short port) {
-	server = port;
-	//errorstream << m_name << "Serve!: " << port <<  std::endl;
-	reanimate();
+	server_port = port;
+	restart();
 }
 
 void * lan_adv::run() {
 
-	reg("LanAdv" + (server ? std::string("Server") : std::string("Client")));
+	reg("LanAdv" + (server_port ? std::string("Server") : std::string("Client")));
 
 	UDPSocket socket_recv(true);
 	int set_option_on = 1;
@@ -75,6 +99,7 @@ void * lan_adv::run() {
 #ifdef SO_REUSEPORT
 	setsockopt(socket_recv.GetHandle(), SOL_SOCKET, SO_REUSEPORT, (const char*) &set_option_on, sizeof(set_option_on));
 #endif
+	setsockopt(socket_recv.GetHandle(), SOL_SOCKET, SO_BROADCAST, (const char*) &set_option_on, sizeof(set_option_on));
 	socket_recv.setTimeoutMs(1000);
 	Address addr_bind(in6addr_any, adv_port);
 	socket_recv.Bind(addr_bind);
@@ -84,10 +109,23 @@ void * lan_adv::run() {
 	Json::Reader reader;
 	Json::FastWriter writer;
 	std::string answer_str;
-	if (server) {
-		Json::Value answer_json;
-		answer_json["port"] = server;
-		answer_str = writer.write(answer_json);
+	if (server_port) {
+		Json::Value server;
+
+		server["name"]         = g_settings->get("server_name");
+		server["description"]  = g_settings->get("server_description");
+		server["version"]      = g_version_string;
+		bool strict_checking = g_settings->getBool("strict_protocol_version_checking");
+		server["proto_min"]    = strict_checking ? LATEST_PROTOCOL_VERSION : SERVER_PROTOCOL_VERSION_MIN;
+		server["proto_max"]    = strict_checking ? LATEST_PROTOCOL_VERSION : SERVER_PROTOCOL_VERSION_MAX;
+		server["url"]          = g_settings->get("server_url");
+		server["creative"]     = g_settings->getBool("creative_mode");
+		server["damage"]       = g_settings->getBool("enable_damage");
+		server["password"]     = g_settings->getBool("disallow_empty_password");
+		server["pvp"]          = g_settings->getBool("enable_pvp");
+		server["port"] = server_port;
+		answer_str = writer.write(server);
+
 		send_string(answer_str);
 	}
 	while(!stopRequested()) {
@@ -96,34 +134,38 @@ void * lan_adv::run() {
 			int rlen = socket_recv.Receive(addr, buffer, packet_maxsize);
 			if (rlen <= 0)
 				continue;
-			std::string recd(buffer, rlen);
-
-			if (ask_str == recd) {
-				errorstream << " " << addr.serializeString() << " want play " << "\n";
+			Json::Value p;
+			if (!reader.parse(std::string(buffer, rlen), p)) {
+				//errorstream << "cant parse "<< s << "\n";
+				continue;
 			}
-			//errorstream << " a=" << addr.serializeString() << " : " << addr.getPort() << " l=" << rlen << " b=" << recd << " ;  server=" << server << "\n";
-			if (server) {
-				if (ask_str == recd) {
+
+			//errorstream << " a=" << addr.serializeString() << " : " << addr.getPort() << " l=" << rlen << " b=" << recd << " ;  server=" << server_port << "\n";
+			if (server_port) {
+				if (p["cmd"] == "ask") {
 					UDPSocket socket_send(true);
 					addr.setPort(adv_port);
 					socket_send.Send(addr, answer_str.c_str(), answer_str.size());
+					infostream << "lan: want play " << addr.serializeString() << std::endl;
 				}
 			} else {
-				Json::Value s;
-				if (!reader.parse(recd, s))
-					continue;
-				if (s["port"].isInt()) {
-					s["address"] = addr.serializeString();
-					auto key = addr.serializeString() + ":" + s["port"].asString();
-					if (s["cmd"].asString() == "shutdown") {
-						errorstream << "server shutdown "<< key << "\n";
+				if (p["cmd"] == "ask") {
+					actionstream << "lan: want play " << addr.serializeString() << std::endl;
+				}
+				if (p["port"].isInt()) {
+					p["address"] = addr.serializeString();
+					auto key = addr.serializeString() + ":" + p["port"].asString();
+					if (p["cmd"].asString() == "shutdown") {
+						//infostream << "server shutdown " << key << "\n";
 						collected.erase(key);
 					} else {
 						if (!collected.count(key))
-							errorstream << "server start "<< key << "\n";
-						collected.set(key, s);
+							actionstream << "lan server start " << key << "\n";
+						collected.set(key, p);
 					}
 				}
+
+				//errorstream<<" current list: ";for (auto & i : collected) {errorstream<< i.first <<" ; ";}errorstream<<std::endl;
 			}
 
 #if !EXEPTION_DEBUG
@@ -137,13 +179,12 @@ void * lan_adv::run() {
 		}
 	}
 
-	if (server) {
+	if (server_port) {
 		Json::Value answer_json;
-		answer_json["port"] = server;
+		answer_json["port"] = server_port;
 		answer_json["cmd"] = "shutdown";
 		send_string(writer.write(answer_json));
 	}
 
 	return nullptr;
-
 }

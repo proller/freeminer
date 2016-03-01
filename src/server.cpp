@@ -573,7 +573,7 @@ void Server::start(Address bind_addr)
 			<<"\" listening on "<<bind_addr.serializeString()<<":"
 			<<bind_addr.getPort() << "."<<std::endl;
 
-	if (!m_simple_singleplayer_mode)
+	if (!m_simple_singleplayer_mode && g_settings->getBool("serverlist_lan"))
 		lan_adv_server.serve(m_bind_addr.getPort());
 }
 

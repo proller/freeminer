@@ -1,4 +1,6 @@
 /*
+Copyright (C) 2016 proller
+
 This file is part of Freeminer.
 
 Freeminer is free software: you can redistribute it and/or modify
@@ -19,9 +21,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #define FM_LAN_HEADER
 
 #include <string>
-//#include <utility>
 #include "json/json.h"
-#include "../socket.h"
 #include "../threading/thread_pool.h"
 #include "../threading/concurrent_map.h"
 
@@ -32,15 +32,13 @@ public:
 	lan_adv();
 	void ask();
 	void send_string(std::string str);
-	std::string get();
 
 	void serve(unsigned short port);
 
 	concurrent_map<std::string, Json::Value> collected;
 
 private:
-	//UDPSocket socket;
-	unsigned short server = 0;
+	unsigned short server_port = 0;
 };
 
 
