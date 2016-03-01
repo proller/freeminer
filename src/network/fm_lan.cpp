@@ -17,10 +17,6 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-
 #include "fm_lan.h"
 #include "../socket.h"
 #include "../util/string.h"
@@ -28,6 +24,34 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "../settings.h"
 #include "../version.h"
 #include "networkprotocol.h"
+
+//copypaste from ../socket.cpp
+#ifdef _WIN32
+	#ifndef WIN32_LEAN_AND_MEAN
+		#define WIN32_LEAN_AND_MEAN
+	#endif
+	// Without this some of the network functions are not found on mingw
+	#ifndef _WIN32_WINNT
+		#define _WIN32_WINNT 0x0501
+	#endif
+	#include <windows.h>
+	#include <winsock2.h>
+	#include <ws2tcpip.h>
+	#define LAST_SOCKET_ERR() WSAGetLastError()
+	typedef SOCKET socket_t;
+	typedef int socklen_t;
+#else
+	#include <sys/types.h>
+	#include <sys/socket.h>
+	#include <netinet/in.h>
+	#include <fcntl.h>
+	#include <netdb.h>
+	#include <unistd.h>
+	#include <arpa/inet.h>
+	#define LAST_SOCKET_ERR() (errno)
+	typedef int socket_t;
+#endif
+
 
 const static unsigned short int adv_port = 29998;
 static std::string ask_str;
