@@ -100,7 +100,7 @@ void * lan_adv::run() {
 	setsockopt(socket_recv.GetHandle(), SOL_SOCKET, SO_REUSEPORT, (const char*) &set_option_on, sizeof(set_option_on));
 #endif
 	setsockopt(socket_recv.GetHandle(), SOL_SOCKET, SO_BROADCAST, (const char*) &set_option_on, sizeof(set_option_on));
-	socket_recv.setTimeoutMs(1000);
+	socket_recv.setTimeoutMs(100);
 	Address addr_bind(in6addr_any, adv_port);
 	socket_recv.Bind(addr_bind);
 	std::unordered_map<std::string, unsigned int> limiter;
