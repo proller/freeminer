@@ -73,9 +73,11 @@ void lan_adv::ask() {
 }
 
 void lan_adv::send_string(std::string str) {
-	struct addrinfo hints { };
-	struct addrinfo *result;
 
+	/*
+		TODO:
+		send from all interfaces
+	*/
 	try {
 		sockaddr_in addr = {};
 		addr.sin_family = AF_INET;
@@ -90,6 +92,9 @@ void lan_adv::send_string(std::string str) {
 		// errorstream << " send4 fail " << e.what() << "\n";
 	}
 
+	struct addrinfo hints { };
+	hints.ai_socktype = SOCK_DGRAM;
+	struct addrinfo *result;
 	if (!getaddrinfo("ff02::1", nullptr, &hints, &result)) {
 		for (auto info = result; info; info = info->ai_next) {
 			try {
@@ -99,7 +104,6 @@ void lan_adv::send_string(std::string str) {
 				int set_option_on = 1;
 				setsockopt(socket_send.GetHandle(), SOL_SOCKET, SO_BROADCAST, (const char*) &set_option_on, sizeof(set_option_on));
 				socket_send.Send(Address(addr), str.c_str(), str.size());
-				break;
 			} catch(std::exception e) {
 				// errorstream << " send6 fail " << e.what() << "\n";
 			}
