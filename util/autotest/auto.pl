@@ -106,6 +106,7 @@ sub init_config () {
         #tsan_opengl_fix   => 1,
         options_display => ($ENV{DISPLAY} ? '' : 'headless'),
         options_bot     => 'bot_random',
+        makej           => '$(nproc || sysctl -n hw.ncpu || echo 2)',
         cmake_minetest  => '-DMINETEST_PROTO=1',
         cmake_nothreads => '-DENABLE_THREADS=0 -DHAVE_THREAD_LOCAL=0 -DHAVE_FUTURE=0',
         cmake_nothreads_a => '-DENABLE_THREADS=0 -DHAVE_THREAD_LOCAL=1 -DHAVE_FUTURE=0',
@@ -113,6 +114,7 @@ sub init_config () {
         cgroup            => ($^O ~~ 'linux' ? 1 : undef),
         tee               => '2>&1 | tee -a ',
         run_task          => 'run_single',
+        cache_clear       => 0, # remove cache dir before start client
         #cmake_add     => '', # '-DIRRLICHT_INCLUDE_DIR=~/irrlicht/include -DIRRLICHT_LIBRARY=~/irrlicht/lib/Linux/libIrrlicht.a',
         #make_add     => '',
         #run_add       => '',
@@ -218,9 +220,10 @@ our $commands = {
     },
     make => sub {
         sy
-qq{nice make -j \$(nproc || sysctl -n hw.ncpu || echo 2) $config->{make_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.make.log};
+qq{nice make -j $config->{makej} $config->{make_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.make.log};
     },
     run_single => sub {
+        sy qq{rm -rf ${root_path}cache/media/* } if $config->{cache_clear} and $root_path;
         #my $args = join ' ', map { '--' . $_ . ' ' . $config->{$_} } grep { $config->{$_} } qw(gameid world address port config autoexit);
         sy qq{$config->{env} $config->{runner} @_ ./freeminer $config->{go} --logfile $config->{logdir}/autotest.$g->{task_name}.game.log }
           . options_make([qw(gameid world address port config autoexit)])
@@ -250,6 +253,7 @@ qq{$config->{env} $config->{runner} @_ ./freeminerserver $config->{tee} $config-
           . qq{ $config->{run_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.server.out.log $fork};
     },
     run_clients => sub {
+        sy qq{rm -rf ${root_path}cache/media/* } if $config->{cache_clear} and $root_path;
         for (0 .. ($config->{clients_runs} || 0)) {
             my $autoexit = $config->{clients_autoexit} || $config->{autoexit};
             local $config->{address} = '::1' if not $config->{address};
@@ -293,6 +297,8 @@ our $tasks = {
     build_nothreads => [sub { $g->{build_name} .= '_nt'; 0 }, 'prepare', ['cmake', $config->{cmake_nothreads}], 'make',],
     build_server       => [{-no_build_client => 1,}, 'build_normal',],
     build_server_debug => [{-no_build_client => 1,}, 'build_debug',],
+    build_client       => [{-no_build_server => 1,}, 'build_normal',],
+    build_client_debug => [{-no_build_server => 1,}, 'build_debug',],
     bot => [{-no_build_server => 1,}, 'build_normal', 'run_single'],
     #run_single => ['run_single'],
     clang => ['prepare', {-cmake_clang => 1,}, 'cmake', 'make',],
@@ -367,7 +373,7 @@ our $tasks = {
         $config->{run_task},
         'symbolize',
     ],
-    debug     => [{-no_build_server => 1,}, 'build_debug',      $config->{run_task},],
+    debug     => ['build_client_debug',      $config->{run_task},],
     nothreads => [{-no_build_server => 1,}, \'build_nothreads', $config->{run_task},],    #'
     (
         map {
@@ -387,7 +393,7 @@ our $tasks = {
         my $name = shift;
         $g->{build_name} .= '_minetest';
         local $config->{no_build_server} = 1;
-        local $config->{cmake_int}       = $config->{cmake_int} . $config->{cmake_minetest};
+        #local $config->{cmake_int}       = $config->{cmake_int} . $config->{cmake_minetest};
         if ($name) {
             commands_run('bot_' . $name);
         } else {
@@ -446,11 +452,12 @@ our $tasks = {
         for (@_) { my $r = commands_run($_); return $r if $r; }
     },
 
-    server => [{-no_build_client => 1,}, 'build_debug', 'run_server'],
-    server_gdb => [['gdb', 'server']],
-    server_gdb_nd => [{-no_build_client => 1,}, 'build_normal', ['gdb', 'run_server']],
+    server => ['build_server', 'run_server'],
+    server_debug => ['build_server_debug', 'run_server'],
+    server_gdb => [['gdb', 'server_debug']],
+    server_gdb_nd => ['build_server', ['gdb', 'run_server']],
 
-    bot_gdb => [{-no_build_server => 1,}, 'build_debug', ['gdb', 'run_single']],
+    bot_gdb => ['build_client_debug', ['gdb', 'run_single']],
 
     vtune => sub {
         sy 'echo 0|sudo tee /proc/sys/kernel/yama/ptrace_scope';
@@ -471,7 +478,7 @@ qq{$config->{vtune_amplifier}amplxe-cl -report $report -report-width=250 -report
             }
         }
     },
-    bot_vtune => [{-no_build_server => 1,}, 'build_debug', ['vtune', 'run_single'], 'vtune_report'],
+    bot_vtune => ['build_client_debug', ['vtune', 'run_single'], 'vtune_report'],
     stress_vtune => [
         'build_debug',
         sub {

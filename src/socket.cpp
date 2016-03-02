@@ -303,6 +303,7 @@ void Address::setAddress(const IPv6AddressBytes *ipv6_bytes)
 void Address::setPort(u16 port)
 {
 	m_port = port;
+	m_address.ipv6.sin6_port = m_port;
 }
 
 void Address::print(std::ostream *s) const
@@ -350,6 +351,9 @@ bool UDPSocket::init(bool ipv6, bool noExceptions)
 	}
 
 	setTimeoutMs(0);
+
+	int set_option_off = 0;
+	setsockopt(m_handle, IPPROTO_IPV6, IPV6_V6ONLY, (const char*) &set_option_off, sizeof(set_option_off));
 
 	return true;
 }
