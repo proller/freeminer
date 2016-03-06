@@ -183,19 +183,6 @@ struct LocalFormspecHandler : public TextDest {
 			}
 		}
 
-		if (m_formname == "MT_CHAT_MENU") {
-			assert(m_client != 0);
-
-			if ((fields.find("btn_send") != fields.end()) ||
-					(fields.find("quit") != fields.end())) {
-				StringMap::const_iterator it = fields.find("f_text");
-				if (it != fields.end())
-					m_client->typeChatMessage(it->second);
-
-				return;
-			}
-		}
-
 		if (m_formname == "MT_DEATH_SCREEN") {
 			assert(m_client != 0);
 
@@ -1130,29 +1117,6 @@ static inline void create_formspec_menu(GUIFormSpecMenu **cur_formspec,
 #define SIZE_TAG "size[11,5.5,true]" // Fixed size on desktop
 #endif
 
-#if 0
-static void show_chat_menu(GUIFormSpecMenu **cur_formspec,
-		InventoryManager *invmgr, IGameDef *gamedef,
-		IWritableTextureSource *tsrc, IrrlichtDevice *device,
-		Client *client, std::string text)
-{
-	std::string formspec =
-		FORMSPEC_VERSION_STRING
-		SIZE_TAG
-		"field[3,2.35;6,0.5;f_text;;" + text + "]"
-		"button_exit[4,3;3,0.5;btn_send;" + strgettext("Proceed") + "]"
-		;
-
-	/* Create menu */
-	/* Note: FormspecFormSource and LocalFormspecHandler
-	 * are deleted by guiFormSpecMenu                     */
-	FormspecFormSource *fs_src = new FormspecFormSource(formspec);
-	LocalFormspecHandler *txt_dst = new LocalFormspecHandler("MT_CHAT_MENU", client);
-
-	create_formspec_menu(cur_formspec, invmgr, gamedef, tsrc, device, fs_src, txt_dst, NULL);
-}
-#endif
-
 static void show_deathscreen(GUIFormSpecMenu **cur_formspec,
 		InventoryManager *invmgr, IGameDef *gamedef,
 		IWritableTextureSource *tsrc, IrrlichtDevice *device, Client *client)
@@ -1613,7 +1577,7 @@ protected:
 	void dropSelectedItem();
 	void dropSelectedStack();
 	void openInventory();
-	void openConsole(float height = 0.6, bool close_on_return = false, const std::wstring& input = L"");
+	void openConsole(float height, const wchar_t *line=NULL);
 	void toggleFreeMove(float *statustext_time);
 	void toggleFreeMoveAlt(float *statustext_time, float *jump_timer);
 	void toggleFast(float *statustext_time);
@@ -1677,6 +1641,10 @@ protected:
 
 	static void settingChangedCallback(const std::string &setting_name, void *data);
 	void readSettings();
+
+#ifdef __ANDROID__
+	void handleAndroidChatInput();
+#endif
 
 private:
 	InputHandler *input;
@@ -1778,8 +1746,8 @@ private:
 
 #ifdef __ANDROID__
 	bool m_cache_hold_aux1;
+	bool m_android_chat_open = false;
 #endif
-
 };
 
 Game::Game() :
@@ -2193,10 +2161,22 @@ bool Game::createSingleplayerServer(const std::string map_dir,
 		return false;
 	}
 
+	try {
+
 	server = new Server(map_dir, gamespec, simple_singleplayer_mode,
 			    bind_addr.isIPv6());
 
 	server->start(bind_addr);
+
+#if !EXEPTION_DEBUG
+	} catch (std::exception &e) {
+		*error_message = std::string("Unable to create server: ") + e.what();
+		errorstream << *error_message << std::endl;
+		return false;
+#else
+	} catch (int) {
+#endif
+	}
 
 	return true;
 }
@@ -2360,7 +2340,7 @@ bool Game::initGui()
 
 	// Chat backend and console
 	gui_chat_console = new GUIChatConsole(guienv, guienv->getRootGUIElement(),
-			-1, chat_backend, client);
+			-1, chat_backend, client, &g_menumgr);
 	if (!gui_chat_console) {
 		*error_message = "Could not allocate memory for chat console";
 		errorstream << *error_message << std::endl;
@@ -2845,6 +2825,7 @@ void Game::processUserInput(VolatileRunFlags *flags,
 	if (gui_chat_console->isOpen()) {
 		if (gui_chat_console->getAndroidUIInput()) {
 			//gui_chat_console->closeConsoleAtOnce();
+			//gui_chat_console->closeConsole();
 		}
 	}
 #endif
@@ -2857,10 +2838,10 @@ void Game::processUserInput(VolatileRunFlags *flags,
 	input->step(dtime);
 
 #ifdef __ANDROID__
-
-	if (current_formspec != 0)
+	if (current_formspec != NULL)
 		current_formspec->getAndroidUIInput();
-
+	else
+		handleAndroidChatInput();
 #endif
 
 	// Increase timer for double tap of "keymap_jump"
@@ -2905,16 +2886,18 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_INVENTORY])) {
 		openInventory();
 	} else if (input->wasKeyDown(EscapeKey) || input->wasKeyDown(CancelKey)) {
-		show_pause_menu(&current_formspec, client, gamedef, texture_src, device,
-				simple_singleplayer_mode);
+		if (!gui_chat_console->isOpenInhibited()) {
+			show_pause_menu(&current_formspec, client, gamedef,
+					texture_src, device, simple_singleplayer_mode);
+		}
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_CHAT])) {
-		openConsole(0.1, true);
+		openConsole(0.1, L"");
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_CMD])) {
-		openConsole(0.1, true, L"/");
+		openConsole(0.1, L"/");
 	//} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_MSG])) {
-	//	openConsole(0.1, true, L"/msg ");
+	//	openConsole(0.1, L"/msg ");
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_CONSOLE])) {
-		openConsole();
+		openConsole(0.5);
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_FREEMOVE])) {
 		toggleFreeMove(statustext_time);
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_JUMP])) {
@@ -2952,15 +2935,15 @@ void Game::processKeyboardInput(VolatileRunFlags *flags,
 	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_RANGESELECT])) {
 		toggleFullViewRange(statustext_time);
 		client->sendDrawControl();
-	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_QUICKTUNE_NEXT]))
+	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_QUICKTUNE_NEXT])) {
 		quicktune->next();
-	else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_QUICKTUNE_PREV]))
+	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_QUICKTUNE_PREV])) {
 		quicktune->prev();
-	else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_QUICKTUNE_INC]))
+	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_QUICKTUNE_INC])) {
 		quicktune->inc();
-	else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_QUICKTUNE_DEC]))
+	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_QUICKTUNE_DEC])) {
 		quicktune->dec();
-	else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_DEBUG_STACKS])) {
+	} else if (input->wasKeyDown(keycache.key[KeyCache::KEYMAP_ID_DEBUG_STACKS])) {
 		// Print debug stacks
 		dstream << "-----------------------------------------"
 		        << std::endl;
@@ -3138,28 +3121,47 @@ void Game::openInventory()
 }
 
 
-void Game::openConsole(float height, bool close_on_return, const std::wstring& input)
+void Game::openConsole(float height, const wchar_t *line)
 {
-	if (!gui_chat_console->isOpenInhibited()) {
-		// Set initial console prompt
-		if (!input.empty()) {
-			gui_chat_console->setPrompt(input);
-		}
-		gui_chat_console->openConsole(height, close_on_return);
-		guienv->setFocus(gui_chat_console);
+	if (gui_chat_console->isOpenInhibited())
+		return;
 
 #ifdef __ANDROID__
-		if (porting::canKeyboard() >= 2) {
-			// fmtodo: invisible input text before pressing enter
-			porting::displayKeyboard(true, porting::app_global, porting::jnienv);
-		} else {
-			int type = 1;
-			porting::showInputDialog(_("ok"), "", wide_to_narrow(gui_chat_console->getText()), type);
-		}
+	if (porting::canKeyboard() >= 2) {
+		// fmtodo: invisible input text before pressing enter
+		porting::displayKeyboard(true, porting::app_global, porting::jnienv);
 #endif
 
+	gui_chat_console->openConsole(height);
+	if (line) {
+		gui_chat_console->setCloseOnEnter(true);
+		gui_chat_console->replaceAndAddToHistory(line);
+	}
+
+#ifdef __ANDROID__
+	} else {
+		int type = 2;
+		porting::showInputDialog(_("ok"), "", wide_to_narrow(gui_chat_console->getText()), type);
+
+/*
+	porting::showInputDialog(_("ok"), "", "", 2);
+*/
+	m_android_chat_open = true;
+	}
+#endif
+
+}
+
+#ifdef __ANDROID__
+void Game::handleAndroidChatInput()
+{
+	if (m_android_chat_open && porting::getInputDialogState() == 0) {
+		std::string text = porting::getInputDialogValue();
+		client->typeChatMessage(text);
+		m_android_chat_open = false;
 	}
 }
+#endif
 
 
 void Game::toggleFreeMove(float *statustext_time)
