@@ -686,7 +686,6 @@ set(FMcommon_SRCS
 )
 
 set(common_SRCS
-	areastore.cpp
 	ban.cpp
 	cavegen.cpp
 	chat.cpp
