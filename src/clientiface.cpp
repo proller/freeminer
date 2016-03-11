@@ -132,7 +132,6 @@ int RemoteClient::GetNextBlocks (
 		m_nearest_unsent_reset = 0;
 		m_nearest_unsent_reset_timer = 999;
 		m_nothing_to_send_pause_timer = 0;
-		m_time_from_building = 999;
 	}
 
 	if(m_nothing_to_send_pause_timer >= 0)
@@ -215,6 +214,9 @@ int RemoteClient::GetNextBlocks (
 		*/
 		if(d_start<=1)
 			d_start=2;
+		++m_nearest_unsent_reset_want;
+	} else if (m_nearest_unsent_reset_want) {
+		m_nearest_unsent_reset_want = 0;
 		m_nearest_unsent_reset_timer = 999; //magical number more than ^ other number 120 - need to reset d on next iteration
 	}
 
@@ -260,7 +262,6 @@ int RemoteClient::GetNextBlocks (
 
 	f32 speed_in_blocks = (playerspeed/(MAP_BLOCKSIZE*BS)).getLength();
 
-
 	int blocks_occlusion_culled = 0;
 	static const bool server_occlusion = g_settings->getBool("server_occlusion");
 	bool occlusion_culling_enabled = server_occlusion;
@@ -281,7 +282,6 @@ int RemoteClient::GetNextBlocks (
 
 	unordered_map_v3POS<bool> occlude_cache;
 
-
 	s16 d;
 	for(d = d_start; d <= d_max; d++) {
 		/*errorstream<<"checking d="<<d<<" for "
@@ -289,7 +289,7 @@ int RemoteClient::GetNextBlocks (
 		//infostream<<"RemoteClient::SendBlocks(): d="<<d<<" d_start="<<d_start<<" d_max="<<d_max<<" d_max_gen="<<d_max_gen<<std::endl;
 
 		std::vector<v3POS> list;
-		if (d > 2 && d == d_start && m_nearest_unsent_reset_timer != 999) { // oops, again magic number from up ^
+		if (d > 2 && d == d_start && !m_nearest_unsent_reset_want && m_nearest_unsent_reset_timer != 999) { // oops, again magic number from up ^
 			list.push_back(v3POS(0,0,0));
 		}
 
@@ -477,6 +477,8 @@ int RemoteClient::GetNextBlocks (
 				if (block->getLightingExpired()) {
 					//env->getServerMap().lighting_modified_blocks.set(p, nullptr);
 					env->getServerMap().lighting_modified_add(p, d);
+					if (block_sent && d > 1)
+						continue;
 				}
 
 				if (block->lighting_broken > 0 && (block_sent || d > 0))
