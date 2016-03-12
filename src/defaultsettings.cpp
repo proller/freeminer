@@ -334,6 +334,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("mg_name", "v7");
 
 #ifdef HAVE_TOUCHSCREENGUI
+	settings->setDefault("touchscreen", android ? "true" : "false");
 	settings->setDefault("touchtarget", "true");
 	settings->setDefault("touchscreen_threshold","20");
 #endif
@@ -443,6 +444,8 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("invert_mouse", "false");
 	settings->setDefault("enable_clouds", "true");
 	settings->setDefault("screenshot_path", ".");
+	settings->setDefault("screenshot_format", "png");
+	settings->setDefault("screenshot_quality", "0");
 	settings->setDefault("view_bobbing_amount", "1.0");
 	settings->setDefault("fall_bobbing_amount", "0.0");
 	settings->setDefault("enable_3d_clouds", "true");
