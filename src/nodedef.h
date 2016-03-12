@@ -82,7 +82,10 @@ enum {
 	CONTENTFEATURES_LEVELED,
 	CONTENTFEATURES_WAVING,
 	CONTENTFEATURES_MESH,
-	CONTENTFEATURES_COLLISION_BOX
+	CONTENTFEATURES_COLLISION_BOX,
+	CONTENTFEATURES_CONNECT_TO_IDS,
+	CONTENTFEATURES_CONNECT_SIDES,
+
 };
 
 class INodeDefManager;
@@ -130,6 +133,7 @@ enum NodeBoxType
 	NODEBOX_FIXED, // Static separately defined box(es)
 	NODEBOX_WALLMOUNTED, // Box for wall mounted nodes; (top, bottom, side)
 	NODEBOX_LEVELED, // Same as fixed, but with dynamic height from param2. for snow, ...
+	NODEBOX_CONNECTED, // optionally draws nodeboxes if a neighbor node attaches
 };
 
 // _S_ is serialized, added to make sure collisions with NodeBoxType never happen
@@ -151,6 +155,13 @@ struct NodeBox
 	aabb3f wall_top;
 	aabb3f wall_bottom;
 	aabb3f wall_side; // being at the -X side
+	// NODEBOX_CONNECTED
+	std::vector<aabb3f> connect_top;
+	std::vector<aabb3f> connect_bottom;
+	std::vector<aabb3f> connect_front;
+	std::vector<aabb3f> connect_left;
+	std::vector<aabb3f> connect_back;
+	std::vector<aabb3f> connect_right;
 
 	NodeBox()
 	{ reset(); }
@@ -359,7 +370,8 @@ struct ContentFeatures
 	bool legacy_facedir_simple;
 	// Set to true if wall_mounted used to be set to true
 	bool legacy_wallmounted;
-	
+
+//freeminer:
 	bool is_wire;
 	bool is_wire_connector;
 	bool is_circuit_element;
@@ -367,10 +379,17 @@ struct ContentFeatures
 	u8 circuit_element_func[64];
 	u8 circuit_element_delay;
 
+
+	// for NDT_CONNECTED pairing
+	u8 connect_sides;
+
 	// Sound properties
 	SimpleSoundSpec sound_footstep;
 	SimpleSoundSpec sound_dig;
 	SimpleSoundSpec sound_dug;
+
+	std::vector<std::string> connects_to;
+	std::unordered_set<content_t> connects_to_ids;
 
 	/*
 		Methods
@@ -418,8 +437,10 @@ public:
 	virtual bool getId(const std::string &name, content_t &result) const=0;
 	virtual content_t getId(const std::string &name) const=0;
 	// Allows "group:name" in addition to regular node names
-	virtual void getIds(const std::string &name, std::unordered_set<content_t> &result) const=0;
-	virtual void getIds(const std::string &name, FMBitset &result) const=0;
+	virtual bool getIds(const std::string &name, FMBitset &result) const=0;
+	// returns false if node name not found, true otherwise
+	virtual bool getIds(const std::string &name, std::unordered_set<content_t> &result)
+			const=0;
 	virtual const ContentFeatures &get(const std::string &name) const=0;
 
 	virtual void serialize(std::ostream &os, u16 protocol_version) const=0;
@@ -431,6 +452,7 @@ public:
 
 	virtual void pendNodeResolve(NodeResolver *nr)=0;
 	virtual bool cancelNodeResolveCallback(NodeResolver *nr)=0;
+	virtual bool nodeboxConnects(const MapNode from, const MapNode to, u8 connect_face)=0;
 };
 
 class IWritableNodeDefManager : public INodeDefManager {
@@ -445,7 +467,7 @@ public:
 	// If not found, returns CONTENT_IGNORE
 	virtual content_t getId(const std::string &name) const=0;
 	// Allows "group:name" in addition to regular node names
-	virtual void getIds(const std::string &name, std::unordered_set<content_t> &result)
+	virtual bool getIds(const std::string &name, std::unordered_set<content_t> &result)
 		const=0;
 	// If not found, returns the features of CONTENT_UNKNOWN
 	virtual const ContentFeatures &get(const std::string &name) const=0;
@@ -488,6 +510,7 @@ public:
 	virtual bool cancelNodeResolveCallback(NodeResolver *nr)=0;
 	virtual void runNodeResolveCallbacks()=0;
 	virtual void resetNodeResolveState()=0;
+	virtual void mapNodeboxConnections()=0;
 };
 
 IWritableNodeDefManager *createNodeDefManager();

@@ -847,7 +847,7 @@ void Client::initLocalMapSaving(const Address &address,
 void Client::ReceiveAll()
 {
 	DSTACK(FUNCTION_NAME);
-	auto end_ms = porting::getTimeMs() + 10;
+	auto end_ms = porting::getTimeMs() + 20;
 	for(;;)
 	{
 #if MINETEST_PROTO
@@ -886,9 +886,6 @@ bool Client::Receive()
 	return true;
 }
 
-//FMTODO
-#if MINETEST_PROTO
-
 inline void Client::handleCommand(NetworkPacket* pkt)
 {
 	const ToClientCommandHandler& opHandle = toClientCommandTable[pkt->getCommand()];
@@ -901,6 +898,11 @@ inline void Client::handleCommand(NetworkPacket* pkt)
 void Client::ProcessData(NetworkPacket *pkt)
 {
 	DSTACK(FUNCTION_NAME);
+
+#if !MINETEST_PROTO
+	if (!pkt->packet_unpack())
+		return;
+#endif
 
 	ToClientCommand command = (ToClientCommand) pkt->getCommand();
 	u32 sender_peer_id = pkt->getPeerId();
@@ -949,7 +951,6 @@ void Client::ProcessData(NetworkPacket *pkt)
 
 	handleCommand(pkt);
 }
-#endif
 
 
 /*

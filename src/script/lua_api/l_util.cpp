@@ -28,7 +28,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "serialization.h"
 #include "json/json.h"
 #include "cpp_api/s_security.h"
-#include "areastore.h"
 #include "porting.h"
 #include "debug.h"
 #include "log.h"
@@ -80,8 +79,7 @@ int ModApiUtil::l_get_us_time(lua_State *L)
 #define CHECK_SECURE_SETTING(L, name) \
 	if (ScriptApiSecurity::isSecure(L) && \
 			name.compare(0, 7, "secure.") == 0) { \
-		lua_pushliteral(L, "Attempt to set secure setting."); \
-		lua_error(L); \
+		throw LuaError("Attempt to set secure setting."); \
 	}
 
 // setting_set(name, value)

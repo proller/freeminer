@@ -398,6 +398,9 @@ Server::Server(
 	// Perform pending node name resolutions
 	m_nodedef->runNodeResolveCallbacks();
 
+	// unmap node names for connected nodeboxes
+	m_nodedef->mapNodeboxConnections();
+
 	// init the recipe hashes to speed up crafting
 	m_craftdef->initHashes(this);
 
@@ -426,10 +429,11 @@ Server::Server(
 	servermap->addEventReceiver(this);
 
 	// If file exists, load environment metadata
-	if(fs::PathExists(m_path_world + DIR_DELIM "env_meta.txt"))
-	{
-		infostream<<"Server: Loading environment metadata"<<std::endl;
+	if (fs::PathExists(m_path_world + DIR_DELIM "env_meta.txt")) {
+		infostream << "Server: Loading environment metadata" << std::endl;
 		m_env->loadMeta();
+	} else {
+		m_env->loadDefaultMeta();
 	}
 
 	// Add some test ActiveBlockModifiers to environment
@@ -1469,9 +1473,6 @@ PlayerSAO* Server::StageTwoClientInit(u16 peer_id)
 	return playersao;
 }
 
-//FMTODO
-#if MINETEST_PROTO
-
 inline void Server::handleCommand(NetworkPacket* pkt)
 {
 	const ToServerCommandHandler& opHandle = toServerCommandTable[pkt->getCommand()];
@@ -1515,6 +1516,11 @@ void Server::ProcessData(NetworkPacket *pkt)
 	}
 
 	try {
+#if !MINETEST_PROTO
+		if (!pkt->packet_unpack())
+			return;
+#endif
+
 		ToServerCommand command = (ToServerCommand) pkt->getCommand();
 
 		// Command must be handled into ToServerCommandHandler
@@ -1564,8 +1570,6 @@ void Server::ProcessData(NetworkPacket *pkt)
 				<< std::endl;
 	}
 }
-#endif
-
 
 void Server::setTimeOfDay(u32 time)
 {
@@ -2937,7 +2941,7 @@ void Server::DenyAccessVerCompliant(u16 peer_id, u16 proto_ver, AccessDeniedCode
 		const std::string &str_reason, bool reconnect)
 {
 	if (proto_ver >= 25) {
-		SendAccessDenied(peer_id, reason, str_reason);
+		SendAccessDenied(peer_id, reason, str_reason, reconnect);
 	} else {
 		std::string wreason = (
 			reason == SERVER_ACCESSDENIED_CUSTOM_STRING ? str_reason :

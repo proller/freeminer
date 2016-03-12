@@ -147,6 +147,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 	PROTOCOL_VERSION 27:
 		backface_culling: backwards compatibility for playing with
 		newer client on pre-27 servers.
+		Add nodedef v3 - connected nodeboxes
 */
 
 #define LATEST_PROTOCOL_VERSION 27
@@ -697,20 +698,6 @@ enum {
 		u16 id
 	*/
 
-/*
-#define TOCLIENT_ANIMATIONS 0x4f
-enum {
-	TOCLIENT_ANIMATIONS_DEFAULT_START,
-	TOCLIENT_ANIMATIONS_DEFAULT_STOP,
-	TOCLIENT_ANIMATIONS_WALK_START,
-	TOCLIENT_ANIMATIONS_WALK_STOP,
-	TOCLIENT_ANIMATIONS_DIG_START,
-	TOCLIENT_ANIMATIONS_DIG_STOP,
-	TOCLIENT_ANIMATIONS_WD_START,
-	TOCLIENT_ANIMATIONS_WD_STOP
-};
-*/
-
 #define TOCLIENT_HUDADD 0x49
 enum {
 	TOCLIENT_HUDADD_ID,
@@ -1246,11 +1233,7 @@ enum {
 		std::string bytes_M
 	*/
 
-#if !MINETEST_PROTO
-#define TOSERVER_NUM_MSG_TYPES 1
-#else
 #define TOSERVER_NUM_MSG_TYPES 0x53
-#endif
 
 /*
 };
