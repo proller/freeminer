@@ -1473,9 +1473,6 @@ PlayerSAO* Server::StageTwoClientInit(u16 peer_id)
 	return playersao;
 }
 
-//FMTODO
-#if MINETEST_PROTO
-
 inline void Server::handleCommand(NetworkPacket* pkt)
 {
 	const ToServerCommandHandler& opHandle = toServerCommandTable[pkt->getCommand()];
@@ -1519,6 +1516,9 @@ void Server::ProcessData(NetworkPacket *pkt)
 	}
 
 	try {
+		if (!pkt->packet_unpack())
+			return;
+
 		ToServerCommand command = (ToServerCommand) pkt->getCommand();
 
 		// Command must be handled into ToServerCommandHandler
@@ -1568,8 +1568,6 @@ void Server::ProcessData(NetworkPacket *pkt)
 				<< std::endl;
 	}
 }
-#endif
-
 
 void Server::setTimeOfDay(u32 time)
 {
