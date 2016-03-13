@@ -243,8 +243,8 @@ void Connection::sctp_setup(u16 port) {
 	usrsctp_init(port, nullptr, debug_func);
 
 #if SCTP_DEBUG
-	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
-	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
+	usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE);
+	//usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL);
 #endif
 
 	//usrsctp_sysctl_set_sctp_ecn_enable(0);
@@ -266,7 +266,9 @@ void Connection::sctp_setup(u16 port) {
 	usrsctp_sysctl_set_sctp_max_retran_chunk(10);
 	usrsctp_sysctl_set_sctp_shutdown_guard_time_default(40);
 
+#if !defined(SCTP_WITH_NO_CSUM)
 	usrsctp_sysctl_set_sctp_no_csum_on_loopback(1);
+#endif
 
 	//usrsctp_sysctl_set_sctp_blackhole(2);
 }
