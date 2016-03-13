@@ -350,7 +350,7 @@ private:
 	void PrintInfo();
 	std::string getDesc();
 
-	bool sock_listen, sock_connect, sctp_inited_by_me;
+	bool sock_listen = false, sock_connect = false, sctp_inited_by_me = false;
 	static bool sctp_inited;
 	int recv(u16 peer_id, struct socket *sock);
 	void sock_setup(u16 peer_id, struct socket *sock);
@@ -365,8 +365,6 @@ private:
 
 };
 
-
-bool parse_msgpack_packet(char *data, u32 datasize, MsgpackPacket *packet, int *command, msgpack::unpacked *msg);
 } // namespace
 
 #endif

@@ -122,6 +122,7 @@ auto & cs = errorstream; // remove after debug
 
 Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
                        bool ipv6, PeerHandler *peerhandler):
+	thread_pool("Connection"),
 	m_protocol_id(protocol_id),
 	m_max_packet_size(max_packet_size),
 	m_timeout(timeout),
@@ -131,8 +132,8 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout,
 	m_last_recieved(0),
 	m_last_recieved_warn(0) {
 
-	sock_listen = sock_connect = false;
-	sctp_inited_by_me = false;
+	//sock_listen = sock_connect = false;
+	//sctp_inited_by_me = false;
 
 	start();
 }
@@ -141,7 +142,7 @@ bool con::Connection::sctp_inited = false;
 
 
 Connection::~Connection() {
-	cs << "Connection::~Connection()" << std::endl;
+	//cs << "Connection::~Connection()" << std::endl;
 
 	join();
 	deletePeer(0);
@@ -150,7 +151,7 @@ Connection::~Connection() {
 
 
 	if (sctp_inited_by_me) {
-		cs << "Connection::~Connection() fin" << std::endl;
+		//cs << "Connection::~Connection() fin" << std::endl;
 
 		for (int i = 0; i < 100; ++i) {
 			if (!usrsctp_finish())
@@ -167,9 +168,9 @@ Connection::~Connection() {
 /* Internal stuff */
 
 void * Connection::run() {
-	reg("Connection");
+	//reg("Connection");
 
-	cs << "threadstart" << std::endl;
+	//cs << "threadstart" << std::endl;
 
 	while(!stopRequested()) {
 		while(!m_command_queue.empty()) {
@@ -226,13 +227,13 @@ void Connection::processCommand(ConnectionCommand &c) {
 }
 
 void Connection::sctp_setup(u16 port) {
-	cs << "sctp_setup i=" << sctp_inited << " p=" << port << std::endl;
+	//cs << "sctp_setup i=" << sctp_inited << " p=" << port << std::endl;
 	if (sctp_inited)
 		return;
 	sctp_inited = true;
 	sctp_inited_by_me = true;
 
-	cs << "sctp_setup " << port << std::endl;
+	//cs << "sctp_setup " << port << std::endl;
 
 	auto debug_func = debug_printf;
 	debug_func = nullptr;
@@ -675,6 +676,7 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 				//printf("SCTP_PEER_ADDR_CHANGE: state=%d, error=%d\n",spc->spc_state, spc->spc_error);
 				handle_peer_address_change_event(spc);
 				errorstream << "SCTP_PEER_ADDR_CHANGE state=" << spc->spc_state << " error=" << spc->spc_error << std::endl;
+				break;
 			}
 			case SCTP_REMOTE_ERROR:
 				errorstream << "SCTP_REMOTE_ERROR" << std::endl;
@@ -797,14 +799,7 @@ void Connection::sock_setup(u16 peer_id, struct socket *sock) {
 
 
 
-	/* Disable Nagle */
-	/*
-		uint32_t nodelay = 1;
-		if(usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_NODELAY, &nodelay, sizeof(nodelay))) {
-			errorstream << " setsockopt error: SCTP_NODELAY" << peer_id << std::endl;
-			//return NULL;
-		}
-	*/
+	
 
 	struct sctp_event event = {};
 	event.se_assoc_id = SCTP_ALL_ASSOC;
@@ -822,15 +817,20 @@ void Connection::sock_setup(u16 peer_id, struct socket *sock) {
 	}
 	*/
 
-	const int on = 1;
-	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_I_WANT_MAPPED_V4_ADDR, (const void*)&on, (socklen_t)sizeof(int)) < 0) {
+	const int one = 1;
+	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_I_WANT_MAPPED_V4_ADDR, &one, sizeof(one)) < 0) {
 		perror("usrsctp_setsockopt SCTP_I_WANT_MAPPED_V4_ADDR");
 	}
 
-	const int one = 1;
-	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_EXPLICIT_EOR, &one, sizeof(int)) < 0) {
+	if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_EXPLICIT_EOR, &one, sizeof(one)) < 0) {
 		perror("setsockopt SCTP_EXPLICIT_EOR");
 	}
+
+		if(usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_NODELAY, &one, sizeof(one))) {
+			//errorstream << " setsockopt error: SCTP_NODELAY" << peer_id << std::endl;
+			//return NULL;
+			perror("setsockopt SCTP_NODELAY");
+		}
 
 	/*
 		if (usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_REUSE_PORT, &on, sizeof(int)) < 0) {
@@ -893,9 +893,9 @@ void Connection::serve(Address bind_addr) {
 		errorstream << "connect() transform to v6 " << __LINE__ << std::endl;
 
 		inet_pton (AF_INET6, ("::ffff:" + bind_addr.serializeString()).c_str(), &addr.sin6_addr);
-	} else
+	} else {
 		addr = bind_addr.getAddress6();
-
+	}
 
 
 //addr = bind_addr.getAddress6();
@@ -1083,7 +1083,7 @@ void Connection::connect(Address addr) {
 
 	usrsctp_set_non_blocking(sock, 1);
 
-	//errorstream << "connect() ... " << __LINE__ << std::endl;
+	errorstream << "connect() ... " << __LINE__ << " scope="<<addr6.sin6_scope_id <<std::endl;
 	if (auto connect_result = usrsctp_connect(sock, (struct sockaddr *)&addr6, sizeof(addr6)) < 0) {
 		if (connect_result < 0 && errno != EINPROGRESS) {
 			perror("usrsctp_connect fail");
@@ -1109,6 +1109,9 @@ void Connection::connect(Address addr) {
 void Connection::disconnect() {
 //cs << "Connection::disconnect()" << std::endl;
 	//JMutexAutoLock peerlock(m_peers_mutex);
+	if (sock)
+		usrsctp_close(sock);
+	sock = nullptr;
 	{
 		auto lock = m_peers.lock_unique_rec();
 
@@ -1167,8 +1170,8 @@ void Connection::send(u16 peer_id, u8 channelnum,
 
 //errorstream<<" === send to peer " << peer_id<< "sock="<< peer<<std::endl;
 
-	usrsctp_set_non_blocking(sock, 0);
-	//usrsctp_set_non_blocking(sock, 1);
+	//usrsctp_set_non_blocking(sock, 0);
+	usrsctp_set_non_blocking(sock, 1);
 
 	uint32_t flags = 0;
 
@@ -1234,7 +1237,7 @@ void Connection::send(u16 peer_id, u8 channelnum,
 		}
 		if (errno == EWOULDBLOCK) {
 			cs << "send EWOULDBLOCK len=" << len << std::endl;
-			//usrsctp_set_non_blocking(sock, 0);
+			usrsctp_set_non_blocking(sock, 0);
 
 			continue;
 		}
@@ -1472,19 +1475,6 @@ void Connection::DisconnectPeer(u16 peer_id) {
 	ConnectionCommand discon;
 	discon.disconnect_peer(peer_id);
 	putCommand(discon);
-}
-
-bool parse_msgpack_packet(char *data, u32 datasize, MsgpackPacket *packet, int *command, msgpack::unpacked *msg) {
-	try {
-		//msgpack::unpacked msg;
-		msgpack::unpack(msg, data, datasize);
-		msgpack::object obj = msg->get();
-		*packet = obj.as<MsgpackPacket>();
-
-		*command = (*packet)[MSGPACK_COMMAND].as<int>();
-	} catch (msgpack::type_error e) { errorstream << "msgpack::type_error sz=" << datasize << " e=" << e.what() << std::endl; return false; }
-	catch (msgpack::unpack_error e) { errorstream << "msgpack::type_error sz=" << datasize << " e=" << e.what() << std::endl; return false; }
-	return true;
 }
 
 } // namespace
