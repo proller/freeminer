@@ -234,10 +234,10 @@ void Connection::sctp_setup(u16 port) {
 
 	cs << "sctp_setup " << port << std::endl;
 
-auto debug_func = debug_printf;
-debug_func = nullptr;
+	auto debug_func = debug_printf;
+	debug_func = nullptr;
 #if SCTP_DEBUG
-debug_func = debug_printf;
+	debug_func = debug_printf;
 #endif
 
 	usrsctp_init(port, nullptr, debug_func);
@@ -747,7 +747,7 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 				//cs <<  "recieved data n="<< n << " peer="<<peer_id<<" sid="<<rcv_info.rcv_sid<< " flags="<<flags<<" complete="<<(flags & MSG_EOR)<< " buf="<<recv_buf[peer_id].size()<<" from sock="<<sock<<" hash="<<std::dec<<std::hash<std::string>()(std::string(buffer, n))<<std::endl;
 				if ((flags & MSG_EOR)) {
 //cs<<"recv: msg complete peer="<<peer_id<<" sid="<<rcv_info.rcv_sid<<" size="<<recv_buf[peer_id][rcv_info.rcv_sid].size()<<" hash="<<std::dec<<std::hash<std::string>()(recv_buf[peer_id][rcv_info.rcv_sid])<<std::endl;
-					ConnectionEvent e; 
+					ConnectionEvent e;
 					//SharedBuffer<u8> resultdata((const unsigned char*)buffer, n);
 					SharedBuffer<u8> resultdata((const unsigned char*)recv_buf[peer_id][rcv_info.rcv_sid].c_str(), recv_buf[peer_id][rcv_info.rcv_sid].size());
 					e.dataReceived(peer_id, resultdata);
@@ -1225,21 +1225,23 @@ void Connection::send(u16 peer_id, u8 channelnum,
 
 		//int len = usrsctp_sendv(sock, *data + curpos, sendlen, NULL, 0, (void *)&spa.sendv_sndinfo, sizeof(spa.sendv_sndinfo), SCTP_SENDV_SNDINFO, 0);
 		int len = usrsctp_sendv(sock, *data + curpos, sendlen, NULL, 0, (void *)&spa, sizeof(spa), SCTP_SENDV_SPA, flags);
-if (len > 0) {
-		curpos += len;
-		remlen -= len;
-		sendlen = std::min(remlen, maxlen);
-}
-if (errno == EWOULDBLOCK){cs<<"send EWOULDBLOCK len="<<len<<std::endl; 
-		//usrsctp_set_non_blocking(sock, 0);
+		if (len > 0) {
+			curpos += len;
+			remlen -= len;
+			sendlen = std::min(remlen, maxlen);
+		}
+		if (errno == EWOULDBLOCK) {
+			cs << "send EWOULDBLOCK len=" << len << std::endl;
+			//usrsctp_set_non_blocking(sock, 0);
 
-continue;}
-if (errno == EAGAIN) {cs<<"send EAGAIN len="<<len<<std::endl; continue; }
+			continue;
+		}
+		if (errno == EAGAIN) {cs << "send EAGAIN len=" << len << std::endl; continue; }
 		if (len < 0) {
 			perror("usrsctp_sendv");
 			deletePeer(peer_id, 0);
 
-			errorstream << " === sending FAILED to peer_id=" << peer_id << " bytes=" << data.getSize() << " sock=" << sock << " len="<<len<< " curpos="<<curpos<< std::endl;
+			errorstream << " === sending FAILED to peer_id=" << peer_id << " bytes=" << data.getSize() << " sock=" << sock << " len=" << len << " curpos=" << curpos << std::endl;
 			break;
 		}
 
