@@ -744,9 +744,9 @@ int Connection::recv(u16 peer_id, struct socket *sock) {
 								       (flags & MSG_EOR) ? 1 : 0);
 				*/
 				recv_buf[peer_id][rcv_info.rcv_sid] += std::string(buffer, n); // optimize here if firs packet complete`
-				//cs <<  "recieved data n="<< n << " peer="<<peer_id<<" sid="<<rcv_info.rcv_sid<< " complete="<<(flags & MSG_EOR)<< " buf="<<recv_buf[peer_id].size()<<" from sock="<<sock<<std::endl;
+				//cs <<  "recieved data n="<< n << " peer="<<peer_id<<" sid="<<rcv_info.rcv_sid<< " flags="<<flags<<" complete="<<(flags & MSG_EOR)<< " buf="<<recv_buf[peer_id].size()<<" from sock="<<sock<<" hash="<<std::dec<<std::hash<std::string>()(std::string(buffer, n))<<std::endl;
 				if ((flags & MSG_EOR)) {
-cs<<"recv: msg complete peer="<<peer_id<<" sid="<<rcv_info.rcv_sid<<" size="<<recv_buf[peer_id][rcv_info.rcv_sid].size()<<std::endl;
+//cs<<"recv: msg complete peer="<<peer_id<<" sid="<<rcv_info.rcv_sid<<" size="<<recv_buf[peer_id][rcv_info.rcv_sid].size()<<" hash="<<std::dec<<std::hash<std::string>()(recv_buf[peer_id][rcv_info.rcv_sid])<<std::endl;
 					ConnectionEvent e; 
 					//SharedBuffer<u8> resultdata((const unsigned char*)buffer, n);
 					SharedBuffer<u8> resultdata((const unsigned char*)recv_buf[peer_id][rcv_info.rcv_sid].c_str(), recv_buf[peer_id][rcv_info.rcv_sid].size());
@@ -1059,8 +1059,9 @@ void Connection::connect(Address addr) {
 			addr6.sin6_addr = in6addr_loopback;
 		else
 			inet_pton (AF_INET6, ("::ffff:" + addr.serializeString()).c_str(), &addr6.sin6_addr);
-	} else
+	} else {
 		addr6 = addr.getAddress6();
+	}
 
 	/* Acting as the connector */
 	//printf("Connecting to %s %s\n",argv[3],argv[4]);
@@ -1132,7 +1133,7 @@ void Connection::sendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable) 
 
 void Connection::send(u16 peer_id, u8 channelnum,
                       SharedBuffer<u8> data, bool reliable) {
-errorstream<<" === sending to peer_id="<<peer_id <<" channelnum="<<(int)channelnum<< " reliable="<<reliable<< " bytes="<<data.getSize()<<std::endl;
+//errorstream<<" === sending to peer_id="<<peer_id <<" channelnum="<<(int)channelnum<< " reliable="<<reliable<< " bytes="<<data.getSize()<<" hash=" <<std::dec<< std::hash<std::string>()(std::string((const char*)*data, data.getSize()))<<std::endl;
 	{
 		//JMutexAutoLock peerlock(m_peers_mutex);
 		if (m_peers.find(peer_id) == m_peers.end()) {
@@ -1218,10 +1219,12 @@ errorstream<<" === sending to peer_id="<<peer_id <<" channelnum="<<(int)channeln
 			spa.sendv_sndinfo.snd_flags |= SCTP_EOR;
 		}
 
-errorstream<<" psend" << " remlen=" << remlen << " curpos="<<curpos<< " sendlen="<<sendlen << " buflen="<<buflen<< " nowsent="<<(curpos+sendlen)<<" flags="<<spa.sendv_sndinfo.snd_flags<< " sid="<<spa.sendv_sndinfo.snd_sid<<std::endl;
+//errorstream<<" psend" << " remlen=" << remlen << " curpos="<<curpos<< " sendlen="<<sendlen << " buflen="<<buflen<< " nowsent="<<(curpos+sendlen)<<" flags="<<spa.sendv_sndinfo.snd_flags<< " sid="<<spa.sendv_sndinfo.snd_sid
+//<<" hash=" <<std::dec<< std::hash<std::string>()(std::string((const char*)*data, data.getSize()))
+//<<std::endl;
 
 		//int len = usrsctp_sendv(sock, *data + curpos, sendlen, NULL, 0, (void *)&spa.sendv_sndinfo, sizeof(spa.sendv_sndinfo), SCTP_SENDV_SNDINFO, 0);
-		int len = usrsctp_sendv(sock, *data, sendlen, NULL, 0, (void *)&spa, sizeof(spa), SCTP_SENDV_SPA, flags);
+		int len = usrsctp_sendv(sock, *data + curpos, sendlen, NULL, 0, (void *)&spa, sizeof(spa), SCTP_SENDV_SPA, flags);
 if (len > 0) {
 		curpos += len;
 		remlen -= len;
