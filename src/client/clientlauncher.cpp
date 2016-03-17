@@ -34,6 +34,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "fontengine.h"
 #include "clientlauncher.h"
 
+#include "debug.h"
+
 /* mainmenumanager.h
  */
 gui::IGUIEnvironment *guienv = NULL;
@@ -200,10 +202,6 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 		device->setWindowCaption((utf8_to_wide(PROJECT_NAME_C) + L" [" + text + L"]").c_str());
 		delete[] text;
 
-#ifdef __ANDROID__
-		porting::handleAndroidActivityEvents(5);
-#endif
-
 		try {	// This is used for catching disconnects
 
 			guienv->clear();
@@ -296,7 +294,7 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 			errorstream << error_message << std::endl;
 		}
 
-#ifdef NDEBUG
+#if !EXEPTION_DEBUG
 		catch (std::exception &e) {
 			std::string error_message = "Some exception: \"";
 			error_message += e.what();
@@ -771,6 +769,7 @@ bool ClientLauncher::print_video_modes()
 
 //freeminer:
 void ClientLauncher::wait_data() {
+	device->run();
 	bool wait = false;
 	std::vector<std::string> check_path { porting::path_share + DIR_DELIM + "builtin" + DIR_DELIM + "init.lua", g_settings->get("font_path") };
 	for (auto p : check_path)
@@ -779,32 +778,32 @@ void ClientLauncher::wait_data() {
 			break;
 		}
 	bool &kill = *porting::signal_handler_killstatus();
-	for (int i = 0; i < 1000; ++i) {
-#ifdef __ANDROID__
-		porting::handleAndroidActivityEvents();
-#endif
-
+	for (int i = 0; i < 1000; ++i) { // 100s max
 		if (i || wait) {
 			auto driver = device->getVideoDriver();
-			g_menuclouds->step(50);
+			g_menuclouds->step(4);
 			driver->beginScene(true, true, video::SColor(255, 140, 186, 250));
 			g_menucloudsmgr->drawAll();
 			guienv->drawAll();
 			driver->endScene();
-
-			std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+			device->run();
+			device->sleep(100);
 		}
 		int no = 0;
-		for (auto p : check_path)
-			if (!fs::PathExists(p)) {
-				no++;
+		if (! (i % 10) ) { //every second
+			for (auto p : check_path)
+				if (!fs::PathExists(p)) {
+					++no;
+					break;
+				}
+			if (!no || kill || !device->run())
 				break;
-			}
-		if (!no || kill || !device->run())
-			break;
-		infostream << "waiting assets i= " << i << " path="<< porting::path_share << std::endl;
+			infostream << "waiting assets i= " << i << " path="<< porting::path_share << std::endl;
+		}
 	}
 
-	if (wait)
-		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+	if (wait) {
+		device->run();
+		device->sleep(300);
+	}
 }
