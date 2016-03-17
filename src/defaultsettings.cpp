@@ -268,6 +268,8 @@ void fm_set_default_settings(Settings *settings) {
 
 
 #ifdef __ANDROID__
+	settings->setDefault("TMPFolder", porting::path_user + "/tmp/");
+
 	//check for device with small screen
 	float x_inches = porting::getDisplaySize().X / porting::get_dpi();
 
@@ -307,7 +309,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("max_objects_per_block", "20");
 
 	settings->setDefault("leaves_style", "opaque");
-	settings->setDefault("mg_name", "v7");
+	//settings->setDefault("mg_name", "v7");
 
 	char lang[3] = {};
 	AConfiguration_getLanguage(porting::app_global->config, lang);
@@ -330,7 +332,13 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("mono_font_size", fontsize.str());
 	settings->setDefault("fallback_font_size", fontsize.str());
 
-	actionstream << "Autoconfig: "" displayX=" << porting::getDisplaySize().X << " density="<<porting::getDisplayDensity()<< " dpi="<< porting::get_dpi() << " densityDpi=" << porting::get_densityDpi()<< " x_inches=" << x_inches << " font=" << font_size << " lang=" << lang <<std::endl;
+	actionstream << "Autoconfig: "" displayX=" << porting::getDisplaySize().X 
+		<< " density=" << porting::getDisplayDensity() 
+		<< " dpi=" << porting::get_dpi()
+		//<< " densityDpi=" << porting::get_densityDpi()
+		<< " x_inches=" << x_inches 
+		<< " font=" << font_size 
+		<< " lang=" << lang <<std::endl;
 	}
 
 #endif

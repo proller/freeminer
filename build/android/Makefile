@@ -35,10 +35,12 @@ ANDROID_VERSION_CODE = 13
 
 
 #and for freeminer for skip conflict:
-BUILD_NUMBER = 68
+#increase by 4
+BUILD_NUMBER = 70
 
 ANDROID_VERSION_CODE = $(BUILD_NUMBER)
 
+SDK_VERSION = 15
 PROJECT_NAME_C = freeminer
 
 GAMES_VERSION = ""
@@ -60,17 +62,41 @@ TARGET_LDFLAGS_ADDON = -Wl,--no-warn-mismatch -lm_hard
 TARGET_ARCH = armv7
 CROSS_PREFIX = arm-linux-androideabi-
 COMPILER_VERSION = 4.9
-#COMPILER_VERSION = clang3.6
+
 HAVE_LEVELDB = 1
 USE_LUAJIT = 1
 USE_ENET = 0
 USE_SCTP = 1
 APP_STL = gnustl       # gnustl libcxx|libc++ stlport
 
+#COMPILER_VERSION = clang
+#TARGET_CFLAGS_ADDON = -D_NDK_MATH_NO_SOFTFP=1 -Ofast
+#STANDALONE_ADDON = --use-llvm
+
+ifeq ($(TARGET_arm64),1)
+ifneq ($(NO_AUTO_VERSION),1)
+ANDROID_VERSION_CODE := $(shell echo $$(( $(ANDROID_VERSION_CODE) + 3 )))
+endif
+TARGET_HOST = aarch64-linux
+TARGET_ABI = arm64-v8a
+TARGET_LIBDIR = arm64-v8a
+TARGET_TOOLCHAIN = aarch64-linux-android-
+TARGET_CFLAGS_ADDON = -Ofast
+TARGET_CXXFLAGS_ADDON = $(TARGET_CFLAGS_ADDON)
+TARGET_LDFLAGS_ADDON =
+CROSS_PREFIX = aarch64-linux-android-
+TARGET_ARCH = aarch64
+SDK_VERSION = 21
+
+#TODO:
+USE_LUAJIT = 0
+endif
+
+
 ################################################################################
 # toolchain config for little endian mips
 ################################################################################
-ifeq ($(TARGET_MIPS),1)
+ifeq ($(TARGET_mips),1)
 ifneq ($(NO_AUTO_VERSION),1)
 ANDROID_VERSION_CODE := $(shell echo $$(( $(ANDROID_VERSION_CODE) + 2 )))
 endif
@@ -102,7 +128,12 @@ TARGET_CXXFLAGS_ADDON = $(TARGET_CFLAGS_ADDON)
 TARGET_LDFLAGS_ADDON =
 CROSS_PREFIX = i686-linux-android-
 TARGET_ARCH = x86
+SDK_VERSION = 16
+OPENSSL_CONFIGURE_ADDON = no-asm
 endif
+
+APP_PLATFORM = android-$(SDK_VERSION)
+
 
 ################################################################################
 ASSETS_TIMESTAMP = deps/assets_timestamp
@@ -350,7 +381,7 @@ openssl_download :
 
 openssl : $(OPENSSL_LIB)
 
-$(OPENSSL_LIB): $(OPENSSL_TIMESTAMP)
+$(OPENSSL_LIB): $(GMP_LIB) $(OPENSSL_TIMESTAMP)
 	@REFRESH=0;                                                                \
 	if [ ! -e ${OPENSSL_TIMESTAMP_INT} ] ; then                                \
 		echo "${OPENSSL_TIMESTAMP_INT} doesn't exist";                         \
@@ -362,14 +393,16 @@ $(OPENSSL_LIB): $(OPENSSL_TIMESTAMP)
 	if [ $$REFRESH -ne 0 ] ; then                                              \
 	echo "changed timestamp for openssl detected building...";                 \
 	cd ${OPENSSL_DIR};                                                         \
-	ln -s ${OPENSSL_DIR} ../openssl;                                           \
+	ln -fsn ${OPENSSL_BASEDIR} ../openssl; \
 	export TOOLCHAIN=/tmp/ndk-${TARGET_HOST}-openssl;                          \
 	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
 	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	--stl=${APP_STL} \
+	--platform=${APP_PLATFORM} \
+	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
-	CC=${CROSS_PREFIX}gcc ./Configure enable-gmp -DL_ENDIAN -I${GMP_DIR} -L${GMP_DIR}/usr/lib android-${TARGET_ARCH};\
+	CC=${CROSS_PREFIX}gcc ./Configure enable-gmp -DL_ENDIAN -I${GMP_DIR} -L${GMP_DIR}/usr/lib ${OPENSSL_CONFIGURE_ADDON} android-${TARGET_ARCH};\
 	CC=${CROSS_PREFIX}gcc ANDROID_DEV=/tmp/ndk-${TARGET_HOST} make depend;     \
 	CC=${CROSS_PREFIX}gcc ANDROID_DEV=/tmp/ndk-${TARGET_HOST} make build_libs; \
 	touch ${OPENSSL_TIMESTAMP};                                                \
@@ -421,6 +454,8 @@ $(LEVELDB_LIB): $(LEVELDB_TIMESTAMP)
 	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
 	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	--stl=${APP_STL} \
+	--platform=${APP_PLATFORM} \
+	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
 	export CC=${CROSS_PREFIX}gcc;                                              \
@@ -500,7 +535,7 @@ iconv_download :
 		wget -O libiconv-${ICONV_VERSION}.tar.gz ${ICONV_URL_HTTP} || exit 1; \
 		tar -xzf libiconv-${ICONV_VERSION}.tar.gz || exit 1;               \
 		rm libiconv-${ICONV_VERSION}.tar.gz;                               \
-		ln -s libiconv-${ICONV_VERSION} libiconv;                          \
+		ln -fsn libiconv-${ICONV_VERSION} libiconv;                          \
 		cd ${ICONV_DIR};                                                   \
 		patch -p1 < ${ROOT}/libiconv_android.patch;                        \
 		patch -p1 < ${ROOT}/libiconv_stdio.patch;                          \
@@ -529,6 +564,8 @@ $(ICONV_LIB) : $(ICONV_TIMESTAMP)
 	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
 	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	--stl=${APP_STL} \
+	--platform=${APP_PLATFORM} \
+	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
 	export CC=${CROSS_PREFIX}gcc;                                              \
@@ -553,7 +590,7 @@ clean_iconv :
 #      -geforce on emulator
 #      -Vivante Corporation GC1000 core (e.g. Galaxy Tab 3)
 
-irrlicht_download :
+irrlicht_download : arch_dirs
 	@if [ ! -d "deps/irrlicht" ] ; then                                        \
 		echo "irrlicht sources missing, downloading...";                       \
 		mkdir -p ${ROOT}/deps;                                                 \
@@ -621,7 +658,7 @@ curl_download :
 		wget ${CURL_URL_HTTP} -O curl-${CURL_VERSION}.tar.bz2 || exit 1;                                       \
 		tar -xjf curl-${CURL_VERSION}.tar.bz2 || exit 1;                       \
 		rm curl-${CURL_VERSION}.tar.bz2;                                       \
-		ln -s curl-${CURL_VERSION} curl;                                       \
+		ln -fsn curl-${CURL_VERSION} curl;                                       \
 	fi
 
 curl : $(CURL_LIB)
@@ -647,6 +684,8 @@ $(CURL_LIB): $(CURL_TIMESTAMP) $(OPENSSL_LIB)
 	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
 	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	--stl=${APP_STL} \
+	--platform=${APP_PLATFORM} \
+	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
 	export CC=${CROSS_PREFIX}gcc;                                              \
@@ -683,7 +722,7 @@ gmp_download :
 		wget ${GMP_URL_HTTP} -O gmp-${GMP_VERSION}.tar.bz2 || exit 1;                                    \
 		tar -xjf gmp-${GMP_VERSION}.tar.bz2 || exit 1;                     \
 		rm gmp-${GMP_VERSION}.tar.bz2;                                     \
-		ln -s gmp-${GMP_VERSION} gmp;                                      \
+		ln -fsn gmp-${GMP_VERSION} gmp;                                      \
 	fi
 
 gmp : $(GMP_LIB)
@@ -709,6 +748,8 @@ $(GMP_LIB): $(GMP_TIMESTAMP)
 	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
 	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	--stl=${APP_STL} \
+	--platform=${APP_PLATFORM} \
+	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
 	export CC=${CROSS_PREFIX}gcc;                                              \
@@ -734,7 +775,7 @@ deps/${SQLITE3_FOLDER}/sqlite3.c :
 	cd deps;                                                                    \
 	wget ${SQLITE3_URL} -O ${SQLITE3_FOLDER}.zip;                               \
 	unzip ${SQLITE3_FOLDER}.zip;                                                \
-	ln -s ${SQLITE3_FOLDER} sqlite
+	ln -fsn ${SQLITE3_FOLDER} sqlite
 
 clean_sqlite3:
 	cd deps && $(RM) -rf ${SQLITE3_FOLDER} && $(RM) -f ${SQLITE3_FOLDER}.zip && \
@@ -827,7 +868,7 @@ clean_assets :
 
 
 #=== freeminer libs:
-.PHONY : default $(MSGPACK_TIMESTAMP) msgpack_download msgpack clean_msgpack \
+.PHONY : arch_dirs default $(MSGPACK_TIMESTAMP) msgpack_download msgpack clean_msgpack \
 		$(ICONV_TIMESTAMP) iconv_download iconv clean_iconv \
 		$(LUAJIT_TIMESTAMP) luajit luajit_download clean_luajit
 
@@ -872,6 +913,8 @@ $(MSGPACK_TARGET): $(MSGPACK_TIMESTAMP)
 	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
 	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	--stl=${APP_STL} \
+	--platform=${APP_PLATFORM} \
+	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
 	export CC=${CROSS_PREFIX}gcc;                                              \
@@ -932,6 +975,8 @@ $(GETTEXT_LIB): $(GETTEXT_TIMESTAMP)
 	#${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
 	#--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	#--stl=${APP_STL} \
+	#--platform=${APP_PLATFORM} \
+	#${STANDALONE_ADDON} \
 	#--install-dir=$${TOOLCHAIN};                                               \
 	#export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
 	#export CXX=${CROSS_PREFIX}g++;                                             \
@@ -955,6 +1000,8 @@ LUAJIT_LIB = $(LUAJIT_DIR)src/libluajit.a
 LUAJIT_TIMESTAMP = $(LUAJIT_DIR)timestamp
 LUAJIT_TIMESTAMP_INT = $(ROOT)/deps/luajit_timestamp
 LUAJIT_URL_GIT = http://luajit.org/git/luajit-2.0.git
+#LUAJIT_GIT_BRANCH = v2.1
+LUAJIT_GIT_BRANCH = master
 
 
 $(LUAJIT_TIMESTAMP) : luajit_download
@@ -968,7 +1015,7 @@ luajit_download :
 		echo "luajit sources missing, downloading...";                            \
 		mkdir -p ${ROOT}/deps;                                                 \
 		cd ${ROOT}/deps ;                                                      \
-		git clone --recursive ${LUAJIT_URL_GIT} ${LUAJIT_DIR} || exit 1; \
+		git clone --recursive --branch ${LUAJIT_GIT_BRANCH} ${LUAJIT_URL_GIT} ${LUAJIT_DIR} || exit 1; \
 	fi
 
 luajit : $(LUAJIT_LIB)
@@ -991,7 +1038,9 @@ $(LUAJIT_LIB): $(LUAJIT_TIMESTAMP)
 	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh \
 	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION} \
 	--stl=${APP_STL} \
-	--install-dir=$${TOOLCHAIN} --platform=${APP_PLATFORM}; \
+	--platform=${APP_PLATFORM} \
+	${STANDALONE_ADDON} \
+	--install-dir=$${TOOLCHAIN}; \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}"; \
 	export CROSS=${CROSS_PREFIX}; \
 	export TARGET_FLAGS="${TARGET_CFLAGS_ADDON}"; \
@@ -1017,11 +1066,17 @@ locale:
 clean_locale:
 	rm -rf cmake
 
+arch_dirs:
+	mkdir -p deps-$(TARGET_ABI)
+#	-rm -fr deps
+	ln -sfn deps-$(TARGET_ABI) deps
+# here is bad place
+	echo "target=${APP_PLATFORM}" > project.properties
 #==== end of freeminer libs
 
 
 # $(ICONV_LIB)
-apk: $(PATHCFGFILE) assets $(IRRLICHT_LIB) $(CURL_LIB) $(GMP_LIB) $(LEVELDB_TARGET)       \
+apk: $(PATHCFGFILE) arch_dirs assets $(IRRLICHT_LIB) $(CURL_LIB) $(GMP_LIB) $(LEVELDB_TARGET)       \
 	$(OPENAL_LIB) $(OGG_LIB) prep_srcdir $(ROOT)/jni/src/android_version.h     \
 	$(MSGPACK_TARGET) $(GETTEXT_LIB) $(LUAJIT_TARGET) $(FREETYPE_LIB) \
 	$(ROOT)/jni/src/android_version_githash.h sqlite3_download
@@ -1048,7 +1103,7 @@ apk: $(PATHCFGFILE) assets $(IRRLICHT_LIB) $(CURL_LIB) $(GMP_LIB) $(LEVELDB_TARG
 
 prep_srcdir :
 	@if [ ! -e ${ROOT}/jni/src ]; then                                         \
-		ln -s ${ROOT}/../../src ${ROOT}/jni/src;                           \
+		ln -fsn ${ROOT}/../../src ${ROOT}/jni/src;                           \
 	fi
 
 clean_apk : manifest
@@ -1126,6 +1181,7 @@ manifest :
 		DBG_FLAG="android:debuggable=\"true\"";                                \
 	fi;                                                                        \
 	cat ${ROOT}/AndroidManifest.xml.template |                                 \
+	sed "s/###SDK_VERSION###/${SDK_VERSION}/g" | \
 	sed "s/###ANDROID_VERSION###/${ANDROID_VERSION_CODE}/g" |                  \
 	sed "s/###BUILD_NUMBER###/${BUILD_NUMBER}/g" | \
 	sed "s/###BASE_VERSION###/$$BASE_VERSION/g" |                              \
