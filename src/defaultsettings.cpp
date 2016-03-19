@@ -162,8 +162,8 @@ void fm_set_default_settings(Settings *settings) {
 
 	// Liquid
 	settings->setDefault("liquid_real", "true");
-	settings->setDefault("liquid_send", "1.0");
-	settings->setDefault("liquid_relax", "2");
+	settings->setDefault("liquid_send", android ? "3.0" : "1.0");
+	settings->setDefault("liquid_relax", android ? "1" : "2");
 	settings->setDefault("liquid_fast_flood", "1");
 
 	// Weather
@@ -512,6 +512,8 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("enable_minimap", "true");
 	settings->setDefault("minimap_shape_round", "true");
 	settings->setDefault("minimap_double_scan_height", "true");
+
+	settings->setDefault("send_pre_v25_init", "true");
 
 	settings->setDefault("curl_timeout", "5000");
 	settings->setDefault("curl_parallel_limit", "8");
