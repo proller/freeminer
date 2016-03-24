@@ -159,6 +159,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("farmesh_wanted", android ? "100" :"500");
 	settings->setDefault("headless_optimize", "false");
 	//settings->setDefault("node_highlighting", "halo");
+	settings->setDefault("enable_vbo", win32 ? "false" : "true");
 
 	// Liquid
 	settings->setDefault("liquid_real", "true");
@@ -609,6 +610,9 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("sqlite_synchronous", "2");
 	settings->setDefault("full_block_send_enable_min_time_from_building", "2.0");
 	settings->setDefault("dedicated_server_step", "0.1");
+	settings->setDefault("active_block_mgmt_interval", "2.0");
+	settings->setDefault("abm_interval", "1.0");
+	settings->setDefault("nodetimer_interval", "1.0");
 	settings->setDefault("ignore_world_load_errors", "false");
 	settings->setDefault("remote_media", "");
 	settings->setDefault("debug_log_level", "action");
