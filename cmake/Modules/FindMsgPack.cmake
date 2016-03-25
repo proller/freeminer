@@ -8,11 +8,11 @@
 # Redistribution and use is allowed according to the terms of the BSD license.
 # For details see the accompanying COPYING-CMAKE-SCRIPTS file.
 
-# Minimal supported version: 1.1.0
+# Minimal supported version: 1.4.0
 if(CMAKE_VERSION VERSION_LESS 2.8.9)
   message(WARNING "Your cmake is bad and you should feel bad! (at least 2.8.9 is recommended)")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.7)
-  message(WARNING "Using system msgpack (insufficient gcc version (${CMAKE_CXX_COMPILER_VERSION})). Minimal supported msgpack version is 1.1.0")
+  message(WARNING "Using system msgpack (insufficient gcc version (${CMAKE_CXX_COMPILER_VERSION})). Minimal supported msgpack version is 1.4.0")
   set(ENABLE_SYSTEM_MSGPACK 1)
 endif()
 
@@ -52,7 +52,7 @@ elseif(NOT MSGPACK_LIBRARY)
 	#set(MSGPACK_ENABLE_SHARED OFF) # broken disable, todo
 	add_subdirectory(msgpack-c)
 	#include_directories(${PROJECT_SOURCE_DIR}/msgpack-c/include)
-	set(MSGPACK_LIBRARY msgpackc-static)
+	set(MSGPACK_LIBRARY msgpackc-static) # before 1.4.0 was msgpack-static
 	set(MSGPACK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/msgpack-c/include)
 	message(STATUS "Using bundled msgpack ${MSGPACK_INCLUDE_DIR} ${MSGPACK_LIBRARY}")
 endif()
