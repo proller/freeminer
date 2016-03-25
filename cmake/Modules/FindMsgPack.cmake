@@ -16,15 +16,14 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSI
   set(ENABLE_SYSTEM_MSGPACK 1)
 endif()
 
+
 # msgpack 1.2.0 recompiles all .h every cmake run - it cause recompile all freeminer src.
 if(NOT ENABLE_SYSTEM_MSGPACK AND NOT MSGPACK_LIBRARY)
 	FIND_PATH(MSGPACK_INCLUDE_DIR msgpack.hpp PATHS ${CMAKE_HOME_DIRECTORY}/src/msgpack-c/include NO_DEFAULT_PATH)
 	FIND_LIBRARY(MSGPACK_LIBRARY NAMES libmsgpackc.a msgpackc msgpack PATHS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/src/msgpack-c NO_DEFAULT_PATH)
 	message(STATUS "Using already compiled bundled msgpack ${MSGPACK_INCLUDE_DIR} ${MSGPACK_LIBRARY}")
 	IF (NOT MSGPACK_LIBRARY)
-
-		set(MSGPACK_INCLUDE_DIR NOTFOUND)
-		message(STATUS "msgpackdeldef  ${MSGPACK_INCLUDE_DIR} ${MSGPACK_LIBRARY}")
+ 		set(MSGPACK_INCLUDE_DIR NOTFOUND)
 	endif()
 endif()
 
