@@ -311,6 +311,7 @@ int hw_culling = 0;
 			}
 		}
 */
+/*
 			v3s16 blockpos_nodes = bp * MAP_BLOCKSIZE;
 			// Block center position
 			v3f blockpos(
@@ -514,7 +515,7 @@ errorstream<<"removing shadow r="<< range<<std::endl;
 					//block->scenenode = getSceneManager()->addMeshSceneNode( tangentMesh );
 					//tangentMesh->drop();
 
-					mesh->setStatic();
+					//mesh->setStatic();
 					block->scenenode = getSceneManager()->addMeshSceneNode(mesh->getMesh());
 
 					if (block->scenenode && hw_culling)
