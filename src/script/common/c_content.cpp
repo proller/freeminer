@@ -204,6 +204,22 @@ void read_object_properties(lua_State *L, int index,
 	}
 	lua_pop(L, 1);
 	getboolfield(L, -1, "backface_culling", prop->backface_culling);
+
+	getstringfield(L, -1, "nametag", prop->nametag);
+	lua_getfield(L, -1, "nametag_color");
+	if (!lua_isnil(L, -1)) {
+		video::SColor color = prop->nametag_color;
+		if (read_color(L, -1, &color))
+			prop->nametag_color = color;
+	}
+	lua_pop(L, 1);
+
+	lua_getfield(L, -1, "automatic_face_movement_max_rotation_per_sec");
+	if (lua_isnumber(L, -1)) {
+		prop->automatic_face_movement_max_rotation_per_sec = luaL_checknumber(L, -1);
+	}
+	lua_pop(L, 1);
+	getstringfield(L, -1, "infotext", prop->infotext);
 }
 
 /******************************************************************************/
@@ -264,6 +280,14 @@ void push_object_properties(lua_State *L, ObjectProperties *prop)
 	lua_setfield(L, -2, "automatic_face_movement_dir");
 	lua_pushboolean(L, prop->backface_culling);
 	lua_setfield(L, -2, "backface_culling");
+	lua_pushlstring(L, prop->nametag.c_str(), prop->nametag.size());
+	lua_setfield(L, -2, "nametag");
+	push_ARGB8(L, prop->nametag_color);
+	lua_setfield(L, -2, "nametag_color");
+	lua_pushnumber(L, prop->automatic_face_movement_max_rotation_per_sec);
+	lua_setfield(L, -2, "automatic_face_movement_max_rotation_per_sec");
+	lua_pushlstring(L, prop->infotext.c_str(), prop->infotext.size());
+	lua_setfield(L, -2, "infotext");
 }
 
 /******************************************************************************/
@@ -273,14 +297,31 @@ TileDef read_tiledef(lua_State *L, int index, u8 drawtype)
 		index = lua_gettop(L) + 1 + index;
 
 	TileDef tiledef;
-	bool default_tiling = (drawtype == NDT_PLANTLIKE || drawtype == NDT_FIRELIKE)
-		? false : true;
+
+	bool default_tiling = true;
+	bool default_culling = true;
+	switch (drawtype) {
+		case NDT_PLANTLIKE:
+		case NDT_FIRELIKE:
+			default_tiling = false;
+			// "break" is omitted here intentionaly, as PLANTLIKE
+			// FIRELIKE drawtype both should default to having
+			// backface_culling to false.
+		case NDT_MESH:
+		case NDT_LIQUID:
+			default_culling = false;
+			break;
+		default:
+			break;
+	}
+
 	// key at index -2 and value at index
 	if(lua_isstring(L, index)){
 		// "default_lava.png"
 		tiledef.name = lua_tostring(L, index);
 		tiledef.tileable_vertical = default_tiling;
 		tiledef.tileable_horizontal = default_tiling;
+		tiledef.backface_culling = default_culling;
 	}
 	else if(lua_istable(L, index))
 	{
@@ -289,7 +330,7 @@ TileDef read_tiledef(lua_State *L, int index, u8 drawtype)
 		getstringfield(L, index, "name", tiledef.name);
 		getstringfield(L, index, "image", tiledef.name); // MaterialSpec compat.
 		tiledef.backface_culling = getboolfield_default(
-			L, index, "backface_culling", true);
+			L, index, "backface_culling", default_culling);
 		tiledef.tileable_horizontal = getboolfield_default(
 			L, index, "tileable_horizontal", default_tiling);
 		tiledef.tileable_vertical = getboolfield_default(
@@ -545,6 +586,8 @@ ContentFeatures read_content_features(lua_State *L, int index)
 	getboolfield(L, index, "climbable", f.climbable);
 	// Player can build on these
 	getboolfield(L, index, "buildable_to", f.buildable_to);
+	// Liquids flow into and replace node
+	getboolfield(L, index, "floodable", f.floodable);
 	// Whether the node is non-liquid, source liquid or flowing liquid
 	f.liquid_type = (LiquidType)getenumfield(L, index, "liquidtype",
 			ScriptApiNode::es_LiquidType, LIQUID_NONE);
@@ -576,6 +619,46 @@ ContentFeatures read_content_features(lua_State *L, int index)
 	lua_getfield(L, index, "node_box");
 	if(lua_istable(L, -1))
 		f.node_box = read_nodebox(L, -1);
+	lua_pop(L, 1);
+
+	lua_getfield(L, index, "connects_to");
+	if (lua_istable(L, -1)) {
+		int table = lua_gettop(L);
+		lua_pushnil(L);
+		while (lua_next(L, table) != 0) {
+			// Value at -1
+			f.connects_to.push_back(lua_tostring(L, -1));
+			lua_pop(L, 1);
+		}
+	}
+	lua_pop(L, 1);
+
+	lua_getfield(L, index, "connect_sides");
+	if (lua_istable(L, -1)) {
+		int table = lua_gettop(L);
+		lua_pushnil(L);
+		while (lua_next(L, table) != 0) {
+			// Value at -1
+			std::string side(lua_tostring(L, -1));
+			// Note faces are flipped to make checking easier
+			if (side == "top")
+				f.connect_sides |= 2;
+			else if (side == "bottom")
+				f.connect_sides |= 1;
+			else if (side == "front")
+				f.connect_sides |= 16;
+			else if (side == "left")
+				f.connect_sides |= 32;
+			else if (side == "back")
+				f.connect_sides |= 4;
+			else if (side == "right")
+				f.connect_sides |= 8;
+			else
+				warningstream << "Unknown value for \"connect_sides\": "
+					<< side << std::endl;
+			lua_pop(L, 1);
+		}
+	}
 	lua_pop(L, 1);
 
 	lua_getfield(L, index, "selection_box");
@@ -670,25 +753,31 @@ NodeBox read_nodebox(lua_State *L, int index)
 		nodebox.type = (NodeBoxType)getenumfield(L, index, "type",
 				ScriptApiNode::es_NodeBoxType, NODEBOX_REGULAR);
 
-		lua_getfield(L, index, "fixed");
-		if(lua_istable(L, -1))
-			nodebox.fixed = read_aabb3f_vector(L, -1, BS);
-		lua_pop(L, 1);
+#define NODEBOXREAD(n, s) \
+	do { \
+		lua_getfield(L, index, (s)); \
+		if (lua_istable(L, -1)) \
+			(n) = read_aabb3f(L, -1, BS); \
+		lua_pop(L, 1); \
+	} while (0)
 
-		lua_getfield(L, index, "wall_top");
-		if(lua_istable(L, -1))
-			nodebox.wall_top = read_aabb3f(L, -1, BS);
-		lua_pop(L, 1);
-
-		lua_getfield(L, index, "wall_bottom");
-		if(lua_istable(L, -1))
-			nodebox.wall_bottom = read_aabb3f(L, -1, BS);
-		lua_pop(L, 1);
-
-		lua_getfield(L, index, "wall_side");
-		if(lua_istable(L, -1))
-			nodebox.wall_side = read_aabb3f(L, -1, BS);
-		lua_pop(L, 1);
+#define NODEBOXREADVEC(n, s) \
+	do { \
+		lua_getfield(L, index, (s)); \
+		if (lua_istable(L, -1)) \
+			(n) = read_aabb3f_vector(L, -1, BS); \
+		lua_pop(L, 1); \
+	} while (0)
+		NODEBOXREADVEC(nodebox.fixed, "fixed");
+		NODEBOXREAD(nodebox.wall_top, "wall_top");
+		NODEBOXREAD(nodebox.wall_bottom, "wall_bottom");
+		NODEBOXREAD(nodebox.wall_side, "wall_side");
+		NODEBOXREADVEC(nodebox.connect_top, "connect_top");
+		NODEBOXREADVEC(nodebox.connect_bottom, "connect_bottom");
+		NODEBOXREADVEC(nodebox.connect_front, "connect_front");
+		NODEBOXREADVEC(nodebox.connect_left, "connect_left");
+		NODEBOXREADVEC(nodebox.connect_back, "connect_back");
+		NODEBOXREADVEC(nodebox.connect_right, "connect_right");
 	}
 	return nodebox;
 }
@@ -1157,9 +1246,10 @@ bool read_noiseparams(lua_State *L, int index, NoiseParams *np)
 	getintfield(L,   index, "octaves",     np->octaves);
 
 	//freeminer:
-	getfloatfield(L, index, "farscale",  np->farscale);
-	getfloatfield(L, index, "farspread",  np->farspread);
-	getfloatfield(L, index, "farpersist",  np->farpersist);
+	getfloatfield(L, index, "farscale",  np->far_scale);
+	getfloatfield(L, index, "farspread",  np->far_spread);
+	getfloatfield(L, index, "farpersist",  np->far_persist);
+	getfloatfield(L, index, "farlacunarity",  np->far_lacunarity);
 
 	u32 flags    = 0;
 	u32 flagmask = 0;

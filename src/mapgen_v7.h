@@ -55,6 +55,7 @@ struct MapgenV7Params : public MapgenSpecificParams {
 	NoiseParams np_float_islands2;
 	NoiseParams np_float_islands3;
 	NoiseParams np_layers;
+	//NoiseParams np_cave_indev;
 	Json::Value paramsj;
 
 	MapgenV7Params();
@@ -117,7 +118,7 @@ public:
 	~MapgenV7();
 
 	virtual void makeChunk(BlockMakeData *data);
-	int getGroundLevelAtPoint(v2s16 p);
+	int getSpawnLevelAtPoint(v2s16 p);
 	Biome *getBiomeAtPoint(v3s16 p);
 
 	float baseTerrainLevelAtPoint(s16 x, s16 z);

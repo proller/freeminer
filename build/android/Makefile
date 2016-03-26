@@ -35,26 +35,17 @@ ANDROID_VERSION_CODE = 13
 
 
 #and for freeminer for skip conflict:
-BUILD_NUMBER = 54
+#increase by 4
+BUILD_NUMBER = 78
 
 ANDROID_VERSION_CODE = $(BUILD_NUMBER)
 
+SDK_VERSION = 15
 PROJECT_NAME_C = freeminer
 
 GAMES_VERSION = ""
 
-################################################################################
-# toolchain config for arm old processors
-################################################################################
-#TARGET_HOST = arm-linux
-#TARGET_ABI = armeabi
-#TARGET_LIBDIR = armeabi
-#TARGET_TOOLCHAIN = arm-linux-androideabi-
-#TARGET_CFLAGS_ADDON = -mfloat-abi=softfp -mfpu=vfp
-#TARGET_ARCH = arm
-#CROSS_PREFIX = arm-linux-androideabi-
-#COMPILER_VERSION = 4.8
-#HAVE_LEVELDB = 1
+GIT_CLONE = git clone --recursive --depth 1
 
 ################################################################################
 # toolchain config for arm new processors
@@ -64,32 +55,56 @@ TARGET_HOST = arm-linux
 TARGET_ABI = armeabi-v7a-hard
 TARGET_LIBDIR = armeabi-v7a
 TARGET_TOOLCHAIN = arm-linux-androideabi-
-#TARGET_CFLAGS_ADDON = -mfloat-abi=softfp -mfpu=vfpv3
-TARGET_CFLAGS_ADDON =  -mfpu=vfpv3-d16 -D_NDK_MATH_NO_SOFTFP=1 -mfloat-abi=hard -march=armv7-a
+TARGET_CFLAGS_ADDON = -mfloat-abi=softfp -mfpu=vfpv3 -O3
+TARGET_CFLAGS_ADDON = -mfpu=vfpv3-d16 -D_NDK_MATH_NO_SOFTFP=1 -mfloat-abi=hard -march=armv7-a -Ofast
 TARGET_CXXFLAGS_ADDON = $(TARGET_CFLAGS_ADDON)
 TARGET_LDFLAGS_ADDON = -Wl,--no-warn-mismatch -lm_hard
 TARGET_ARCH = armv7
 CROSS_PREFIX = arm-linux-androideabi-
 COMPILER_VERSION = 4.9
-#COMPILER_VERSION = clang3.6
+
 HAVE_LEVELDB = 1
 USE_LUAJIT = 1
 USE_ENET = 1
 APP_STL = gnustl       # gnustl libcxx|libc++ stlport
 
+#COMPILER_VERSION = clang
+#TARGET_CFLAGS_ADDON = -D_NDK_MATH_NO_SOFTFP=1 -Ofast
+#STANDALONE_ADDON = --use-llvm
+
+ifeq ($(TARGET_arm64),1)
+ifneq ($(NO_AUTO_VERSION),1)
+ANDROID_VERSION_CODE := $(shell echo $$(( $(ANDROID_VERSION_CODE) + 1 )))
+endif
+TARGET_HOST = aarch64-linux
+TARGET_ABI = arm64-v8a
+TARGET_LIBDIR = arm64-v8a
+TARGET_TOOLCHAIN = aarch64-linux-android-
+TARGET_CFLAGS_ADDON = -Ofast
+TARGET_CXXFLAGS_ADDON = $(TARGET_CFLAGS_ADDON)
+TARGET_LDFLAGS_ADDON =
+CROSS_PREFIX = aarch64-linux-android-
+TARGET_ARCH = aarch64
+SDK_VERSION = 21
+
+#TODO:
+USE_LUAJIT = 0
+endif
+
+
 ################################################################################
 # toolchain config for little endian mips
 ################################################################################
-ifeq ($(TARGET_MIPS),1)
+ifeq ($(TARGET_mips),1)
 ifneq ($(NO_AUTO_VERSION),1)
-ANDROID_VERSION_CODE := $(shell echo $$(( $(ANDROID_VERSION_CODE) + 2 )))
+ANDROID_VERSION_CODE := $(shell echo $$(( $(ANDROID_VERSION_CODE) + 3 )))
 endif
 TARGET_HOST = mipsel-linux
 TARGET_ABI = mips
 TARGET_LIBDIR = mips
 TARGET_TOOLCHAIN = mipsel-linux-android-
-TARGET_CFLAGS_ADDON =
-TARGET_CXXFLAGS_ADDON =
+TARGET_CFLAGS_ADDON = -Ofast
+TARGET_CXXFLAGS_ADDON = $(TARGET_CFLAGS_ADDON)
 TARGET_LDFLAGS_ADDON =
 TARGET_ARCH = mips32
 CROSS_PREFIX = mipsel-linux-android-
@@ -101,27 +116,33 @@ endif
 ################################################################################
 ifeq ($(TARGET_x86),1)
 ifneq ($(NO_AUTO_VERSION),1)
-ANDROID_VERSION_CODE := $(shell echo $$(( $(ANDROID_VERSION_CODE) + 1 )))
+ANDROID_VERSION_CODE := $(shell echo $$(( $(ANDROID_VERSION_CODE) + 2 )))
 endif
 TARGET_HOST = x86-linux
 TARGET_ABI = x86
 TARGET_LIBDIR = x86
 TARGET_TOOLCHAIN = x86-
-TARGET_CFLAGS_ADDON =
-TARGET_CXXFLAGS_ADDON =
+TARGET_CFLAGS_ADDON = -Ofast
+TARGET_CXXFLAGS_ADDON = $(TARGET_CFLAGS_ADDON)
 TARGET_LDFLAGS_ADDON =
 CROSS_PREFIX = i686-linux-android-
 TARGET_ARCH = x86
+SDK_VERSION = 16
+OPENSSL_CONFIGURE_ADDON = no-asm
 endif
+
+APP_PLATFORM = android-$(SDK_VERSION)
+
 
 ################################################################################
 ASSETS_TIMESTAMP = deps/assets_timestamp
 
 LEVELDB_DIR = $(ROOT)/deps/leveldb/
-LEVELDB_LIB = $(LEVELDB_DIR)libleveldb.a
+LEVELDB_LIB = $(LEVELDB_DIR)/out-static/libleveldb.a
 LEVELDB_TIMESTAMP = $(LEVELDB_DIR)/timestamp
 LEVELDB_TIMESTAMP_INT = $(ROOT)/deps/leveldb_timestamp
 LEVELDB_URL_GIT = https://github.com/google/leveldb
+LEVELDB_COMMIT = 2d0320a458d0e6a20fff46d5f80b18bfdcce7018
 
 OPENAL_DIR = $(ROOT)/deps/openal-soft/
 OPENAL_LIB = $(OPENAL_DIR)libs/$(TARGET_ABI)/libopenal.so
@@ -136,6 +157,7 @@ OGG_TIMESTAMP = $(OGG_DIR)timestamp
 OGG_TIMESTAMP_INT = $(ROOT)/deps/ogg_timestamp
 OGG_URL_GIT = https://github.com/vincentjames501/libvorbis-libogg-android
 
+IRRLICHT_REVISION = 5122
 IRRLICHT_DIR = $(ROOT)/deps/irrlicht/
 IRRLICHT_LIB = $(IRRLICHT_DIR)lib/Android/libIrrlicht.a
 IRRLICHT_TIMESTAMP = $(IRRLICHT_DIR)timestamp
@@ -143,8 +165,12 @@ IRRLICHT_TIMESTAMP_INT = $(ROOT)/deps/irrlicht_timestamp
 #IRRLICHT_URL_SVN = http://svn.code.sf.net/p/irrlicht/code/branches/ogl-es/
 IRRLICHT_URL_GIT = https://github.com/zaki/irrlicht.git
 IRRLICHT_GIT_BRANCH = ogl-es
+IRRLICHT_GIT_COMMIT = 58fa0cf
+#IRRLICHT_GIT_COMMIT = ogl-es
 
-OPENSSL_VERSION = 1.0.2d
+#IRRLICHT_URL_SVN = http://svn.code.sf.net/p/irrlicht/code/branches/ogl-es@$(IRRLICHT_REVISION)
+
+OPENSSL_VERSION = 1.0.2g
 OPENSSL_BASEDIR = openssl-$(OPENSSL_VERSION)
 OPENSSL_DIR = $(ROOT)/deps/$(OPENSSL_BASEDIR)/
 OPENSSL_LIB = $(OPENSSL_DIR)/libssl.so.1.0.0
@@ -152,14 +178,14 @@ OPENSSL_TIMESTAMP = $(OPENSSL_DIR)timestamp
 OPENSSL_TIMESTAMP_INT = $(ROOT)/deps/openssl_timestamp
 OPENSSL_URL = http://www.openssl.org/source/openssl-$(OPENSSL_VERSION).tar.gz
 
-CURL_VERSION = 7.45.0
+CURL_VERSION = 7.47.1
 CURL_DIR = $(ROOT)/deps/curl-$(CURL_VERSION)
 CURL_LIB = $(CURL_DIR)/lib/.libs/libcurl.a
 CURL_TIMESTAMP = $(CURL_DIR)/timestamp
 CURL_TIMESTAMP_INT = $(ROOT)/deps/curl_timestamp
-CURL_URL_HTTP = http://curl.haxx.se/download/curl-${CURL_VERSION}.tar.bz2
+CURL_URL_HTTP = https://curl.haxx.se/download/curl-${CURL_VERSION}.tar.bz2
 
-GMP_VERSION = 6.0.0
+GMP_VERSION = 6.1.0
 GMP_DIR = $(ROOT)/deps/gmp-$(GMP_VERSION)
 GMP_LIB = $(GMP_DIR)/usr/lib/libgmp.so
 GMP_TIMESTAMP = $(GMP_DIR)/timestamp
@@ -179,8 +205,8 @@ ICONV_TIMESTAMP = $(ICONV_DIR)timestamp
 ICONV_TIMESTAMP_INT = $(ROOT)/deps/iconv_timestamp
 ICONV_URL_HTTP = http://ftp.gnu.org/pub/gnu/libiconv/libiconv-$(ICONV_VERSION).tar.gz
 
-SQLITE3_FOLDER = sqlite-amalgamation-3081101
-SQLITE3_URL = http://www.sqlite.org/2015/$(SQLITE3_FOLDER).zip
+SQLITE3_FOLDER = sqlite-amalgamation-3110100
+SQLITE3_URL = http://www.sqlite.org/2016/$(SQLITE3_FOLDER).zip
 
 -include $(PATHCFGFILE)
 
@@ -201,7 +227,7 @@ endif
 	$(ASSETS_TIMESTAMP) $(LEVELDB_TIMESTAMP) \
 	$(OPENAL_TIMESTAMP) $(OGG_TIMESTAMP) \
 	$(IRRLICHT_TIMESTAMP) $(CURL_TIMESTAMP) \
-	$(OPENSSL_TIMESTAMP) curl_binary \
+	$(OPENSSL_TIMESTAMP) \
 	$(ROOT)/jni/src/android_version.h \
 	$(ROOT)/jni/src/android_version_githash.h
 
@@ -258,13 +284,13 @@ openal_download :
 		echo "openal sources missing, downloading...";                         \
 		mkdir -p ${ROOT}/deps;                                                 \
 		cd ${ROOT}/deps ;                                                      \
-		git clone ${OPENAL_URL_GIT} || exit 1;                                 \
+		${GIT_CLONE} ${OPENAL_URL_GIT} || exit 1;                                 \
 	fi
 
 openal : $(OPENAL_LIB)
 
 $(OPENAL_LIB): $(OPENAL_TIMESTAMP)
-	@REFRESH=0;                                                                \
+	+ @REFRESH=0;                                                                \
 	if [ ! -e ${OPENAL_TIMESTAMP_INT} ] ; then                                 \
 		REFRESH=1;                                                             \
 	fi;                                                                        \
@@ -300,7 +326,7 @@ ogg_download :
 		echo "ogg sources missing, downloading...";                            \
 		mkdir -p ${ROOT}/deps;                                                 \
 		cd ${ROOT}/deps ;                                                      \
-		git clone ${OGG_URL_GIT}|| exit 1;                                     \
+		${GIT_CLONE} ${OGG_URL_GIT}|| exit 1;                                     \
 		cd libvorbis-libogg-android ;                                          \
 		patch -p1 < ../../libvorbis-libogg-fpu.patch || exit 1;                \
 		sed -i 's-:-?-' jni/Application.mk;                                    \
@@ -309,7 +335,7 @@ ogg_download :
 ogg : $(OGG_LIB)
 
 $(OGG_LIB): $(OGG_TIMESTAMP)
-	@REFRESH=0;                                                                \
+	+ @REFRESH=0;                                                                \
 	if [ ! -e ${OGG_TIMESTAMP_INT} ] ; then                                    \
 		echo "${OGG_TIMESTAMP_INT} doesn't exist";                             \
 		REFRESH=1;                                                             \
@@ -354,7 +380,7 @@ openssl_download :
 
 openssl : $(OPENSSL_LIB)
 
-$(OPENSSL_LIB): $(OPENSSL_TIMESTAMP)
+$(OPENSSL_LIB): $(GMP_LIB) $(OPENSSL_TIMESTAMP)
 	@REFRESH=0;                                                                \
 	if [ ! -e ${OPENSSL_TIMESTAMP_INT} ] ; then                                \
 		echo "${OPENSSL_TIMESTAMP_INT} doesn't exist";                         \
@@ -366,14 +392,17 @@ $(OPENSSL_LIB): $(OPENSSL_TIMESTAMP)
 	if [ $$REFRESH -ne 0 ] ; then                                              \
 	echo "changed timestamp for openssl detected building...";                 \
 	cd ${OPENSSL_DIR};                                                         \
-	ln -s ${OPENSSL_DIR} ../openssl;                                           \
+	ln -fsn ${OPENSSL_BASEDIR} ../openssl; \
 	export TOOLCHAIN=/tmp/ndk-${TARGET_HOST}-openssl;                          \
 	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
 	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	--stl=${APP_STL} \
+	--platform=${APP_PLATFORM} \
+	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
-	CC=${CROSS_PREFIX}gcc ./Configure android-${TARGET_ARCH} no-idea no-seed -no-sha0 -DL_ENDIAN;\
+	CC=${CROSS_PREFIX}gcc ./Configure enable-gmp -DL_ENDIAN -I${GMP_DIR} -L${GMP_DIR}/usr/lib ${OPENSSL_CONFIGURE_ADDON} android-${TARGET_ARCH};\
+	CC=${CROSS_PREFIX}gcc ANDROID_DEV=/tmp/ndk-${TARGET_HOST} make depend;     \
 	CC=${CROSS_PREFIX}gcc ANDROID_DEV=/tmp/ndk-${TARGET_HOST} make build_libs; \
 	touch ${OPENSSL_TIMESTAMP};                                                \
 	touch ${OPENSSL_TIMESTAMP_INT};                                            \
@@ -398,8 +427,12 @@ leveldb_download :
 		echo "leveldb sources missing, downloading...";                        \
 		mkdir -p ${ROOT}/deps;                                                 \
 		cd ${ROOT}/deps ;                                                      \
-		git clone ${LEVELDB_URL_GIT} || exit 1;                                \
+		${GIT_CLONE} ${LEVELDB_URL_GIT} || exit 1; \
+		curl https://patch-diff.githubusercontent.com/raw/google/leveldb/pull/341.diff | patch -d ${LEVELDB_DIR} --forward -p1 || true; \
+		#cd ${LEVELDB_DIR} || exit 1;                                           \
+		#git checkout ${LEVELDB_COMMIT} || exit 1;                              \
 	fi
+
 
 leveldb : $(LEVELDB_LIB)
 
@@ -420,6 +453,8 @@ $(LEVELDB_LIB): $(LEVELDB_TIMESTAMP)
 	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
 	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	--stl=${APP_STL} \
+	--platform=${APP_PLATFORM} \
+	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
 	export CC=${CROSS_PREFIX}gcc;                                              \
@@ -450,13 +485,13 @@ freetype_download :
 		echo "freetype sources missing, downloading...";                       \
 		mkdir -p ${ROOT}/deps;                                                 \
 		cd deps;                                                               \
-		git clone ${FREETYPE_URL_GIT} || exit 1;                               \
+		${GIT_CLONE} ${FREETYPE_URL_GIT} || exit 1; \
 	fi
 
 freetype : $(FREETYPE_LIB)
 
 $(FREETYPE_LIB) : $(FREETYPE_TIMESTAMP)
-	@REFRESH=0;                                                                \
+	+ @REFRESH=0;                                                                \
 	if [ ! -e ${FREETYPE_TIMESTAMP_INT} ] ; then                               \
 		REFRESH=1;                                                             \
 	fi;                                                                        \
@@ -499,7 +534,7 @@ iconv_download :
 		wget -O libiconv-${ICONV_VERSION}.tar.gz ${ICONV_URL_HTTP} || exit 1; \
 		tar -xzf libiconv-${ICONV_VERSION}.tar.gz || exit 1;               \
 		rm libiconv-${ICONV_VERSION}.tar.gz;                               \
-		ln -s libiconv-${ICONV_VERSION} libiconv;                          \
+		ln -fsn libiconv-${ICONV_VERSION} libiconv;                          \
 		cd ${ICONV_DIR};                                                   \
 		patch -p1 < ${ROOT}/libiconv_android.patch;                        \
 		patch -p1 < ${ROOT}/libiconv_stdio.patch;                          \
@@ -528,6 +563,8 @@ $(ICONV_LIB) : $(ICONV_TIMESTAMP)
 	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
 	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	--stl=${APP_STL} \
+	--platform=${APP_PLATFORM} \
+	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
 	export CC=${CROSS_PREFIX}gcc;                                              \
@@ -552,15 +589,17 @@ clean_iconv :
 #      -geforce on emulator
 #      -Vivante Corporation GC1000 core (e.g. Galaxy Tab 3)
 
-irrlicht_download :
+irrlicht_download : arch_dirs
 	@if [ ! -d "deps/irrlicht" ] ; then                                        \
 		echo "irrlicht sources missing, downloading...";                       \
 		mkdir -p ${ROOT}/deps;                                                 \
 		cd deps;                                                               \
 		#svn co ${IRRLICHT_URL_SVN} irrlicht || exit 1;                         \
-		git clone --recursive --branch ${IRRLICHT_GIT_BRANCH} ${IRRLICHT_URL_GIT} irrlicht || exit 1; \
+		${GIT_CLONE} --depth 200 --branch ${IRRLICHT_GIT_BRANCH} ${IRRLICHT_URL_GIT} irrlicht || exit 1; \
 		cd irrlicht;                                                           \
+		git checkout ${IRRLICHT_GIT_COMMIT}; \
 		mkdir -p lib/Android; \
+		patch -p1 < ../../irrlicht-crystax.patch; \
 		patch -p1 < ../../irrlicht-touchcount.patch || exit 1;                 \
 		patch -p1 < ../../irrlicht-back_button.patch || exit 1;                \
 		patch -p1 < ../../irrlicht-texturehack.patch || exit 1;                \
@@ -575,7 +614,7 @@ $(IRRLICHT_TIMESTAMP) : irrlicht_download
 irrlicht : $(IRRLICHT_LIB)
 
 $(IRRLICHT_LIB): $(IRRLICHT_TIMESTAMP) $(FREETYPE_LIB)
-	@REFRESH=0;                                                                \
+	+ @REFRESH=0;                                                                \
 	if [ ! -e ${IRRLICHT_TIMESTAMP_INT} ] ; then                               \
 		REFRESH=1;                                                             \
 	fi;                                                                        \
@@ -618,7 +657,7 @@ curl_download :
 		wget ${CURL_URL_HTTP} -O curl-${CURL_VERSION}.tar.bz2 || exit 1;                                       \
 		tar -xjf curl-${CURL_VERSION}.tar.bz2 || exit 1;                       \
 		rm curl-${CURL_VERSION}.tar.bz2;                                       \
-		ln -s curl-${CURL_VERSION} curl;                                       \
+		ln -fsn curl-${CURL_VERSION} curl;                                       \
 	fi
 
 curl : $(CURL_LIB)
@@ -644,13 +683,15 @@ $(CURL_LIB): $(CURL_TIMESTAMP) $(OPENSSL_LIB)
 	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
 	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	--stl=${APP_STL} \
+	--platform=${APP_PLATFORM} \
+	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
 	export CC=${CROSS_PREFIX}gcc;                                              \
 	export CXX=${CROSS_PREFIX}g++;                                             \
 	export TARGET_OS=OS_ANDROID_CROSSCOMPILE;                                  \
 	export CPPFLAGS="$${CPPFLAGS} -I${OPENSSL_DIR}/include                     \
-	-L${OPENSSL_DIR} ${TARGET_CFLAGS_ADDON}";                                  \
+	${TARGET_CFLAGS_ADDON}";                                                   \
 	export CFLAGS="$${CFLAGS} ${TARGET_CFLAGS_ADDON}";                         \
 	export LDFLAGS="$${LDFLAGS} -L${OPENSSL_DIR} ${TARGET_LDFLAGS_ADDON}";     \
 	./configure --host=${TARGET_HOST} --disable-shared --enable-static --with-ssl --enable-ipv6;  \
@@ -666,18 +707,6 @@ clean_curl :
 	$(RM) -rf deps/curl-${CURL_VERSION}                                        \
 	$(RM) -f deps/curl
 
-
-curl_binary:
-	@if [ ! -d "deps/curl-${CURL_VERSION_BINARY}" ] ; then                     \
-		echo "curl binary missing, downloading...";                           \
-		mkdir -p ${ROOT}/deps;                                                 \
-		cd deps;                                                               \
-		wget http://curl.haxx.se/gknw.net/7.34.0/dist-android/curl-7.34.0-rtmp-ssh2-ssl-zlib-static-bin-android.tar.gz || exit 1;\
-		tar -xzf curl-7.34.0-rtmp-ssh2-ssl-zlib-static-bin-android.tar.gz || exit 1;\
-		mv curl-7.34.0-rtmp-ssh2-ssl-zlib-static-bin-android curl-${CURL_VERSION_BINARY};\
-		rm curl-7.34.0-rtmp-ssh2-ssl-zlib-static-bin-android.tar.gz;           \
-	fi
-
 $(GMP_TIMESTAMP) : gmp_download
 	@LAST_MODIF=$$(find ${GMP_DIR} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
 	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
@@ -692,7 +721,7 @@ gmp_download :
 		wget ${GMP_URL_HTTP} -O gmp-${GMP_VERSION}.tar.bz2 || exit 1;                                    \
 		tar -xjf gmp-${GMP_VERSION}.tar.bz2 || exit 1;                     \
 		rm gmp-${GMP_VERSION}.tar.bz2;                                     \
-		ln -s gmp-${GMP_VERSION} gmp;                                      \
+		ln -fsn gmp-${GMP_VERSION} gmp;                                      \
 	fi
 
 gmp : $(GMP_LIB)
@@ -718,6 +747,8 @@ $(GMP_LIB): $(GMP_TIMESTAMP)
 	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
 	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	--stl=${APP_STL} \
+	--platform=${APP_PLATFORM} \
+	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
 	export CC=${CROSS_PREFIX}gcc;                                              \
@@ -743,7 +774,7 @@ deps/${SQLITE3_FOLDER}/sqlite3.c :
 	cd deps;                                                                    \
 	wget ${SQLITE3_URL} -O ${SQLITE3_FOLDER}.zip;                               \
 	unzip ${SQLITE3_FOLDER}.zip;                                                \
-	ln -s ${SQLITE3_FOLDER} sqlite
+	ln -fsn ${SQLITE3_FOLDER} sqlite
 
 clean_sqlite3:
 	cd deps && $(RM) -rf ${SQLITE3_FOLDER} && $(RM) -f ${SQLITE3_FOLDER}.zip && \
@@ -794,9 +825,11 @@ assets : $(ASSETS_TIMESTAMP) locale
 	cp -r ${ROOT}/worlds ${ROOT}/assets/freeminer; \
 	cp ${ROOT}/../../README.md ${ROOT}/assets/freeminer; \
 	cp -r ${ROOT}/../../builtin ${ROOT}/assets/freeminer; \
-	cp -r ${ROOT}/../../client ${ROOT}/assets/freeminer; \
-	#cp -r ${ROOT}/../../doc ${ROOT}/assets/freeminer; \
-	cp -r ${ROOT}/../../fonts ${ROOT}/assets/freeminer; \
+	mkdir ${ROOT}/assets/freeminer/client;                                      \
+	cp -r ${ROOT}/../../client/shaders ${ROOT}/assets/freeminer/client;         \
+	#cp ${ROOT}/../../doc/lgpl-2.1.txt ${ROOT}/assets/freeminer/LICENSE.txt;     \
+	mkdir ${ROOT}/assets/freeminer/fonts; \
+	cp -r ${ROOT}/../../fonts/*.ttf ${ROOT}/assets/freeminer/fonts/; \
 	mkdir ${ROOT}/assets/freeminer/games${GAMES_VERSION}; \
 	for game in ${GAMES_TO_COPY};                                              \
 	do                                                                         \
@@ -821,7 +854,9 @@ assets : $(ASSETS_TIMESTAMP) locale
 	find . -type f -path "*.gitignore" -exec rm -rf {} \; ;                    \
 	find . \( -name "lucida_sans_*" -o -name "mono_dejavu_sans_*" -o -name "README.txt" -o -name "game_api.txt" -o -name ".git*" \) -exec rm {} \; ; \
 	ls -R | grep ":$$" | sed -e 's/:$$//' -e 's/\.//' -e 's/^\///' > "index.txt"; \
-	find freeminer >"filelist.txt"; \
+	#find freeminer >"filelist.txt"; \
+	find freeminer ! -path '*/games/*' > filelist.txt; \
+	find freeminer -path '*/games/*' >> filelist.txt; \
 	cp ${ROOT}/${ASSETS_TIMESTAMP} ${ROOT}/${ASSETS_TIMESTAMP}.old;            \
 	else                                                                       \
 		echo "nothing to be done for assets";                                  \
@@ -832,15 +867,16 @@ clean_assets :
 
 
 #=== freeminer libs:
-.PHONY : default $(MSGPACK_TIMESTAMP) msgpack_download msgpack clean_msgpack \
+.PHONY : arch_dirs default $(MSGPACK_TIMESTAMP) msgpack_download msgpack clean_msgpack \
 		$(ICONV_TIMESTAMP) iconv_download iconv clean_iconv \
 		$(LUAJIT_TIMESTAMP) luajit luajit_download clean_luajit
 
 MSGPACK_DIR = $(ROOT)/deps/msgpack/
-MSGPACK_LIB = $(MSGPACK_DIR)lib/Android/libmsgpack.a
+MSGPACK_LIB = $(MSGPACK_DIR)libmsgpackc.a
 MSGPACK_TIMESTAMP = $(MSGPACK_DIR)timestamp
 MSGPACK_TIMESTAMP_INT = $(ROOT)/deps/msgpack_timestamp
-MSGPACK_URL_GIT = https://github.com/msgpack/msgpack-c
+MSGPACK_GIT_URL = https://github.com/msgpack/msgpack-c
+#MSGPACK_GIT_BRANCH = 72c7feb2c4eb3a837e88733cece4a928f0a3808a
 MSGPACK_TARGET = $(MSGPACK_DIR)/include/msgpack.hpp
 
 $(MSGPACK_TIMESTAMP) : msgpack_download
@@ -854,7 +890,8 @@ msgpack_download :
 		echo "msgpack sources missing, downloading...";                        \
 		mkdir -p ${ROOT}/deps;                                                 \
 		cd ${ROOT}/deps ;                                                      \
-		git clone -b cpp-1.1.0 ${MSGPACK_URL_GIT} ${MSGPACK_DIR} || exit 1;    \
+		${GIT_CLONE} ${MSGPACK_GIT_URL} ${MSGPACK_DIR} || exit 1; \
+		# git checkout ${MSGPACK_GIT_BRANCH} || exit 1; \
 	fi
 	
 msgpack : $(MSGPACK_LIB)
@@ -876,6 +913,8 @@ $(MSGPACK_TARGET): $(MSGPACK_TIMESTAMP)
 	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
 	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	--stl=${APP_STL} \
+	--platform=${APP_PLATFORM} \
+	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
 	export CC=${CROSS_PREFIX}gcc;                                              \
@@ -884,7 +923,7 @@ $(MSGPACK_TARGET): $(MSGPACK_TIMESTAMP)
 	export CPPFLAGS="$${CPPFLAGS} ${TARGET_CFLAGS_ADDON}";                     \
 	export CFLAGS="$${CFLAGS} ${TARGET_CFLAGS_ADDON}";                         \
 	export LDFLAGS="$${LDFLAGS} ${TARGET_LDFLAGS_ADDON}";                      \
-	cmake -DMSGPACK_CXX11=ON .;                                                \
+	cmake -DMSGPACK_CXX11=1 -DMSGPACK_BUILD_EXAMPLES=0 -DMSGPACK_BUILD_TESTS=0 .; \
 	$(MAKE) -j${PARALLEL} || exit 1; \
 	touch ${MSGPACK_TIMESTAMP};                                                \
 	touch ${MSGPACK_TIMESTAMP_INT};                                            \
@@ -912,7 +951,7 @@ gettext_download :
 		echo "gettext sources missing, downloading...";                          \
 		mkdir -p ${ROOT}/deps;                                                 \
 		cd ${ROOT}/deps ;                                                      \
-		git clone ${GETTEXT_URL_GIT} || exit 1;                                 \
+		${GIT_CLONE} ${GETTEXT_URL_GIT} || exit 1; \
 		mv libintl-lite ${GETTEXT_DIR};                            \
 		cd ${GETTEXT_DIR};                                                       \
 	fi
@@ -936,6 +975,8 @@ $(GETTEXT_LIB): $(GETTEXT_TIMESTAMP)
 	#${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
 	#--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	#--stl=${APP_STL} \
+	#--platform=${APP_PLATFORM} \
+	#${STANDALONE_ADDON} \
 	#--install-dir=$${TOOLCHAIN};                                               \
 	#export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
 	#export CXX=${CROSS_PREFIX}g++;                                             \
@@ -959,6 +1000,8 @@ LUAJIT_LIB = $(LUAJIT_DIR)src/libluajit.a
 LUAJIT_TIMESTAMP = $(LUAJIT_DIR)timestamp
 LUAJIT_TIMESTAMP_INT = $(ROOT)/deps/luajit_timestamp
 LUAJIT_URL_GIT = http://luajit.org/git/luajit-2.0.git
+#LUAJIT_GIT_BRANCH = v2.1
+LUAJIT_GIT_BRANCH = master
 
 
 $(LUAJIT_TIMESTAMP) : luajit_download
@@ -972,7 +1015,7 @@ luajit_download :
 		echo "luajit sources missing, downloading...";                            \
 		mkdir -p ${ROOT}/deps;                                                 \
 		cd ${ROOT}/deps ;                                                      \
-		git clone ${LUAJIT_URL_GIT} ${LUAJIT_DIR} || exit 1;                                     \
+		git clone --recursive --branch ${LUAJIT_GIT_BRANCH} ${LUAJIT_URL_GIT} ${LUAJIT_DIR} || exit 1; \
 	fi
 
 luajit : $(LUAJIT_LIB)
@@ -995,11 +1038,13 @@ $(LUAJIT_LIB): $(LUAJIT_TIMESTAMP)
 	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh \
 	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION} \
 	--stl=${APP_STL} \
-	--install-dir=$${TOOLCHAIN} --platform=${APP_PLATFORM}; \
+	--platform=${APP_PLATFORM} \
+	${STANDALONE_ADDON} \
+	--install-dir=$${TOOLCHAIN}; \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}"; \
 	export CROSS=${CROSS_PREFIX}; \
 	export TARGET_FLAGS="${TARGET_CFLAGS_ADDON}"; \
-	export TARGET_LDFLAGS="-lm_hard ${TARGET_LDFLAGS_ADDON}"; \
+	export TARGET_LDFLAGS="${TARGET_LDFLAGS_ADDON}"; \
 	$(MAKE) -j${PARALLEL} HOST_CC="gcc -m32" BUILDMODE=static; \
 	touch ${LUAJIT_TIMESTAMP}; \
 	touch ${LUAJIT_TIMESTAMP_INT}; \
@@ -1016,18 +1061,24 @@ endif
 
 
 locale:
-	mkdir -p cmake && cd cmake && cmake ../../.. && make translations
+	-mkdir -p cmake && cd cmake && cmake ../../.. -DBUILD_SERVER=0 -DNO_BUILD=1 && make translations
 
 clean_locale:
 	rm -rf cmake
 
+arch_dirs:
+	mkdir -p deps-$(TARGET_ABI)
+#	-rm -fr deps
+	ln -sfn deps-$(TARGET_ABI) deps
+# here is bad place
+	echo "target=${APP_PLATFORM}" > project.properties
 #==== end of freeminer libs
 
 
 # $(ICONV_LIB)
-apk: $(PATHCFGFILE) assets $(IRRLICHT_LIB) $(CURL_LIB) $(GMP_LIB) $(LEVELDB_TARGET)       \
+apk: $(PATHCFGFILE) arch_dirs assets $(IRRLICHT_LIB) $(CURL_LIB) $(GMP_LIB) $(LEVELDB_TARGET)       \
 	$(OPENAL_LIB) $(OGG_LIB) prep_srcdir $(ROOT)/jni/src/android_version.h     \
-	$(MSGPACK_TARGET) $(GETTEXT_LIB) $(LUAJIT_TARGET) \
+	$(MSGPACK_TARGET) $(GETTEXT_LIB) $(LUAJIT_TARGET) $(FREETYPE_LIB) \
 	$(ROOT)/jni/src/android_version_githash.h sqlite3_download
 	@export NDEBUG=$$NDEBUG; $(MAKE) manifest;                                 \
 	export PATH=$$PATH:${SDKFOLDER}/platform-tools:${ANDROID_NDK};             \
@@ -1051,7 +1102,7 @@ apk: $(PATHCFGFILE) assets $(IRRLICHT_LIB) $(CURL_LIB) $(GMP_LIB) $(LEVELDB_TARG
 
 prep_srcdir :
 	@if [ ! -e ${ROOT}/jni/src ]; then                                         \
-		ln -s ${ROOT}/../../src ${ROOT}/jni/src;                           \
+		ln -fsn ${ROOT}/../../src ${ROOT}/jni/src;                           \
 	fi
 
 clean_apk : manifest
@@ -1129,6 +1180,7 @@ manifest :
 		DBG_FLAG="android:debuggable=\"true\"";                                \
 	fi;                                                                        \
 	cat ${ROOT}/AndroidManifest.xml.template |                                 \
+	sed "s/###SDK_VERSION###/${SDK_VERSION}/g" | \
 	sed "s/###ANDROID_VERSION###/${ANDROID_VERSION_CODE}/g" |                  \
 	sed "s/###BUILD_NUMBER###/${BUILD_NUMBER}/g" | \
 	sed "s/###BASE_VERSION###/$$BASE_VERSION/g" |                              \

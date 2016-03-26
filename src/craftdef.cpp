@@ -32,7 +32,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/serialize.h"
 #include "util/string.h"
 #include "util/numeric.h"
-#include "strfnd.h"
+#include "util/strfnd.h"
 #include "exceptions.h"
 
 inline bool isGroupRecipeStr(const std::string &rec_name)
@@ -93,7 +93,7 @@ static bool inputItemMatchesRecipe(const std::string &inp_name,
 				all_groups_match = false;
 				break;
 			}
-		} while (!f.atend());
+		} while (!f.at_end());
 		if (all_groups_match)
 			return true;
 	}
@@ -217,7 +217,7 @@ static void craftDecrementOrReplaceInput(CraftInput &input,
 		for (std::vector<std::pair<std::string, std::string> >::iterator
 				j = pairs.begin();
 				j != pairs.end(); ++j) {
-			if (item.name == craftGetItemName(j->first, gamedef)) {
+			if (inputItemMatchesRecipe(item.name, j->first, gamedef->idef())) {
 				if (item.count == 1) {
 					item.deSerialize(j->second, gamedef->idef());
 					found_replacement = true;

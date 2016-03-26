@@ -45,10 +45,10 @@ void initAndroid();
 void cleanupAndroid();
 
 /**
- * set storage dir on external sdcard#
- * @param lJNIEnv environment from android
+ * Initializes path_* variables for Android
+ * @param env Android JNI environment
  */
-void setExternalStorageDir(JNIEnv* lJNIEnv);
+void initializePathsAndroid();
 
 /**
  * use java function to copy media from assets to external storage
@@ -77,8 +77,6 @@ int getInputDialogState();
  * get text in current input dialog
  */
 std::string getInputDialogValue();
-
-void handleAndroidActivityEvents(int max = 1000);
 
 int canKeyboard();
 void displayKeyboard(bool pShow, android_app* mApplication, JNIEnv* lJNIEnv);

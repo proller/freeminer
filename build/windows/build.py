@@ -63,7 +63,7 @@ LEVELDB_VERSION = "1.16.0.5"
 CRC32C_VERSION = "1.0.4"
 SNAPPY_VERSION = "1.1.1.7"
 irrlicht = "irrlicht-1.8.1"
-curl = "curl-7.45.0"
+curl = "curl-7.47.0"
 openal = "openal-soft-1.16.0"
 libogg = "libogg-{}".format(LIBOGG_VERSION)
 libvorbis = "libvorbis-1.3.5"
@@ -100,6 +100,10 @@ def main():
 
 	print("Build type: {}".format(build_type))
 	
+	nuget = "NuGet.exe"
+	if not os.path.exists(libvorbis):
+		urllib.request.urlretrieve("https://dist.nuget.org/win-x86-commandline/latest/nuget.exe", nuget)
+
 	if not os.path.exists("deps"):
 		print("Creating `deps` directory.")
 		os.mkdir("deps")

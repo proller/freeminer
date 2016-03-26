@@ -46,8 +46,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 //fm:
 #include "network/connection.h"
 #include "fm_bitset.h"
-#include "util/concurrent_unordered_map.h"
-#include "util/concurrent_vector.h"
+#include "threading/concurrent_unordered_map.h"
+#include "threading/concurrent_vector.h"
 #include <unordered_set>
 #include "util/container.h" // Queue
 #include <array>
@@ -73,6 +73,7 @@ class Player;
 class RemotePlayer;
 
 struct ItemStack;
+class PlayerSAO;
 
 namespace epixel
 {
@@ -118,6 +119,8 @@ public:
 
 	void setDayNightRatioOverride(bool enable, u32 value);
 
+	u32 getDayCount();
+
 	// counter used internally when triggering ABMs
 	std::atomic_uint m_added_objects;
 
@@ -140,6 +143,9 @@ protected:
 	// Overriding the day-night ratio is useful for custom sky visuals
 	bool m_enable_day_night_ratio_override;
 	u32 m_day_night_ratio_override;
+	// Days from the server start, accounts for time shift
+	// in game (e.g. /time or bed usage)
+	Atomic<u32> m_day_count;
 	/*
 	 * Above: values managed by m_time_lock
 	*/
@@ -154,6 +160,9 @@ protected:
 	 *       a later release.
 	 */
 	bool m_cache_enable_shaders;
+	float m_cache_active_block_mgmt_interval;
+	float m_cache_abm_interval;
+	float m_cache_nodetimer_interval;
 
 private:
 	Mutex m_time_lock;
@@ -162,7 +171,7 @@ private:
 };
 
 /*
-	Active block modifier interface.
+	{Active, Loading} block modifier interface.
 
 	These are fed into ServerEnvironment at initialization time;
 	ServerEnvironment handles deleting them.
@@ -208,6 +217,77 @@ struct ABMWithState
 	FMBitset required_neighbors, required_neighbors_activate;
 
 	ABMWithState(ActiveBlockModifier *abm_, ServerEnvironment *senv);
+};
+
+struct LoadingBlockModifierDef
+{
+	// Set of contents to trigger on
+	std::set<std::string> trigger_contents;
+	std::string name;
+	bool run_at_every_load;
+
+	virtual ~LoadingBlockModifierDef() {}
+	virtual void trigger(ServerEnvironment *env, v3s16 p, MapNode n){};
+};
+
+struct LBMContentMapping
+{
+	typedef std::map<content_t, std::vector<LoadingBlockModifierDef *> > container_map;
+	container_map map;
+
+	std::vector<LoadingBlockModifierDef *> lbm_list;
+
+	// Needs to be separate method (not inside destructor),
+	// because the LBMContentMapping may be copied and destructed
+	// many times during operation in the lbm_lookup_map.
+	void deleteContents();
+	void addLBM(LoadingBlockModifierDef *lbm_def, IGameDef *gamedef);
+	const std::vector<LoadingBlockModifierDef *> *lookup(content_t c) const;
+};
+
+class LBMManager
+{
+public:
+	LBMManager():
+		m_query_mode(false)
+	{}
+
+	~LBMManager();
+
+	// Don't call this after loadIntroductionTimes() ran.
+	void addLBMDef(LoadingBlockModifierDef *lbm_def);
+
+	void loadIntroductionTimes(const std::string &times,
+		IGameDef *gamedef, u32 now);
+
+	// Don't call this before loadIntroductionTimes() ran.
+	std::string createIntroductionTimesString();
+
+	// Don't call this before loadIntroductionTimes() ran.
+	void applyLBMs(ServerEnvironment *env, MapBlock *block, u32 stamp);
+
+	// Warning: do not make this std::unordered_map, order is relevant here
+	typedef std::map<u32, LBMContentMapping> lbm_lookup_map;
+
+private:
+	// Once we set this to true, we can only query,
+	// not modify
+	bool m_query_mode;
+
+	// For m_query_mode == false:
+	// The key of the map is the LBM def's name.
+	// TODO make this std::unordered_map
+	std::map<std::string, LoadingBlockModifierDef *> m_lbm_defs;
+
+	// For m_query_mode == true:
+	// The key of the map is the LBM def's first introduction time.
+	lbm_lookup_map m_lbm_lookup;
+
+	// Returns an iterator to the LBMs that were introduced
+	// after the given time. This is guaranteed to return
+	// valid values for everything
+	lbm_lookup_map::const_iterator getLBMsIntroducedAfter(u32 time)
+	{ return m_lbm_lookup.lower_bound(time); }
 };
 
 /*
@@ -261,6 +341,18 @@ public:
 };
 
 /*
+	Operation mode for ServerEnvironment::clearObjects()
+*/
+enum ClearObjectsMode {
+	// Load and go through every mapblock, clearing objects
+	CLEAR_OBJECTS_MODE_FULL,
+
+	// Clear objects immediately in loaded mapblocks;
+	// clear objects in unloaded mapblocks only when the mapblocks are next activated.
+	CLEAR_OBJECTS_MODE_QUICK,
+};
+
+/*
 	The server-side environment.
 
 	This is not thread-safe. Server uses an environment mutex.
@@ -290,7 +382,8 @@ public:
 	//Player * getPlayer(u16 peer_id) { return Environment::getPlayer(peer_id); };
 	//Player * getPlayer(const std::string &name);
 
-	KeyValueStorage *getKeyValueStorage();
+	KeyValueStorage &getKeyValueStorage(std::string name = "key_value_storage");
+	KeyValueStorage &getPlayerStorage() { return getKeyValueStorage("players"); };
 
 	void kickAllPlayers(AccessDeniedCode reason,
 		const std::string &str_reason, bool reconnect);
@@ -304,6 +397,9 @@ public:
 	*/
 	void saveMeta();
 	void loadMeta();
+	// to be called instead of loadMeta if
+	// env_meta.txt doesn't exist (e.g. new world)
+	void loadDefaultMeta();
 
 	/*
 		External ActiveObject interface
@@ -368,11 +464,12 @@ public:
 	void activateBlock(MapBlock *block, u32 additional_dtime=0);
 
 	/*
-		ActiveBlockModifiers
+		{Active,Loading}BlockModifiers
 		-------------------------------------------
 	*/
 
 	void addActiveBlockModifier(ActiveBlockModifier *abm);
+	void addLoadingBlockModifierDef(LoadingBlockModifierDef *lbm);
 
 	/*
 		Other stuff
@@ -387,8 +484,8 @@ public:
 	// Find all active objects inside a radius around a point
 	void getObjectsInsideRadius(std::vector<u16> &objects, v3f pos, float radius);
 
-	// Clear all objects, loading and going through every MapBlock
-	void clearAllObjects();
+	// Clear objects, loading and going through every MapBlock
+	void clearObjects(ClearObjectsMode mode);
 
 	// This makes stuff happen
 	void step(f32 dtime, float uptime, unsigned int max_cycle_ms);
@@ -398,8 +495,8 @@ public:
 
 	u32 getGameTime() { return m_game_time; }
 
-	void reportMaxLagEstimate(float f) { std::unique_lock<std::mutex> lock(m_max_lag_estimate_mutex); m_max_lag_estimate = f; }
-	float getMaxLagEstimate() { std::unique_lock<std::mutex> lock(m_max_lag_estimate_mutex); return m_max_lag_estimate; }
+	void reportMaxLagEstimate(float f) { std::unique_lock<Mutex> lock(m_max_lag_estimate_mutex); m_max_lag_estimate = f; }
+	float getMaxLagEstimate() { std::unique_lock<Mutex> lock(m_max_lag_estimate_mutex); return m_max_lag_estimate; }
 
 	// is weather active in this environment?
 	bool m_use_weather;
@@ -421,7 +518,8 @@ public:
 	void setStaticForActiveObjectsInBlock(v3s16 blockpos,
 		bool static_exists, v3s16 static_block=v3s16(0,0,0));
 
-	void nodeUpdate(const v3s16 pos, int recurse = 5,  int fast = 2, bool destroy = false);
+	void nodeUpdate(const v3s16 pos, u16 recursion_limit = 5, int fast = 2, bool destroy = false);
+	void handleNodeDrops(const ContentFeatures &f, v3f pos, PlayerSAO* player=NULL);
 private:
 
 	/*
@@ -462,6 +560,21 @@ private:
 	*/
 	void deactivateFarObjects(bool force_delete);
 
+
+/*
+	void contrib_player_globalstep(RemotePlayer *player, float dtime);
+	void contrib_lookupitemtogather(RemotePlayer* player, v3f playerPos,
+			Inventory* inv, ServerActiveObject* obj);
+*/
+	void contrib_globalstep(const float dtime);
+	bool checkAttachedNode(v3s16 pos, MapNode n, const ContentFeatures &f);
+/*
+	void explodeNode(const v3s16 pos);
+*/
+
+	std::deque<v3s16> m_nodeupdate_queue;
+	Mutex m_nodeupdate_queue_mutex;
+
 	/*
 		Member variables
 	*/
@@ -477,8 +590,7 @@ private:
 	Circuit m_circuit;
 	// Key-value storage
 public:
-	KeyValueStorage m_key_value_storage;
-	KeyValueStorage m_players_storage;
+	std::unordered_map<std::string, KeyValueStorage> m_key_value_storage;
 private:
 
 	// World path
@@ -511,12 +623,17 @@ private:
 	// Time from the beginning of the game in seconds.
 	// Incremented in step().
 	std::atomic_uint m_game_time;
-	std::mutex m_max_lag_estimate_mutex;
+	Mutex m_max_lag_estimate_mutex;
 	// A helper variable for incrementing the latter
 	float m_game_time_fraction_counter;
+	// Time of last clearObjects call (game time).
+	// When a mapblock older than this is loaded, its objects are cleared.
+	u32 m_last_clear_objects_time;
+	// Active block modifiers
 public:
 	std::vector<ABMWithState> m_abms;
 private:
+	LBMManager m_lbm_mgr;
 	// An interval for generally sending object positions and stuff
 	float m_recommended_send_interval;
 	// Estimate for general maximum lag as determined by server.

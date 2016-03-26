@@ -179,7 +179,7 @@ MapgenMath::MapgenMath(int mapgenid, MapgenParams *params_, EmergeManager *emerg
 	invert_yz = params.get("invert_yz", 1).asBool();
 	invert_xy = params.get("invert_xy", 0).asBool();
 	size = params.get("size", (MAX_MAP_GENERATION_LIMIT - 1000)).asDouble(); // = max_r
-	if (!params.get("center", Json::Value()).empty()) 
+	if (params.get("center", Json::Value()).isObject())
 		center = v3f(params["center"]["x"].asDouble(), params["center"]["y"].asDouble(), params["center"]["z"].asDouble()); //v3f(5, -size - 5, 5);
 	iterations = params.get("N", 15).asInt(); //10;
 
@@ -439,11 +439,11 @@ MapgenMath::MapgenMath(int mapgenid, MapgenParams *params_, EmergeManager *emerg
 		s = params.get("scale", 1.0 / size).asDouble();
 		scale = v3f(s,s,s);
 	}
-	else if (!params.get("scale", Json::Value()).empty())
+	else if (params.get("scale", Json::Value()).isObject())
 		scale = v3f(params["scale"].get("x", 1.0 / size).asDouble(), params["scale"].get("y", 1.0 / size).asDouble(), params["scale"].get("z", 1.0 / size).asDouble());
 
-
-	if (params["center_auto_top"].asBool() && params.get("center", Json::Value()).empty() && !center.getLength()) center = v3f(3, -1.0 / (1.0 / size) + (-5 - (-(int)invert * 10)), 3);
+	auto center_auto_top = params.get("center_auto_top", Json::Value(false));
+	if (center_auto_top.isBool() && center_auto_top.asBool() && !params.get("center", Json::Value()).isObject() && !center.getLength()) center = v3f(3, -1.0 / (1.0 / size) + (-5 - (-(int)invert * 10)), 3);
 }
 
 MapgenMath::~MapgenMath() {
@@ -533,14 +533,20 @@ int MapgenMath::generateTerrain() {
 	return 0;
 }
 
+/*
 int MapgenMath::getGroundLevelAtPoint(v2POS p) {
 	return 0;
 }
 
+int MapgenMath::getSpawnLevelAtPoint(v2POS p) {
+	return 0;
+}
+*/
+
 void MapgenMath::calculateNoise() {
 	//TimeTaker t("calculateNoise", NULL, PRECISION_MICRO);
 	int x = node_min.X;
-	int y = node_min.Y - 1;
+	int y = node_min.Y - y_offset;
 	int z = node_min.Z;
 
 	if (flags & MG_CAVES) {

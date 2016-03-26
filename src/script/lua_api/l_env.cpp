@@ -40,6 +40,13 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "pathfinder.h"
 #include <unordered_set>
 
+struct EnumString ModApiEnvMod::es_ClearObjectsMode[] =
+{
+	{CLEAR_OBJECTS_MODE_FULL,  "full"},
+	{CLEAR_OBJECTS_MODE_QUICK, "quick"},
+	{0, NULL},
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 
 v3s16 start_pos;
@@ -48,7 +55,10 @@ void LuaABM::trigger(ServerEnvironment *env, v3s16 p, MapNode n,
 		u32 active_object_count, u32 active_object_count_wider, MapNode neighbor, bool activate)
 {
 	GameScripting *scriptIface = env->getScriptIface();
-	auto _script_lock = std::unique_lock<std::recursive_mutex> (scriptIface->m_luastackmutex);
+	auto _script_lock = RecursiveMutexAutoLock(scriptIface->m_luastackmutex, std::try_to_lock);
+	if (!_script_lock.owns_lock()) {
+		return;
+	}
 	scriptIface->realityCheck();
 
 	lua_State *L = scriptIface->getStack();
@@ -87,6 +97,46 @@ void LuaABM::trigger(ServerEnvironment *env, v3s16 p, MapNode n,
 	int result = lua_pcall(L, 6, 0, error_handler);
 	if (result)
 		scriptIface->scriptError(result, "LuaABM::trigger");
+
+	lua_pop(L, 1); // Pop error handler
+}
+
+void LuaLBM::trigger(ServerEnvironment *env, v3s16 p, MapNode n)
+{
+	GameScripting *scriptIface = env->getScriptIface();
+	scriptIface->realityCheck();
+
+	lua_State *L = scriptIface->getStack();
+	sanity_check(lua_checkstack(L, 20));
+	StackUnroller stack_unroller(L);
+
+	int error_handler = PUSH_ERROR_HANDLER(L);
+
+	// Get registered_lbms
+	lua_getglobal(L, "core");
+	lua_getfield(L, -1, "registered_lbms");
+	luaL_checktype(L, -1, LUA_TTABLE);
+	lua_remove(L, -2); // Remove core
+
+	// Get registered_lbms[m_id]
+	lua_pushnumber(L, m_id);
+	lua_gettable(L, -2);
+	FATAL_ERROR_IF(lua_isnil(L, -1), "Entry with given id not found in registered_lbms table");
+	lua_remove(L, -2); // Remove registered_lbms
+
+	scriptIface->setOriginFromTable(-1);
+
+	// Call action
+	luaL_checktype(L, -1, LUA_TTABLE);
+	lua_getfield(L, -1, "action");
+	luaL_checktype(L, -1, LUA_TFUNCTION);
+	lua_remove(L, -2); // Remove registered_lbms[m_id]
+	push_v3s16(L, p);
+	pushnode(L, n, env->getGameDef()->ndef());
+
+	int result = lua_pcall(L, 2, 0, error_handler);
+	if (result)
+		scriptIface->scriptError(result, "LuaLBM::trigger");
 
 	lua_pop(L, 1); // Pop error handler
 }
@@ -556,6 +606,15 @@ int ModApiEnvMod::l_get_timeofday(lua_State *L)
 	return 1;
 }
 
+// get_day_count() -> int
+int ModApiEnvMod::l_get_day_count(lua_State *L)
+{
+	GET_ENV_PTR;
+
+	lua_pushnumber(L, env->getDayCount());
+	return 1;
+}
+
 // get_gametime()
 int ModApiEnvMod::l_get_gametime(lua_State *L)
 {
@@ -769,13 +828,20 @@ int ModApiEnvMod::l_get_voxel_manip(lua_State *L)
 	return 1;
 }
 
-// clear_objects()
+// clear_objects([options])
 // clear all objects in the environment
+// where options = {mode = "full" or "quick"}
 int ModApiEnvMod::l_clear_objects(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	env->clearAllObjects();
+	ClearObjectsMode mode = CLEAR_OBJECTS_MODE_FULL;
+	if (lua_istable(L, 1)) {
+		mode = (ClearObjectsMode)getenumfield(L, 1, "mode",
+			ModApiEnvMod::es_ClearObjectsMode, mode);
+	}
+
+	env->clearObjects(mode);
 	return 0;
 }
 
@@ -1021,6 +1087,7 @@ int ModApiEnvMod::l_get_heat(lua_State *L)
 	GET_ENV_PTR;
 
 	auto pos = read_v3POS(L, 1);
+
 	lua_pushnumber(L, env->getServerMap().updateBlockHeat(env, pos));
 	return 1;
 }
@@ -1085,6 +1152,7 @@ void ModApiEnvMod::Initialize(lua_State *L, int top)
 	API_FCT(set_timeofday);
 	API_FCT(get_timeofday);
 	API_FCT(get_gametime);
+	API_FCT(get_day_count);
 	API_FCT(find_node_near);
 	API_FCT(find_nodes_in_area);
 	API_FCT(find_nodes_in_area_under_air);
@@ -1103,5 +1171,12 @@ void ModApiEnvMod::Initialize(lua_State *L, int top)
 	API_FCT(get_surface);
 	API_FCT(forceload_block);
 	API_FCT(forceload_free_block);
+
+//epixel:
+	API_FCT(spawn_item_activeobject);
 	API_FCT(spawn_falling_node);
+	API_FCT(nodeupdate);
+/*
+	API_FCT(make_explosion);
+*/
 }

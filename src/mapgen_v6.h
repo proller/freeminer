@@ -39,6 +39,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #define MGV6_BIOMEBLEND 0x02
 #define MGV6_MUDFLOW    0x04
 #define MGV6_SNOWBIOMES 0x08
+#define MGV6_FLAT       0x10
+#define MGV6_TREES      0x20
 
 
 extern FlagDesc flagdesc_mapgen_v6[];
@@ -131,6 +133,7 @@ public:
 
 	void makeChunk(BlockMakeData *data);
 	int getGroundLevelAtPoint(v2s16 p);
+	int getSpawnLevelAtPoint(v2s16 p);
 
 	float baseTerrainLevel(float terrain_base, float terrain_higher,
 		float steepness, float height_select);

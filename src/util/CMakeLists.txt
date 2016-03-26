@@ -1,4 +1,5 @@
 set(UTIL_SRCS
+	${CMAKE_CURRENT_SOURCE_DIR}/areastore.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/auth.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/base64.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/directiontables.cpp
@@ -10,7 +11,5 @@ set(UTIL_SRCS
 	${CMAKE_CURRENT_SOURCE_DIR}/string.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/srp.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/timetaker.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/lock.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/thread_pool.cpp
 	PARENT_SCOPE)
 

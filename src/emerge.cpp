@@ -36,14 +36,13 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "log_types.h"
 #include "map.h"
 #include "mapblock.h"
+#include "mapgen_flat.h"
 #include "mapgen_fractal.h"
 #include "mapgen_v5.h"
 #include "mapgen_v6.h"
 #include "mapgen_v7.h"
-#include "mapgen_indev.h"
+#include "mapgen_valleys.h"
 #include "mapgen_singlenode.h"
-#include "mapgen_math.h"
-#include "util/thread_pool.h"
 #include "mg_biome.h"
 #include "mg_ore.h"
 #include "mg_decoration.h"
@@ -55,6 +54,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "serverobject.h"
 #include "settings.h"
 #include "voxel.h"
+
+#include "mapgen_math.h"
+#include "mapgen_indev.h"
+#include "threading/thread_pool.h"
 
 
 struct MapgenDesc {
@@ -112,7 +115,9 @@ MapgenDesc g_reg_mapgens[] = {
 	{"v6",         new MapgenFactoryV6,         true},
 	{"v7",         new MapgenFactoryV7,         true},
 	{"math",       new MapgenFactoryMath,       true},
-	{"fractal",    new MapgenFactoryFractal,    false},
+	{"flat",       new MapgenFactoryFlat,       true},
+	{"fractal",    new MapgenFactoryFractal,    true},
+	{"valleys",    new MapgenFactoryValleys,    true},
 	{"singlenode", new MapgenFactorySinglenode, false},
 };
 
@@ -304,13 +309,17 @@ bool EmergeManager::enqueueBlockEmergeEx(
 	void *callback_param)
 {
 	EmergeThread *thread = NULL;
+	bool entry_already_exists = false;
 
 	{
 		MutexAutoLock queuelock(m_queue_mutex);
 
 		if (!pushBlockEmergeData(blockpos, peer_id, flags,
-				callback, callback_param))
+				callback, callback_param, &entry_already_exists))
 			return false;
+
+		if (entry_already_exists)
+			return true;
 
 		thread = getOptimalThread();
 		thread->pushBlock(blockpos);
@@ -339,6 +348,18 @@ v3s16 EmergeManager::getContainingChunk(v3s16 blockpos, s16 chunksize)
 
 	return getContainerPos(blockpos - chunk_offset, chunksize)
 		* chunksize + chunk_offset;
+}
+
+
+int EmergeManager::getSpawnLevelAtPoint(v2s16 p)
+{
+	if (m_mapgens.size() == 0 || !m_mapgens[0]) {
+		errorstream << "EmergeManager: getSpawnLevelAtPoint() called"
+			" before mapgen init" << std::endl;
+		return 0;
+	}
+
+	return m_mapgens[0]->getSpawnLevelAtPoint(p);
 }
 
 
@@ -394,14 +415,14 @@ bool EmergeManager::pushBlockEmergeData(
 	u16 peer_requested,
 	u16 flags,
 	EmergeCompletionCallback callback,
-	void *callback_param)
+	void *callback_param,
+	bool *entry_already_exists)
 {
 	u16 &count_peer = m_peer_queue_count[peer_requested];
 
 	if ((flags & BLOCK_EMERGE_FORCE_QUEUE) == 0) {
 		if (m_blocks_enqueued.size() >= m_qlimit_total)
 			return false;
-
 		if (peer_requested != PEER_ID_INEXISTENT) {
 			u16 qlimit_peer = (flags & BLOCK_EMERGE_ALLOW_GEN) ?
 				m_qlimit_generate : m_qlimit_diskonly;
@@ -414,12 +435,12 @@ bool EmergeManager::pushBlockEmergeData(
 	findres = m_blocks_enqueued.insert(std::make_pair(pos, BlockEmergeData()));
 
 	BlockEmergeData &bedata = findres.first->second;
-	bool update_existing    = !findres.second;
+	*entry_already_exists   = !findres.second;
 
 	if (callback)
 		bedata.callbacks.push_back(std::make_pair(callback, callback_param));
 
-	if (update_existing) {
+	if (*entry_already_exists) {
 		bedata.flags |= flags;
 	} else {
 		bedata.flags = flags;
@@ -576,7 +597,7 @@ EmergeAction EmergeThread::getBlockOrStartGen(
 	{
 	MAP_NOTHREAD_LOCK(m_map);
 	// 1). Attempt to fetch block from memory
-	*block = m_map->getBlockNoCreateNoEx(pos);
+	*block = m_map->getBlockNoCreateNoEx(pos, false, true);
 	}
 	if (*block && !(*block)->isDummy() && (*block)->isGenerated())
 		return EMERGE_FROM_MEMORY;
@@ -600,6 +621,14 @@ EmergeAction EmergeThread::getBlockOrStartGen(
 	if (allow_gen && m_map->initBlockMake(pos, bmdata))
 		return EMERGE_GENERATED;
 	}
+
+/*
+	verbosestream << "EmergeThread::getBlockOrStartGen : cancel pos=" << pos << " block="<< *block;
+	if (*block)
+		verbosestream << "dummy=" << (*block)->isDummy() << " generated="<< (*block)->isGenerated();
+	verbosestream << std::endl;
+*/
+
 	// All attempts failed; cancel this block emerge
 	return EMERGE_CANCELLED;
 }
@@ -618,7 +647,7 @@ MapBlock *EmergeThread::finishGen(v3s16 pos, BlockMakeData *bmdata,
 	*/
 	m_map->finishBlockMake(bmdata, modified_blocks);
 
-	MapBlock *block = m_map->getBlockNoCreateNoEx(pos);
+	MapBlock *block = m_map->getBlockNoCreateNoEx(pos, false, true);
 	if (!block) {
 		errorstream << "EmergeThread::finishGen: Couldn't grab block we "
 			"just generated: " << PP(pos) << std::endl;
@@ -713,10 +742,9 @@ void *EmergeThread::run()
 
 		if (block) {
 			//modified_blocks[pos] = block;
-		} else if (allow_gen)
-			infostream<<"nothing generated at "<<pos<<std::endl;
-
-
+		} else if (allow_gen) {
+			verbosestream<<"nothing generated at "<<pos<< " emerge action="<< action <<std::endl;
+		}
 
 		if (modified_blocks.size() > 0)
 			m_server->SetBlocksNotSent(/*modified_blocks*/);
@@ -746,7 +774,7 @@ void *EmergeThread::run()
 		debug_stacks_print();
 		m_server->setAsyncFatalError(err.str());
 	} catch (std::exception &e) {
-		errorstream << "emerge: exception at " << pos << " : " << e.what() << std::endl;
+		errorstream << m_name << ": exception at " << pos << " : " << e.what() << std::endl;
 	}
 	}
 

@@ -4,14 +4,12 @@ class MapThread : public thread_pool {
 public:
 
 	MapThread(Server *server):
+		thread_pool("Map", 15),
 		m_server(server)
 	{}
 
 	void * run() {
-		reg("Map", 15);
-
 		DSTACK(FUNCTION_NAME);
-		BEGIN_DEBUG_EXCEPTION_HANDLER
 
 		auto time = porting::getTimeMs();
 		while(!stopRequested()) {
@@ -21,20 +19,18 @@ public:
 					std::this_thread::sleep_for(std::chrono::milliseconds(100));
 				else
 					std::this_thread::sleep_for(std::chrono::milliseconds(10));
-#ifdef NDEBUG
-			} catch (BaseException &e) {
-				errorstream << "MapThread: exception: " << e.what() << std::endl;
+#if !EXEPTION_DEBUG
 			} catch(std::exception &e) {
-				errorstream << "MapThread: exception: " << e.what() << std::endl;
+				errorstream << m_name << ": exception: " << e.what() << std::endl;
 			} catch (...) {
-				errorstream << "MapThread: Ooops..." << std::endl;
+				errorstream << m_name << ": Ooops..." << std::endl;
 #else
 			} catch (int) { //nothing
 #endif
 			}
 			time = time_now;
 		}
-		END_DEBUG_EXCEPTION_HANDLER
+		//END_DEBUG_EXCEPTION_HANDLER
 		return nullptr;
 	}
 };
@@ -44,12 +40,11 @@ class SendBlocksThread : public thread_pool {
 public:
 
 	SendBlocksThread(Server *server):
+		thread_pool("SendBlocks", 30),
 		m_server(server)
 	{}
 
 	void * run() {
-		reg("SendBlocks", 30);
-
 		DSTACK(FUNCTION_NAME);
 		BEGIN_DEBUG_EXCEPTION_HANDLER
 
@@ -61,13 +56,11 @@ public:
 				auto sent = m_server->SendBlocks((time_now - time) / 1000.0f);
 				time = time_now;
 				std::this_thread::sleep_for(std::chrono::milliseconds(sent ? 5 : 100));
-#ifdef NDEBUG
-			} catch (BaseException &e) {
-				errorstream << "SendBlocksThread: exception: " << e.what() << std::endl;
+#if !EXEPTION_DEBUG
 			} catch(std::exception &e) {
-				errorstream << "SendBlocksThread: exception: " << e.what() << std::endl;
+				errorstream << m_name << ": exception: " << e.what() << std::endl;
 			} catch (...) {
-				errorstream << "SendBlocksThread: Ooops..." << std::endl;
+				errorstream << m_name << ": Ooops..." << std::endl;
 #else
 			} catch (int) { //nothing
 #endif
@@ -84,28 +77,27 @@ class LiquidThread : public thread_pool {
 public:
 
 	LiquidThread(Server *server):
+		thread_pool("Liquid", 4),
 		m_server(server)
 	{}
 
 	void * run() {
-		reg("Liquid", 4);
-
 		DSTACK(FUNCTION_NAME);
 		BEGIN_DEBUG_EXCEPTION_HANDLER
 
 		unsigned int max_cycle_ms = 1000;
 		while(!stopRequested()) {
 			try {
-				//concurrent_map<v3POS, MapBlock*> modified_blocks; //not used
-				int res = m_server->getEnv().getMap().transformLiquids(m_server, max_cycle_ms);
-				std::this_thread::sleep_for(std::chrono::milliseconds(std::max(300 - res, 1)));
-#ifdef NDEBUG
-			} catch (BaseException &e) {
-				errorstream << "Liquid: exception: " << e.what() << std::endl;
+				auto time_start = porting::getTimeMs();
+				m_server->getEnv().getMap().transformLiquids(m_server, max_cycle_ms);
+				auto time_spend = porting::getTimeMs() - time_start;
+				std::this_thread::sleep_for(std::chrono::milliseconds(time_spend > 300 ? 1 : 300 - time_spend));
+
+#if !EXEPTION_DEBUG
 			} catch(std::exception &e) {
-				errorstream << "Liquid: exception: " << e.what() << std::endl;
+				errorstream << m_name << ": exception: " << e.what() << std::endl;
 			} catch (...) {
-				errorstream << "Liquid: Ooops..." << std::endl;
+				errorstream << m_name << ": Ooops..." << std::endl;
 #else
 			} catch (int) { //nothing
 #endif
@@ -121,14 +113,12 @@ class EnvThread : public thread_pool {
 public:
 
 	EnvThread(Server *server):
+		thread_pool("Env", 20),
 		m_server(server)
 	{}
 
 	void * run() {
-		reg("Env", 20);
-
 		DSTACK(FUNCTION_NAME);
-		BEGIN_DEBUG_EXCEPTION_HANDLER
 
 		unsigned int max_cycle_ms = 1000;
 		unsigned int time = porting::getTimeMs();
@@ -139,19 +129,16 @@ public:
 				time = ctime;
 				m_server->getEnv().step(dtimems / 1000.0f, m_server->m_uptime.get(), max_cycle_ms);
 				std::this_thread::sleep_for(std::chrono::milliseconds(dtimems > 100 ? 1 : 100 - dtimems));
-#ifdef NDEBUG
-			} catch (BaseException &e) {
-				errorstream << "Env: exception: " << e.what() << std::endl;
+#if !EXEPTION_DEBUG
 			} catch(std::exception &e) {
-				errorstream << "Env: exception: " << e.what() << std::endl;
+				errorstream << m_name << ": exception: " << e.what() << std::endl;
 			} catch (...) {
-				errorstream << "Env: Ooops..." << std::endl;
+				errorstream << m_name << ": Ooops..." << std::endl;
 #else
 			} catch (int) { //nothing
 #endif
 			}
 		}
-		END_DEBUG_EXCEPTION_HANDLER
 		return nullptr;
 	}
 };
@@ -161,12 +148,11 @@ class AbmThread : public thread_pool {
 public:
 
 	AbmThread(Server *server):
+		thread_pool("Abm", 20),
 		m_server(server)
 	{}
 
 	void * run() {
-		reg("Abm", 20);
-
 		DSTACK(FUNCTION_NAME);
 		BEGIN_DEBUG_EXCEPTION_HANDLER
 
@@ -179,13 +165,11 @@ public:
 				time = ctime;
 				m_server->getEnv().analyzeBlocks(dtimems / 1000.0f, max_cycle_ms);
 				std::this_thread::sleep_for(std::chrono::milliseconds(dtimems > 1000 ? 100 : 1000 - dtimems));
-#ifdef NDEBUG
-			} catch (BaseException &e) {
-				errorstream << "Abm: exception: " << e.what() << std::endl;
+#if !EXEPTION_DEBUG
 			} catch(std::exception &e) {
-				errorstream << "Abm: exception: " << e.what() << std::endl;
+				errorstream << m_name << ": exception: " << e.what() << std::endl;
 			} catch (...) {
-				errorstream << "Abm: Ooops..." << std::endl;
+				errorstream << m_name << ": Ooops..." << std::endl;
 #else
 			} catch (int) { //nothing
 #endif
@@ -214,7 +198,7 @@ int Server::AsyncRunMapStep(float dtime, float dedicated_server_step, bool async
 		}
 	*/
 
-	u32 max_cycle_ms = async ? 2000 : 300;
+	u32 max_cycle_ms = 1000 * dedicated_server_step; //async ? 500 : 200;
 
 	static const float map_timer_and_unload_dtime = 10.92;
 	if(!maintenance_status && m_map_timer_and_unload_interval.step(dtime, map_timer_and_unload_dtime)) {
@@ -294,8 +278,7 @@ void Server::maintenance_start() {
 	m_env->getServerMap().m_map_saving_enabled = false;
 	m_env->getServerMap().m_map_loading_enabled = false;
 	m_env->getServerMap().dbase->close();
-	m_env->m_key_value_storage.close();
-	m_env->m_players_storage.close();
+	m_env->m_key_value_storage.clear();
 	stat.close();
 	actionstream << "Server: Starting maintenance: bases closed now." << std::endl;
 
@@ -303,11 +286,15 @@ void Server::maintenance_start() {
 
 void Server::maintenance_end() {
 	m_env->getServerMap().dbase->open();
-	m_env->m_key_value_storage.open();
-	m_env->m_players_storage.open();
 	stat.open();
 	m_env->getServerMap().m_map_saving_enabled = true;
 	m_env->getServerMap().m_map_loading_enabled = true;
 	m_emerge->startThreads();
 	actionstream << "Server: Starting maintenance: ended." << std::endl;
 };
+
+
+#if MINETEST_PROTO
+void Server::SendPunchPlayer(u16 peer_id, v3f speed) { }
+#endif
+

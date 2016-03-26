@@ -305,7 +305,7 @@ class neighborRail {
 	if (recurse >= 2)
 		return self;
 
-	neighborRail neighbor_x_all[2], neighbor_z_all[2];
+	neighborRail neighbor_x_all[2] = {}, neighbor_z_all[2] = {};
 	if(is_rail_x_all[0]) {
 		if(is_rail_x_plus_y[0]) {
 			neighbor_x_all[0] = recurseRail(v3s16(x-1, y+1, z), data, collector, recurse+1);
@@ -515,6 +515,14 @@ class neighborRail {
 	return self;
 }
 
+static inline void getNeighborConnectingFace(v3s16 p, INodeDefManager *nodedef,
+		MeshMakeData *data, MapNode n, int v, int *neighbors)
+{
+	MapNode n2 = data->m_vmanip.getNodeNoEx(p);
+	if (nodedef->nodeboxConnects(n, n2, v))
+		*neighbors |= v;
+}
+
 /*
 	TODO: Fix alpha blending for special nodes
 	Currently only the last element rendered is blended correct
@@ -523,7 +531,6 @@ void mapblock_mesh_generate_special(MeshMakeData *data,
 		MeshCollector &collector)
 {
 	INodeDefManager *nodedef = data->m_gamedef->ndef();
-	ITextureSource *tsrc = data->m_gamedef->tsrc();
 	scene::ISceneManager* smgr = data->m_gamedef->getSceneManager();
 	scene::IMeshManipulator* meshmanip = smgr->getMeshManipulator();
 
@@ -534,11 +541,6 @@ void mapblock_mesh_generate_special(MeshMakeData *data,
 		Some settings
 	*/
 	bool enable_mesh_cache	= g_settings->getBool("enable_mesh_cache");
-	bool new_style_water = g_settings->getBool("new_style_water");
-
-	float node_liquid_level = 1.0;
-	if (new_style_water)
-		node_liquid_level = 0.85;
 
 	v3s16 blockpos_nodes = data->m_blockpos*MAP_BLOCKSIZE;
 
@@ -640,35 +642,29 @@ void mapblock_mesh_generate_special(MeshMakeData *data,
 					If our topside is liquid, set upper border of face
 					at upper border of node
 				*/
-				if(top_is_same_liquid)
-				{
-					vertices[2].Pos.Y = 0.5*BS;
-					vertices[3].Pos.Y = 0.5*BS;
-				}
+				if (top_is_same_liquid) {
+					vertices[2].Pos.Y = 0.5 * BS;
+					vertices[3].Pos.Y = 0.5 * BS;
+				} else {
 				/*
 					Otherwise upper position of face is liquid level
 				*/
-				else
-				{
-					vertices[2].Pos.Y = (node_liquid_level-0.5)*BS;
-					vertices[3].Pos.Y = (node_liquid_level-0.5)*BS;
+					vertices[2].Pos.Y = 0.5 * BS;
+					vertices[3].Pos.Y = 0.5 * BS;
 				}
 				/*
 					If neighbor is liquid, lower border of face is liquid level
 				*/
-				if(neighbor_is_same_liquid)
-				{
-					vertices[0].Pos.Y = (node_liquid_level-0.5)*BS;
-					vertices[1].Pos.Y = (node_liquid_level-0.5)*BS;
-				}
+				if (neighbor_is_same_liquid) {
+					vertices[0].Pos.Y = 0.5 * BS;
+					vertices[1].Pos.Y = 0.5 * BS;
+				} else {
 				/*
 					If neighbor is not liquid, lower border of face is
 					lower border of node
 				*/
-				else
-				{
-					vertices[0].Pos.Y = -0.5*BS;
-					vertices[1].Pos.Y = -0.5*BS;
+					vertices[0].Pos.Y = -0.5 * BS;
+					vertices[1].Pos.Y = -0.5 * BS;
 				}
 
 				for(s32 j=0; j<4; j++)
@@ -711,7 +707,7 @@ void mapblock_mesh_generate_special(MeshMakeData *data,
 				video::S3DVertex(-BS/2,0,-BS/2, 0,0,0, c, 0,0),
 			};
 
-			v3f offset(p.X*BS, p.Y*BS + (-0.5+node_liquid_level)*BS, p.Z*BS);
+			v3f offset(p.X * BS, (p.Y + 0.5) * BS, p.Z * BS);
 			for(s32 i=0; i<4; i++)
 			{
 				vertices[i].Pos += offset;
@@ -788,10 +784,17 @@ void mapblock_mesh_generate_special(MeshMakeData *data,
 					content = n2.getContent();
 
 					if(n2.getContent() == c_source)
-						level = (-0.5+node_liquid_level) * BS;
+						level = 0.5 * BS;
 					else if(n2.getContent() == c_flowing){
-						level = (-0.5 + ((float)n2.getLevel(nodedef)
-							 + 0.5) / n2.getMaxLevel(nodedef) * node_liquid_level) * BS;
+/*
+						u8 liquid_level = (n2.param2&LIQUID_LEVEL_MASK);
+						if (liquid_level <= LIQUID_LEVEL_MAX+1-range)
+							liquid_level = 0;
+						else
+							liquid_level -= (LIQUID_LEVEL_MAX+1-range);
+						level = (-0.5 + ((float)liquid_level + 0.5) / (float)range) * BS;
+*/
+						level = (-0.5 + ((float)n2.getLevel(nodedef) + 0.5) / n2.getMaxLevel(nodedef)) * BS;
 					}
 
 					// Check node above neighbor.
@@ -839,7 +842,7 @@ void mapblock_mesh_generate_special(MeshMakeData *data,
 					// Source is always the same height
 					else if(content == c_source)
 					{
-						cornerlevel = (-0.5+node_liquid_level)*BS;
+						cornerlevel = 0.5 * BS;
 						valid_count = 1;
 						break;
 					}
@@ -1790,8 +1793,8 @@ void mapblock_mesh_generate_special(MeshMakeData *data,
 						continue;
 					MapNode n_xy = data->m_vmanip.getNodeNoEx(blockpos_nodes + v3s16(x + xz, y + y0, z));
 					MapNode n_zy = data->m_vmanip.getNodeNoEx(blockpos_nodes + v3s16(x, y + y0, z + xz));
-					ContentFeatures def_xy = nodedef->get(n_xy);
-					ContentFeatures def_zy = nodedef->get(n_zy);
+					const ContentFeatures &def_xy = nodedef->get(n_xy);
+					const ContentFeatures &def_zy = nodedef->get(n_zy);
 
 					// Check if current node would connect with the rail
 					is_rail_x[index] = ((def_xy.drawtype == NDT_RAILLIKE
@@ -1924,7 +1927,38 @@ void mapblock_mesh_generate_special(MeshMakeData *data,
 
 			v3f pos = intToFloat(p, BS);
 
-			std::vector<aabb3f> boxes = n.getNodeBoxes(nodedef);
+			int neighbors = 0;
+
+			// locate possible neighboring nodes to connect to
+			if (f.node_box.type == NODEBOX_CONNECTED) {
+				v3s16 p2 = p;
+
+				p2.Y++;
+				getNeighborConnectingFace(blockpos_nodes + p2, nodedef, data, n, 1, &neighbors);
+
+				p2 = p;
+				p2.Y--;
+				getNeighborConnectingFace(blockpos_nodes + p2, nodedef, data, n, 2, &neighbors);
+
+				p2 = p;
+				p2.Z--;
+				getNeighborConnectingFace(blockpos_nodes + p2, nodedef, data, n, 4, &neighbors);
+
+				p2 = p;
+				p2.X--;
+				getNeighborConnectingFace(blockpos_nodes + p2, nodedef, data, n, 8, &neighbors);
+
+				p2 = p;
+				p2.Z++;
+				getNeighborConnectingFace(blockpos_nodes + p2, nodedef, data, n, 16, &neighbors);
+
+				p2 = p;
+				p2.X++;
+				getNeighborConnectingFace(blockpos_nodes + p2, nodedef, data, n, 32, &neighbors);
+			}
+
+			std::vector<aabb3f> boxes;
+			n.getNodeBoxes(nodedef, &boxes, neighbors);
 			for(std::vector<aabb3f>::iterator
 					i = boxes.begin();
 					i != boxes.end(); ++i)
@@ -2026,56 +2060,6 @@ void mapblock_mesh_generate_special(MeshMakeData *data,
 				mesh->drop();
 			}
 		break;}
-		}
-	}
-
-	/*
-		Caused by incorrect alpha blending, selection mesh needs to be created as
-		last element to ensure it gets blended correct over nodes with alpha channel
-	*/
-	// Create selection mesh
-	v3s16 p = data->m_highlighted_pos_relative;
-	if (data->m_show_hud &&
-			(p.X >= 0) && (p.X < MAP_BLOCKSIZE) &&
-			(p.Y >= 0) && (p.Y < MAP_BLOCKSIZE) &&
-			(p.Z >= 0) && (p.Z < MAP_BLOCKSIZE)) {
-
-		MapNode n = data->m_vmanip.getNodeNoEx(blockpos_nodes + p);
-		if(n.getContent() != CONTENT_AIR) {
-			// Get selection mesh light level
-			static const v3s16 dirs[7] = {
-					v3s16( 0, 0, 0),
-					v3s16( 0, 1, 0),
-					v3s16( 0,-1, 0),
-					v3s16( 1, 0, 0),
-					v3s16(-1, 0, 0),
-					v3s16( 0, 0, 1),
-					v3s16( 0, 0,-1)
-			};
-
-			u16 l = 0;
-			u16 l1 = 0;
-			for (u8 i = 0; i < 7; i++) {
-				MapNode n1 = data->m_vmanip.getNodeNoEx(blockpos_nodes + p + dirs[i]);
-				l1 = getInteriorLight(n1, -4, nodedef);
-				if (l1 > l)
-					l = l1;
-			}
-			video::SColor c = MapBlock_LightColor(255, l, 0);
-			data->m_highlight_mesh_color = c;
-			std::vector<aabb3f> boxes = n.getSelectionBoxes(nodedef);
-			TileSpec h_tile;
-			h_tile.material_flags |= MATERIAL_FLAG_HIGHLIGHTED;
-			h_tile.texture = tsrc->getTextureForMesh("halo.png",&h_tile.texture_id);
-			v3f pos = intToFloat(p, BS);
-			f32 d = 0.05 * BS;
-			for (std::vector<aabb3f>::iterator i = boxes.begin();
-					i != boxes.end(); ++i) {
-				aabb3f box = *i;
-				box.MinEdge += v3f(-d, -d, -d) + pos;
-				box.MaxEdge += v3f(d, d, d) + pos;
-				makeCuboid(&collector, box, &h_tile, 1, c, NULL);
-			}
 		}
 	}
 }

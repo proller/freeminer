@@ -117,7 +117,7 @@ function menu.render_favorite(spec,render_details)
 		if spec.address ~= "" then
 			text = text .. spec.address:trim()
 
-			if spec.port ~= "" then
+			if spec.port ~= "" and tostring(spec.port) ~= "30000" then
 				text = text .. ":" .. spec.port
 			end
 		end
@@ -284,7 +284,7 @@ end
 -- Dialogs
 --------------------------------------------------------------------------------
 function tabbuilder.dialog_create_world()
-	local mapgens = {"v5", "v6", "v7", "indev", "singlenode", "math"}
+	local mapgens = core.get_mapgen_names()
 
 	local current_seed = core.setting_get("fixed_map_seed") or ""
 	local current_mg   = core.setting_get("mg_name")
@@ -300,6 +300,8 @@ function tabbuilder.dialog_create_world()
 		mglist = mglist .. v .. ","
 	end
 	mglist = mglist:sub(1, -2)
+
+	gamemgr.update_gamelist()
 
 	local retval =
 		"label[6.5,0;" .. fgettext("World name") .. "]"..
@@ -984,7 +986,6 @@ function tabbuilder.tab_settings()
 	add_checkbox( "cb_opaque_water",              "opaque_water",               "Opaque Water"          )
 	add_checkbox( "cb_connected_glass",           "connected_glass",            "Connected glass"       )
 	add_checkbox( "cb_3d_clouds",                 "enable_3d_clouds",           "3D Clouds"             )
-	add_checkbox( "cb_pre_ivis",                  "preload_item_visuals",       "Preload item visuals"  )
 	add_checkbox( "cb_farmesh",                   "farmesh",                    "Farmesh (dev)"         )
 
 	-- Effects settings
@@ -1064,9 +1065,6 @@ function tabbuilder.handle_settings_buttons(fields)
 		else
 			core.setting_set("enable_shaders", fields["cb_shaders"])
 		end
-	end
-	if fields["cb_pre_ivis"] then
-		core.setting_set("preload_item_visuals", fields["cb_pre_ivis"])
 	end
 	if fields["cb_particles"] then
 		core.setting_set("enable_particles", fields["cb_particles"])
@@ -1230,6 +1228,9 @@ function menu.init()
 
 	menu.defaulttexturedir = core.get_texturepath_share() .. DIR_DELIM .. "base" ..
 					DIR_DELIM .. "pack" .. DIR_DELIM
+
+	updater_init()
+
 end
 
 --------------------------------------------------------------------------------

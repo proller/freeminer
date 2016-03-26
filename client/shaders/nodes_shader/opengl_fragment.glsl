@@ -23,6 +23,38 @@ bool normalTexturePresent = false;
 const float e = 2.718281828459;
 const float BS = 10.0;
 
+#ifdef ENABLE_TONE_MAPPING
+
+/* Hable's UC2 Tone mapping parameters
+	A = 0.22;
+	B = 0.30;
+	C = 0.10;
+	D = 0.20;
+	E = 0.01;
+	F = 0.30;
+	W = 11.2;
+	equation used:  ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F
+*/
+
+vec3 uncharted2Tonemap(vec3 x)
+{
+	return ((x * (0.22 * x + 0.03) + 0.002) / (x * (0.22 * x + 0.3) + 0.06)) - 0.03334;
+}
+
+vec4 applyToneMapping(vec4 color)
+{
+	color = vec4(pow(color.rgb, vec3(2.2)), color.a);
+	const float gamma = 1.6;
+	const float exposureBias = 5.5;
+	color.rgb = uncharted2Tonemap(exposureBias * color.rgb);
+	// Precalculated white_scale from 
+	//vec3 whiteScale = 1.0 / uncharted2Tonemap(vec3(W));
+	vec3 whiteScale = vec3(1.036015346);
+	color.rgb *= whiteScale;
+	return vec4(pow(color.rgb, vec3(1.0 / gamma)), color.a);
+}
+#endif
+
 void get_texture_flags()
 {
 	vec4 flags = texture2D(textureFlags, vec2(0.0, 0.0));
@@ -50,15 +82,29 @@ vec4 get_normal_map(vec2 uv)
 
 float find_intersection(vec2 dp, vec2 ds)
 {
-	const float depth_step = 1.0 / 24.0;
 	float depth = 1.0;
-	for (int i = 0 ; i < 24 ; i++) {
+	float best_depth = 0.0;
+	float size = 0.0625;
+	for (int i = 0; i < 15; i++) {
+		depth -= size;
 		float h = texture2D(normalTexture, dp + ds * depth).a;
-		if (h >= depth)
+		if (depth <= h) {
+			best_depth = depth;
 			break;
-		depth -= depth_step;
+		}
 	}
-	return depth;
+	depth = best_depth;
+	for (int i = 0; i < 4; i++) {
+		size *= 0.5;
+		float h = texture2D(normalTexture,dp + ds * depth).a;
+		if (depth <= h) {
+			best_depth = depth;
+			depth += size;
+		} else {
+			depth -= size;
+		}
+	}
+	return best_depth;
 }
 
 float find_intersectionRGB(vec2 dp, vec2 ds)
@@ -150,22 +196,26 @@ void main(void)
 #endif
 
 	float light = max((wieldLight/2.0)/vPosition.z, 0.0);
-#if MATERIAL_TYPE == TILE_MATERIAL_LIQUID_TRANSPARENT || MATERIAL_TYPE == TILE_MATERIAL_LIQUID_OPAQUE
+	vec4 col = vec4(color.rgb * min(gl_Color.rgb + light, 1.0), 1.0);
+	
+#if MATERIAL_TYPE == TILE_MATERIAL_LIQUID_TRANSPARENT
 	float alpha = gl_Color.a;
-	vec4 col = vec4(color.rgb, alpha);
-	col *= min(gl_Color+vec4(light), 1.0);
 	if (fogDistance != 0.0) {
 		float d = max(0.0, min(vPosition.z / fogDistance * 1.5 - 0.6, 1.0));
 		alpha = mix(alpha, 0.0, d);
 	}
-	gl_FragColor = vec4(col.rgb, alpha);
+	col = vec4(col.rgb, alpha);
 #else
-	vec4 col = vec4(color.rgb, base.a);
-	col *= min(gl_Color+vec4(light), 1.0);
 	if (fogDistance != 0.0) {
 		float d = max(0.0, min(vPosition.z / fogDistance * 1.5 - 0.6, 1.0));
 		col = mix(col, skyBgColor, d);
 	}
-	gl_FragColor = vec4(col.rgb, base.a);
+	col = vec4(col.rgb, base.a);
+#endif
+
+#ifdef ENABLE_TONE_MAPPING
+	gl_FragColor = applyToneMapping(col);
+#else
+	gl_FragColor = col;
 #endif
 }

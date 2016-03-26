@@ -34,14 +34,22 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 struct MapDrawControl
 {
 	MapDrawControl();
+/*
+		range_all(false),
+		wanted_range(0),
+		wanted_max_blocks(0),
+		blocks_drawn(0),
+		blocks_would_have_drawn(0),
+		farthest_drawn(0)
+	{
+	}
+*/
 	// Overrides limits by drawing everything
 	bool range_all;
 	// Wanted drawing range
 	float wanted_range;
 	// Maximum number of blocks to draw
-	u32 wanted_max_blocks;
-	// Blocks in this range are drawn regardless of number of blocks drawn
-	float wanted_min_range;
+	//u32 wanted_max_blocks;
 	// Number of blocks rendered is written here by the renderer
 	u32 blocks_drawn;
 	// Number of blocks that would have been drawn in wanted_range
@@ -97,7 +105,6 @@ public:
 
 	void updateCamera(v3f pos, v3f dir, f32 fov, v3s16 offset)
 	{
-		MutexAutoLock lock(m_camera_mutex);
 		m_camera_position = pos;
 		m_camera_direction = dir;
 		m_camera_fov = fov;
@@ -121,11 +128,13 @@ public:
 		}
 	}
 	
-	virtual const core::aabbox3d<f32>& getBoundingBox() const
+	virtual const aabb3f &getBoundingBox() const
 	{
 		return m_box;
 	}
 	
+	void getBlocksInViewRange(v3s16 cam_pos_nodes, 
+		v3s16 *p_blocks_min, v3s16 *p_blocks_max);
 	void updateDrawList(video::IVideoDriver* driver, float dtime, unsigned int max_cycle_ms = 0);
 	void renderMap(video::IVideoDriver* driver, s32 pass);
 
@@ -145,7 +154,7 @@ public:
 private:
 	Client *m_client;
 	
-	core::aabbox3d<f32> m_box;
+	aabb3f m_box;
 	
 	MapDrawControl &m_control;
 
@@ -153,7 +162,6 @@ private:
 	v3f m_camera_direction;
 	f32 m_camera_fov;
 	v3s16 m_camera_offset;
-	Mutex m_camera_mutex;
 
 	std::atomic<concurrent_unordered_map<v3POS, MapBlockP, v3POSHash, v3POSEqual> *> m_drawlist;
 	concurrent_unordered_map<v3POS, MapBlockP, v3POSHash, v3POSEqual> m_drawlist_0;

@@ -22,11 +22,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #ifdef _MSC_VER
-#ifndef SERVER // Dedicated server isn't linked with Irrlicht
-	#pragma comment(lib, "Irrlicht.lib")
-	// This would get rid of the console window
-	//#pragma comment(linker, "/subsystem:windows /ENTRY:mainCRTStartup")
-#endif
+	#ifndef SERVER // Dedicated server isn't linked with Irrlicht
+		#pragma comment(lib, "Irrlicht.lib")
+		// This would get rid of the console window
+		//#pragma comment(linker, "/subsystem:windows /ENTRY:mainCRTStartup")
+	#endif
 	//#pragma comment(lib, "zlibwapi.lib")
 	#pragma comment(lib, "Shell32.lib")
 #endif
@@ -68,8 +68,17 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 #ifdef HAVE_TOUCHSCREENGUI
-#include "touchscreengui.h"
+	#include "touchscreengui.h"
 #endif
+
+/*
+#if !defined(SERVER) && \
+	(IRRLICHT_VERSION_MAJOR == 1) && \
+	(IRRLICHT_VERSION_MINOR == 8) && \
+	(IRRLICHT_VERSION_REVISION == 2)
+	#error "Irrlicht 1.8.2 is known to be broken - please update Irrlicht to version >= 1.8.3"
+#endif
+*/
 
 #define DEBUGFILE "debug.txt"
 #define DEFAULT_SERVER_PORT 30000
@@ -174,7 +183,13 @@ int main(int argc, char *argv[])
 	setup_log_params(cmd_args);
 
 	porting::signal_handler_init();
+
+#ifdef __ANDROID__
+	porting::initAndroid();
+	porting::initializePathsAndroid();
+#else
 	porting::initializePaths();
+#endif
 
 	if (!create_userdata_path()) {
 		errorstream << "Cannot create user data directory "<< porting::path_user << std::endl;
@@ -454,9 +469,6 @@ static bool create_userdata_path()
 	bool success;
 
 #ifdef __ANDROID__
-	porting::initAndroid();
-
-	porting::setExternalStorageDir(porting::jnienv);
 	bool wait = false;
 	if (!fs::PathExists(porting::path_user)) {
 		success = fs::CreateDir(porting::path_user);
@@ -467,22 +479,10 @@ static bool create_userdata_path()
 
 	porting::copyAssets();
 
-	for (int i = 0; i < 1000; ++i) {
-		porting::handleAndroidActivityEvents(5);
-		if (i || wait)
-			std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-		if (fs::PathExists(porting::path_share + DIR_DELIM + "builtin" DIR_DELIM + "init.lua"))
-			break;
-		infostream << "waiting assets i= " << i << " path="<< porting::path_share << std::endl;
-	}
-
 #else
 	// Create user data directory
 	success = fs::CreateDir(porting::path_user);
 #endif
-
-	infostream << "path_share = " << porting::path_share << std::endl;
-	infostream << "path_user  = " << porting::path_user << std::endl;
 
 	return success;
 }
@@ -619,8 +619,13 @@ static void init_log_streams(const Settings &cmd_args)
 
 	verbosestream << "log_filename = " << log_filename << std::endl;
 
+	try {
 	file_log_output.open(log_filename.c_str());
 	g_logger.addOutputMaxLevel(&file_log_output, log_level);
+	} catch (std::exception &e) {
+		errorstream << ": log open exception: " << log_filename << " err: " << e.what() << std::endl;
+		g_logger.removeOutput(&file_log_output);
+	}
 
 	g_time_taker_enabled = g_settings->getU16("time_taker_enabled") ? g_settings->getU16("time_taker_enabled") : ((g_settings->getFloat("profiler_print_interval") || log_level >= LL_INFO) ? 100 : 0);
 }

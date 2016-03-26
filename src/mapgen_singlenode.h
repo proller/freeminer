@@ -38,12 +38,13 @@ class MapgenSinglenode : public Mapgen {
 public:
 	u32 flags;
 	content_t c_node;
+	u8 set_light;
 
 	MapgenSinglenode(int mapgenid, MapgenParams *params, EmergeManager *emerge);
 	~MapgenSinglenode();
 	
 	void makeChunk(BlockMakeData *data);
-	int getGroundLevelAtPoint(v2s16 p);
+	int getSpawnLevelAtPoint(v2s16 p);
 };
 
 struct MapgenFactorySinglenode : public MapgenFactory {

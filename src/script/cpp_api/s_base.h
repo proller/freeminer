@@ -25,7 +25,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <iostream>
 #include <string>
-#include <mutex>
 
 extern "C" {
 #include <lua.h>
@@ -89,6 +88,7 @@ public:
 
 protected:
 	friend class LuaABM;
+	friend class LuaLBM;
 	friend class InvRef;
 	friend class ObjectRef;
 	friend class NodeMetaRef;
@@ -115,10 +115,9 @@ protected:
 	void objectrefGetOrCreate(lua_State *L, ServerActiveObject *cobj);
 	void objectrefGet(lua_State *L, u16 id);
 
-	std::recursive_mutex m_luastackmutex;
-/*
-	Mutex          m_luastackmutex;
-*/
+public:
+	RecursiveMutex  m_luastackmutex;
+protected:
 	std::string     m_last_run_mod;
 	bool            m_secure;
 #ifdef SCRIPTAPI_LOCK_DEBUG

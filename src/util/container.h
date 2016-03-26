@@ -31,7 +31,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <list>
 #include <vector>
 #include <map>
-#include "lock.h"
+#include "../threading/lock.h"
 #include "unordered_map_hash.h"
 #include <unordered_set>
 #include <queue>
@@ -237,7 +237,7 @@ public:
 	{
 		//try_shared_lock lock(m_mutex);
 		MutexAutoLock lock(m_mutex);
-		return (m_queue.size() == 0);
+		return m_queue.empty();
 	}
 	bool empty_try()
 	{
@@ -245,7 +245,7 @@ public:
 		MutexAutoLock lock(m_mutex);
 		//if (!lock.owns_lock())
 		//	return 1;
-		return (m_queue.size() == 0);
+		return m_queue.empty();
 	}
 	unsigned int size() {
 		MutexAutoLock lock(m_mutex);

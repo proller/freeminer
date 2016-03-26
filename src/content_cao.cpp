@@ -313,7 +313,7 @@ public:
 
 	void initialize(const std::string &data);
 
-	core::aabbox3d<f32>* getSelectionBox()
+	aabb3f *getSelectionBox()
 		{return &m_selection_box;}
 	v3f getPosition()
 		{return m_position;}
@@ -323,7 +323,7 @@ public:
 
 	bool getCollisionBox(aabb3f *toset) { return false; }
 private:
-	core::aabbox3d<f32> m_selection_box;
+	aabb3f m_selection_box;
 	scene::IMeshSceneNode *m_node;
 	v3f m_position;
 	std::string m_itemstring;
@@ -551,14 +551,15 @@ GenericCAO::GenericCAO(IGameDef *gamedef, ClientEnvironment *env):
 		//
 		m_smgr(NULL),
 		m_irr(NULL),
+		m_camera(NULL),
+		m_gamedef(NULL),
 		m_selection_box(-BS/3.,-BS/3.,-BS/3., BS/3.,BS/3.,BS/3.),
 		m_meshnode(NULL),
 		m_animated_meshnode(NULL),
 		m_wield_meshnode(NULL),
 		m_spritenode(NULL),
-		m_nametag_color(video::SColor(255, 255, 255, 255)),
-		m_textnode(NULL),
 		m_shadownode(nullptr),
+		m_nametag(NULL),
 		m_position(v3f(0,10*BS,0)),
 		m_velocity(v3f(0,0,0)),
 		m_acceleration(v3f(0,0,0)),
@@ -587,8 +588,11 @@ GenericCAO::GenericCAO(IGameDef *gamedef, ClientEnvironment *env):
 		m_last_light(255),
 		m_is_visible(false)
 {
-	if(gamedef == NULL)
+	if (gamedef == NULL) {
 		ClientActiveObject::registerType(getType(), create);
+	} else {
+		m_gamedef = gamedef;
+	}
 }
 
 bool GenericCAO::getCollisionBox(aabb3f *toset)
@@ -674,14 +678,13 @@ void GenericCAO::initialize(const std::string &data)
 
 GenericCAO::~GenericCAO()
 {
-	if(m_is_player)
-	{
+	if (m_is_player) {
 		m_env->removePlayerName(m_name);
 	}
 	removeFromScene(true);
 }
 
-core::aabbox3d<f32>* GenericCAO::getSelectionBox()
+aabb3f *GenericCAO::getSelectionBox()
 {
 	if(!m_prop.is_visible || !m_is_visible || m_is_local_player || getParent() != NULL)
 		return NULL;
@@ -702,14 +705,15 @@ v3f GenericCAO::getPosition()
 
 scene::ISceneNode* GenericCAO::getSceneNode()
 {
-	if (m_meshnode)
+	if (m_meshnode) {
 		return m_meshnode;
-	if (m_animated_meshnode)
+	} else if (m_animated_meshnode) {
 		return m_animated_meshnode;
-	if (m_wield_meshnode)
+	} else if (m_wield_meshnode) {
 		return m_wield_meshnode;
-	if (m_spritenode)
+	} else if (m_spritenode) {
 		return m_spritenode;
+	}
 	return NULL;
 }
 
@@ -783,59 +787,53 @@ void GenericCAO::removeFromScene(bool permanent)
 	}
 
 	if (m_shadownode) {
+		// no drop?!
 		m_shadownode = nullptr;
 	}
 
-	if(m_meshnode)
-	{
+	if (m_meshnode) {
 		m_meshnode->remove();
 		m_meshnode->drop();
 		m_meshnode = NULL;
-	}
-	if(m_animated_meshnode)
-	{
+	} else if (m_animated_meshnode)	{
 		m_animated_meshnode->remove();
 		m_animated_meshnode->drop();
 		m_animated_meshnode = NULL;
-	}
-	if(m_wield_meshnode)
-	{
+	} else if (m_wield_meshnode) {
 		m_wield_meshnode->remove();
 		m_wield_meshnode->drop();
 		m_wield_meshnode = NULL;
-	}
-	if(m_spritenode)
-	{
+	} else if (m_spritenode) {
 		m_spritenode->remove();
 		m_spritenode->drop();
 		m_spritenode = NULL;
 	}
-	if (m_textnode)
-	{
-		m_textnode->remove();
-		m_textnode->drop();
-		m_textnode = NULL;
+
+	if (m_nametag) {
+		m_gamedef->getCamera()->removeNametag(m_nametag);
+		m_nametag = NULL;
 	}
 }
 
-void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
-		IrrlichtDevice *irr)
+void GenericCAO::addToScene(scene::ISceneManager *smgr, 
+		ITextureSource *tsrc, IrrlichtDevice *irr)
 {
 	m_smgr = smgr;
 	m_irr = irr;
 
-	if (getSceneNode() != NULL)
+	if (getSceneNode() != NULL) {
 		return;
+	}
 
 	m_visuals_expired = false;
 
-	if(!m_prop.is_visible)
+	if (!m_prop.is_visible) {
 		return;
+	}
 
 	//video::IVideoDriver* driver = smgr->getVideoDriver();
 
-	if(m_prop.visual == "sprite")
-	{
+	if (m_prop.visual == "sprite") {
 /*
 		infostream<<"GenericCAO::addToScene(): single_sprite"<<std::endl;
 */
@@ -984,23 +982,10 @@ void GenericCAO::addToScene(scene::ISceneManager *smgr, ITextureSource *tsrc,
 	updateTextures("");
 
 	scene::ISceneNode *node = getSceneNode();
-	if (node && m_is_player && !m_is_local_player) {
-		// Add a text node for showing the name
-		gui::IGUIEnvironment* gui = irr->getGUIEnvironment();
-		std::wstring wname = utf8_to_wide(m_name);
-		if (m_name.size() > 15) {
-			wname.resize(15);
-			wname+=L".";
-		}
-		m_textnode = smgr->addTextSceneNode(gui->getSkin()->getFont(),
-				wname.c_str(), m_nametag_color, node);
-		m_textnode->grab();
-		m_textnode->setPosition(v3f(0, BS*1.1, 0));
-
-		// Enforce hiding nametag,
-		// because if freetype is enabled, a grey
-		// shadow can remain.
-		m_textnode->setVisible(m_nametag_color.getAlpha() > 0);
+	if (node && m_prop.nametag != "" && !m_is_local_player) {
+		// Add nametag
+		m_nametag = m_gamedef->getCamera()->addNametag(node,
+			m_prop.nametag, m_prop.nametag_color);
 	}
 
 	updateNodePos();
@@ -1220,28 +1205,31 @@ void GenericCAO::step(float dtime, ClientEnvironment *env)
 
 		if(m_prop.physical)
 		{
-			core::aabbox3d<f32> box = m_prop.collisionbox;
+			aabb3f box = m_prop.collisionbox;
 			box.MinEdge *= BS;
 			box.MaxEdge *= BS;
 			collisionMoveResult moveresult;
 			f32 pos_max_d = BS*0.125; // Distance per iteration
 			v3f p_pos = m_position;
 			v3f p_velocity = m_velocity;
-			v3f p_acceleration = m_acceleration;
 			moveresult = collisionMoveSimple(env,env->getGameDef(),
 					pos_max_d, box, m_prop.stepheight, dtime,
-					p_pos, p_velocity, p_acceleration,
+					&p_pos, &p_velocity, m_acceleration,
 					this, m_prop.collideWithObjects);
 			// Apply results
 			m_position = p_pos;
 			m_velocity = p_velocity;
-			m_acceleration = p_acceleration;
 
 			bool is_end_position = moveresult.collides;
 			pos_translator.update(m_position, is_end_position, dtime);
 			pos_translator.translate(dtime);
 			updateNodePos();
 		} else {
+
+		if (m_position_recd && m_velocity.getLength() > 0.01 && (porting::getTimeMs() - m_position_recd)/1000.0 > m_update_interval) {
+			m_velocity *= 0.7;
+		}
+
 			m_position += dtime * m_velocity + 0.5 * dtime * dtime * m_acceleration;
 			m_velocity += dtime * m_acceleration;
 			pos_translator.update(m_position, pos_translator.aim_is_end,
@@ -1295,8 +1283,18 @@ void GenericCAO::step(float dtime, ClientEnvironment *env)
 	if (getParent() == NULL && m_prop.automatic_face_movement_dir &&
 			(fabs(m_velocity.Z) > 0.001 || fabs(m_velocity.X) > 0.001))
 	{
-		m_yaw = atan2(m_velocity.Z,m_velocity.X) * 180 / M_PI
+		float optimal_yaw = atan2(m_velocity.Z,m_velocity.X) * 180 / M_PI
 				+ m_prop.automatic_face_movement_dir_offset;
+		float max_rotation_delta =
+				dtime * m_prop.automatic_face_movement_max_rotation_per_sec;
+
+		if ((m_prop.automatic_face_movement_max_rotation_per_sec > 0) &&
+			(fabs(m_yaw - optimal_yaw) > max_rotation_delta)) {
+
+			m_yaw = optimal_yaw < m_yaw ? m_yaw - max_rotation_delta : m_yaw + max_rotation_delta;
+		} else {
+			m_yaw = optimal_yaw;
+		}
 		updateNodePos();
 	}
 
@@ -1635,6 +1633,9 @@ void GenericCAO::processMessage(const std::string &data)
 			m_tx_basepos = m_prop.initial_sprite_basepos;
 		}
 
+		if ((m_is_player && !m_is_local_player) && m_prop.nametag == "")
+			m_prop.nametag = m_name;
+
 		expireVisuals();
 	}
 	else if(cmd == GENERIC_CMD_UPDATE_POSITION)
@@ -1650,12 +1651,14 @@ void GenericCAO::processMessage(const std::string &data)
 			readF1000(is);
 		bool do_interpolate = readU8(is);
 		bool is_end_position = readU8(is);
-		float update_interval = readF1000(is);
+		m_update_interval = readF1000(is);
 
 		// Place us a bit higher if we're physical, to not sink into
 		// the ground due to sucky collision detection...
 		if(m_prop.physical)
 			m_position += v3f(0,0.002,0);
+
+		m_position_recd = porting::getTimeMs();
 
 		if(getParent() != NULL) // Just in case
 			return;
@@ -1663,7 +1666,7 @@ void GenericCAO::processMessage(const std::string &data)
 		if(do_interpolate)
 		{
 			if(!m_prop.physical)
-				pos_translator.update(m_position, is_end_position, update_interval);
+				pos_translator.update(m_position, is_end_position, m_update_interval);
 		} else {
 			pos_translator.init(m_position);
 		}
@@ -1813,15 +1816,11 @@ void GenericCAO::processMessage(const std::string &data)
 			m_armor_groups[name] = rating;
 		}
 	} else if (cmd == GENERIC_CMD_UPDATE_NAMETAG_ATTRIBUTES) {
+		// Deprecated, for backwards compatibility only.
 		readU8(is); // version
-		m_nametag_color = readARGB8(is);
-		if (m_textnode != NULL) {
-			m_textnode->setTextColor(m_nametag_color);
-
-			// Enforce hiding nametag,
-			// because if freetype is enabled, a grey
-			// shadow can remain.
-			m_textnode->setVisible(m_nametag_color.getAlpha() > 0);
+		m_prop.nametag_color = readARGB8(is);
+		if (m_nametag != NULL) {
+			m_nametag->nametag_color = m_prop.nametag_color;
 		}
 	}
 }
@@ -1831,7 +1830,7 @@ void GenericCAO::processMessage(const std::string &data)
 bool GenericCAO::directReportPunch(v3f dir, const ItemStack *punchitem,
 		float time_from_last_punch)
 {
-	assert(punchitem);	// pre-condition
+	if(!punchitem) return true;	// pre-condition
 	const ToolCapabilities *toolcap =
 			&punchitem->getToolCapabilities(m_gamedef->idef());
 	PunchDamageResult result = getPunchDamage(

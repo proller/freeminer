@@ -77,7 +77,7 @@ endif()
 set(CMAKE_REQUIRED_FLAGS "")
 
 if(MSVC)
-	option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 0)
+	option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 1)
 else()
 	option(ENABLE_THREADS "Use more threads (might be slower on 1-2 core machines)" 1)
 endif()
@@ -168,7 +168,11 @@ else()
 		endif()
 	endif()
 	if(SANITIZE_MEMORY)
-		set(OTHER_FLAGS "${OTHER_FLAGS} -fsanitize=memory -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+		set(OTHER_FLAGS "${OTHER_FLAGS} -fsanitize=memory -fPIE -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+		SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
+	endif()
+	if(SANITIZE_UNDEFINED)
+		set(OTHER_FLAGS "${OTHER_FLAGS} -fsanitize=undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 	endif()
 
 
@@ -221,7 +225,7 @@ mark_as_advanced(EXECUTABLE_OUTPUT_PATH LIBRARY_OUTPUT_PATH)
 
 find_package(MsgPack REQUIRED)
 
-if(NOT (BUILD_CLIENT OR BUILD_SERVER))
+if(NOT (BUILD_CLIENT OR BUILD_SERVER OR NO_BUILD))
 	message(WARNING "Neither BUILD_CLIENT nor BUILD_SERVER is set! Setting BUILD_SERVER=true")
 	set(BUILD_SERVER TRUE)
 endif()
@@ -378,11 +382,27 @@ set(USE_FREETYPE FALSE)
 		set(CGUITTFONT_LIBRARY cguittfont)
 	endif()
 
-if(NOT FREETYPE_FOUND)
+if(NOT FREETYPE_FOUND AND NOT NO_BUILD)
 	message(FATAL_ERROR "FreeType was not found.")
 endif()
 
-find_package(Lua REQUIRED)
+# LuaJIT
+option(ENABLE_LUAJIT "Enable LuaJIT support" TRUE)
+set(USE_LUAJIT FALSE)
+if(ENABLE_LUAJIT)
+	find_package(LuaJIT)
+	if(LUAJIT_FOUND)
+		set(USE_LUAJIT TRUE)
+	endif(LUAJIT_FOUND)
+else()
+	message (STATUS "LuaJIT detection disabled! (ENABLE_LUAJIT=0)")
+endif()
+if(NOT USE_LUAJIT)
+	message(STATUS "LuaJIT not found, using bundled Lua.")
+	set(LUA_LIBRARY "lua")
+	set(LUA_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/lua/src")
+	add_subdirectory(lua)
+endif()
 
 find_package(GMP REQUIRED)
 
@@ -510,6 +530,10 @@ if(WIN32)
 	endif()
 	set(PLATFORM_LIBS ws2_32.lib shlwapi.lib ${PLATFORM_LIBS})
 
+	if(MSVC) # vs2015
+		set(PLATFORM_LIBS winmm.lib ${PLATFORM_LIBS})
+	endif()
+
 	# Zlib stuff
 	set(ZLIB_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/../../zlib/zlib-1.2.5"
 			CACHE PATH "Zlib include directory")
@@ -630,7 +654,6 @@ set(FMcommon_SRCS
 )
 
 set(common_SRCS
-	areastore.cpp
 	ban.cpp
 	cavegen.cpp
 	chat.cpp
@@ -664,11 +687,13 @@ set(common_SRCS
 	map.cpp
 	mapblock.cpp
 	mapgen.cpp
+	mapgen_flat.cpp
 	mapgen_fractal.cpp
 	mapgen_singlenode.cpp
 	mapgen_v5.cpp
 	mapgen_v6.cpp
 	mapgen_v7.cpp
+	mapgen_valleys.cpp
 	mapnode.cpp
 	mapsector.cpp
 	mg_biome.cpp
@@ -739,6 +764,11 @@ set(FMclient_SRCS
 	intlGUIEditBox.cpp
 	FMStaticText.cpp
 )
+
+if (USE_TOUCHSCREENGUI)
+	add_definitions(-DHAVE_TOUCHSCREENGUI)
+	set(FMclient_SRCS ${FMclient_SRCS} touchscreengui.cpp)
+endif()
 
 # Client sources
 if (BUILD_CLIENT)

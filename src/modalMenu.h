@@ -39,8 +39,8 @@ class IMenuManager
 {
 public:
 	// A GUIModalMenu calls these when this class is passed as a parameter
-	virtual void createdMenu(GUIModalMenu *menu) = 0;
-	virtual void deletingMenu(GUIModalMenu *menu) = 0;
+	virtual void createdMenu(gui::IGUIElement *menu) = 0;
+	virtual void deletingMenu(gui::IGUIElement *menu) = 0;
 };
 
 /*
@@ -116,7 +116,7 @@ public:
 		this->remove();
 #ifdef HAVE_TOUCHSCREENGUI
 		if (g_touchscreengui)
-			g_touchscreengui->Show();
+			g_touchscreengui->show();
 #endif
 	}
 

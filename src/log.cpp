@@ -36,7 +36,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
-
 #include <mutex>
 
 class StringBuffer : public std::streambuf {
@@ -339,6 +338,8 @@ int StringBuffer::overflow(int c)
 
 std::streamsize StringBuffer::xsputn(const char *s, std::streamsize n)
 {
+	if (!s)
+		return 0;
 	//MutexAutoLock lock(m_log_mutex);
 	for (int i = 0; i < n; ++i)
 		push_back(s[i]);
@@ -368,8 +369,8 @@ void RawLogBuffer::flush(const std::string &buffer)
 	g_logger.logRaw(LL_NONE, buffer);
 }
 
-std::mutex localtime_mutex;
+Mutex localtime_mutex;
 tm * localtime_safe(time_t * t) {
-	auto lock = std::unique_lock<std::mutex>(localtime_mutex);
+	auto lock = std::unique_lock<Mutex>(localtime_mutex);
 	return localtime(t);
 }

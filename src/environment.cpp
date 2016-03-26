@@ -63,6 +63,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 std::random_device random_device; // todo: move me to random.h
 std::mt19937 random_gen(random_device());
 
+#define LBM_NAME_ALLOWED_CHARS "abcdefghijklmnopqrstuvwxyz0123456789_:"
+
 Environment::Environment():
 	m_time_of_day_speed(0),
 /*
@@ -75,6 +77,9 @@ Environment::Environment():
 {
 	m_time_of_day = 9000;
 	m_cache_enable_shaders = g_settings->getBool("enable_shaders");
+	m_cache_active_block_mgmt_interval = g_settings->getFloat("active_block_mgmt_interval");
+	m_cache_abm_interval = g_settings->getFloat("abm_interval");
+	m_cache_nodetimer_interval = g_settings->getFloat("nodetimer_interval");
 }
 
 Environment::~Environment()
@@ -191,6 +196,8 @@ void Environment::setDayNightRatioOverride(bool enable, u32 value)
 void Environment::setTimeOfDay(u32 time)
 {
 	MutexAutoLock lock(this->m_time_lock);
+	if (m_time_of_day > time)
+		m_day_count++;
 	m_time_of_day = time;
 }
 
@@ -224,10 +231,12 @@ void Environment::stepTimeOfDay(float dtime)
 	if (units > 0) {
 		// Sync at overflow
 /*
-		if (m_time_of_day + units >= 24000)
+		if (m_time_of_day + units >= 24000) {
 			sync_f = true;
+			m_day_count++;
+		}
 */
-		m_time_of_day = (m_time_of_day + units) /*% 24000*/;
+		m_time_of_day = (m_time_of_day + units); // % 24000;
 /*
 		if (sync_f)
 			m_time_of_day_f = (float)m_time_of_day / 24000.0;
@@ -246,6 +255,13 @@ void Environment::stepTimeOfDay(float dtime)
 	}
 */
 }
+
+u32 Environment::getDayCount()
+{
+	// Atomic<u32> counter
+	return m_day_count;
+}
+
 
 /*
 	ABMWithState
@@ -289,6 +305,223 @@ ABMWithState::ABMWithState(ActiveBlockModifier *abm_, ServerEnvironment *senv):
 
 	for(auto & i : abm->getTriggerContents())
 		ndef->getIds(i, trigger_ids);
+}
+
+/*
+	LBMManager
+*/
+
+void LBMContentMapping::deleteContents()
+{
+	for (std::vector<LoadingBlockModifierDef *>::iterator it = lbm_list.begin();
+			it != lbm_list.end(); ++it) {
+		delete *it;
+	}
+}
+
+void LBMContentMapping::addLBM(LoadingBlockModifierDef *lbm_def, IGameDef *gamedef)
+{
+	// Add the lbm_def to the LBMContentMapping.
+	// Unknown names get added to the global NameIdMapping.
+	INodeDefManager *nodedef = gamedef->ndef();
+
+	lbm_list.push_back(lbm_def);
+
+	for (std::set<std::string>::const_iterator it = lbm_def->trigger_contents.begin();
+			it != lbm_def->trigger_contents.end(); ++it) {
+		std::unordered_set<content_t> c_ids;
+		bool found = nodedef->getIds(*it, c_ids);
+		if (!found) {
+			content_t c_id = gamedef->allocateUnknownNodeId(*it);
+			if (c_id == CONTENT_IGNORE) {
+				// Seems it can't be allocated.
+				warningstream << "Could not internalize node name \"" << *it
+					<< "\" while loading LBM \"" << lbm_def->name << "\"." << std::endl;
+				continue;
+			}
+			c_ids.insert(c_id);
+		}
+
+		for (auto iit =
+				c_ids.begin(); iit != c_ids.end(); ++iit) {
+			content_t c_id = *iit;
+			map[c_id].push_back(lbm_def);
+		}
+	}
+}
+
+const std::vector<LoadingBlockModifierDef *> *
+		LBMContentMapping::lookup(content_t c) const
+{
+	container_map::const_iterator it = map.find(c);
+	if (it == map.end())
+		return NULL;
+	// This first dereferences the iterator, returning
+	// a std::vector<LoadingBlockModifierDef *>
+	// reference, then we convert it to a pointer.
+	return &(it->second);
+}
+
+LBMManager::~LBMManager()
+{
+	for (std::map<std::string, LoadingBlockModifierDef *>::iterator it =
+			m_lbm_defs.begin(); it != m_lbm_defs.end(); ++it) {
+		delete it->second;
+	}
+	for (lbm_lookup_map::iterator it = m_lbm_lookup.begin();
+			it != m_lbm_lookup.end(); ++it) {
+		(it->second).deleteContents();
+	}
+}
+
+void LBMManager::addLBMDef(LoadingBlockModifierDef *lbm_def)
+{
+	// Precondition, in query mode the map isn't used anymore
+	FATAL_ERROR_IF(m_query_mode == true,
+		"attempted to modify LBMManager in query mode");
+
+	if (!string_allowed(lbm_def->name, LBM_NAME_ALLOWED_CHARS)) {
+		throw ModError("Error adding LBM \"" + lbm_def->name +
+			"\": Does not follow naming conventions: "
+			"Only chararacters [a-z0-9_:] are allowed.");
+	}
+
+	m_lbm_defs[lbm_def->name] = lbm_def;
+}
+
+void LBMManager::loadIntroductionTimes(const std::string &times,
+		IGameDef *gamedef, u32 now)
+{
+	m_query_mode = true;
+
+	// name -> time map.
+	// Storing it in a map first instead of
+	// handling the stuff directly in the loop
+	// removes all duplicate entries.
+	// TODO make this std::unordered_map
+	std::map<std::string, u32> introduction_times;
+
+	/*
+	The introduction times string consists of name~time entries,
+	with each entry terminated by a semicolon. The time is decimal.
+	 */
+
+	size_t idx = 0;
+	size_t idx_new;
+	while ((idx_new = times.find(";", idx)) != std::string::npos) {
+		std::string entry = times.substr(idx, idx_new - idx);
+		std::vector<std::string> components = str_split(entry, '~');
+		if (components.size() != 2)
+			throw SerializationError("Introduction times entry \""
+				+ entry + "\" requires exactly one '~'!");
+		const std::string &name = components[0];
+		u32 time = from_string<u32>(components[1]);
+		introduction_times[name] = time;
+		idx = idx_new + 1;
+	}
+
+	// Put stuff from introduction_times into m_lbm_lookup
+	for (std::map<std::string, u32>::const_iterator it = introduction_times.begin();
+			it != introduction_times.end(); ++it) {
+		const std::string &name = it->first;
+		u32 time = it->second;
+
+		std::map<std::string, LoadingBlockModifierDef *>::iterator def_it =
+			m_lbm_defs.find(name);
+		if (def_it == m_lbm_defs.end()) {
+			// This seems to be an LBM entry for
+			// an LBM we haven't loaded. Discard it.
+			continue;
+		}
+		LoadingBlockModifierDef *lbm_def = def_it->second;
+		if (lbm_def->run_at_every_load) {
+			// This seems to be an LBM entry for
+			// an LBM that runs at every load.
+			// Don't add it just yet.
+			continue;
+		}
+
+		m_lbm_lookup[time].addLBM(lbm_def, gamedef);
+
+		// Erase the entry so that we know later
+		// what elements didn't get put into m_lbm_lookup
+		m_lbm_defs.erase(name);
+	}
+
+	// Now also add the elements from m_lbm_defs to m_lbm_lookup
+	// that weren't added in the previous step.
+	// They are introduced first time to this world,
+	// or are run at every load (introducement time hardcoded to U32_MAX).
+
+	LBMContentMapping &lbms_we_introduce_now = m_lbm_lookup[now];
+	LBMContentMapping &lbms_running_always = m_lbm_lookup[U32_MAX];
+
+	for (std::map<std::string, LoadingBlockModifierDef *>::iterator it =
+			m_lbm_defs.begin(); it != m_lbm_defs.end(); ++it) {
+		if (it->second->run_at_every_load) {
+			lbms_running_always.addLBM(it->second, gamedef);
+		} else {
+			lbms_we_introduce_now.addLBM(it->second, gamedef);
+		}
+	}
+
+	// Clear the list, so that we don't delete remaining elements
+	// twice in the destructor
+	m_lbm_defs.clear();
+}
+
+std::string LBMManager::createIntroductionTimesString()
+{
+	// Precondition, we must be in query mode
+	FATAL_ERROR_IF(m_query_mode == false,
+		"attempted to query on non fully set up LBMManager");
+
+	std::ostringstream oss;
+	for (lbm_lookup_map::iterator it = m_lbm_lookup.begin();
+			it != m_lbm_lookup.end(); ++it) {
+		u32 time = it->first;
+		std::vector<LoadingBlockModifierDef *> &lbm_list = it->second.lbm_list;
+		for (std::vector<LoadingBlockModifierDef *>::iterator iit = lbm_list.begin();
+				iit != lbm_list.end(); ++iit) {
+			// Don't add if the LBM runs at every load,
+			// then introducement time is hardcoded
+			// and doesn't need to be stored
+			if ((*iit)->run_at_every_load)
+				continue;
+			oss << (*iit)->name << "~" << time << ";";
+		}
+	}
+	return oss.str();
+}
+
+void LBMManager::applyLBMs(ServerEnvironment *env, MapBlock *block, u32 stamp)
+{
+	// Precondition, we need m_lbm_lookup to be initialized
+	FATAL_ERROR_IF(m_query_mode == false,
+		"attempted to query on non fully set up LBMManager");
+	v3s16 pos_of_block = block->getPosRelative();
+	v3s16 pos;
+	MapNode n;
+	content_t c;
+	lbm_lookup_map::const_iterator it = getLBMsIntroducedAfter(stamp);
+	for (pos.X = 0; pos.X < MAP_BLOCKSIZE; pos.X++)
+	for (pos.Y = 0; pos.Y < MAP_BLOCKSIZE; pos.Y++)
+	for (pos.Z = 0; pos.Z < MAP_BLOCKSIZE; pos.Z++)
+	{
+		n = block->getNodeNoEx(pos);
+		c = n.getContent();
+		for (LBMManager::lbm_lookup_map::const_iterator iit = it;
+				iit != m_lbm_lookup.end(); ++iit) {
+			const std::vector<LoadingBlockModifierDef *> *lbm_list =
+				iit->second.lookup(c);
+			if (!lbm_list)
+				continue;
+			for (std::vector<LoadingBlockModifierDef *>::const_iterator iit =
+					lbm_list->begin(); iit != lbm_list->end(); ++iit) {
+				(*iit)->trigger(env, pos + pos_of_block, n);
+			}
+		}
+	}
 }
 
 /*
@@ -374,8 +607,6 @@ ServerEnvironment::ServerEnvironment(ServerMap *map,
 	m_script(scriptIface),
 	m_gamedef(gamedef),
 	m_circuit(m_script, map, gamedef->ndef(), path_world),
-	m_key_value_storage(path_world, "key_value_storage"),
-	m_players_storage(path_world, "players"),
 	m_path_world(path_world),
 	m_send_recommended_timer(0),
 	m_active_objects_last(0),
@@ -386,17 +617,13 @@ ServerEnvironment::ServerEnvironment(ServerMap *map,
 	m_blocks_added_last(0),
 	m_active_block_analyzed_last(0),
 	m_game_time_fraction_counter(0),
+	m_last_clear_objects_time(0),
 	m_recommended_send_interval(g_settings->getFloat("dedicated_server_step")),
 	m_max_lag_estimate(0.1)
 {
 	m_game_time = 0;
 	m_use_weather = g_settings->getBool("weather");
 	m_use_weather_biome = g_settings->getBool("weather_biome");
-
-	if (!m_key_value_storage.db)
-		errorstream << "Cant open KV storage: "<< m_key_value_storage.error << std::endl;
-	if (!m_players_storage.db)
-		errorstream << "Cant open players storage: "<< m_players_storage.error << std::endl;
 
 	// Init custom SAO
 	v3f nullpos;
@@ -418,6 +645,8 @@ ServerEnvironment::~ServerEnvironment()
 	// Convert all objects to static and delete the active objects
 	deactivateFarObjects(true);
 	removeRemovedObjects(50000);
+	if (!objects_to_delete.empty())
+		removeRemovedObjects(50000);
 
 /*
 	for (auto & o : objects_to_delete) {
@@ -449,9 +678,15 @@ ServerMap & ServerEnvironment::getServerMap()
 	return *m_map;
 }
 
-KeyValueStorage *ServerEnvironment::getKeyValueStorage()
+KeyValueStorage &ServerEnvironment::getKeyValueStorage(std::string name)
 {
-	return &m_key_value_storage;
+	if (name.empty()) {
+		name = "key_value_storage";
+	}
+	if (!m_key_value_storage.count(name)) {
+		m_key_value_storage.emplace(std::piecewise_construct, std::forward_as_tuple(name), std::forward_as_tuple(m_path_world, name));
+	}
+	return m_key_value_storage.at(name);
 }
 
 bool ServerEnvironment::line_of_sight(v3f pos1, v3f pos2, float stepsize, v3s16 *p)
@@ -516,7 +751,7 @@ void ServerEnvironment::savePlayer(RemotePlayer *player)
 		return;
 	Json::Value player_json;
 	player_json << *player;
-	m_players_storage.put_json("p." + player->getName(), player_json);
+	getPlayerStorage().put_json("p." + player->getName(), player_json);
 }
 
 Player * ServerEnvironment::loadPlayer(const std::string &playername)
@@ -532,7 +767,7 @@ Player * ServerEnvironment::loadPlayer(const std::string &playername)
 
 	try {
 		Json::Value player_json;
-		m_players_storage.get_json("p." + playername, player_json);
+		getPlayerStorage().get_json("p." + playername, player_json);
 		verbosestream<<"Reading kv player "<<playername<<std::endl;
 		if (!player_json.empty()) {
 			player_json >> *player;
@@ -548,6 +783,8 @@ Player * ServerEnvironment::loadPlayer(const std::string &playername)
 
 	if(!string_allowed(playername, PLAYERNAME_ALLOWED_CHARS) || !playername.size()) {
 		infostream<<"Not loading player with invalid name: "<<playername<<std::endl;
+		if (newplayer)
+			delete player;
 		return nullptr;
 	}
 
@@ -557,12 +794,16 @@ Player * ServerEnvironment::loadPlayer(const std::string &playername)
 		// Open file and deserialize
 		std::ifstream is(path.c_str(), std::ios_base::binary);
 		if (!is.good()) {
+			if (newplayer)
+				delete player;
 			return NULL;
 		}
 		try {
 		player->deSerialize(is, path);
 		} catch (SerializationError e) {
 			errorstream<<e.what()<<std::endl;
+			if (newplayer)
+				delete player;
 			return nullptr;
 		}
 		is.close();
@@ -592,6 +833,11 @@ void ServerEnvironment::saveMeta()
 	Settings args;
 	args.setU64("game_time", m_game_time);
 	args.setU64("time_of_day", getTimeOfDay());
+	args.setU64("last_clear_objects_time", m_last_clear_objects_time);
+	args.setU64("lbm_introduction_times_version", 1);
+	args.set("lbm_introduction_times",
+		m_lbm_mgr.createIntroductionTimesString());
+	args.setU64("day_count", m_day_count);
 	args.writeLines(ss);
 	ss<<"EnvArgsEnd\n";
 
@@ -632,12 +878,35 @@ void ServerEnvironment::loadMeta()
 		//throw SerializationError("Couldn't load env meta game_time");
 	}
 
+	setTimeOfDay(args.exists("time_of_day") ?
+		// set day to morning by default
+		args.getU64("time_of_day") : 9000);
+
+	m_last_clear_objects_time = args.exists("last_clear_objects_time") ?
+		// If missing, do as if clearObjects was never called
+		args.getU64("last_clear_objects_time") : 0;
+
+	std::string lbm_introduction_times = "";
 	try {
-		setTimeOfDay(args.getU64("time_of_day"));
+		u64 ver = args.getU64("lbm_introduction_times_version");
+		if (ver == 1) {
+			lbm_introduction_times = args.get("lbm_introduction_times");
+		} else {
+			infostream << "ServerEnvironment::loadMeta(): Non-supported"
+				<< " introduction time version " << ver << std::endl;
+		}
 	} catch (SettingNotFoundException &e) {
-		// This is not as important
-		setTimeOfDay(9000);
+		// No problem, this is expected. Just continue with an empty string
 	}
+	m_lbm_mgr.loadIntroductionTimes(lbm_introduction_times, m_gamedef, m_game_time);
+
+	m_day_count = args.exists("day_count") ?
+		args.getU64("day_count") : 0;
+}
+
+void ServerEnvironment::loadDefaultMeta()
+{
+	m_lbm_mgr.loadIntroductionTimes("", m_gamedef, m_game_time);
 }
 
 	ABMHandler::ABMHandler(ServerEnvironment *env):
@@ -709,7 +978,7 @@ void ServerEnvironment::loadMeta()
 
 		//infostream<<"ABMHandler::apply p="<<block->getPos()<<" block->abm_triggers="<<block->abm_triggers<<std::endl;
 		{
-			std::lock_guard<std::mutex> lock(block->abm_triggers_mutex);
+			std::lock_guard<Mutex> lock(block->abm_triggers_mutex);
 			if (block->abm_triggers)
 				block->abm_triggers->clear();
 		}
@@ -737,11 +1006,16 @@ void ServerEnvironment::loadMeta()
 		u32 active_object_count = this->countObjects(block, &m_env->getServerMap(), active_object_count_wider);
 		m_env->m_added_objects = 0;
 
+		auto *ndef = m_env->getGameDef()->ndef();
+
 #if !ENABLE_THREADS
 		auto lock_map = m_env->getServerMap().m_nothread_locker.try_lock_shared_rec();
 		if (!lock_map->owns_lock())
 			return;
 #endif
+
+		int heat_num = 0;
+		int heat_sum = 0;
 
 		v3POS bpr = block->getPosRelative();
 		v3s16 p0;
@@ -758,6 +1032,16 @@ void ServerEnvironment::loadMeta()
 			content_t c = n.getContent();
 			if (c == CONTENT_IGNORE)
 				continue;
+
+			{
+				int hot = ((ItemGroupList) ndef->get(n).groups)["hot"];
+				//todo: int cold = ((ItemGroupList) ndef->get(n).groups)["cold"];
+				//also humidity todo.
+				if (hot) {
+					++heat_num;
+					heat_sum += hot;
+				}
+			}
 
 			if (!m_aabms[c]) {
 				if (block->content_only != CONTENT_IGNORE)
@@ -794,7 +1078,7 @@ void ServerEnvironment::loadMeta()
 				}
 neighbor_found:
 
-				std::lock_guard<std::mutex> lock(block->abm_triggers_mutex);
+				std::lock_guard<Mutex> lock(block->abm_triggers_mutex);
 
 				if (!block->abm_triggers)
 					block->abm_triggers = std::unique_ptr<MapBlock::abm_triggers_type>(new MapBlock::abm_triggers_type); // c++14: make_unique here
@@ -802,6 +1086,21 @@ neighbor_found:
 				block->abm_triggers->emplace_back(abm_trigger_one{i, p, c, active_object_count, active_object_count_wider, neighbor_pos, activate});
 			}
 		}
+		if (heat_num) {
+			float heat_avg = heat_sum/heat_num;
+			const int min = 2 * MAP_BLOCKSIZE;
+			float magic = heat_avg >= 1 ? min+(1024-min)/(4096/heat_avg) : min;
+			float heat_add = ((block->heat < 0 ? -block->heat : 0) + heat_avg) * (heat_num < magic ? heat_num/magic : 1);
+			if (block->heat > heat_add) {
+				block->heat_add = 0;
+			} else if (block->heat + heat_add > heat_avg)  {
+				block->heat_add = heat_avg - block->heat;
+			} else {
+				block->heat_add = heat_add;
+			}
+			//infostream<<"heat_num=" << heat_num << " heat_sum="<<heat_sum<<" heat_add="<<heat_add << " bheat_add"<<block->heat_add<< " heat_avg="<<heat_avg << " heatnow="<<block->heat<< " magic="<<magic << std::endl;
+		}
+
 	//infostream<<"ABMHandler::apply reult p="<<block->getPos()<<" apply result:"<< (block->abm_triggers ? block->abm_triggers->size() : 0) <<std::endl;
 
 	}
@@ -809,7 +1108,7 @@ neighbor_found:
 void MapBlock::abmTriggersRun(ServerEnvironment * m_env, u32 time, bool activate) {
 		ScopeProfiler sp(g_profiler, "ABM trigger blocks", SPT_ADD);
 
-		std::unique_lock<std::mutex> lock(abm_triggers_mutex, std::try_to_lock);
+		std::unique_lock<Mutex> lock(abm_triggers_mutex, std::try_to_lock);
 		if (!lock.owns_lock())
 			return;
 
@@ -894,7 +1193,7 @@ void MapBlock::abmTriggersRun(ServerEnvironment * m_env, u32 time, bool activate
 				}
 		}
 		if (abm_triggers->empty())
-			abm_triggers.release();
+			abm_triggers.reset();
 }
 
 void ServerEnvironment::analyzeBlock(MapBlock * block) {
@@ -925,12 +1224,18 @@ void ServerEnvironment::activateBlock(MapBlock *block, u32 additional_dtime)
 	// Get time difference
 	u32 dtime_s = 0;
 	u32 stamp = block->getTimestamp();
-	if(m_game_time > stamp && stamp != BLOCK_TIMESTAMP_UNDEFINED)
+	if (m_game_time > stamp && stamp != BLOCK_TIMESTAMP_UNDEFINED)
 		dtime_s = m_game_time - stamp;
 	dtime_s += additional_dtime;
 
 	/*infostream<<"ServerEnvironment::activateBlock(): block timestamp: "
 			<<stamp<<", game time: "<<m_game_time<<std::endl;*/
+
+	// Remove stored static objects if clearObjects was called since block's timestamp
+	if (stamp == BLOCK_TIMESTAMP_UNDEFINED || stamp < m_last_clear_objects_time) {
+		block->m_static_objects.m_stored.clear();
+		// do not set changed flag to avoid unnecessary mapblock writes
+	}
 
 	// Set current time as timestamp
 	block->setTimestampNoChangedFlag(m_game_time);
@@ -943,6 +1248,9 @@ void ServerEnvironment::activateBlock(MapBlock *block, u32 additional_dtime)
 
 //	// Calculate weather conditions
 //	m_map->updateBlockHeat(this, block->getPos() *  MAP_BLOCKSIZE, block);
+
+	/* Handle LoadingBlockModifiers */
+	m_lbm_mgr.applyLBMs(this, block, stamp);
 
 	// Run node timers
 	std::map<v3s16, NodeTimer> elapsed_timers =
@@ -963,6 +1271,11 @@ void ServerEnvironment::activateBlock(MapBlock *block, u32 additional_dtime)
 void ServerEnvironment::addActiveBlockModifier(ActiveBlockModifier *abm)
 {
 	m_abms.push_back(ABMWithState(abm, this));
+}
+
+void ServerEnvironment::addLoadingBlockModifierDef(LoadingBlockModifierDef *lbm)
+{
+	m_lbm_mgr.addLBMDef(lbm);
 }
 
 bool ServerEnvironment::setNode(v3s16 p, const MapNode &n, s16 fast)
@@ -1060,17 +1373,19 @@ bool ServerEnvironment::swapNode(v3s16 p, const MapNode &n)
 
 void ServerEnvironment::getObjectsInsideRadius(std::vector<u16> &objects, v3f pos, float radius)
 {
+	int obj_null = 0, obj_count = 0;
 	auto lock = m_active_objects.lock_shared_rec();
 	for(auto
 			i = m_active_objects.begin();
 			i != m_active_objects.end(); ++i)
 	{
+		++obj_count;
 		ServerActiveObject* obj = i->second;
-		u16 id = i->first;
 		if (!obj) {
-			infostream<<"ServerEnvironment::getObjectsInsideRadius(): "<<"got null object "<<id<<" = "<<obj<<std::endl;
+			++obj_null;
 			continue;
 		}
+		u16 id = i->first;
 		if (obj->m_removed || obj->m_pending_deactivation)
 			continue;
 
@@ -1079,26 +1394,28 @@ void ServerEnvironment::getObjectsInsideRadius(std::vector<u16> &objects, v3f po
 			continue;
 		objects.push_back(id);
 	}
+	if (obj_null)
+		infostream<<"ServerEnvironment::getObjectsInsideRadius(): "<<"got null objects: "<<obj_null<<"/"<<obj_count<<std::endl;
 }
 
-void ServerEnvironment::clearAllObjects()
+void ServerEnvironment::clearObjects(ClearObjectsMode mode)
 {
-	infostream<<"ServerEnvironment::clearAllObjects(): "
-			<<"Removing all active objects"<<std::endl;
+	infostream << "ServerEnvironment::clearObjects(): "
+		<< "Removing all active objects" << std::endl;
 	std::vector<u16> objects_to_remove;
 	auto lock = m_active_objects.lock_unique_rec();
 
-	for(auto
+	for( auto
 			i = m_active_objects.begin();
 			i != m_active_objects.end(); ++i) {
 		ServerActiveObject* obj = i->second;
-		if(obj->getType() == ACTIVEOBJECT_TYPE_PLAYER)
+		if (obj->getType() == ACTIVEOBJECT_TYPE_PLAYER)
 			continue;
 		u16 id = i->first;
 		// Delete static object if block is loaded
-		if(obj->m_static_exists){
+		if (obj->m_static_exists) {
 			MapBlock *block = m_map->getBlockNoCreateNoEx(obj->m_static_block);
-			if(block){
+			if (block) {
 				block->m_static_objects.remove(id);
 				block->raiseModified(MOD_STATE_WRITE_NEEDED,
 						MOD_REASON_CLEAR_ALL_OBJECTS);
@@ -1106,7 +1423,7 @@ void ServerEnvironment::clearAllObjects()
 			}
 		}
 		// If known by some client, don't delete immediately
-		if(obj->m_known_by_count > 0){
+		if (obj->m_known_by_count > 0) {
 			obj->m_pending_deactivation = true;
 			obj->m_removed = true;
 			continue;
@@ -1118,39 +1435,46 @@ void ServerEnvironment::clearAllObjects()
 		m_script->removeObjectReference(obj);
 
 		// Delete active object
-		if(obj->environmentDeletes())
+		if (obj->environmentDeletes())
 			delete obj;
 		// Id to be removed from m_active_objects
 		objects_to_remove.push_back(id);
 	}
 
 	// Remove references from m_active_objects
-	for(std::vector<u16>::iterator i = objects_to_remove.begin();
+	for (std::vector<u16>::iterator i = objects_to_remove.begin();
 			i != objects_to_remove.end(); ++i) {
 		m_active_objects.erase(*i);
 	}
 
 	// Get list of loaded blocks
 	std::vector<v3s16> loaded_blocks;
-	infostream<<"ServerEnvironment::clearAllObjects(): "
-			<<"Listing all loaded blocks"<<std::endl;
+	infostream << "ServerEnvironment::clearObjects(): "
+		<< "Listing all loaded blocks" << std::endl;
 	m_map->listAllLoadedBlocks(loaded_blocks);
-	infostream<<"ServerEnvironment::clearAllObjects(): "
-			<<"Done listing all loaded blocks: "
-			<<loaded_blocks.size()<<std::endl;
+	infostream << "ServerEnvironment::clearObjects(): "
+		<< "Done listing all loaded blocks: "
+		<< loaded_blocks.size()<<std::endl;
 
 	// Get list of loadable blocks
 	std::vector<v3s16> loadable_blocks;
-	infostream<<"ServerEnvironment::clearAllObjects(): "
-			<<"Listing all loadable blocks"<<std::endl;
-	m_map->listAllLoadableBlocks(loadable_blocks);
-	infostream<<"ServerEnvironment::clearAllObjects(): "
-			<<"Done listing all loadable blocks: "
-			<<loadable_blocks.size()
-			<<", now clearing"<<std::endl;
+	if (mode == CLEAR_OBJECTS_MODE_FULL) {
+		infostream << "ServerEnvironment::clearObjects(): "
+			<< "Listing all loadable blocks" << std::endl;
+		m_map->listAllLoadableBlocks(loadable_blocks);
+		infostream << "ServerEnvironment::clearObjects(): "
+			<< "Done listing all loadable blocks: "
+			<< loadable_blocks.size() << std::endl;
+	} else {
+		loadable_blocks = loaded_blocks;
+	}
+
+	infostream << "ServerEnvironment::clearObjects(): "
+		<< "Now clearing objects in " << loadable_blocks.size()
+		<< " blocks" << std::endl;
 
 	// Grab a reference on each loaded block to avoid unloading it
-	for(std::vector<v3s16>::iterator i = loaded_blocks.begin();
+	for (std::vector<v3s16>::iterator i = loaded_blocks.begin();
 			i != loaded_blocks.end(); ++i) {
 		v3s16 p = *i;
 		MapBlock *block = m_map->getBlockNoCreateNoEx(p);
@@ -1160,24 +1484,27 @@ void ServerEnvironment::clearAllObjects()
 	}
 
 	// Remove objects in all loadable blocks
-	u32 unload_interval = g_settings->getS32("max_clearobjects_extra_loaded_blocks");
-	unload_interval = MYMAX(unload_interval, 1);
+	u32 unload_interval = U32_MAX;
+	if (mode == CLEAR_OBJECTS_MODE_FULL) {
+		unload_interval = g_settings->getS32("max_clearobjects_extra_loaded_blocks");
+		unload_interval = MYMAX(unload_interval, 1);
+	}
 	u32 report_interval = loadable_blocks.size() / 10;
 	u32 num_blocks_checked = 0;
 	u32 num_blocks_cleared = 0;
 	u32 num_objs_cleared = 0;
-	for(std::vector<v3s16>::iterator i = loadable_blocks.begin();
+	for (std::vector<v3s16>::iterator i = loadable_blocks.begin();
 			i != loadable_blocks.end(); ++i) {
 		v3s16 p = *i;
 		MapBlock *block = m_map->emergeBlock(p, false);
-		if(!block){
-			errorstream<<"ServerEnvironment::clearAllObjects(): "
-					<<"Failed to emerge block "<<PP(p)<<std::endl;
+		if (!block) {
+			errorstream << "ServerEnvironment::clearObjects(): "
+				<< "Failed to emerge block " << PP(p) << std::endl;
 			continue;
 		}
 		u32 num_stored = block->m_static_objects.m_stored.size();
 		u32 num_active = block->m_static_objects.m_active.size();
-		if(num_stored != 0 || num_active != 0){
+		if (num_stored != 0 || num_active != 0) {
 			block->m_static_objects.m_stored.clear();
 			block->m_static_objects.m_active.clear();
 			block->raiseModified(MOD_STATE_WRITE_NEEDED,
@@ -1187,23 +1514,23 @@ void ServerEnvironment::clearAllObjects()
 		}
 		num_blocks_checked++;
 
-		if(report_interval != 0 &&
-				num_blocks_checked % report_interval == 0){
+		if (report_interval != 0 &&
+				num_blocks_checked % report_interval == 0) {
 			float percent = 100.0 * (float)num_blocks_checked /
-					loadable_blocks.size();
-			infostream<<"ServerEnvironment::clearAllObjects(): "
-					<<"Cleared "<<num_objs_cleared<<" objects"
-					<<" in "<<num_blocks_cleared<<" blocks ("
-					<<percent<<"%)"<<std::endl;
+				loadable_blocks.size();
+			infostream << "ServerEnvironment::clearObjects(): "
+				<< "Cleared " << num_objs_cleared << " objects"
+				<< " in " << num_blocks_cleared << " blocks ("
+				<< percent << "%)" << std::endl;
 		}
-		if(num_blocks_checked % unload_interval == 0){
+		if (num_blocks_checked % unload_interval == 0) {
 			m_map->unloadUnreferencedBlocks();
 		}
 	}
 	m_map->unloadUnreferencedBlocks();
 
 	// Drop references that were added above
-	for(std::vector<v3s16>::iterator i = loaded_blocks.begin();
+	for (std::vector<v3s16>::iterator i = loaded_blocks.begin();
 			i != loaded_blocks.end(); ++i) {
 		v3s16 p = *i;
 		MapBlock *block = m_map->getBlockNoCreateNoEx(p);
@@ -1212,9 +1539,11 @@ void ServerEnvironment::clearAllObjects()
 		block->refDrop();
 	}
 
-	infostream<<"ServerEnvironment::clearAllObjects(): "
-			<<"Finished: Cleared "<<num_objs_cleared<<" objects"
-			<<" in "<<num_blocks_cleared<<" blocks"<<std::endl;
+	m_last_clear_objects_time = m_game_time;
+
+	infostream << "ServerEnvironment::clearObjects(): "
+		<< "Finished: Cleared " << num_objs_cleared << " objects"
+		<< " in " << num_blocks_cleared << " blocks" << std::endl;
 }
 
 void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_ms)
@@ -1229,7 +1558,10 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	// Update this one
 	// NOTE: This is kind of funny on a singleplayer game, but doesn't
 	// really matter that much.
-	//m_recommended_send_interval = g_settings->getFloat("dedicated_server_step");
+/*
+	static const float server_step = g_settings->getFloat("dedicated_server_step");
+	m_recommended_send_interval = server_step;
+*/
 
 	/*
 		Increment game time
@@ -1281,9 +1613,9 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	/*
 		Manage active block list
 	*/
-	if(m_blocks_added_last || m_active_blocks_management_interval.step(dtime, 2.0)) {
+	if(m_blocks_added_last || m_active_blocks_management_interval.step(dtime, m_cache_active_block_mgmt_interval)) {
 		//TimeTaker timer_s1("Manage active block list");
-		ScopeProfiler sp(g_profiler, "SEnv: manage act. block list avg /2s", SPT_AVG);
+		ScopeProfiler sp(g_profiler, "SEnv: manage act. block list avg per interval", SPT_AVG);
 		if (!m_blocks_added_last) {
 		/*
 			Get player block positions
@@ -1327,7 +1659,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		/*
 			Update list of active blocks, collecting changes
 		*/
-		const s16 active_block_range = g_settings->getS16("active_block_range");
+		static const s16 active_block_range = g_settings->getS16("active_block_range");
 		std::set<v3s16> blocks_removed;
 		m_active_blocks.update(players_blockpos, active_block_range,
 				blocks_removed, m_blocks_added);
@@ -1340,6 +1672,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		deactivateFarObjects(false);
 
 		} // if (!m_blocks_added_last)
+
 		/*
 			Handle added blocks
 		*/
@@ -1373,12 +1706,12 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	/*
 		Mess around in active blocks
 	*/
-	if(m_active_block_timer_last || m_active_blocks_nodemetadata_interval.step(dtime, 1.0)) {
+	if(m_active_block_timer_last || m_active_blocks_nodemetadata_interval.step(dtime, m_cache_nodetimer_interval)) {
 		//if (!m_active_block_timer_last) infostream<<"Start ABM timer cycle s="<<m_active_blocks.m_list.size()<<std::endl;
 		//TimeTaker timer_s1("Mess around in active blocks");
-		//ScopeProfiler sp(g_profiler, "SEnv: mess in act. blocks avg /1s", SPT_AVG);
+		//ScopeProfiler sp(g_profiler, "SEnv: mess in act. blocks avg per interval", SPT_AVG);
 
-		//float dtime = 1.0;
+		//float dtime = m_cache_nodetimer_interval;
 
 		u32 n = 0, calls = 0, end_ms = porting::getTimeMs() + max_cycle_ms;
 		auto lock = m_active_blocks.m_list.lock_shared_rec();
@@ -1444,11 +1777,22 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	g_profiler->add("SMap: Blocks: Active", m_active_blocks.m_list.size());
 	m_active_block_abm_dtime_counter += dtime;
 
-	const float abm_interval = 1.0;
-	if(m_active_block_abm_last || m_active_block_modifier_interval.step(dtime, abm_interval)) {
-		ScopeProfiler sp(g_profiler, "SEnv: modify in blocks avg /1s", SPT_AVG);
-		TimeTaker timer("modify in active blocks");
+	if(m_active_block_abm_last || m_active_block_modifier_interval.step(dtime, m_cache_abm_interval)) {
+		/*
+	do{ // breakable
+		if(m_active_block_interval_overload_skip > 0){
+			ScopeProfiler sp(g_profiler, "SEnv: ABM overload skips");
+			m_active_block_interval_overload_skip--;
+			break;
+		}
+		*/
+		ScopeProfiler sp(g_profiler, "SEnv: modify in blocks avg per interval", SPT_AVG);
+		TimeTaker timer("modify in active blocks per interval");
 
+		/*
+		// Initialize handling of ActiveBlockModifiers
+		ABMHandler abmhandler(m_abms, m_cache_abm_interval, this, true);
+		*/
 		u32 n = 0, calls = 0, end_ms = porting::getTimeMs() + max_cycle_ms;
 		auto lock = m_active_blocks.m_list.lock_shared_rec();
 		for(auto
@@ -1500,6 +1844,10 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		}
 	}
 
+	{
+	TimeTaker timer("contrib_globalstep");
+	contrib_globalstep(dtime);
+	}
 	/*
 		Step script environment (run global on_step())
 	*/
@@ -1555,7 +1903,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 			// Step object
 			if (!obj->m_uptime_last)  // not very good place, but minimum modifications
 				obj->m_uptime_last = uptime - dtime;
-			obj->step(uptime - obj->m_uptime_last, send_recommended);
+			obj->step(uptime > obj->m_uptime_last ? uptime - obj->m_uptime_last : dtime, send_recommended);
 			obj->m_uptime_last = uptime;
 			// Read messages from object
 /*
@@ -1995,12 +2343,14 @@ void ServerEnvironment::removeRemovedObjects(unsigned int max_cycle_ms)
 	TimeTaker timer("ServerEnvironment::removeRemovedObjects()");
 	//std::list<u16> objects_to_remove;
 
-	for (auto & o : objects_to_delete) {
-		if (!o)
-			continue;
-		delete o;
+	{
+		RecursiveMutexAutoLock testscriptlock(getScriptIface()->m_luastackmutex, std::try_to_lock);
+		if (testscriptlock.owns_lock()) {
+			for (auto & o : objects_to_delete)
+				delete o;
+			objects_to_delete.clear();
+		}
 	}
-	objects_to_delete.clear();
 
 	std::vector<ServerActiveObject*> objects;
 	{
@@ -2274,6 +2624,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 		}
 	}
 
+	static const auto max_objects_per_block = g_settings->getU16("max_objects_per_block");
 	if (objects.size())
 	for (auto & obj : objects)
 	{
@@ -2291,7 +2642,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 		u16 id = obj->getId();
 		v3f objectpos = obj->getBasePosition();
 
-		if (obj->getType() == ACTIVEOBJECT_TYPE_PLAYER) {
+		if (!force_delete && obj->getType() == ACTIVEOBJECT_TYPE_PLAYER) {
 			//infostream<<"deactivating far object player id=" <<id<< std::endl;
 			continue;
 		}
@@ -2432,7 +2783,7 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 
 			if(block)
 			{
-				if(block->m_static_objects.m_stored.size() >= g_settings->getU16("max_objects_per_block")){
+				if(block->m_static_objects.m_stored.size() >= max_objects_per_block){
 					infostream<<"ServerEnv: Trying to store id="<<obj->getId()
 							<<" statically but block "<<PP(blockpos)
 							<<" already contains "
@@ -2485,9 +2836,11 @@ void ServerEnvironment::deactivateFarObjects(bool force_delete)
 
 		if(pending_delete && !force_delete)
 		{
+/*
 			verbosestream<<"ServerEnvironment::deactivateFarObjects(): "
 					<<"object id="<<id<<" is known by clients"
 					<<"; not deleting yet"<<std::endl;
+*/
 
 			obj->m_pending_deactivation = true;
 			continue;
@@ -2849,7 +3202,7 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		// head
 		v3s16 p = floatToInt(pf + v3f(0, BS*1.6, 0), BS);
 		MapNode n = m_map->getNodeNoEx(p);
-		ContentFeatures c = m_gamedef->ndef()->get(n);
+		const ContentFeatures &c = m_gamedef->ndef()->get(n);
 		u8 drowning_damage = c.drowning;
 		if(drowning_damage > 0 && lplayer->hp > 0){
 			u16 breath = lplayer->getBreath();
@@ -2874,7 +3227,7 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		// head
 		v3s16 p = floatToInt(pf + v3f(0, BS*1.6, 0), BS);
 		MapNode n = m_map->getNodeNoEx(p);
-		ContentFeatures c = m_gamedef->ndef()->get(n);
+		const ContentFeatures &c = m_gamedef->ndef()->get(n);
 		if (!lplayer->hp){
 			lplayer->setBreath(11);
 		}
@@ -2942,6 +3295,7 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 	bool update_lighting = m_active_object_light_update_interval.step(dtime, 1);
 	u32 n = 0, calls = 0, end_ms = porting::getTimeMs() + u32(500/g_settings->getFloat("wanted_fps"));
 	int skipped = 0;
+	static unsigned int cnt = 0;
 	for(std::map<u16, ClientActiveObject*>::iterator
 			i = m_active_objects.begin();
 			i != m_active_objects.end(); ++i)
@@ -2956,10 +3310,13 @@ void ClientEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 		ClientActiveObject* obj = i->second;
 
 		auto & draw_control = getClientMap().getControl();
-		if ((pf.getDistanceFrom(obj->getPosition()) / BS) * 1.2 > draw_control.wanted_range && end_ms % 300) {
-			//errorstream<<"skip "<<obj->getId() << " p="<<pf<< " o=" << obj->getPosition() << " r=" << pf.getDistanceFrom(obj->getPosition()) / BS << " wr=" << draw_control.wanted_range<< std::endl;
-			++skipped;
-			continue;
+		if ((pf.getDistanceFrom(obj->getPosition()) / BS) * 1.2 > draw_control.wanted_range ) {
+			if (++cnt % int((draw_control.fps_avg+1)*5.0)) {
+				//errorstream<<"skip "<<obj->getId() << " p="<<pf<< " o=" << obj->getPosition() << " r=" << pf.getDistanceFrom(obj->getPosition()) / BS << " wr=" << draw_control.wanted_range<< std::endl;
+				++skipped;
+				continue;
+			}
+			//errorstream<<"step "<<obj->getId() <<" cnt="<< cnt << " m="<<m<< " p="<<pf<< " o=" << obj->getPosition() << " r=" << pf.getDistanceFrom(obj->getPosition()) / BS << " wr=" << draw_control.wanted_range<< std::endl;
 		}
 
 		// Step object

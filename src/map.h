@@ -28,7 +28,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <set>
 #include <map>
 #include "util/unordered_map_hash.h"
-#include "util/concurrent_unordered_map.h"
+#include "threading/concurrent_unordered_map.h"
 #include <list>
 
 #include "irrlichttypes_bloated.h"
@@ -184,7 +184,7 @@ public:
 	void getBlockCacheFlush();
 
 	/* Server overrides */
-	virtual MapBlock * emergeBlock(v3s16 p, bool create_blank=true)
+	virtual MapBlock * emergeBlock(v3s16 p, bool create_blank=false)
 	{ return getBlockNoCreateNoEx(p); }
 
 	// Returns InvalidPositionException if not found
@@ -193,16 +193,17 @@ public:
 	bool isValidPosition(v3s16 p);
 
 	// throws InvalidPositionException if not found
-	void setNode(v3s16 p, MapNode & n);
+	void setNode(v3s16 p, MapNode & n, bool no_light_check = 0);
 
 	// Returns a CONTENT_IGNORE node if not found
 	MapNode getNodeTry(v3s16 p);
 	//MapNode getNodeNoLock(v3s16 p); // dont use
 	// If is_valid_position is not NULL then this will be set to true if the
 	// position is valid, otherwise false
-	MapNode getNodeNoEx(v3s16 p, bool *is_valid_position = NULL);
+	MapNode getNodeNoEx(v3s16 p, bool *is_valid_position);
 	MapNode getNode(v3POS p) { return getNodeNoEx(p); };
 	//MapNode getNodeLog(v3POS p);
+	MapNode getNodeNoEx(v3POS p);
 
 	void unspreadLight(enum LightBank bank,
 			std::map<v3s16, u8> & from_nodes,
@@ -358,9 +359,11 @@ public:
 	MapBlock * createBlankBlock(v3s16 & p);
 	bool insertBlock(MapBlock *block);
 	void deleteBlock(MapBlockP block);
-	std::map<MapBlockP, int> * m_blocks_delete;
-	std::map<MapBlockP, int> m_blocks_delete_1, m_blocks_delete_2;
+	std::unordered_map<MapBlockP, int> * m_blocks_delete;
+	std::unordered_map<MapBlockP, int> m_blocks_delete_1, m_blocks_delete_2;
+	unsigned int m_blocks_delete_time = 0;
 	//void getBlocks(std::list<MapBlock*> &dest);
+	concurrent_unordered_map<v3POS, int, v3POSHash, v3POSEqual> m_db_miss;
 
 #if !ENABLE_THREADS
 	locker<> m_nothread_locker;
@@ -397,7 +400,7 @@ protected:
 
 public:
 	//concurrent_unordered_map<v3POS, bool, v3POSHash, v3POSEqual> m_transforming_liquid;
-	std::mutex m_transforming_liquid_mutex;
+	Mutex m_transforming_liquid_mutex;
 	UniqueQueue<v3POS> m_transforming_liquid;
 	typedef unordered_map_v3POS<int> lighting_map_t;
 	Mutex m_lighting_modified_mutex;
@@ -455,7 +458,7 @@ public:
 		- Create blank filled with CONTENT_IGNORE
 
 	*/
-	MapBlock *emergeBlock(v3s16 p, bool create_blank=true);
+	MapBlock *emergeBlock(v3s16 p, bool create_blank=false);
 
 	/*
 		Try to get a block.

@@ -124,26 +124,6 @@ void Server::SendNodeDef(u16 peer_id,
 	m_clients.send(peer_id, 0, buffer, true);
 }
 
-/* not merged to mt
-void Server::SendAnimations(u16 peer_id)
-{
-	DSTACK(FUNCTION_NAME);
-
-	MSGPACK_PACKET_INIT(TOCLIENT_ANIMATIONS, 8);
-	PACK(TOCLIENT_ANIMATIONS_DEFAULT_START, g_settings->getFloat("animation_default_start"));
-	PACK(TOCLIENT_ANIMATIONS_DEFAULT_STOP, g_settings->getFloat("animation_default_stop"));
-	PACK(TOCLIENT_ANIMATIONS_WALK_START, g_settings->getFloat("animation_walk_start"));
-	PACK(TOCLIENT_ANIMATIONS_WALK_STOP, g_settings->getFloat("animation_walk_stop"));
-	PACK(TOCLIENT_ANIMATIONS_DIG_START, g_settings->getFloat("animation_dig_start"));
-	PACK(TOCLIENT_ANIMATIONS_DIG_STOP, g_settings->getFloat("animation_dig_stop"));
-	PACK(TOCLIENT_ANIMATIONS_WD_START, g_settings->getFloat("animation_walk_start"));
-	PACK(TOCLIENT_ANIMATIONS_WD_STOP, g_settings->getFloat("animation_walk_stop"));
-
-	// Send as reliable
-	m_clients.send(peer_id, 0, buffer, true);
-}
-*/
-
 /*
 	Non-static send methods
 */
@@ -446,7 +426,20 @@ void Server::SendMovePlayer(u16 peer_id)
 	PACK(TOCLIENT_MOVE_PLAYER_POS, player->getPosition());
 	PACK(TOCLIENT_MOVE_PLAYER_PITCH, player->getPitch());
 	PACK(TOCLIENT_MOVE_PLAYER_YAW, player->getYaw());
+	//PACK(TOCLIENT_MOVE_PLAYER_SPEED, player->getSpeed());
+	// Send as reliable
+	m_clients.send(peer_id, 0, buffer, true);
+}
 
+void Server::SendPunchPlayer(u16 peer_id, v3f speed)
+{
+	DSTACK(FUNCTION_NAME);
+	Player *player = m_env->getPlayer(peer_id);
+	if (!player)
+		return;
+
+	MSGPACK_PACKET_INIT(TOCLIENT_PUNCH_PLAYER, 1);
+	PACK(TOCLIENT_PUNCH_PLAYER_SPEED, speed);
 	// Send as reliable
 	m_clients.send(peer_id, 0, buffer, true);
 }
@@ -705,8 +698,8 @@ void Server::SendBlockNoLock(u16 peer_id, MapBlock *block, u8 ver, u16 net_proto
 	block->serialize(os, ver, false, client->net_proto_version_fm >= 1);
 	PACK(TOCLIENT_BLOCKDATA_DATA, os.str());
 
-	PACK(TOCLIENT_BLOCKDATA_HEAT, (s16)block->heat);
-	PACK(TOCLIENT_BLOCKDATA_HUMIDITY, (s16)block->humidity);
+	PACK(TOCLIENT_BLOCKDATA_HEAT, (s16)(block->heat + block->heat_add));
+	PACK(TOCLIENT_BLOCKDATA_HUMIDITY, (s16)(block->humidity + block->humidity_add));
 	PACK(TOCLIENT_BLOCKDATA_STEP, (s8)1);
 	PACK(TOCLIENT_BLOCKDATA_CONTENT_ONLY, block->content_only);
 	PACK(TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM1, block->content_only_param1);

@@ -84,6 +84,18 @@ core.register_chatcommand("me", {
 	end,
 })
 
+core.register_chatcommand("admin", {
+	description = "Show the name of the server owner",
+	func = function(name)
+		local admin = minetest.setting_get("name")
+		if admin then
+			return true, "The administrator of this server is "..admin.."."
+		else
+			return false, "There's no administrator named in the config file."
+		end
+	end,
+})
+
 core.register_chatcommand("help", {
 	privs = {},
 	params = "[all/privs/<cmd>]",
@@ -105,7 +117,7 @@ core.register_chatcommand("help", {
 			local cmds = {}
 			for cmd, def in pairs(core.chatcommands) do
 				if core.check_player_privs(name, def.privs) then
-					table.insert(cmds, cmd)
+					cmds[#cmds + 1] = cmd
 				end
 			end
 			table.sort(cmds)
@@ -116,7 +128,7 @@ core.register_chatcommand("help", {
 			local cmds = {}
 			for cmd, def in pairs(core.chatcommands) do
 				if core.check_player_privs(name, def.privs) then
-					table.insert(cmds, format_help_line(cmd, def))
+					cmds[#cmds + 1] = format_help_line(cmd, def)
 				end
 			end
 			table.sort(cmds)
@@ -124,7 +136,7 @@ core.register_chatcommand("help", {
 		elseif param == "privs" then
 			local privs = {}
 			for priv, def in pairs(core.registered_privileges) do
-				table.insert(privs, priv .. ": " .. def.description)
+				privs[#privs + 1] = priv .. ": " .. def.description
 			end
 			table.sort(privs)
 			return true, "Available privileges:\n"..table.concat(privs, "\n")
@@ -775,6 +787,13 @@ core.register_chatcommand("time", {
 	end,
 })
 
+core.register_chatcommand("days", {
+	description = "Display day count",
+	func = function(name, param)
+		return true, "Current day is " .. core.get_day_count()
+	end
+})
+
 core.register_chatcommand("shutdown", {
 	description = "shutdown server",
 	privs = {server=true},
@@ -838,14 +857,25 @@ core.register_chatcommand("kick", {
 })
 
 core.register_chatcommand("clearobjects", {
+	params = "[full|quick]",
 	description = "clear all objects in world",
 	privs = {server=true},
 	func = function(name, param)
-		core.log("action", name .. " clears all objects.")
+		local options = {}
+		if param == "" or param == "full" then
+			options.mode = "full"
+		elseif param == "quick" then
+			options.mode = "quick"
+		else
+			return false, "Invalid usage, see /help clearobjects."
+		end
+
+		core.log("action", name .. " clears all objects ("
+				.. options.mode .. " mode).")
 		core.chat_send_all("Clearing all objects.  This may take long."
 				.. "  You may experience a timeout.  (by "
 				.. name .. ")")
-		core.clear_objects()
+		core.clear_objects(options)
 		core.log("action", "Object clearing done.")
 		core.chat_send_all("*** Cleared all objects.")
 	end,

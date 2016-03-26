@@ -39,7 +39,8 @@ std::map<io::path, video::ITexture *> g_txrCache;
  */
 void guiScalingCache(io::path key, video::IVideoDriver *driver, video::IImage *value)
 {
-	if (!g_settings->getBool("gui_scaling_filter"))
+	static const auto gui_scaling_filter = g_settings->getBool("gui_scaling_filter");
+	if (!gui_scaling_filter)
 		return;
 	video::IImage *copied = driver->createImage(value->getColorFormat(),
 			value->getDimension());
@@ -74,7 +75,8 @@ video::ITexture *guiScalingResizeCached(video::IVideoDriver *driver,
 {
 	if (src == NULL)
 		return src;
-	if (!g_settings->getBool("gui_scaling_filter"))
+	static const auto gui_scaling_filter = g_settings->getBool("gui_scaling_filter");
+	if (!gui_scaling_filter)
 		return src;
 
 	// Calculate scaled texture name.
@@ -111,6 +113,8 @@ video::ITexture *guiScalingResizeCached(video::IVideoDriver *driver,
 	video::IImage *destimg = driver->createImage(src->getColorFormat(),
 			core::dimension2d<u32>((u32)destrect.getWidth(),
 			(u32)destrect.getHeight()));
+	if (!destimg)
+		return src;
 	imageScaleNNAA(srcimg, srcrect, destimg);
 
 #ifdef __ANDROID__
@@ -120,6 +124,8 @@ video::ITexture *guiScalingResizeCached(video::IVideoDriver *driver,
 	video::IImage *po2img = driver->createImage(src->getColorFormat(),
 			core::dimension2d<u32>(npot2((u32)destrect.getWidth()),
 			npot2((u32)destrect.getHeight())));
+	if (!po2img)
+		return src;
 	po2img->fill(video::SColor(0, 0, 0, 0));
 	destimg->copyTo(po2img);
 	destimg->drop();

@@ -19,6 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "drawscene.h"
 #include "log_types.h"
+#include "minimap.h"
 #include "settings.h"
 #include "clouds.h"
 #include "clientmap.h"
@@ -26,33 +27,17 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "fontengine.h"
 #include "guiscalingfilter.h"
 
+#include "touchscreengui.h"
+
 typedef enum {
 	LEFT = -1,
 	RIGHT = 1,
 	EYECOUNT = 2
 } paralax_sign;
 
-
-void draw_selectionbox(video::IVideoDriver* driver, Hud& hud,
-		std::vector<aabb3f>& hilightboxes, bool show_hud)
-{
-	static const s16 selectionbox_width = rangelim(g_settings->getS16("selectionbox_width"), 1, 5);
-
-	if (!show_hud)
-		return;
-
-	video::SMaterial oldmaterial = driver->getMaterial2D();
-	video::SMaterial m;
-	m.Thickness = selectionbox_width;
-	m.Lighting = false;
-	driver->setMaterial(m);
-	hud.drawSelectionBoxes(hilightboxes);
-	driver->setMaterial(oldmaterial);
-}
-
 void draw_anaglyph_3d_mode(Camera& camera, bool show_hud, Hud& hud,
-		std::vector<aabb3f> hilightboxes, video::IVideoDriver* driver,
-		scene::ISceneManager* smgr, bool draw_wield_tool, Client& client,
+		video::IVideoDriver* driver, scene::ISceneManager* smgr,
+		bool draw_wield_tool, Client& client,
 		gui::IGUIEnvironment* guienv )
 {
 
@@ -86,10 +71,8 @@ void draw_anaglyph_3d_mode(Camera& camera, bool show_hud, Hud& hud,
 	camera.getCameraNode()->setTarget(focusPoint);
 	smgr->drawAll();
 	driver->setTransform(video::ETS_WORLD, core::IdentityMatrix);
-	if (show_hud)
-	{
-		draw_selectionbox(driver, hud, hilightboxes, show_hud);
-
+	if (show_hud) {
+		hud.drawSelectionMesh();
 		if (draw_wield_tool)
 			camera.drawWieldedTool(&leftMove);
 	}
@@ -116,10 +99,8 @@ void draw_anaglyph_3d_mode(Camera& camera, bool show_hud, Hud& hud,
 	camera.getCameraNode()->setTarget(focusPoint);
 	smgr->drawAll();
 	driver->setTransform(video::ETS_WORLD, core::IdentityMatrix);
-	if (show_hud)
-	{
-		draw_selectionbox(driver, hud, hilightboxes, show_hud);
-
+	if (show_hud) {
+		hud.drawSelectionMesh();
 		if (draw_wield_tool)
 			camera.drawWieldedTool(&rightMove);
 	}
@@ -145,16 +126,15 @@ void init_texture(video::IVideoDriver* driver, const v2u32& screensize,
 			irr::video::ECF_A8R8G8B8);
 }
 
-video::ITexture* draw_image(const v2u32& screensize,
-		paralax_sign psign, const irr::core::matrix4& startMatrix,
-		const irr::core::vector3df& focusPoint, bool show_hud,
-		video::IVideoDriver* driver, Camera& camera, scene::ISceneManager* smgr,
-		Hud& hud, std::vector<aabb3f>& hilightboxes,
-		bool draw_wield_tool, Client& client, gui::IGUIEnvironment* guienv,
-		video::SColor skycolor )
+video::ITexture* draw_image(const v2u32 &screensize,
+		paralax_sign psign, const irr::core::matrix4 &startMatrix,
+		const irr::core::vector3df &focusPoint, bool show_hud,
+		video::IVideoDriver *driver, Camera &camera, scene::ISceneManager *smgr,
+		Hud &hud, bool draw_wield_tool, Client &client,
+		gui::IGUIEnvironment *guienv, const video::SColor &skycolor)
 {
 	static video::ITexture* images[2] = { NULL, NULL };
-	static v2u32 last_screensize = v2u32(0,0);
+	static v2u32 last_screensize = v2u32(0, 0);
 
 	video::ITexture* image = NULL;
 
@@ -188,10 +168,8 @@ video::ITexture* draw_image(const v2u32& screensize,
 
 	driver->setTransform(video::ETS_WORLD, core::IdentityMatrix);
 
-	if (show_hud)
-	{
-		draw_selectionbox(driver, hud, hilightboxes, show_hud);
-
+	if (show_hud) {
+		hud.drawSelectionMesh();
 		if (draw_wield_tool)
 			camera.drawWieldedTool(&movement);
 	}
@@ -221,7 +199,7 @@ video::ITexture*  draw_hud(video::IVideoDriver* driver, const v2u32& screensize,
 			hud.drawCrosshair();
 		hud.drawHotbar(client.getPlayerItem());
 		hud.drawLuaElements(camera.getOffset());
-
+		camera.drawNametags();
 		guienv->drawAll();
 	}
 
@@ -233,7 +211,7 @@ video::ITexture*  draw_hud(video::IVideoDriver* driver, const v2u32& screensize,
 }
 
 void draw_interlaced_3d_mode(Camera& camera, bool show_hud,
-		Hud& hud, std::vector<aabb3f> hilightboxes, video::IVideoDriver* driver,
+		Hud& hud, video::IVideoDriver* driver,
 		scene::ISceneManager* smgr, const v2u32& screensize,
 		bool draw_wield_tool, Client& client, gui::IGUIEnvironment* guienv,
 		video::SColor skycolor )
@@ -249,7 +227,7 @@ void draw_interlaced_3d_mode(Camera& camera, bool show_hud,
 
 	/* create left view */
 	video::ITexture* left_image = draw_image(screensize, LEFT, startMatrix,
-			focusPoint, show_hud, driver, camera, smgr, hud, hilightboxes,
+			focusPoint, show_hud, driver, camera, smgr, hud,
 			draw_wield_tool, client, guienv, skycolor);
 
 	//Right eye...
@@ -268,10 +246,8 @@ void draw_interlaced_3d_mode(Camera& camera, bool show_hud,
 
 	driver->setTransform(video::ETS_WORLD, core::IdentityMatrix);
 
-	if (show_hud)
-	{
-		draw_selectionbox(driver, hud, hilightboxes, show_hud);
-
+	if (show_hud) {
+		hud.drawSelectionMesh();
 		if(draw_wield_tool)
 			camera.drawWieldedTool(&rightMove);
 	}
@@ -294,7 +270,7 @@ void draw_interlaced_3d_mode(Camera& camera, bool show_hud,
 }
 
 void draw_sidebyside_3d_mode(Camera& camera, bool show_hud,
-		Hud& hud, std::vector<aabb3f> hilightboxes, video::IVideoDriver* driver,
+		Hud& hud, video::IVideoDriver* driver,
 		scene::ISceneManager* smgr, const v2u32& screensize,
 		bool draw_wield_tool, Client& client, gui::IGUIEnvironment* guienv,
 		video::SColor skycolor )
@@ -310,12 +286,12 @@ void draw_sidebyside_3d_mode(Camera& camera, bool show_hud,
 
 	/* create left view */
 	video::ITexture* left_image = draw_image(screensize, LEFT, startMatrix,
-			focusPoint, show_hud, driver, camera, smgr, hud, hilightboxes,
+			focusPoint, show_hud, driver, camera, smgr, hud,
 			draw_wield_tool, client, guienv, skycolor);
 
 	/* create right view */
 	video::ITexture* right_image = draw_image(screensize, RIGHT, startMatrix,
-			focusPoint, show_hud, driver, camera, smgr, hud, hilightboxes,
+			focusPoint, show_hud, driver, camera, smgr, hud,
 			draw_wield_tool, client, guienv, skycolor);
 
 	/* create hud overlay */
@@ -350,7 +326,7 @@ void draw_sidebyside_3d_mode(Camera& camera, bool show_hud,
 }
 
 void draw_top_bottom_3d_mode(Camera& camera, bool show_hud,
-		Hud& hud, std::vector<aabb3f> hilightboxes, video::IVideoDriver* driver,
+		Hud& hud, video::IVideoDriver* driver,
 		scene::ISceneManager* smgr, const v2u32& screensize,
 		bool draw_wield_tool, Client& client, gui::IGUIEnvironment* guienv,
 		video::SColor skycolor )
@@ -366,12 +342,12 @@ void draw_top_bottom_3d_mode(Camera& camera, bool show_hud,
 
 	/* create left view */
 	video::ITexture* left_image = draw_image(screensize, LEFT, startMatrix,
-			focusPoint, show_hud, driver, camera, smgr, hud, hilightboxes,
+			focusPoint, show_hud, driver, camera, smgr, hud,
 			draw_wield_tool, client, guienv, skycolor);
 
 	/* create right view */
 	video::ITexture* right_image = draw_image(screensize, RIGHT, startMatrix,
-			focusPoint, show_hud, driver, camera, smgr, hud, hilightboxes,
+			focusPoint, show_hud, driver, camera, smgr, hud,
 			draw_wield_tool, client, guienv, skycolor);
 
 	/* create hud overlay */
@@ -405,13 +381,93 @@ void draw_top_bottom_3d_mode(Camera& camera, bool show_hud,
 	camera.getCameraNode()->setTarget(oldTarget);
 }
 
-void draw_plain(Camera& camera, bool show_hud, Hud& hud,
-		std::vector<aabb3f> hilightboxes, video::IVideoDriver* driver,
-		bool draw_wield_tool, Client& client, gui::IGUIEnvironment* guienv)
+void draw_pageflip_3d_mode(Camera& camera, bool show_hud,
+		Hud& hud, video::IVideoDriver* driver,
+		scene::ISceneManager* smgr, const v2u32& screensize,
+		bool draw_wield_tool, Client& client, gui::IGUIEnvironment* guienv,
+		video::SColor skycolor)
 {
+	/* preserve old setup*/
+	irr::core::vector3df oldPosition = camera.getCameraNode()->getPosition();
+	irr::core::vector3df oldTarget   = camera.getCameraNode()->getTarget();
+
+	irr::core::matrix4 startMatrix =
+			camera.getCameraNode()->getAbsoluteTransformation();
+	irr::core::vector3df focusPoint = (camera.getCameraNode()->getTarget()
+			- camera.getCameraNode()->getAbsolutePosition()).setLength(1)
+			+ camera.getCameraNode()->getAbsolutePosition();
+
+	//Left eye...
+// fmTODO: fixme:
+#if IRRLICHT_VERSION_10000 < 10900
+	driver->setRenderTarget(irr::video::ERT_STEREO_LEFT_BUFFER);
+#endif
+
+	irr::core::vector3df leftEye;
+	irr::core::matrix4 leftMove;
+	leftMove.setTranslation(
+			irr::core::vector3df(-g_settings->getFloat("3d_paralax_strength"),
+					0.0f, 0.0f));
+	leftEye = (startMatrix * leftMove).getTranslation();
+
+	//clear the depth buffer, and color
+	driver->beginScene(true, true, irr::video::SColor(200, 200, 200, 255));
+	camera.getCameraNode()->setPosition(leftEye);
+	camera.getCameraNode()->setTarget(focusPoint);
+	smgr->drawAll();
 	driver->setTransform(video::ETS_WORLD, core::IdentityMatrix);
 
-	draw_selectionbox(driver, hud, hilightboxes, show_hud);
+	if (show_hud) {
+		hud.drawSelectionMesh();
+		if (draw_wield_tool)
+			camera.drawWieldedTool(&leftMove);
+		hud.drawHotbar(client.getPlayerItem());
+		hud.drawLuaElements(camera.getOffset());
+		camera.drawNametags();
+	}
+
+	guienv->drawAll();
+
+	//Right eye...
+// fmTODO: fixme:
+#if IRRLICHT_VERSION_10000 < 10900
+	driver->setRenderTarget(irr::video::ERT_STEREO_RIGHT_BUFFER);
+#endif
+
+	irr::core::vector3df rightEye;
+	irr::core::matrix4 rightMove;
+	rightMove.setTranslation(
+			irr::core::vector3df(g_settings->getFloat("3d_paralax_strength"),
+					0.0f, 0.0f));
+	rightEye = (startMatrix * rightMove).getTranslation();
+
+	//clear the depth buffer, and color
+	driver->beginScene(true, true, irr::video::SColor(200, 200, 200, 255));
+	camera.getCameraNode()->setPosition(rightEye);
+	camera.getCameraNode()->setTarget(focusPoint);
+	smgr->drawAll();
+	driver->setTransform(video::ETS_WORLD, core::IdentityMatrix);
+
+	if (show_hud) {
+		hud.drawSelectionMesh();
+		if (draw_wield_tool)
+			camera.drawWieldedTool(&rightMove);
+		hud.drawHotbar(client.getPlayerItem());
+		hud.drawLuaElements(camera.getOffset());
+		camera.drawNametags();
+	}
+
+	guienv->drawAll();
+
+	camera.getCameraNode()->setPosition(oldPosition);
+	camera.getCameraNode()->setTarget(oldTarget);
+}
+
+void draw_plain(Camera &camera, bool show_hud, Hud &hud,
+		video::IVideoDriver *driver, bool draw_wield_tool,
+		Client &client, gui::IGUIEnvironment *guienv)
+{
+	driver->setTransform(video::ETS_WORLD, core::IdentityMatrix);
 
 /*
 #if !defined(NDEBUG)
@@ -419,15 +475,19 @@ void draw_plain(Camera& camera, bool show_hud, Hud& hud,
 #endif
 */
 
-	if(draw_wield_tool)
-		camera.drawWieldedTool();
+	if (show_hud) {
+		hud.drawSelectionMesh();
+		if (draw_wield_tool) {
+			camera.drawWieldedTool();
+		}
+	}
 }
 
 void draw_scene(video::IVideoDriver *driver, scene::ISceneManager *smgr,
 		Camera &camera, Client& client, LocalPlayer *player, Hud &hud,
 		Mapper &mapper, gui::IGUIEnvironment *guienv,
-		std::vector<aabb3f> hilightboxes, const v2u32 &screensize,
-		video::SColor skycolor, bool show_hud, bool show_minimap)
+		const v2u32 &screensize, const video::SColor &skycolor,
+		bool show_hud, bool show_minimap)
 {
 	TimeTaker timer("smgr");
 
@@ -439,10 +499,10 @@ void draw_scene(video::IVideoDriver *driver, scene::ISceneManager *smgr,
 			(camera.getCameraMode() != CAMERA_MODE_THIRD_FRONT));
 
 #ifdef HAVE_TOUCHSCREENGUI
-	try {
-		draw_crosshair = !g_settings->getBool("touchtarget");
+	if (g_touchscreengui) {
+	static const auto touchtarget = g_settings->getBool("touchtarget");
+	draw_crosshair = !touchtarget;
 	}
-	catch(SettingNotFoundException) {}
 #endif
 
 	std::string draw_mode = g_settings->get("3d_mode");
@@ -451,30 +511,37 @@ void draw_scene(video::IVideoDriver *driver, scene::ISceneManager *smgr,
 
 	if (draw_mode == "anaglyph")
 	{
-		draw_anaglyph_3d_mode(camera, show_hud, hud, hilightboxes, driver,
+		draw_anaglyph_3d_mode(camera, show_hud, hud, driver,
 				smgr, draw_wield_tool, client, guienv);
 		draw_crosshair = false;
 	}
 	else if (draw_mode == "interlaced")
 	{
-		draw_interlaced_3d_mode(camera, show_hud, hud, hilightboxes, driver,
+		draw_interlaced_3d_mode(camera, show_hud, hud, driver,
 				smgr, screensize, draw_wield_tool, client, guienv, skycolor);
 		draw_crosshair = false;
 	}
 	else if (draw_mode == "sidebyside")
 	{
-		draw_sidebyside_3d_mode(camera, show_hud, hud, hilightboxes, driver,
+		draw_sidebyside_3d_mode(camera, show_hud, hud, driver,
 				smgr, screensize, draw_wield_tool, client, guienv, skycolor);
 		show_hud = false;
 	}
 	else if (draw_mode == "topbottom")
 	{
-		draw_top_bottom_3d_mode(camera, show_hud, hud, hilightboxes, driver,
+		draw_top_bottom_3d_mode(camera, show_hud, hud, driver,
 				smgr, screensize, draw_wield_tool, client, guienv, skycolor);
 		show_hud = false;
 	}
+	else if (draw_mode == "pageflip")
+	{
+		draw_pageflip_3d_mode(camera, show_hud, hud, driver,
+				smgr, screensize, draw_wield_tool, client, guienv, skycolor);
+		draw_crosshair = false;
+		show_hud = false;
+	}
 	else {
-		draw_plain(camera, show_hud, hud, hilightboxes, driver,
+		draw_plain(camera, show_hud, hud, driver,
 				draw_wield_tool, client, guienv);
 	}
 
@@ -490,8 +557,11 @@ void draw_scene(video::IVideoDriver *driver, scene::ISceneManager *smgr,
 	{
 		if (draw_crosshair)
 			hud.drawCrosshair();
+
 		hud.drawHotbar(client.getPlayerItem());
 		hud.drawLuaElements(camera.getOffset());
+		camera.drawNametags();
+
 		if (show_minimap)
 			mapper.drawMinimap();
 	}
@@ -501,6 +571,7 @@ void draw_scene(video::IVideoDriver *driver, scene::ISceneManager *smgr,
 	timer.stop(true);
 }
 
+static std::wstring text_old;
 /*
 	Draws a screen with a single text on it.
 	Text will be removed when the screen is drawn the next time.
@@ -512,7 +583,10 @@ void draw_load_screen(const std::wstring &text, IrrlichtDevice* device,
 	video::IVideoDriver* driver    = device->getVideoDriver();
 
 	if (device->getVideoDriver()->getDriverType() == video::EDT_NULL) {
-		actionstream<<" ... "<< text << std::endl;
+		if (text != text_old) {
+			actionstream<<" ... "<< text << std::endl;
+			text_old = text;
+		}
 		return;
 	}
 

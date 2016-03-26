@@ -27,19 +27,11 @@ function core.get_pointed_thing_position(pointed_thing, above)
 		if above then
 			-- The position where a node would be placed
 			return pointed_thing.above
-		else
-			-- The position where a node would be dug
-			return pointed_thing.under
 		end
+		-- The position where a node would be dug
+		return pointed_thing.under
 	elseif pointed_thing.type == "object" then
-		obj = pointed_thing.ref
-		if obj ~= nil then
-			return obj:getpos()
-		else
-			return nil
-		end
-	else
-		return nil
+		return pointed_thing.ref and pointed_thing.ref:getpos()
 	end
 end
 
@@ -96,25 +88,26 @@ function core.dir_to_facedir(dir, is6d)
 	end
 end
 
+-- Table of possible dirs
+local facedir_to_dir = {
+	{x= 0, y=0,  z= 1},
+	{x= 1, y=0,  z= 0},
+	{x= 0, y=0,  z=-1},
+	{x=-1, y=0,  z= 0},
+	{x= 0, y=-1, z= 0},
+	{x= 0, y=1,  z= 0},
+}
+-- Mapping from facedir value to index in facedir_to_dir.
+local facedir_to_dir_map = {
+	[0]=1, 2, 3, 4,
+	5, 2, 6, 4,
+	6, 2, 5, 4,
+	1, 5, 3, 6,
+	1, 6, 3, 5,
+	1, 4, 3, 2,
+}
 function core.facedir_to_dir(facedir)
-	--a table of possible dirs
-	return ({{x=0, y=0, z=1},
-					{x=1, y=0, z=0},
-					{x=0, y=0, z=-1},
-					{x=-1, y=0, z=0},
-					{x=0, y=-1, z=0},
-					{x=0, y=1, z=0}})
-
-					--indexed into by a table of correlating facedirs
-					[({[0]=1, 2, 3, 4,
-						5, 2, 6, 4,
-						6, 2, 5, 4,
-						1, 5, 3, 6,
-						1, 6, 3, 5,
-						1, 4, 3, 2})
-
-						--indexed into by the facedir in question
-						[facedir]]
+	return facedir_to_dir[facedir_to_dir_map[facedir]]
 end
 
 function core.dir_to_wallmounted(dir)
@@ -139,17 +132,17 @@ function core.dir_to_wallmounted(dir)
 	end
 end
 
+-- table of dirs in wallmounted order
+local wallmounted_to_dir = {
+	[0] = {x = 0, y = 1, z = 0},
+	{x =  0, y = -1, z =  0},
+	{x =  1, y =  0, z =  0},
+	{x = -1, y =  0, z =  0},
+	{x =  0, y =  0, z =  1},
+	{x =  0, y =  0, z = -1},
+}
 function core.wallmounted_to_dir(wallmounted)
-	-- table of dirs in wallmounted order
-	return ({[0] = {x = 0, y = 1, z = 0},
-		{x = 0,  y = -1, z = 0},
-		{x = 1,  y = 0,  z = 0},
-		{x = -1, y = 0,  z = 0},
-		{x = 0,  y = 0,  z = 1},
-		{x = 0,  y = 0,  z = -1}})
-
-		--indexed into by the wallmounted in question
-		[wallmounted]
+	return wallmounted_to_dir[wallmounted]
 end
 
 function core.get_node_drops(nodename, toolname)
@@ -240,7 +233,8 @@ function core.item_place_node(itemstack, placer, pointed_thing, param2)
 		place_to = {x = under.x, y = under.y, z = under.z}
 	end
 
-	if core.is_protected(place_to, placer:get_player_name()) then
+	if core.is_protected(place_to, placer:get_player_name()) and
+			not minetest.check_player_privs(placer, "protection_bypass") then
 		core.log("action", placer:get_player_name()
 				.. " tried to place " .. def.name
 				.. " at protected position "
@@ -357,8 +351,12 @@ function core.item_place(itemstack, placer, pointed_thing, param2)
 	return itemstack
 end
 
+function core.item_secondary_use(itemstack, placer)
+	return itemstack
+end
+
 function core.item_drop(itemstack, dropper, pos)
-	if dropper.is_player then
+	if dropper and dropper:is_player() then
 		local v = dropper:get_look_dir()
 		local p = {x=pos.x, y=pos.y+1.2, z=pos.z}
 		local cs = itemstack:get_count()
@@ -372,6 +370,8 @@ function core.item_drop(itemstack, dropper, pos)
 			v.y = v.y*2 + 2
 			v.z = v.z*2
 			obj:setvelocity(v)
+			obj:get_luaentity().dropped_by = dropper:get_player_name()
+			obj:get_luaentity().ttl = 86400 * 365 * 10; -- huge time for player drops
 			return itemstack
 		end
 
@@ -456,7 +456,8 @@ function core.node_dig(pos, node, digger)
 		return
 	end
 
-	if core.is_protected(pos, digger:get_player_name()) then
+	if core.is_protected(pos, digger:get_player_name()) and
+			not minetest.check_player_privs(digger, "protection_bypass") then
 		core.log("action", digger:get_player_name()
 				.. " tried to dig " .. node.name
 				.. " at protected position "
@@ -587,6 +588,7 @@ core.nodedef_default = {
 	diggable = true,
 	climbable = false,
 	buildable_to = false,
+	floodable = false,
 	liquidtype = "none",
 	liquid_alternative_flowing = "",
 	liquid_alternative_source = "",
@@ -614,6 +616,7 @@ core.craftitemdef_default = {
 	-- Interaction callbacks
 	on_place = redef_wrapper(core, 'item_place'), -- core.item_place
 	on_drop = redef_wrapper(core, 'item_drop'), -- core.item_drop
+	on_secondary_use = redef_wrapper(core, 'item_secondary_use'),
 	on_use = nil,
 }
 
@@ -631,6 +634,7 @@ core.tooldef_default = {
 
 	-- Interaction callbacks
 	on_place = redef_wrapper(core, 'item_place'), -- core.item_place
+	on_secondary_use = redef_wrapper(core, 'item_secondary_use'),
 	on_drop = redef_wrapper(core, 'item_drop'), -- core.item_drop
 	on_use = nil,
 }
@@ -649,6 +653,7 @@ core.noneitemdef_default = {  -- This is used for the hand and unknown items
 
 	-- Interaction callbacks
 	on_place = redef_wrapper(core, 'item_place'),
+	on_secondary_use = redef_wrapper(core, 'item_secondary_use'),
 	on_drop = nil,
 	on_use = nil,
 }

@@ -50,7 +50,7 @@ public:
 	bool isAttached;
 
 	v3f overridePosition;
-	
+
 	void move(f32 dtime, Environment *env, f32 pos_max_d);
 	void move(f32 dtime, Environment *env, f32 pos_max_d,
 			std::vector<CollisionInfo> *collision_info);
@@ -72,8 +72,11 @@ public:
 	int last_animation;
 	float last_animation_speed;
 
+	/*
 	std::string hotbar_image;
+	int hotbar_image_items;
 	std::string hotbar_selected_image;
+	*/
 
 	video::SColor light_color;
 
@@ -87,11 +90,16 @@ public:
 	}
 
 private:
+	void accelerateHorizontal(const v3f &target_speed, const f32 max_increase, float slippery = 0);
+	void accelerateVertical(const v3f &target_speed, const f32 max_increase);
+
 	// This is used for determining the sneaking range
 	v3s16 m_sneak_node;
 	// Whether the player is allowed to sneak
+public:
 	bool m_sneak_node_exists;
 	// Whether recalculation of the sneak node is needed
+private:
 	bool m_need_to_get_new_sneak_node;
 	// Stores the max player uplift by m_sneak_node and is updated
 	// when m_need_to_get_new_sneak_node == true

@@ -46,8 +46,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "threads.h"
 #include <atomic>
 
-#define IRRLICHT_VERSION_10000 IRRLICHT_VERSION_MAJOR*10000 + IRRLICHT_VERSION_MINOR * 100 + IRRLICHT_VERSION_REVISION
-
 #ifdef _MSC_VER
 	#define SWPRINTF_CHARSTRING L"%S"
 #else
@@ -159,10 +157,21 @@ extern std::string path_user;
 extern std::string path_locale;
 
 /*
+	Path to directory for storing caches.
+*/
+extern std::string path_cache;
+
+/*
 	Get full path of stuff in data directory.
 	Example: "stone.png" -> "../data/stone.png"
 */
 std::string getDataPath(const char *subpath);
+
+/*
+	Move cache folder from path_user to the
+	system cache location if possible.
+*/
+void migrateCachePath();
 
 /*
 	Initialize path_*.
@@ -211,43 +220,56 @@ void initIrrlicht(irr::IrrlichtDevice * );
 	}
 
 #else // Posix
-
-	inline u32 getTimeS()
+	inline void _os_get_clock(struct timespec *ts)
 	{
-		struct timeval tv;
-		gettimeofday(&tv, NULL);
-		return tv.tv_sec;
-	}
-
-	inline u32 getTimeMs()
-	{
-		struct timeval tv;
-		gettimeofday(&tv, NULL);
-		return tv.tv_sec * 1000 + tv.tv_usec / 1000;
-	}
-
-	inline u32 getTimeUs()
-	{
-		struct timeval tv;
-		gettimeofday(&tv, NULL);
-		return tv.tv_sec * 1000000 + tv.tv_usec;
-	}
-
-	inline u32 getTimeNs()
-	{
-		struct timespec ts;
-		// from http://stackoverflow.com/questions/5167269/clock-gettime-alternative-in-mac-os-x
-#if defined(__MACH__) && defined(__APPLE__) // OS X does not have clock_gettime, use clock_get_time
+#if defined(__MACH__) && defined(__APPLE__)
+	// from http://stackoverflow.com/questions/5167269/clock-gettime-alternative-in-mac-os-x
+	// OS X does not have clock_gettime, use clock_get_time
 		clock_serv_t cclock;
 		mach_timespec_t mts;
 		host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
 		clock_get_time(cclock, &mts);
 		mach_port_deallocate(mach_task_self(), cclock);
-		ts.tv_sec = mts.tv_sec;
-		ts.tv_nsec = mts.tv_nsec;
+		ts->tv_sec = mts.tv_sec;
+		ts->tv_nsec = mts.tv_nsec;
+#elif defined(CLOCK_MONOTONIC_RAW)
+		clock_gettime(CLOCK_MONOTONIC_RAW, ts);
+#elif defined(_POSIX_MONOTONIC_CLOCK)
+		clock_gettime(CLOCK_MONOTONIC, ts);
 #else
-		clock_gettime(CLOCK_REALTIME, &ts);
-#endif
+		struct timeval tv;
+		gettimeofday(&tv, NULL);
+		TIMEVAL_TO_TIMESPEC(&tv, ts);
+#endif // defined(__MACH__) && defined(__APPLE__)
+	}
+
+	// Note: these clock functions do not return wall time, but
+	// generally a clock that starts at 0 when the process starts.
+	inline u32 getTimeS()
+	{
+		struct timespec ts;
+		_os_get_clock(&ts);
+		return ts.tv_sec;
+	}
+
+	inline u32 getTimeMs()
+	{
+		struct timespec ts;
+		_os_get_clock(&ts);
+		return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+	}
+
+	inline u32 getTimeUs()
+	{
+		struct timespec ts;
+		_os_get_clock(&ts);
+		return ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+	}
+
+	inline u32 getTimeNs()
+	{
+		struct timespec ts;
+		_os_get_clock(&ts);
 		return ts.tv_sec * 1000000000 + ts.tv_nsec;
 	}
 
@@ -366,6 +388,7 @@ inline u32 getDeltaMs(u32 old_time_ms, u32 new_time_ms)
 float getDisplayDensity();
 float get_dpi();
 int get_densityDpi();
+void irr_device_wait_egl (irr::IrrlichtDevice * device = nullptr);
 
 v2u32 getDisplaySize();
 v2u32 getWindowSize();
@@ -427,6 +450,7 @@ void setXorgClassHint(const video::SExposedVideoData &video_data,
 // threads in the process inherit this exception handler
 void setWin32ExceptionHandler();
 
+bool secure_rand_fill_buf(void *buf, size_t len);
 } // namespace porting
 
 #ifdef __ANDROID__

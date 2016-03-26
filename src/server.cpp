@@ -72,7 +72,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <iomanip>
 #include "msgpack_fix.h"
 #include <chrono>
-#include "util/thread_pool.h"
+#include "threading/thread_pool.h"
 #include "key_value_storage.h"
 #include "database.h"
 
@@ -97,6 +97,7 @@ class ServerThread : public thread_pool
 public:
 
 	ServerThread(Server *server):
+		thread_pool("Server", 40),
 		m_server(server)
 	{}
 
@@ -108,8 +109,6 @@ private:
 
 void *ServerThread::run()
 {
-	reg("Server", 40);
-
 	DSTACK(FUNCTION_NAME);
 	BEGIN_DEBUG_EXCEPTION_HANDLER
 
@@ -119,22 +118,26 @@ void *ServerThread::run()
 	auto time = porting::getTimeMs();
 	while (!stopRequested()) {
 		try {
-			//TimeTaker timer("AsyncRunStep() + Receive()");
 			u32 time_now = porting::getTimeMs();
+			{
+			TimeTaker timer("Server AsyncRunStep()");
 			m_server->AsyncRunStep((time_now - time)/1000.0f);
+			}
 			time = time_now;
 
+			TimeTaker timer("Server Receive()");
 			// Loop used only when 100% cpu load or on old slow hardware.
 			// usually only one packet recieved here
 			u32 end_ms = porting::getTimeMs();
 			int sleep = (1000 * dedicated_server_step) - (end_ms - time_now);
-			if (sleep < 10)
-				sleep = 10;
+			if (sleep < 50)
+				sleep = 50;
 			end_ms += sleep; //u32(1000 * dedicated_server_step/2);
 			for (u16 i = 0; i < 1000; ++i) {
 				if (!m_server->Receive(sleep))
 					break;
-				if (porting::getTimeMs() > end_ms)
+				if (i > 50 && porting::getTimeMs() > end_ms)
+					verbosestream<<"Server: Recieve queue overloaded: processed="  << i << " per="<<porting::getTimeMs()-(end_ms-sleep)<<" sleep="<<sleep<<std::endl;
 					break;
 			}
 		} catch (con::NoIncomingDataException &e) {
@@ -144,13 +147,13 @@ void *ServerThread::run()
 		} catch (ClientNotFoundException &e) {
 		} catch (con::ConnectionBindFailed &e) {
 			m_server->setAsyncFatalError(e.what());
-#ifdef NDEBUG
+#if !EXEPTION_DEBUG
 		} catch (LuaError &e) {
 			m_server->setAsyncFatalError("Lua: " + std::string(e.what()));
 		} catch (std::exception &e) {
-			errorstream<<"ServerThread: exception: "<<e.what()<<std::endl;
+			errorstream << m_name << ": exception: "<<e.what()<<std::endl;
 		} catch (...) {
-			errorstream<<"ServerThread: Ooops..."<<std::endl;
+			errorstream << m_name << ": Ooops..."<<std::endl;
 #endif
 		}
 	}
@@ -395,6 +398,9 @@ Server::Server(
 	// Perform pending node name resolutions
 	m_nodedef->runNodeResolveCallbacks();
 
+	// unmap node names for connected nodeboxes
+	m_nodedef->mapNodeboxConnections();
+
 	// init the recipe hashes to speed up crafting
 	m_craftdef->initHashes(this);
 
@@ -423,10 +429,11 @@ Server::Server(
 	servermap->addEventReceiver(this);
 
 	// If file exists, load environment metadata
-	if(fs::PathExists(m_path_world + DIR_DELIM "env_meta.txt"))
-	{
-		infostream<<"Server: Loading environment metadata"<<std::endl;
+	if (fs::PathExists(m_path_world + DIR_DELIM "env_meta.txt")) {
+		infostream << "Server: Loading environment metadata" << std::endl;
 		m_env->loadMeta();
+	} else {
+		m_env->loadDefaultMeta();
 	}
 
 	// Add some test ActiveBlockModifiers to environment
@@ -436,9 +443,6 @@ Server::Server(
 
 	m_liquid_transform_interval = g_settings->getFloat("liquid_update");
 	m_liquid_send_interval = g_settings->getFloat("liquid_send");
-
-	if (!simple_singleplayer_mode)
-		m_nodedef->updateTextures(this);
 
 	m_emerge->startThreads();
 }
@@ -572,6 +576,9 @@ void Server::start(Address bind_addr)
 			<<"\" mapgen=\""<<m_emerge->params.mg_name
 			<<"\" listening on "<<bind_addr.serializeString()<<":"
 			<<bind_addr.getPort() << "."<<std::endl;
+
+	if (!m_simple_singleplayer_mode && g_settings->getBool("serverlist_lan"))
+		lan_adv_server.serve(m_bind_addr.getPort());
 }
 
 void Server::stop()
@@ -756,21 +763,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 			MutexAutoLock lock(m_env_mutex);
 			while (!m_admin_chat->command_queue.empty()) {
 				ChatEvent *evt = m_admin_chat->command_queue.pop_frontNoEx();
-				if (evt->type == CET_NICK_ADD) {
-					// The terminal informed us of its nick choice
-					m_admin_nick = ((ChatEventNick *)evt)->nick;
-					if (!m_script->getAuth(m_admin_nick, NULL, NULL)) {
-						errorstream << "You haven't set up an account." << std::endl
-							<< "Please log in using the client as '"
-							<< m_admin_nick << "' with a secure password." << std::endl
-							<< "Until then, you can't execute admin tasks via the console," << std::endl
-							<< "and everybody can claim the user account instead of you," << std::endl
-							<< "giving them full control over this server." << std::endl;
-					}
-				} else {
-					assert(evt->type == CET_CHAT);
-					handleAdminChat((ChatEventChat *)evt);
-				}
+				handleChatInterfaceEvent(evt);
 				delete evt;
 			}
 		}
@@ -820,19 +813,21 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 		ScopeProfiler sp(g_profiler, "Server: checking added and deleted objs");
 
 		// Radius inside which objects are active
-		s16 radius = g_settings->getS16("active_object_send_range_blocks");
-		s16 player_radius = g_settings->getS16("player_transfer_distance");
+		static const s16 radius =
+			g_settings->getS16("active_object_send_range_blocks") * MAP_BLOCKSIZE;
 
-		if (player_radius == 0 && g_settings->exists("unlimited_player_transfer_distance") &&
-				!g_settings->getBool("unlimited_player_transfer_distance"))
+		static const s16 radius_deactivate = radius * 2;
+
+		// Radius inside which players are active
+		static const bool is_transfer_limited =
+			g_settings->exists("unlimited_player_transfer_distance") &&
+			!g_settings->getBool("unlimited_player_transfer_distance");
+		static const s16 player_transfer_dist = g_settings->getS16("player_transfer_distance") * MAP_BLOCKSIZE;
+		s16 player_radius = player_transfer_dist;
+		if (player_radius == 0 && is_transfer_limited)
 			player_radius = radius;
 
-		radius *= MAP_BLOCKSIZE;
-		s16 radius_deactivate = radius * 2;
-		player_radius *= MAP_BLOCKSIZE;
-
 		for(auto & client : clients) {
-
 			// If definitions and textures have not been sent, don't
 			// send objects either
 			if (client->getState() < CS_DefinitionsSent)
@@ -1258,8 +1253,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 		TimeTaker timer_step("Server step: Trigger emergethread");
 		float &counter = m_emergethread_trigger_timer;
 		counter += dtime;
-		if(counter >= 2.0)
-		{
+		if (counter >= 2.0) {
 			counter = 0.0;
 
 			m_emerge->startThreads();
@@ -1296,8 +1290,9 @@ int Server::save(float dtime, float dedicated_server_step, bool breakable) {
 	int ret = 0;
 		float &counter = m_savemap_timer;
 		counter += dtime;
-		if(counter >= g_settings->getFloat("server_map_save_interval"))
-		{
+		static const float save_interval =
+			g_settings->getFloat("server_map_save_interval");
+		if (counter >= save_interval) {
 			counter = 0.0;
 			TimeTaker timer_step("Server step: Save map, players and auth stuff");
 			//MutexAutoLock lock(m_env_mutex);
@@ -1368,7 +1363,9 @@ u16 Server::Receive(int ms)
 	} catch (msgpack::v1::type_error &e) {
 		verbosestream<<"Server: recieve: msgpack:"<< e.what() <<std::endl;
 	} catch (std::exception &e) {
+#if !MINETEST_PROTO
 		infostream<<"Server: recieve: exception:"<< e.what() <<std::endl;
+#endif
 	}
 	return received;
 }
@@ -1476,9 +1473,6 @@ PlayerSAO* Server::StageTwoClientInit(u16 peer_id)
 	return playersao;
 }
 
-//FMTODO
-#if MINETEST_PROTO
-
 inline void Server::handleCommand(NetworkPacket* pkt)
 {
 	const ToServerCommandHandler& opHandle = toServerCommandTable[pkt->getCommand()];
@@ -1522,6 +1516,11 @@ void Server::ProcessData(NetworkPacket *pkt)
 	}
 
 	try {
+#if !MINETEST_PROTO
+		if (!pkt->packet_unpack())
+			return;
+#endif
+
 		ToServerCommand command = (ToServerCommand) pkt->getCommand();
 
 		// Command must be handled into ToServerCommandHandler
@@ -1571,8 +1570,6 @@ void Server::ProcessData(NetworkPacket *pkt)
 				<< std::endl;
 	}
 }
-#endif
-
 
 void Server::setTimeOfDay(u32 time)
 {
@@ -1654,7 +1651,7 @@ void Server::setInventoryModified(const InventoryLocation &loc, bool playerSend)
 	{
 		v3s16 blockpos = getNodeBlockPos(loc.p);
 
-		MapBlock *block = m_env->getMap().getBlockNoCreateNoEx(blockpos);
+		MapBlock *block = m_env->getMap().getBlockNoCreateNoEx(blockpos, false, true);
 		if(block)
 			block->raiseModified(MOD_STATE_WRITE_NEEDED, MOD_REASON_REPORT_META_CHANGE);
 
@@ -1786,7 +1783,7 @@ void Server::printToConsoleOnly(const std::string &text)
 		m_admin_chat->outgoing_queue.push_back(
 			new ChatEventChat("", utf8_to_wide(text)));
 	} else {
-		std::cout << text;
+		std::cout << text << std::endl;
 	}
 }
 
@@ -2919,6 +2916,7 @@ void Server::RespawnPlayer(u16 peer_id)
 	if(!repositioned){
 		v3f pos = findSpawnPos();
 		// setPos will send the new position to client
+		playersao->getPlayer()->setSpeed(v3f(0,0,0));
 		playersao->setPos(pos);
 	}
 
@@ -2943,7 +2941,7 @@ void Server::DenyAccessVerCompliant(u16 peer_id, u16 proto_ver, AccessDeniedCode
 		const std::string &str_reason, bool reconnect)
 {
 	if (proto_ver >= 25) {
-		SendAccessDenied(peer_id, reason, str_reason);
+		SendAccessDenied(peer_id, reason, str_reason, reconnect);
 	} else {
 		std::string wreason = (
 			reason == SERVER_ACCESSDENIED_CUSTOM_STRING ? str_reason :
@@ -3119,8 +3117,28 @@ void Server::UpdateCrafting(Player* player)
 	plist->changeItem(0, preview);
 }
 
+void Server::handleChatInterfaceEvent(ChatEvent *evt)
+{
+	if (evt->type == CET_NICK_ADD) {
+		// The terminal informed us of its nick choice
+		m_admin_nick = ((ChatEventNick *)evt)->nick;
+		if (!m_script->getAuth(m_admin_nick, NULL, NULL)) {
+			errorstream << "You haven't set up an account." << std::endl
+				<< "Please log in using the client as '"
+				<< m_admin_nick << "' with a secure password." << std::endl
+				<< "Until then, you can't execute admin tasks via the console," << std::endl
+				<< "and everybody can claim the user account instead of you," << std::endl
+				<< "giving them full control over this server." << std::endl;
+		}
+	} else {
+		assert(evt->type == CET_CHAT);
+		handleAdminChat((ChatEventChat *)evt);
+	}
+}
+
 std::wstring Server::handleChat(const std::string &name, const std::wstring &wname,
-	const std::wstring &wmessage, u16 peer_id_to_avoid_sending)
+	const std::wstring &wmessage, bool check_shout_priv,
+	u16 peer_id_to_avoid_sending)
 {
 	// If something goes wrong, this player is to blame
 	RollbackScopeActor rollback_scope(m_rollback,
@@ -3148,10 +3166,15 @@ std::wstring Server::handleChat(const std::string &name, const std::wstring &wna
 		else
 			line += L"-!- Invalid command: " + str_split(wcmd, L' ')[0];
 	} else {
-		line += L"<";
-		line += wname;
-		line += L"> ";
-		line += wmessage;
+		if (check_shout_priv && !checkPriv(name, "shout")) {
+			line += L"-!- You don't have permission to shout.";
+			broadcast_line = false;
+		} else {
+			line += L"<";
+			line += wname;
+			line += L"> ";
+			line += wmessage;
+		}
 	}
 
 	/*
@@ -3395,7 +3418,8 @@ bool Server::hudSetFlags(Player *player, u32 flags, u32 mask)
 		return false;
 
 	SendHUDSetFlags(player->peer_id, flags, mask);
-	player->hud_flags = flags;
+	player->hud_flags &= ~mask;
+	player->hud_flags |= flags;
 
 	PlayerSAO* playersao = player->getPlayerSAO();
 
@@ -3427,13 +3451,14 @@ s32 Server::hudGetHotbarItemcount(Player *player)
 	return player->getHotbarItemcount();
 }
 
-void Server::hudSetHotbarImage(Player *player, std::string name)
+void Server::hudSetHotbarImage(Player *player, std::string name, int items)
 {
 	if (!player)
 		return;
 
 	player->setHotbarImage(name);
 	SendHUDSetParam(player->peer_id, HUD_PARAM_HOTBAR_IMAGE, name);
+	SendHUDSetParam(player->peer_id, HUD_PARAM_HOTBAR_IMAGE_ITEMS, std::string() + to_string(items));
 }
 
 std::string Server::hudGetHotbarImage(Player *player)
@@ -3743,27 +3768,39 @@ v3f Server::findSpawnPos()
 		return nodeposf * BS;
 	}
 
+//todo: remove
 	s16 water_level = map.getWaterLevel();
 	s16 vertical_spawn_range = g_settings->getS16("vertical_spawn_range");
+//============
 	auto cache_block_before_spawn = g_settings->getBool("cache_block_before_spawn");
+
 	bool is_good = false;
 
 	// Try to find a good place a few times
-	for(s32 i = 0; i < 1000 && !is_good; i++) {
+	for(s32 i = 0; i < 4000 && !is_good; i++) {
 		s32 range = 1 + i;
 		// We're going to try to throw the player to this position
 		v2s16 nodepos2d = v2s16(
 				-range + (myrand() % (range * 2)),
 				-range + (myrand() % (range * 2)));
 
+// FM version:
 		// Get ground height at point
-		s16 groundheight = map.findGroundLevel(nodepos2d, cache_block_before_spawn);
+		s16 spawn_level = map.findGroundLevel(nodepos2d, cache_block_before_spawn);
 		// Don't go underwater or to high places
-		if (groundheight <= water_level ||
-				groundheight > water_level + vertical_spawn_range)
+		if (spawn_level <= water_level ||
+				spawn_level > water_level + vertical_spawn_range)
+
+/*MT :
+		// Get spawn level at point
+		s16 spawn_level = m_emerge->getSpawnLevelAtPoint(nodepos2d);
+		// Continue if MAX_MAP_GENERATION_LIMIT was returned by
+		// the mapgen to signify an unsuitable spawn position
+		if (spawn_level == MAX_MAP_GENERATION_LIMIT)
+*/
 			continue;
 
-		v3s16 nodepos(nodepos2d.X, groundheight, nodepos2d.Y);
+		v3s16 nodepos(nodepos2d.X, spawn_level, nodepos2d.Y);
 
 		s32 air_count = 0;
 		for (s32 i = 0; i < 10; i++) {
@@ -3878,9 +3915,11 @@ void dedicated_server_loop(Server &server, bool &kill)
 
 	int errors = 0;
 	double run_time = 0;
-	float steplen = g_settings->getFloat("dedicated_server_step");
-	for(;;)
-	{
+	static const float steplen = g_settings->getFloat("dedicated_server_step");
+	static const float profiler_print_interval =
+			g_settings->getFloat("profiler_print_interval");
+
+	for(;;) {
 		// This is kind of a hack but can be done like this
 		// because server.step() is very light
 		{
@@ -3917,10 +3956,7 @@ void dedicated_server_loop(Server &server, bool &kill)
 		/*
 			Profiler
 		*/
-		float profiler_print_interval =
-				g_settings->getFloat("profiler_print_interval");
-		if(server.m_clients.getClientList().size() && profiler_print_interval != 0)
-		{
+		if (server.m_clients.getClientList().size() && profiler_print_interval) {
 			if(m_profiler_interval.step(steplen, profiler_print_interval))
 			{
 				infostream<<"Profiler:"<<std::endl;

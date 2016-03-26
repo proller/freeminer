@@ -43,6 +43,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "lua_api/l_util.h"
 #include "lua_api/l_vmanip.h"
 #include "lua_api/l_settings.h"
+#include "lua_api/l_http.h"
 
 extern "C" {
 #include "lualib.h"
@@ -94,6 +95,7 @@ void GameScripting::InitializeModApi(lua_State *L, int top)
 	ModApiRollback::Initialize(L, top);
 	ModApiServer::Initialize(L, top);
 	ModApiUtil::Initialize(L, top);
+	ModApiHttp::Initialize(L, top);
 
 	// Register reference classes (userdata)
 	InvRef::Register(L);
@@ -103,6 +105,7 @@ void GameScripting::InitializeModApi(lua_State *L, int top)
 	LuaPerlinNoiseMap::Register(L);
 	LuaPseudoRandom::Register(L);
 	LuaPcgRandom::Register(L);
+	LuaSecureRandom::Register(L);
 	LuaVoxelManip::Register(L);
 	NodeMetaRef::Register(L);
 	NodeTimerRef::Register(L);

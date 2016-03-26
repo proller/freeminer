@@ -29,7 +29,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "../threading/mutex_auto_lock.h"
 #include "porting.h"
 #include "log.h"
-#include "thread_pool.h"
+#include "../threading/thread_pool.h"
 
 template<typename T>
 class MutexedVariable {
@@ -220,6 +220,7 @@ public:
 		BEGIN_DEBUG_EXCEPTION_HANDLER
 
 		while (!stopRequested()) {
+			EXCEPTION_HANDLER_BEGIN;
 			m_update_sem.wait(1000);
 			// Set semaphore to 0
 			while (m_update_sem.wait(0));
@@ -227,6 +228,7 @@ public:
 			if (stopRequested()) break;
 
 			doUpdate();
+			EXCEPTION_HANDLER_END;
 		}
 
 		END_DEBUG_EXCEPTION_HANDLER

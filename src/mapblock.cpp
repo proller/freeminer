@@ -40,7 +40,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/serialize.h"
 #include "circuit.h"
 #include "profiler.h"
-#include <mutex>
 
 #define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
@@ -88,6 +87,8 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 {
 	heat = 0;
 	humidity = 0;
+	heat_add = 0;
+	humidity_add = 0;
 	m_timestamp = BLOCK_TIMESTAMP_UNDEFINED;
 	m_changed_timestamp = 0;
 	m_day_night_differs_expired = true;
@@ -110,7 +111,7 @@ MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef, bool dummy):
 	m_abm_timestamp = 0;
 	content_only = CONTENT_IGNORE;
 	content_only_param1 = content_only_param2 = 0;
-	lighting_broken = false;
+	lighting_broken = 0;
 }
 
 MapBlock::~MapBlock()
@@ -124,13 +125,17 @@ MapBlock::~MapBlock()
 	//delMesh();
 #endif
 
-	{
-		std::unique_lock<std::mutex> lock(abm_triggers_mutex);
-		abm_triggers = nullptr;
+	for (int i = 0; i <= 100; ++i) {
+		std::unique_lock<Mutex> lock(abm_triggers_mutex, std::try_to_lock);
+		if (!lock.owns_lock()) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			continue;
+		}
+		abm_triggers.reset();
+		break;
 	}
 
-	if(data)
-		delete data;
+	delete data;
 	data = nullptr;
 }
 
@@ -538,7 +543,7 @@ static void getBlockNodeIdMapping(NameIdMapping *nimap, MapNode *nodes,
 // Correct ids in the block to match nodedef based on names.
 // Unknown ones are added to nodedef.
 // Will not update itself to match id-name pairs in nodedef.
-static std::mutex correctBlockNodeIds_mutex;
+static Mutex correctBlockNodeIds_mutex;
 static void correctBlockNodeIds(const NameIdMapping *nimap, MapNode *nodes,
 		IGameDef *gamedef)
 {
@@ -549,7 +554,7 @@ static void correctBlockNodeIds(const NameIdMapping *nimap, MapNode *nodes,
 	// correct ids.
 	std::set<content_t> unnamed_contents;
 	std::set<std::string> unallocatable_contents;
-	std::lock_guard<std::mutex> lock(correctBlockNodeIds_mutex);
+	std::lock_guard<Mutex> lock(correctBlockNodeIds_mutex);
 	for (u32 i = 0; i < MapBlock::nodecount; i++) {
 		content_t local_id = nodes[i].getContent();
 		std::string name;
@@ -690,8 +695,8 @@ void MapBlock::serializeNetworkSpecific(std::ostream &os, u16 net_proto_version)
 	if(net_proto_version >= 21){
 		int version = 1;
 		writeU8(os, version);
-		writeF1000(os, heat); // deprecated heat
-		writeF1000(os, humidity); // deprecated humidity
+		writeF1000(os, heat + heat_add); // deprecated heat
+		writeF1000(os, humidity + humidity_add); // deprecated humidity
 	}
 }
 
@@ -761,7 +766,7 @@ bool MapBlock::deSerialize(std::istream &is, u8 version, bool disk)
 			content_nodemeta_deserialize_legacy(iss,
 				&m_node_metadata, &m_node_timers,
 				m_gamedef->idef());
-	} catch(SerializationError &e) {
+	} catch(std::exception &e) {
 		warningstream<<"MapBlock::deSerialize(): Ignoring an error"
 				<<" while deserializing node metadata at ("
 				<<PP(getPos())<<": "<<e.what()<<std::endl;
@@ -847,14 +852,26 @@ void MapBlock::deSerializeNetworkSpecific(std::istream &is)
 #ifndef NDEBUG
 		g_profiler->add("Map: setNode", 1);
 #endif
-		if (!isValidPosition(p.X, p.Y, p.Z))
-			return;
+		//if (!isValidPosition(p.X, p.Y, p.Z))
+		//	return;
+
+		auto nodedef = m_gamedef->ndef();
+		auto index = p.Z*zstride + p.Y*ystride + p.X;
+		const auto &f1 = nodedef->get(n.getContent());
+
 		auto lock = lock_unique_rec();
-		data[p.Z*zstride + p.Y*ystride + p.X] = n;
-		raiseModified(MOD_STATE_WRITE_NEEDED);
+
+		const auto &f0 = nodedef->get(data[index].getContent());
+
+		data[index] = n;
+
+		modified_light light = modified_light_no;
+		if (f0.light_propagates != f1.light_propagates || f0.solidness != f1.solidness || f0.light_source != f1.light_source) /*|| f0.drawtype != f1.drawtype*/
+			light = modified_light_yes;
+		raiseModified(MOD_STATE_WRITE_NEEDED, light);
 	}
 
-	void MapBlock::raiseModified(u32 mod)
+	void MapBlock::raiseModified(u32 mod, modified_light light)
 	{
 		if(mod >= MOD_STATE_WRITE_NEEDED /*&& m_timestamp != BLOCK_TIMESTAMP_UNDEFINED*/) {
 			m_changed_timestamp = (unsigned int)m_parent->time_life;
@@ -864,12 +881,28 @@ void MapBlock::deSerializeNetworkSpecific(std::istream &is)
 			if(m_modified >= MOD_STATE_WRITE_AT_UNLOAD)
 				m_disk_timestamp = m_timestamp;
 		}
-		setLightingExpired(true);
+		if (light == modified_light_yes)
+			setLightingExpired(true);
 	}
 
 void MapBlock::pushElementsToCircuit(Circuit* circuit)
 {
 }
+
+	content_t MapBlock::analyzeContent() {
+		auto lock = lock_shared_rec();
+		content_only = data[0].param0;
+		content_only_param1 = data[0].param1;
+		content_only_param2 = data[0].param2;
+		for (int i = 1; i<MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; ++i) {
+			if (data[i].param0 != content_only || data[i].param1 != content_only_param1 || data[i].param2 != content_only_param2) {
+				content_only = CONTENT_IGNORE;
+				break;
+			}
+		}
+		return content_only;
+	}
+
 
 #ifndef SERVER
 MapBlock::mesh_type MapBlock::getMesh(int step, bool no_fallback) {
@@ -1042,7 +1075,7 @@ void MapBlock::deSerialize_pre22(std::istream &is, u8 version, bool disk)
 						&m_node_metadata, &m_node_timers,
 						m_gamedef->idef());
 				}
-			} catch(SerializationError &e) {
+			} catch(std::exception &e) {
 				warningstream<<"MapBlock::deSerialize(): Ignoring an error"
 						<<" while deserializing node metadata"<<std::endl;
 			}
@@ -1142,19 +1175,8 @@ void MapBlock::deSerialize_pre22(std::istream &is, u8 version, bool disk)
 
 void MapBlock::incrementUsageTimer(float dtime)
 {
-	std::lock_guard<std::mutex> lock(m_usage_timer_mutex);
+	std::lock_guard<Mutex> lock(m_usage_timer_mutex);
 	m_usage_timer += dtime;
-/*
-#ifndef SERVER
-	if(mesh){
-		//if(mesh->getUsageTimer() > 10)
-		//	mesh->setStatic();
-		//else
-			mesh->incrementUsageTimer(dtime);
-	}
-#endif
-*/
-
 }
 
 /* here for errorstream

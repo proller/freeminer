@@ -11,10 +11,11 @@ local register_alias_raw = core.register_alias_raw
 core.register_alias_raw = nil
 
 --
--- Item / entity / ABM registration functions
+-- Item / entity / ABM / LBM registration functions
 --
 
 core.registered_abms = {}
+core.registered_lbms = {}
 core.registered_entities = {}
 core.registered_items = {}
 core.registered_nodes = {}
@@ -51,27 +52,38 @@ local forbidden_item_names = {
 
 local function check_modname_prefix(name)
 	if name:sub(1,1) == ":" then
-		-- Escape the modname prefix enforcement mechanism
+		-- If the name starts with a colon, we can skip the modname prefix
+		-- mechanism.
 		return name:sub(2)
 	else
-		-- Modname prefix enforcement
+		-- Enforce that the name starts with the correct mod name.
 		local expected_prefix = core.get_current_modname() .. ":"
 		if name:sub(1, #expected_prefix) ~= expected_prefix then
 			error("Name " .. name .. " does not follow naming conventions: " ..
-				"\"modname:\" or \":\" prefix required")
+				"\"" .. expected_prefix .. "\" or \":\" prefix required")
 		end
+		
+		-- Enforce that the name only contains letters, numbers and underscores.
 		local subname = name:sub(#expected_prefix+1)
-		if subname:find("[^abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]") then
+		if subname:find("[^%w_]") then
 			error("Name " .. name .. " does not follow naming conventions: " ..
 				"contains unallowed characters")
 		end
+		
 		return name
 	end
 end
 
 function core.register_abm(spec)
 	-- Add to core.registered_abms
-	core.registered_abms[#core.registered_abms+1] = spec
+	core.registered_abms[#core.registered_abms + 1] = spec
+	spec.mod_origin = core.get_current_modname() or "??"
+end
+
+function core.register_lbm(spec)
+	-- Add to core.registered_lbms
+	check_modname_prefix(spec.name)
+	core.registered_lbms[#core.registered_lbms + 1] = spec
 	spec.mod_origin = core.get_current_modname() or "??"
 end
 
@@ -268,6 +280,7 @@ core.register_item(":unknown", {
 	description = "Unknown Item",
 	inventory_image = "unknown_item.png",
 	on_place = core.item_place,
+	on_secondary_use = core.item_secondary_use,
 	on_drop = core.item_drop,
 	groups = {not_in_creative_inventory=1},
 	diggable = true,
@@ -284,6 +297,7 @@ core.register_node(":air", {
 	pointable = false,
 	diggable = false,
 	buildable_to = true,
+	floodable = true,
 	air_equivalent = true,
 	drop = "",
 	groups = {not_in_creative_inventory=1},
@@ -385,7 +399,7 @@ end
 local function make_registration()
 	local t = {}
 	local registerfunc = function(func)
-		table.insert(t, func)
+		t[#t + 1] = func
 		core.callback_origins[func] = {
 			mod = core.get_current_modname() or "??",
 			name = debug.getinfo(1, "n").name or "??"
@@ -461,9 +475,9 @@ end
 
 function core.register_on_player_hpchange(func, modifier)
 	if modifier then
-		table.insert(core.registered_on_player_hpchanges.modifiers, func)
+		core.registered_on_player_hpchanges.modifiers[#core.registered_on_player_hpchanges.modifiers + 1] = func
 	else
-		table.insert(core.registered_on_player_hpchanges.loggers, func)
+		core.registered_on_player_hpchanges.loggers[#core.registered_on_player_hpchanges.loggers + 1] = func
 	end
 	core.callback_origins[func] = {
 		mod = core.get_current_modname() or "??",

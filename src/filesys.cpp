@@ -32,6 +32,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #include "log.h"
 #include "config.h"
+#include "porting.h"
 
 namespace fs
 {
@@ -383,7 +384,7 @@ std::string TempPath()
 		configuration hardcodes mkstemp("/tmp/lua_XXXXXX").
 	*/
 #ifdef __ANDROID__
-	return DIR_DELIM "sdcard" DIR_DELIM PROJECT_NAME DIR_DELIM "tmp";
+	return porting::path_user + "/tmp/";
 #else
 	return DIR_DELIM "tmp";
 #endif
@@ -703,18 +704,32 @@ bool safeWriteToFile(const std::string &path, const std::string &content)
 	os.flush();
 	os.close();
 	if (os.fail()) {
+		// Remove the temporary file because writing it failed and it's useless.
 		remove(tmp_file.c_str());
 		return false;
 	}
 
-	// Copy file
+	// Move the finished temporary file over the real file
+#ifdef _WIN32
+	// On POSIX compliant systems rename() is specified to be able to swap the
+	// file in place of the destination file, making this a truly error-proof
+	// transaction.
+	// However, on Windows, the target file has to be removed first.
 	remove(path.c_str());
+#endif
 	if(rename(tmp_file.c_str(), path.c_str())) {
+		// Remove the temporary file because moving it over the target file
+		// failed.
 		remove(tmp_file.c_str());
 		return false;
 	} else {
 		return true;
 	}
+}
+
+bool Rename(const std::string &from, const std::string &to)
+{
+	return rename(from.c_str(), to.c_str()) == 0;
 }
 
 } // namespace fs
