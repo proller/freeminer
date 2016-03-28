@@ -44,15 +44,34 @@ const bool debug =
     ;
 
 const bool win32 =
-#if defined(_WIN32)
+#if defined(_WIN32) && !defined(_WIN64)
     true
 #else
     false
 #endif
     ;
 
+const bool win64 =
+#if defined(_WIN64)
+    true
+#else
+    false
+#endif
+    ;
+
+const bool win = win32 || win64;
+
+
 const bool android =
 #if defined(__ANDROID__)
+    true
+#else
+    false
+#endif
+    ;
+
+const bool arm =
+#if defined(__arm__)
     true
 #else
     false
@@ -125,7 +144,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("font_path", porting::getDataPath("fonts" DIR_DELIM "liberationsans.ttf")); // porting::getDataPath("fonts" DIR_DELIM "lucida_sans")
 	settings->setDefault("mono_font_path", porting::getDataPath("fonts" DIR_DELIM "liberationmono.ttf")); // porting::getDataPath("fonts" DIR_DELIM "mono_dejavu_sans")
 
-	settings->setDefault("reconnects", win32 ? "1" : "10"); // TODO: wix windows
+	settings->setDefault("reconnects", win ? "1" : "10"); // TODO: wix windows
 
 	// Map generation
 	settings->setDefault("mg_name", "indev"); // "v6"
@@ -151,7 +170,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("cloud_height", "300"); // "120"
 	settings->setDefault("enable_zoom_cinematic", "true");
 	settings->setDefault("wanted_fps", android ? "25" : "30");
-	settings->setDefault("viewing_range_max", android ? "500" : "10000" /*itos(MAX_MAP_GENERATION_LIMIT)*/); // "240"
+	settings->setDefault("viewing_range_max", (win32 || android) ? "300" : "10000" /*itos(MAX_MAP_GENERATION_LIMIT)*/); // "240"
 	settings->setDefault("shadows", "0");
 	settings->setDefault("zoom_fov", "15");
 	settings->setDefault("farmesh", android ? "2" : "0");
@@ -159,7 +178,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("farmesh_wanted", android ? "100" :"500");
 	settings->setDefault("headless_optimize", "false");
 	//settings->setDefault("node_highlighting", "halo");
-	settings->setDefault("enable_vbo", win32 ? "false" : "true");
+	//settings->setDefault("enable_vbo", win ? "false" : "true");
 
 	// Liquid
 	settings->setDefault("liquid_real", "true");
@@ -181,7 +200,6 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("weather_humidity_width", "300");
 	settings->setDefault("weather_humidity_days", "2");
 
-	settings->setDefault("unload_unused_meshes_timeout", "120");
 	settings->setDefault("respawn_auto", "false");
 	settings->setDefault("autojump", android ? "1" : "0");
 	settings->setDefault("hotbar_cycling", "false");
@@ -226,6 +244,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("server_map_save_interval", "300"); // "5.3"
 	settings->setDefault("sqlite_synchronous", "1"); // "2"
 	settings->setDefault("save_generated_block", "true");
+	settings->setDefault("block_delete_time", threads && arm ? "60" : "10");
 
 #if (ENET_IPV6 || MINETEST_PROTO || USE_SCTP)
 	//settings->setDefault("enable_ipv6", "true");
@@ -260,8 +279,8 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("console_enabled", debug ? "true" : "false");
 
 	if (win32) {
-		settings->setDefault("client_unload_unused_data_timeout", "60");
-		settings->setDefault("server_unload_unused_data_timeout", "65");
+		settings->setDefault("client_unload_unused_data_timeout", "30");
+		settings->setDefault("server_unload_unused_data_timeout", "45");
 	}
 
 	settings->setDefault("minimap_shape_round", "false");
@@ -433,7 +452,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("vsync", "false");
 	settings->setDefault("address", "");
 	settings->setDefault("random_input", "false");
-	settings->setDefault("client_unload_unused_data_timeout", "600");
+	settings->setDefault("client_unload_unused_data_timeout", "300");
 	settings->setDefault("client_mapblock_limit", "5000");
 	settings->setDefault("enable_fog", "true");
 	settings->setDefault("fov", "72");
