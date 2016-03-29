@@ -2,6 +2,7 @@
 
 # install:
 # sudo apt-get install valgrind clang
+# sudo apt-get install google-perftools libgoogle-perftools-dev
 
 our $help = qq{
 #simple task
@@ -28,9 +29,6 @@ $0 server_gdb
 # run server without debug in gdb
 $0 server_gdb_nd
 
-# timelapse video
-$0 timelapse
-
 $0 stress_tsan  --clients_autoexit=30 --clients_runs=5 --clients_sleep=25 --options_add=headless
 
 $0 --cgroup=10g bot_tsannta --address=192.168.0.1 --port=30005
@@ -47,12 +45,24 @@ $0 bot_vtune --autoexit=60 --vtune_gui=1
 $0 bot_vtune --autoexit=60
 $0 stress_vtune
 
+# google-perftools https://github.com/gperftools/gperftools
+$0 --gperf_heapprofile=1 --gperf_heapcheck=1 --gperf_cpuprofile=1 bot_gperf
+
+
 # stress test of flowing liquid
 $0 --options_add=world_water
 
 # stress test of falling sand
 $0 --options_add=world_sand
 
+
+# timelapse video
+$0 timelapse
+
+#fly
+$0 --options_add=server_optimize,far fly
+$0 -farmesh=1 --options_add=mg_math_tglag,server_optimize,far -static_spawnpoint=10000,30030,-22700 fly
+$0 --options_bot=fall1 -continuous_forward=1 bot
 };
 
 no if $] >= 5.017011, warnings => 'experimental::smartmatch';
@@ -137,10 +147,13 @@ our $options = {
         respawn_auto             => 1,
         disable_anticheat        => 1,
         reconnects               => 10000,
-        debug_log_level          => 4,
-        enable_mapgen_debug_info => 1,
         profiler_print_interval  => 100000,
         default_game             => $config->{gameid},
+    },
+    verbose => {
+        #debug_log_level          => 'verbose',
+        -verbose                 => 1,
+        enable_mapgen_debug_info => 1,
     },
     bot_random => {
         random_input       => 1,
@@ -182,6 +195,54 @@ our $options = {
         mg_params => {"layers" => [{"name" => "default:sand"}]},
         mg_math => {"generator" => "mengersponge"},
     },
+    mg_math_tglag => {
+        -world            => $script_path . 'world_math_tglad',
+        mg_name           => 'math',
+        mg_math           => {"N" => 30, "generator" => "tglad", "mandelbox_scale" => 1.5, "scale" => 0.000333333333,},
+        static_spawnpoint => '30010,30010,-30010',
+        mg_float_islands  => 0,
+        mg_flags          => '',                                                                                          # "trees",
+    },
+    fall1 => {
+        -world            => $script_path . 'world_fall1',
+        mg_name           => 'math',
+        mg_math           => {"generator" => "menger_sponge"},
+        static_spawnpoint => '-70,20020,-190',
+        mg_float_islands  => 0,
+        mg_flags          => '',                                                                                          # "trees",
+    },
+
+    far => {
+        max_block_generate_distance => 50,
+        max_block_send_distance     => 50,
+    },
+    server_optimize => {
+        chunksize                  => 3,
+        active_block_range         => 1,
+        weather                    => 0,
+        abm_interval               => 20,
+        nodetimer_interval         => 20,
+        active_block_mgmt_interval => 20,
+        server_occlusion           => 0,
+    },
+    client_optimize => {
+        viewing_range              => 15,
+    },
+    fly_forward => {
+        crosshair_alpha    => 0,
+        time_speed         => 0,
+        enable_minimap     => 0,
+        random_input       => 0,
+        static_spawnpoint  => '0,50,0',
+        creative_mode      => 1,
+        free_move          => 1,
+        enable_damage      => 0,
+        continuous_forward => 1,
+    },
+    fast => {
+        fast_move => 1, movement_speed_fast => 30,
+    },
+    bench1 => {fixed_map_seed => 1, -autoexit => 60, max_block_generate_distance => 100, max_block_send_distance => 100,},
 };
 
 map { /^-(\w+)(?:=(.*))/ and $options->{opt}{$1} = $2; } @ARGV;
@@ -215,6 +276,7 @@ our $commands = {
         $D{MINETEST_PROTO}     = $config->{cmake_minetest}    if defined $config->{cmake_minetest};
         $D{ENABLE_LEVELDB}     = $config->{cmake_leveldb}     if defined $config->{cmake_leveldb};
         $D{USE_TOUCHSCREENGUI} = $config->{cmake_touchscreen} if defined $config->{cmake_touchscreen};
+        $D{USE_GPERF}          = $config->{cmake_gperf}       if defined $config->{cmake_gperf};
 
         $D{CMAKE_C_COMPILER}     = qq{`which clang$config->{clang_version}`},
           $D{CMAKE_CXX_COMPILER} = qq{`which clang++$config->{clang_version}`}
@@ -234,7 +296,7 @@ our $commands = {
         sy qq{rm -rf ${root_path}cache/media/* } if $config->{cache_clear} and $root_path;
         #my $args = join ' ', map { '--' . $_ . ' ' . $config->{$_} } grep { $config->{$_} } qw(gameid world address port config autoexit);
         sy qq{$config->{env} $config->{runner} @_ ./freeminer $config->{go} --logfile $config->{logdir}/autotest.$g->{task_name}.game.log }
-          . options_make([qw(gameid world address port config autoexit)])
+          . options_make([qw(gameid world address port config autoexit verbose)])
           . qq{$config->{run_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.out.log };
         0;
     },
@@ -257,7 +319,7 @@ qq{$config->{env} $config->{runner} @_ ./freeminerserver $config->{tee} $config-
         my $fork = $config->{server_fg} ? '' : '&';
         #my $args = join ' ', map { '--' . $_ . ' ' . $config->{$_} } grep { $config->{$_} } qw(gameid world port config autoexit);
         sy qq{$config->{env} $config->{runner} @_ ./freeminerserver --logfile $config->{logdir}/autotest.$g->{task_name}.game.log }
-          . options_make([qw(gameid world port config autoexit)])
+          . options_make([qw(gameid world port config autoexit verbose)])
           . qq{ $config->{run_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.server.out.log $fork};
     },
     run_clients => sub {
@@ -269,7 +331,7 @@ qq{$config->{env} $config->{runner} @_ ./freeminerserver $config->{tee} $config-
             #  map { '--' . $_ . ' ' . $config->{$_} } grep { $config->{$_} } qw( address gameid world address port config);
             sy
 qq{$config->{env} $config->{runner} @_ ./freeminer --name $config->{name}$_ --go --autoexit $autoexit --logfile $config->{logdir}/autotest.$g->{task_name}.game.log }
-              . options_make([qw( address gameid world address port config)])
+              . options_make([qw( address gameid world address port config verbose)])
               . qq{ $config->{run_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.$config->{name}$_.err.log & }
               for 0 .. $config->{clients_num};
             sleep $config->{clients_sleep} || 1;
@@ -353,6 +415,17 @@ our $tasks = {
             0;
         }, {
             -cmake_usan => 1,
+        },
+        'prepare',
+        'cmake',
+        'make',
+    ],
+    build_gperf => [
+        sub {
+            $g->{build_name} .= '_gperf';
+            0;
+        }, {
+            -cmake_gperf => 1,
         },
         'prepare',
         'cmake',
@@ -499,6 +572,19 @@ qq{$config->{vtune_amplifier}amplxe-cl -report $report -report-width=250 -report
         'clients_run',
     ],
 
+    gperf => sub {
+        my $flags;
+        $flags .= " MALLOCSTATS=9 ";
+        $flags .= " HEAPCHECK=normal " if $config->{gperf_heapcheck};
+        $flags .= " HEAPPROFILE=$config->{logdir}/heap.out " if $config->{gperf_heapprofile};
+        $flags .= " CPUPROFILE=$config->{logdir}/cpu.out " if $config->{gperf_cpuprofile};
+        local $config->{runner} = $flags . ' ' . $config->{runner};
+        @_ = ('debug') if !@_;
+        for (@_) { my $r = commands_run($_); return $r if $r; }
+    },
+    bot_gperf => [{-no_build_server => 1,}, 'build_gperf', ['gperf', 'run_single'], 'gperf_report'],
+    play_gperf => [{-no_build_server => 1,}, [\'play_task', 'build_gperf', [\'gperf', $config->{run_task}], 'gperf_report']],
+
     play_task => sub {
         return 1 if $config->{all_run};
         local $config->{no_build_server} = 1;
@@ -520,7 +606,10 @@ qq{$config->{vtune_amplifier}amplxe-cl -report $report -report-width=250 -report
     (map { 'gdb_' . $_ => [[\'gdb', $_]] } map {$_} qw(server)),
 
     play => [{-no_build_server => 1,}, [\'play_task', 'build_normal', $config->{run_task}]],    #'
-    timelapse => [{-options_add => 'timelapse',}, \'play', 'timelapse_video'],                  #'
+    timelapse_play => [{-options_int => 'timelapse',}, \'play', 'timelapse_video'],             #'
+    fly => [{-options_int => 'fly_forward', -options_bot => '',}, \'bot',],                                          #'
+    timelapse_fly => [{-options_int => 'timelapse,fly_forward', -options_bot => '',}, \'bot', 'timelapse_video'],    #'
+    bench1 => [{-options_int => 'bench1,fly_forward,fast',}, \'bot'],                                                #'
     up => sub {
         my $cwd = Cwd::cwd();
         chdir $config->{root_path};
@@ -556,7 +645,7 @@ sub array (@) {
 sub json (@) {
     local *Data::Dumper::qquote = sub {
         $_[0] =~ s/\\/\\\\/g, s/"/\\"/g for $_[0];
-        return ('"' . $_[0] . '"');
+        return $_[0] + 0 eq $_[0] ? $_[0] : '"' . $_[0] . '"';
     };
     return \(Data::Dumper->new(\@_)->Pair(':')->Terse(1)->Indent(0)->Useqq(1)->Useperl(1)->Dump());
 }
@@ -567,7 +656,10 @@ sub options_make(;$$) {
 
     $rmm = {map { $_ => $config->{$_} } grep { $config->{$_} } array(@$mm)};
 
-    $m ||= ['default', $config->{options_display}, $config->{options_bot}, (split /,;/, $config->{options_add}), 'opt'];
+    $m ||= [
+        'default', $config->{options_display}, $config->{options_bot},
+        (map { split /[,;]+/ } $config->{options_int}, $config->{options_add},), 'opt'
+    ];
     for my $name (array(@$m)) {
         $rm->{$_} = $options->{$name}{$_} for sort keys %{$options->{$name}};
         for my $k (keys %$rm) {
@@ -630,6 +722,10 @@ sub commands_run(@) {
         return command_run $c, @_;
     } elsif (ref $name) {
         return command_run $name, @_;
+        #} elsif ($options->{$name}) {
+        #    $config->{options_add} .= ',' . $name;
+        #    #command_run({-options_add => $name});
+        #    return 0;
     } else {
         say 'msg ', $name;
         return 0;

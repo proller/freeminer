@@ -336,7 +336,7 @@ public:
 		Variables
 	*/
 
-	void transforming_liquid_push_back(v3s16 p);
+	void transforming_liquid_add(v3s16 p);
 	v3s16 transforming_liquid_pop();
 	u32 transforming_liquid_size();
 	std::atomic_uint m_liquid_step_flow;
@@ -409,7 +409,7 @@ public:
 	void lighting_modified_add(v3POS pos, int range = 5);
 	std::atomic_uint time_life;
 	u32 updateLighting(lighting_map_t & a_blocks, unordered_map_v3POS<int> & processed, unsigned int max_cycle_ms = 0);
-	unsigned int updateLightingQueue(unsigned int max_cycle_ms = 0);
+	unsigned int updateLightingQueue(unsigned int max_cycle_ms, int & loopcount);
 
 
 private:

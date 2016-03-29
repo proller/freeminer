@@ -341,11 +341,13 @@ u32 Map::timerUpdate(float uptime, float unload_timeout, u32 max_loaded_blocks,
 	if (porting::getTimeMs() > m_blocks_delete_time) {
 		m_blocks_delete = (m_blocks_delete == &m_blocks_delete_1 ? &m_blocks_delete_2 : &m_blocks_delete_1);
 		verbosestream << "Deleting blocks=" << m_blocks_delete->size() << std::endl;
-		for (auto & ir : *m_blocks_delete)
+		for (auto & ir : *m_blocks_delete) {
 			delete ir.first;
+		}
 		m_blocks_delete->clear();
 		getBlockCacheFlush();
-		m_blocks_delete_time = porting::getTimeMs() + 60000;
+		static int block_delete_time = g_settings->getS16("block_delete_time");
+		m_blocks_delete_time = porting::getTimeMs() + block_delete_time * 1000;
 	}
 
 	u32 deleted_blocks_count = 0;
@@ -358,14 +360,17 @@ u32 Map::timerUpdate(float uptime, float unload_timeout, u32 max_loaded_blocks,
 	int save_started = 0;
 	{
 		auto lock = m_blocks.try_lock_shared_rec();
-		if (!lock->owns_lock())
+		if (!lock->owns_lock()) {
 			return m_blocks_update_last;
+		}
 
 #if !ENABLE_THREADS
 		auto lock_map = m_nothread_locker.try_lock_unique_rec();
 		if (!lock_map->owns_lock())
 			return m_blocks_update_last;
 #endif
+
+		auto m_blocks_size = m_blocks.size();
 
 		for(auto ir : m_blocks) {
 			if (n++ < m_blocks_update_last) {
@@ -376,13 +381,15 @@ u32 Map::timerUpdate(float uptime, float unload_timeout, u32 max_loaded_blocks,
 			++calls;
 
 			auto block = ir.second;
-			if (!block)
+			if (!block) {
 				continue;
+			}
 
 			{
 				auto lock = block->try_lock_unique_rec();
-				if (!lock->owns_lock())
+				if (!lock->owns_lock()) {
 					continue;
+				}
 				if(block->getUsageTimer() > unload_timeout) { // block->refGet() <= 0 &&
 					v3POS p = block->getPos();
 					//infostream<<" deleting block p="<<p<<" ustimer="<<block->getUsageTimer() <<" to="<< unload_timeout<<" inc="<<(uptime - block->m_uptime_timer_last)<<" state="<<block->getModified()<<std::endl;
@@ -391,8 +398,9 @@ u32 Map::timerUpdate(float uptime, float unload_timeout, u32 max_loaded_blocks,
 						//modprofiler.add(block->getModifiedReasonString(), 1);
 						if(!save_started++)
 							beginSave();
-						if (!saveBlock(block))
+						if (!saveBlock(block)) {
 							continue;
+						}
 						saved_blocks_count++;
 					}
 
@@ -415,22 +423,11 @@ u32 Map::timerUpdate(float uptime, float unload_timeout, u32 max_loaded_blocks,
 					block->m_uptime_timer_last = uptime;
 
 					block_count_all++;
-
-					/*#ifndef SERVER
-									if(block->refGet() == 0 && block->getUsageTimer() >
-											g_settings->getFloat("unload_unused_meshes_timeout"))
-									{
-										if(block->mesh){
-											delete block->mesh;
-											block->mesh = NULL;
-										}
-									}
-					#endif*/
 				}
 
 			} // block lock
 
-			if (calls > 100 && porting::getTimeMs() > end_ms) {
+			if (calls > std::max(size_t(100), m_blocks_size/10) && porting::getTimeMs() > end_ms) {
 				m_blocks_update_last = n;
 				break;
 			}
@@ -512,7 +509,7 @@ u32 Map::updateLighting(Map::lighting_map_t & a_blocks, unordered_map_v3POS<int>
 
 		u32 end_ms = porting::getTimeMs() + max_cycle_ms;
 		for(auto i = a_blocks.begin();
-		        i != a_blocks.end(); ++i) {
+		        i != a_blocks.end();) {
 
 			//processed[i->first] = //1000000;
 			//infostream<<"Light: start col if=" << i->first << std::endl;
@@ -521,11 +518,13 @@ u32 Map::updateLighting(Map::lighting_map_t & a_blocks, unordered_map_v3POS<int>
 			for(;;) {
 				// Don't bother with dummy blocks.
 				if(!block || block->isDummy() || !block->isGenerated()) {
-					break;
+					i = a_blocks.erase(i);
+					goto ablocks_end;
 				}
 				auto lock = block->try_lock_unique_rec();
-				if (!lock->owns_lock())
+				if (!lock->owns_lock()) {
 					break; // may cause dark areas
+				}
 				v3POS pos = block->getPos();
 				//if (processed.count(pos)) infostream<<"Light: test pos" << pos << " pps="<<processed[pos] << " >= if="<< i->first.Y <<std::endl;
 
@@ -594,6 +593,12 @@ u32 Map::updateLighting(Map::lighting_map_t & a_blocks, unordered_map_v3POS<int>
 				block = getBlockNoCreateNoEx(pos);
 			}
 
+
+			// magic for erase:
+			++i; 
+			ablocks_end:
+
+
 			if (porting::getTimeMs() > end_ms) {
 				++ret;
 				break;
@@ -630,11 +635,9 @@ u32 Map::updateLighting(Map::lighting_map_t & a_blocks, unordered_map_v3POS<int>
 	}
 	//infostream<< " ablocks_aft="<<a_blocks.size()<<std::endl;
 
-
 	g_profiler->add("Server: light blocks", loopcount);
 
 	return ret;
-
 }
 
 
@@ -763,7 +766,7 @@ void Map::lighting_modified_add(v3POS pos, int range) {
 };
 
 
-unsigned int Map::updateLightingQueue(unsigned int max_cycle_ms) {
+unsigned int Map::updateLightingQueue(unsigned int max_cycle_ms, int & loopcount) {
 	unsigned int ret = 0;
 	u32 end_ms = porting::getTimeMs() + max_cycle_ms;
 	unordered_map_v3POS<int> processed;
@@ -775,12 +778,13 @@ unsigned int Map::updateLightingQueue(unsigned int max_cycle_ms) {
 			auto r = m_lighting_modified_blocks_range.begin();
 			if (r == m_lighting_modified_blocks_range.end())
 				break;
+			++loopcount;
 			range = r->first;
 			blocks = r->second;
 			m_lighting_modified_blocks_range.erase(r);
 			for (auto & i : blocks)
 				m_lighting_modified_blocks.erase(i.first);
-			//infostream <<" go light range="<< r->first << " size="<<blocks.size()<< std::endl;
+			infostream <<" go light range="<< r->first << " size="<<blocks.size()<< " ranges="<<m_lighting_modified_blocks_range.size()<<" total blk"<<m_lighting_modified_blocks.size()<< std::endl;
 		}
 		ret += updateLighting(blocks, processed, max_cycle_ms);
 
@@ -791,7 +795,7 @@ unsigned int Map::updateLightingQueue(unsigned int max_cycle_ms) {
 				m_lighting_modified_blocks[i.first] = i.second;
 			}
 		}
-		//infostream <<" ok light range="<<range << " retbacksize="<<blocks.size() << " ret="<< ret << " processed="<<processed.size()<< std::endl;
+		infostream << " ok light range=" << range << " retbacksize=" << blocks.size() << " ret="<< ret << " processed="<<processed.size()<< std::endl;
 		if (porting::getTimeMs() > end_ms)
 			break;
 	}
@@ -805,6 +809,8 @@ unsigned int Map::updateLightingQueue(unsigned int max_cycle_ms) {
 			}
 		}
 	}
+
+infostream << "light ret=" << ret << " " << loopcount << std::endl;
 
 	return ret;
 }
