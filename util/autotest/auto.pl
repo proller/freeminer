@@ -147,10 +147,13 @@ our $options = {
         respawn_auto             => 1,
         disable_anticheat        => 1,
         reconnects               => 10000,
-        debug_log_level          => 'verbose',
-        enable_mapgen_debug_info => 1,
         profiler_print_interval  => 100000,
         default_game             => $config->{gameid},
+    },
+    verbose => {
+        #debug_log_level          => 'verbose',
+        -verbose                 => 1,
+        enable_mapgen_debug_info => 1,
     },
     bot_random => {
         random_input       => 1,
@@ -204,7 +207,7 @@ our $options = {
         -world            => $script_path . 'world_fall1',
         mg_name           => 'math',
         mg_math           => {"generator" => "menger_sponge"},
-        static_spawnpoint => '0,20020,0',
+        static_spawnpoint => '-70,20020,-190',
         mg_float_islands  => 0,
         mg_flags          => '',                                                                                          # "trees",
     },
@@ -293,7 +296,7 @@ our $commands = {
         sy qq{rm -rf ${root_path}cache/media/* } if $config->{cache_clear} and $root_path;
         #my $args = join ' ', map { '--' . $_ . ' ' . $config->{$_} } grep { $config->{$_} } qw(gameid world address port config autoexit);
         sy qq{$config->{env} $config->{runner} @_ ./freeminer $config->{go} --logfile $config->{logdir}/autotest.$g->{task_name}.game.log }
-          . options_make([qw(gameid world address port config autoexit)])
+          . options_make([qw(gameid world address port config autoexit verbose)])
           . qq{$config->{run_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.out.log };
         0;
     },
@@ -316,7 +319,7 @@ qq{$config->{env} $config->{runner} @_ ./freeminerserver $config->{tee} $config-
         my $fork = $config->{server_fg} ? '' : '&';
         #my $args = join ' ', map { '--' . $_ . ' ' . $config->{$_} } grep { $config->{$_} } qw(gameid world port config autoexit);
         sy qq{$config->{env} $config->{runner} @_ ./freeminerserver --logfile $config->{logdir}/autotest.$g->{task_name}.game.log }
-          . options_make([qw(gameid world port config autoexit)])
+          . options_make([qw(gameid world port config autoexit verbose)])
           . qq{ $config->{run_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.server.out.log $fork};
     },
     run_clients => sub {
@@ -328,7 +331,7 @@ qq{$config->{env} $config->{runner} @_ ./freeminerserver $config->{tee} $config-
             #  map { '--' . $_ . ' ' . $config->{$_} } grep { $config->{$_} } qw( address gameid world address port config);
             sy
 qq{$config->{env} $config->{runner} @_ ./freeminer --name $config->{name}$_ --go --autoexit $autoexit --logfile $config->{logdir}/autotest.$g->{task_name}.game.log }
-              . options_make([qw( address gameid world address port config)])
+              . options_make([qw( address gameid world address port config verbose)])
               . qq{ $config->{run_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.$config->{name}$_.err.log & }
               for 0 .. $config->{clients_num};
             sleep $config->{clients_sleep} || 1;
