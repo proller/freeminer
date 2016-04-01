@@ -176,13 +176,13 @@ MapgenV7Params::MapgenV7Params()
 	np_float_islands1  = NoiseParams(0,    1,   v3f(256, 256, 256), 3683,  6, 0.6, 2.0, NOISE_FLAG_DEFAULTS, 1,   1.5);
 	np_float_islands2  = NoiseParams(0,    1,   v3f(8,   8,   8  ), 9292,  2, 0.5, 2.0, NOISE_FLAG_DEFAULTS, 1,   1.5);
 	np_float_islands3  = NoiseParams(0,    1,   v3f(256, 256, 256), 6412,  2, 0.5, 2.0, NOISE_FLAG_DEFAULTS, 1,   0.5);
-	np_layers          = NoiseParams(500,  500, v3f(100, 100,  100), 3663, 5, 0.6, 2.0, NOISE_FLAG_DEFAULTS, 1,   5,   0.5);
+	np_layers          = NoiseParams(500,  500, v3f(100, 100,  100), 3663, 5, 0.6, 2.0, NOISE_FLAG_DEFAULTS, 1,   1.1,   0.5);
 //----------
 
 	np_terrain_base    = NoiseParams(4,    70,  v3f(600,  600,  600),  82341, 5, 0.6,  2.0);
 	np_terrain_alt     = NoiseParams(4,    25,  v3f(600,  600,  600),  5934,  5, 0.6,  2.0);
 	np_terrain_persist = NoiseParams(0.6,  0.1, v3f(2000, 2000, 2000), 539,   3, 0.6,  2.0);
-	np_height_select   = NoiseParams(-12,  24,  v3f(500,  500,  500),  4213,  6, 0.7,  2.0);
+	np_height_select   = NoiseParams(-8,   16,  v3f(500,  500,  500),  4213,  6, 0.7,  2.0);
 	np_filler_depth    = NoiseParams(0,    1.2, v3f(150,  150,  150),  261,   3, 0.7,  2.0);
 	np_mount_height    = NoiseParams(256,  112, v3f(1000, 1000, 1000), 72449, 3, 0.6,  2.0);
 	np_ridge_uwater    = NoiseParams(0,    1,   v3f(1000, 1000, 1000), 85039, 5, 0.6,  2.0);
