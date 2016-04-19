@@ -5,6 +5,8 @@
 # sudo apt-get install google-perftools libgoogle-perftools-dev
 
 our $help = qq{
+$0 [--this_script_params] [-freeminer_params] [cmd]
+
 #simple task
 $0 valgrind_massif
 
@@ -29,6 +31,9 @@ $0 server_gdb
 # run server without debug in gdb
 $0 server_gdb_nd
 
+# with periodic profiler
+$0 stress --options_add=headless,headless_optimize,info --clients_num=10 -profiler_print_interval=5
+
 $0 stress_tsan  --clients_autoexit=30 --clients_runs=5 --clients_sleep=25 --options_add=headless
 
 $0 --cgroup=10g bot_tsannta --address=192.168.0.1 --port=30005
@@ -47,7 +52,7 @@ $0 stress_vtune
 
 # google-perftools https://github.com/gperftools/gperftools
 $0 --gperf_heapprofile=1 --gperf_heapcheck=1 --gperf_cpuprofile=1 bot_gperf
-
+$0 --gperf_heapprofile=1 --gperf_heapcheck=1 --gperf_cpuprofile=1 --options_add=headless,headless_optimize,info --clients_num=50 -profiler_print_interval=10 stress_gperf
 
 # stress test of flowing liquid
 $0 --options_add=world_water
@@ -55,6 +60,7 @@ $0 --options_add=world_water
 # stress test of falling sand
 $0 --options_add=world_sand
 
+$0 --cmake_minetest=1 --build_name=_minetest --options_add=headless,headless_optimize --address=cool.server.org --port=30001 --clients_num=25 clients
 
 # timelapse video
 $0 timelapse
@@ -73,6 +79,7 @@ $Data::Dumper::Sortkeys = $Data::Dumper::Useqq = $Data::Dumper::Indent = $Data::
 #use JSON;
 use Cwd   ();
 use POSIX ();
+use Time::HiRes qw(sleep);
 
 sub sy (@);
 sub dmp (@);
@@ -150,16 +157,22 @@ our $options = {
         reconnects              => 10000,
         profiler_print_interval => 100000,
         default_game            => $config->{gameid},
+        max_users               => 4000,
     },
     no_exit => {
         autoexit => 0,
     },
+    info => {
+        -info                 => 1,
+    },
     verbose => {
         #debug_log_level          => 'verbose',
         -verbose                 => 1,
-        enable_mapgen_debug_info => 1,
+        #enable_mapgen_debug_info => 1,
     },
-    bot        => {},
+    bot        => {
+        fps_max => 30,
+    },
     bot_random => {
         random_input       => 1,
         continuous_forward => 1,
@@ -174,6 +187,10 @@ our $options = {
         enable_fog       => 0,
         enable_particles => 0,
         enable_shaders   => 0,
+    },
+    headless_optimize => {
+        fps_max => 10,
+        headless_optimize => 1,
     },
     software => {
         video_driver => 'software',
@@ -199,6 +216,10 @@ our $options = {
         mg_name   => 'math',
         mg_params => {"layers" => [{"name" => "default:sand"}]},
         mg_math => {"generator" => "mengersponge"},
+    },
+    world_torch => {
+        -world    => $script_path . 'world_torch',
+        mg_params => {"layers" => [{"name" => "default:torch"}, {"name" => "default:glass"}]},
     },
     mg_math_tglag => {
         -world            => $script_path . 'world_math_tglad',
@@ -318,8 +339,9 @@ our $commands = {
         commands_run($config->{run_task});
     },
     run_server_simple => sub {
+        my $fork = $config->{server_bg} ? '&' : '';
         sy
-qq{$config->{env} $config->{runner} @_ ./freeminerserver $config->{tee} $config->{logdir}/autotest.$g->{task_name}.server.out.log};
+qq{$config->{env} $config->{runner} @_ ./freeminerserver $config->{tee} $config->{logdir}/autotest.$g->{task_name}.server.out.log $fork};
     },
     run_server => sub {
         my $fork = $config->{server_bg} ? '&' : '';
@@ -335,12 +357,14 @@ qq{$config->{env} $config->{runner} @_ ./freeminerserver $config->{tee} $config-
             local $config->{address} = '::1' if not $config->{address};
             #my $args = join ' ',
             #  map { '--' . $_ . ' ' . $config->{$_} } grep { $config->{$_} } qw( address gameid world address port config);
+            for (0 .. $config->{clients_num}) {
             sy
 qq{$config->{env} $config->{runner} @_ ./freeminer --name $config->{name}$_ --go --autoexit $autoexit --logfile $config->{logdir}/autotest.$g->{task_name}.game.log }
               . options_make([qw( address gameid world address port config verbose)])
-              . qq{ $config->{run_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.$config->{name}$_.err.log & }
-              for 0 .. $config->{clients_num};
-            sleep $config->{clients_sleep} || 1;
+              . qq{ $config->{run_add} $config->{tee} $config->{logdir}/autotest.$g->{task_name}.$config->{name}$_.err.log & };
+               sleep $config->{clients_spawn_sleep} // 0.2;
+            }
+            sleep $config->{clients_sleep} || 1 if $config->{clients_runs};
         }
     },
     symbolize => sub {
@@ -369,13 +393,14 @@ qq{ cat ../$config->{autotest_dir_rel}$config->{screenshot_dir}/*.png | ffmpeg -
 
 our $tasks = {
     build_normal => [sub { $g->{build_name} ||= '_normal'; 0 }, 'prepare', 'cmake', 'make',],
+    build => [\'build_normal'], #'
     build_debug => [sub { $g->{build_name} .= '_debug'; 0 }, {-cmake_debug => 1,}, 'prepare', 'cmake', 'make',],
     build_nothreads => [sub { $g->{build_name} .= '_nt'; 0 }, 'prepare', ['cmake', $config->{cmake_nothreads}], 'make',],
-    build_server       => [{-no_build_client => 1,}, 'build_normal',],
-    build_server_debug => [{-no_build_client => 1,}, 'build_debug',],
-    build_client       => [{-no_build_server => 1,}, 'build_normal',],
-    build_client_debug => [{-no_build_server => 1,}, 'build_debug',],
-    bot                => [{-no_build_server => 1,}, 'build_normal', 'run_single'],
+    build_server       => [{-no_build_client => 1, -no_build_server => 0,}, 'build_normal',],
+    build_server_debug => [{-no_build_client => 1, -no_build_server => 0,}, 'build_debug',],
+    build_client       => [{-no_build_client => 0, -no_build_server => 1,}, 'build_normal',],
+    build_client_debug => [{-no_build_client => 0, -no_build_server => 1,}, 'build_debug',],
+    bot                => [{-no_build_client => 0, -no_build_server => 1,}, 'build_normal', 'run_single'],
     #run_single => ['run_single'],
     clang => ['prepare', {-cmake_clang => 1,}, 'cmake', 'make',],
     build_tsan => [sub { $g->{build_name} .= '_tsan'; 0 }, {-cmake_tsan => 1,}, 'prepare', 'cmake', 'make',],
@@ -475,8 +500,15 @@ our $tasks = {
         } @{$config->{valgrind_tools}}
     ),
 
-    build_minetest       => [sub { $g->{build_name} .= '_minetest'; 0 }, {-cmake_minetest => 1,}, 'build_client'],
-    build_minetest_debug => [sub { $g->{build_name} .= '_minetest'; 0 }, {-cmake_minetest => 1,}, 'build_client_debug'],
+    minetest => sub {
+        return 1 if $config->{all_run};
+        local $g->{build_name} = $g->{build_name} . '_minetest';
+        local $config->{cmake_minetest} = 1;
+        @_ = ('build') if !@_;
+        for (@_) { my $r = commands_run($_); return $r if $r; }
+    },
+
+    (map { 'minetest_' . $_ => [[\'minetest', $_]] } qw(build build_client build_client_debug build_server build_server_debug stress)), # '
 
     bot_minetest => sub {
         my $name = shift;
@@ -487,7 +519,7 @@ our $tasks = {
             $g->{build_name} .= '_minetest';
             commands_run('bot_' . $name);
         } else {
-            commands_run('build_minetest');
+            commands_run('build_client_minetest');
             commands_run($config->{run_task});
         }
     }, (
@@ -496,29 +528,28 @@ our $tasks = {
         } qw(tsan tsannt asan usan gdb debug)
     ),
 
-    #stress => [{ZZbuild_name => 'normal'}, 'prepare', 'cmake', 'make', 'run_server', 'run_clients',],
-    stress => sub {
-        commands_run($_[0] || 'build_normal');
-        local $config->{server_bg} = 1;
-        for ('run_server', 'run_clients') { my $r = commands_run($_); return $r if $r; }
-        return 0;
-    },
-    #clients     => [{ZZbuild_name => 'normal'}, 'prepare', {-no_build_client => 0, -no_build_server => 1}, 'cmake', 'make', 'run_clients'],
-    clients_build => [{build_name => '_normal'}, 'prepare', {-no_build_client => 0, -no_build_server => 1}, 'cmake', 'make'],
-    clients_run   => [{build_name => '_normal'}, 'run_clients'],
-    clients => ['clients_build', 'clients_run'],
+    stress => ['build_normal', {-server_bg => 1,}, 'run_server', ['sleep', 10], 'clients_run',],
+
+    clients_run => [{build_name => '_normal'}, 'run_clients'],
+    clients => ['build_client', 'clients_run'],
 
     stress_tsan => [
-        {-no_build_client => 1, -no_build_server => 0, server_bg => 1,}, 'build_tsan', 'cgroup',
+        {-no_build_client => 1, -no_build_server => 0, -server_bg => 1,}, 'build_tsan', 'cgroup',
         'run_server', ['sleep', 10], {build_name => '_normal', -cmake_tsan => 0,}, 'clients',
+
+        # todo split build and run:
+        #{-no_build_client => 1, -no_build_server => 0, -server_bg => 1,}, 'build_tsan', 'cgroup',
+        #{build_name => '_normal', -cmake_tsan => 0,}, 'build_client',
+        #{build_name => '_tsan',}, 'run_server',
+        #{build_name => '_normal',}, ['sleep', 10], 'clients_run',
     ],
     stress_asan => [
-        {-no_build_client => 1, -no_build_server => 0, server_bg => 1,}, 'build_asan', 'cgroup',
+        {-no_build_client => 1, -no_build_server => 0, -server_bg => 1,}, 'build_asan', 'cgroup',
         'run_server', ['sleep', 10], {build_name => '_normal', -cmake_asan => 0,}, 'clients',
     ],
 
     stress_massif => [
-        'clients_build',
+        'build_client',
         sub {
             local $config->{run_task} = 'run_server';
             commands_run('valgrind_massif');
@@ -526,8 +557,6 @@ our $tasks = {
         ['sleep', 10],
         'clients_run',
     ],
-
-    stress => ['build_normal', 'run_server', ['sleep', 5], 'clients_run'],
 
     debug_mapgen => [
         #{build_name => 'debug'},
@@ -548,8 +577,8 @@ our $tasks = {
     server_gdb => [{-options_add => 'no_exit'}, ['gdb', 'server_debug']],
     server_gdb_nd => [{-options_add => 'no_exit'}, 'build_server', ['gdb', 'run_server']],
 
-    bot_gdb => ['build_client_debug', ['gdb', 'run_single']],
-    bot_gdb_nd => ['build_client', ['gdb', 'run_single']],
+    bot_gdb    => ['build_client_debug', ['gdb', 'run_single']],
+    bot_gdb_nd => ['build_client',       ['gdb', 'run_single']],
 
     vtune => sub {
         sy 'echo 0|sudo tee /proc/sys/kernel/yama/ptrace_scope';
@@ -572,12 +601,13 @@ qq{$config->{vtune_amplifier}amplxe-cl -report $report -report-width=250 -report
     },
     bot_vtune => ['build_client_debug', ['vtune', 'run_single'], 'vtune_report'],
     stress_vtune => [
-        'build_debug',
-        sub {
-            commands_run('vtune', 'run_server');
-        },
-        ['sleep', 10],
-        'clients_run',
+        #'build_debug',sub { commands_run('vtune', 'run_server');}, ['sleep', 10], 'clients_run',
+         {#-no_build_client => 1, -no_build_server => 0, 
+         -server_bg => 1,}, 'build_debug',
+        [\'vtune', 'run_server'], ['sleep', 10], 
+        #{build_name => '_normal'}, 
+        'clients',
+
     ],
 
     gperf => sub {
@@ -592,6 +622,12 @@ qq{$config->{vtune_amplifier}amplxe-cl -report $report -report-width=250 -report
     },
     bot_gperf => [{-no_build_server => 1,}, 'build_gperf', ['gperf', 'run_single'], 'gperf_report'],
     play_gperf => [{-no_build_server => 1,}, [\'play_task', 'build_gperf', [\'gperf', $config->{run_task}], 'gperf_report']],
+
+    stress_gperf => [
+        {-no_build_client => 1, -no_build_server => 0, -server_bg => 1,}, 'build_gperf',
+        ['gperf', 'run_server'], ['sleep', 10], {build_name => '_normal', -cmake_gperf => 0,}, 'clients',
+    ],
+
 
     play_task => sub {
         return 1 if $config->{all_run};
@@ -626,6 +662,16 @@ qq{$config->{vtune_amplifier}amplxe-cl -report $report -report-width=250 -report
         chdir $cwd;
         return 0;
     },
+
+    kill_client => sub {
+        sy qq{killall freeminer};
+        return 0;
+    },
+    kill_server => sub {
+        sy qq{killall freeminerserver};
+        return 0;
+    },
+    kill => ['kill_client', 'kill_server'],
 };
 
 sub dmp (@) { say +(join ' ', (caller)[0 .. 5]), ' ', Data::Dumper::Dumper \@_ }
@@ -664,13 +710,13 @@ sub options_make(;$$) {
 
     $rmm = {map { $_ => $config->{$_} } grep { $config->{$_} } array(@$mm)};
 
-    $m ||= [ map { split /[,;]+/ } map { array($_) }
-        'default', $config->{options_display}, $config->{options_bot},
-         $config->{options_int}, $config->{options_add}, 'opt'
+    $m ||= [
+        map { split /[,;]+/ } map { array($_) } 'default', $config->{options_display}, $config->{options_bot},
+        $config->{options_int}, $config->{options_add}, 'opt'
     ];
     for my $name (array(@$m)) {
         $rm->{$_} = $options->{$name}{$_} for sort keys %{$options->{$name}};
-        for my $k (keys %$rm) {
+        for my $k (sort keys %$rm) {
             if ($k =~ /^-/) {
                 $rmm->{$'} = $rm->{$k};
                 delete $rm->{$k};
@@ -693,7 +739,7 @@ sub command_run(@) {
     if ('CODE' eq ref $cmd) {
         return $cmd->(@_);
     } elsif ('HASH' eq ref $cmd) {
-        for my $k (keys %$cmd) {
+        for my $k (sort keys %$cmd) {
             if ($k =~ /^-+(.+)/) {
                 $config->{$1} = $cmd->{$k};
             } else {
@@ -767,6 +813,9 @@ unless (@ARGV) {
     say "possible tasks:";
     print "$_ " for sort keys %$tasks;
     say "\n\n but running default list: ", join ' ', @$task_run;
+    say '';
+    say "possible presets in --options_add=... :";
+    print "$_ " for sort keys %$options;
     say '';
     sleep 1;
 }

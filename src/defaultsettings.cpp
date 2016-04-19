@@ -184,7 +184,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("liquid_real", "true");
 	settings->setDefault("liquid_send", android ? "3.0" : "1.0");
 	settings->setDefault("liquid_relax", android ? "1" : "2");
-	settings->setDefault("liquid_fast_flood", "1");
+	settings->setDefault("liquid_fast_flood", "-200");
 
 	// Weather
 	settings->setDefault("weather", threads ? "true" : "false");
@@ -501,6 +501,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("desynchronize_mapblock_texture_animation", "true");
 	settings->setDefault("hud_hotbar_max_width", "1.0");
 	settings->setDefault("enable_local_map_saving", "false");
+	settings->setDefault("show_entity_selectionbox", "true");
 
 	settings->setDefault("mip_map", "false");
 	settings->setDefault("anisotropic_filter", "false");

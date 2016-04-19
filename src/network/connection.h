@@ -1110,6 +1110,10 @@ private:
 	bool m_shutting_down;
 
 	u16 m_next_remote_peer_id;
+
+//freeminer:
+public:
+	size_t events_size() { return m_event_queue.size(); }
 };
 
 } // namespace
