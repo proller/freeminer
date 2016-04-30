@@ -182,8 +182,10 @@ core.register_chatcommand("grant", {
 		end
 		local privs = core.get_player_privs(grantname)
 		local privs_unknown = ""
+		local basic_privs =
+			core.string_to_privs(core.setting_get("basic_privs") or "interact,shout")
 		for priv, _ in pairs(grantprivs) do
-			if priv ~= "interact" and priv ~= "shout" and
+			if not basic_privs[priv] and
 					not core.check_player_privs(name, {privs=true}) then
 				return false, "Your privileges are insufficient."
 			end
@@ -224,8 +226,10 @@ core.register_chatcommand("revoke", {
 		end
 		local revoke_privs = core.string_to_privs(revoke_priv_str)
 		local privs = core.get_player_privs(revoke_name)
+		local basic_privs =
+			core.string_to_privs(core.setting_get("basic_privs") or "interact,shout")
 		for priv, _ in pairs(revoke_privs) do
-			if priv ~= "interact" and priv ~= "shout" and
+			if not basic_privs[priv] and
 					not core.check_player_privs(name, {privs=true}) then
 				return false, "Your privileges are insufficient."
 			end
@@ -349,10 +353,16 @@ core.register_chatcommand("teleport", {
 		p.x = tonumber(p.x)
 		p.y = tonumber(p.y)
 		p.z = tonumber(p.z)
-		teleportee = core.get_player_by_name(name)
-		if teleportee and p.x and p.y and p.z then
-			teleportee:setpos(p)
-			return true, "Teleporting to "..core.pos_to_string(p)
+		if p.x and p.y and p.z then
+			local lm = tonumber(minetest.setting_get("map_generation_limit") or 31000)
+			if p.x < -lm or p.x > lm or p.y < -lm or p.y > lm or p.z < -lm or p.z > lm then
+				return false, "Cannot teleport out of map bounds!"
+			end
+			teleportee = core.get_player_by_name(name)
+			if teleportee then
+				teleportee:setpos(p)
+				return true, "Teleporting to "..core.pos_to_string(p)
+			end
 		end
 
 		local teleportee = nil

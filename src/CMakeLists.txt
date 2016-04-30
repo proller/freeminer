@@ -1128,7 +1128,7 @@ endif()
 
 # Subdirectories
 
-if (BUILD_CLIENT AND USE_FREETYPE)
+if (BUILD_CLIENT AND USE_FREETYPE AND NOT NO_BUILD)
 	add_subdirectory(cguittfont)
 endif()
 
