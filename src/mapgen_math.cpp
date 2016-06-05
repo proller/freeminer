@@ -145,33 +145,27 @@ inline double sphere(double x, double y, double z, double d, int ITR = 1) {
 
 inline double rooms(double dx, double dy, double dz, double d, int ITR = 1) {
 	int x = dx, y = dy, z = dz;
-	//if (x < y && x < z) return 0; // debug slice
-
+	if (x < y && x < z) return 0; // debug slice
 	auto rooms_pow_min = 2, rooms_pow_max = 10;
 	auto rooms_pow_cut_max = 8;
 	for (int pw = rooms_pow_min; pw <= rooms_pow_max; ++pw) {
 		int every = 2 << pw;
 		//errorstream << " t "<<" x=" << x << " y="<< y << " x="<<z << " pw="<<pw<< " every="<<every<< " tx="<<((int)x%every)<<"\n";
-		if (!((int)x%every) || !((int)y%every) || !((int)z%every)) {
+		auto xhit = !(x%every), yhit = !(y%every), zhit = !(z%every);
+		if (xhit || yhit || zhit) {
 			//errorstream << " t "<<" x=" << x << " y="<< y << " x="<<z << " pw="<<pw<< " every="<<every<< " ty="<<((int)y%every)<<"\n";
-
-			int cx = 0, cy=0, cz=0;
+			int cx = 0, cy = 0, cz = 0;
 			int room_n = 0;
 			for (int pw2 = rooms_pow_max; pw2 >= rooms_pow_min; --pw2) {
 				//int every2 = 2 << pw2;
-				int room_size = 2 << (pw2-1);
 				int lv = 1;
-				lv += (0 + (x < cx))<<0;
-				lv += (0 + (y < cy))<<1;
-				lv += (0 + (z < cz))<<2;
+				lv += x < cx;
+				lv += (y < cy)<<1;
+				lv += (z < cz)<<2;
 				//value = lv + value * pow(10, tens);
-
 				//errorstream << " t "<<" x=" << x << " y="<< y << " z="<<z << " room_n=" << room_n << " pw="<<pw<< " hash=" << std::hash<int>()(room_n)<<" test="<<(!( std::hash<int>()(room_n) % 7))<< "\n";
-
 				room_n = lv + room_n * 10;
-
-				if (pw2 <= rooms_pow_cut_max && !( std::hash<double>()(room_n) % 7)) { 
-
+				if (pw2 <= rooms_pow_cut_max && !( std::hash<double>()(room_n + 0) % 13)) { 
 					//errorstream << " cutt "<<" x=" << x << " y="<< y << " z="<<z << " every="<< every<<" room_n=" << room_n << " pw="<<pw << " pw2="<<pw2<< "\n";
 					//errorstream << " x>>pw2" << (x>>pw2)  << " (x-1)>>pw2" << ((x-1)>>pw2) << " y>>pw2" << (y>>pw2)  << " (y-1)>>pw2" << ((y-1)>>pw2) << " z>>pw2" << (z>>pw2)  << " (z-1)>>pw2" << ((z-1)>>pw2) << "\n";
 
@@ -180,8 +174,8 @@ inline double rooms(double dx, double dy, double dz, double d, int ITR = 1) {
 						return 0; 
 					}
 				}
-
 				//errorstream << " t "<<" x=" << x << " y="<< y << " z="<<z   <<" cx=" << cx << " cy="<< cy << " cz="<<cz<< "pw="<<pw<< " every="<<every<< " lv="<< lv << " room_n="<<room_n<< room_size="<<room_size <<"\n";
+				int room_size = 2 << (pw2-1);
 				cx+= ((x < cx) ? -1 : 1) * room_size; 
 				cy+= ((y < cy) ? -1 : 1) * room_size; 
 				cz+= ((z < cz) ? -1 : 1) * room_size; 
