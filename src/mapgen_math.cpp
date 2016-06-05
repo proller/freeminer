@@ -145,9 +145,10 @@ inline double sphere(double x, double y, double z, double d, int ITR = 1) {
 
 inline double rooms(double dx, double dy, double dz, double d, int ITR = 1) {
 	int x = dx, y = dy, z = dz;
+	//if (x < y && x < z) return 0; // debug slice
+
 	auto rooms_pow_min = 2, rooms_pow_max = 10;
 	auto rooms_pow_cut_max = 8;
-	if (x < y && x < z) return 0;
 	for (int pw = rooms_pow_min; pw <= rooms_pow_max; ++pw) {
 		int every = 2 << pw;
 		//errorstream << " t "<<" x=" << x << " y="<< y << " x="<<z << " pw="<<pw<< " every="<<every<< " tx="<<((int)x%every)<<"\n";
