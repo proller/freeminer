@@ -102,10 +102,9 @@ core.register_chatcommand("help", {
 	description = "Get help for commands or list privileges",
 	func = function(name, param)
 		local function format_help_line(cmd, def)
-			local msg = freeminer.colorize("00ffff", "/"..cmd)
-			local msg = "/"..cmd
+			local msg = core.colorize("#00ffff", "/"..cmd)
 			if def.params and def.params ~= "" then
-				msg = msg .. " " .. freeminer.colorize("eeeeee", def.params)
+				msg = msg .. " " .. core.colorize("#eeeeee", def.params)
 			end
 			if def.description and def.description ~= "" then
 				msg = msg .. ": " .. def.description

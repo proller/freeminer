@@ -32,7 +32,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "modalMenu.h"
 #include "guiTable.h"
 #include "network/networkprotocol.h"
+#include "client/joystick_controller.h"
 #include "util/string.h"
+#include "util/enriched_string.h"
 
 class IGameDef;
 class InventoryManager;
@@ -205,7 +207,8 @@ class GUIFormSpecMenu : public GUIModalMenu
 			fname(name),
 			fid(id)
 		{
-			flabel = unescape_enriched(label);
+			//flabel = unescape_enriched(label);
+			flabel = label;
 			fdefault = unescape_enriched(default_text);
 			send = false;
 			ftype = f_Unknown;
@@ -242,7 +245,8 @@ class GUIFormSpecMenu : public GUIModalMenu
 			bgcolor(a_bgcolor),
 			color(a_color)
 		{
-			tooltip = unescape_enriched(utf8_to_wide(a_tooltip));
+			//tooltip = unescape_enriched(utf8_to_wide(a_tooltip));
+			tooltip = utf8_to_wide(a_tooltip);
 		}
 		std::wstring tooltip;
 		irr::video::SColor bgcolor;
@@ -259,7 +263,8 @@ class GUIFormSpecMenu : public GUIModalMenu
 			rect(a_rect),
 			parent_button(NULL)
 		{
-			text = unescape_enriched(a_text);
+			//text = unescape_enriched(a_text);
+			text = a_text;
 		}
 		StaticTextSpec(const std::wstring &a_text,
 				const core::rect<s32> &a_rect,
@@ -267,7 +272,8 @@ class GUIFormSpecMenu : public GUIModalMenu
 			rect(a_rect),
 			parent_button(a_parent_button)
 		{
-			text = unescape_enriched(a_text);
+			//text = unescape_enriched(a_text);
+			text = a_text;
 		}
 		std::wstring text;
 		core::rect<s32> rect;
@@ -276,6 +282,7 @@ class GUIFormSpecMenu : public GUIModalMenu
 
 public:
 	GUIFormSpecMenu(irr::IrrlichtDevice* dev,
+			JoystickController *joystick,
 			gui::IGUIElement* parent, s32 id,
 			IMenuManager *menumgr,
 			InventoryManager *invmgr,
@@ -431,10 +438,11 @@ protected:
 	video::SColor m_default_tooltip_color;
 
 private:
-	IFormSource      *m_form_src;
-	TextDest         *m_text_dst;
-	unsigned int      m_formspec_version;
-	std::string       m_focused_element;
+	IFormSource        *m_form_src;
+	TextDest           *m_text_dst;
+	unsigned int        m_formspec_version;
+	std::string         m_focused_element;
+	JoystickController *m_joystick;
 
 	typedef struct {
 		bool explicit_size;
@@ -491,6 +499,8 @@ private:
 	bool parseVersionDirect(std::string data);
 	bool parseSizeDirect(parserData* data, std::string element);
 	void parseScrollBar(parserData* data, std::string element);
+
+	void tryClose();
 
 	/**
 	 * check if event is part of a double click

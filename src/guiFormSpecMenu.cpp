@@ -54,6 +54,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/hex.h"
 #include "util/numeric.h"
 #include "util/string.h" // for parseColorString()
+#include "irrlicht_changes/static_text.h"
 #include "guiscalingfilter.h"
 
 #if USE_FREETYPE && IRRLICHT_VERSION_MAJOR == 1 && IRRLICHT_VERSION_MINOR < 9
@@ -82,6 +83,7 @@ static unsigned int font_line_height(gui::IGUIFont *font)
 }
 
 GUIFormSpecMenu::GUIFormSpecMenu(irr::IrrlichtDevice* dev,
+		JoystickController *joystick,
 		gui::IGUIElement* parent, s32 id, IMenuManager *menumgr,
 		InventoryManager *invmgr, IGameDef *gamedef,
 		ISimpleTextureSource *tsrc, IFormSource* fsrc, TextDest* tdst,
@@ -105,6 +107,7 @@ GUIFormSpecMenu::GUIFormSpecMenu(irr::IrrlichtDevice* dev,
 	m_text_dst(tdst),
 	m_formspec_version(0),
 	m_focused_element(""),
+	m_joystick(joystick),
 	m_font(NULL),
 	m_remap_dbl_click(remap_dbl_click)
 #ifdef __ANDROID__
@@ -251,37 +254,6 @@ std::vector<std::string>* GUIFormSpecMenu::getDropDownValues(const std::string &
 			return &m_dropdowns[i].second;
 	}
 	return NULL;
-}
-
-static std::vector<std::string> split(const std::string &s, char delim)
-{
-	std::vector<std::string> tokens;
-
-	std::string current = "";
-	bool last_was_escape = false;
-	for (unsigned int i = 0; i < s.size(); i++) {
-		char si = s.c_str()[i];
-		if (last_was_escape) {
-			current += '\\';
-			current += si;
-			last_was_escape = false;
-		} else {
-			if (si == delim) {
-				tokens.push_back(current);
-				current = "";
-				last_was_escape = false;
-			} else if (si == '\\') {
-				last_was_escape = true;
-			} else {
-				current += si;
-				last_was_escape = false;
-			}
-		}
-	}
-	//push last element
-	tokens.push_back(current);
-
-	return tokens;
 }
 
 void GUIFormSpecMenu::parseSize(parserData* data,std::string element)
@@ -972,7 +944,7 @@ void GUIFormSpecMenu::parsePwdField(parserData* data,std::string element)
 			int font_height = g_fontengine->getTextHeight();
 			rect.UpperLeftCorner.Y -= font_height;
 			rect.LowerRightCorner.Y = rect.UpperLeftCorner.Y + font_height;
-			Environment->addStaticText(spec.flabel.c_str(), rect, false, true, this, 0);
+			addStaticText(Environment, spec.flabel.c_str(), rect, false, true, this, 0);
 		}
 
 		e->setPasswordBox(true,L'*');
@@ -1027,7 +999,7 @@ void GUIFormSpecMenu::parseSimpleField(parserData* data,
 	if (name == "")
 	{
 		// spec field id to 0, this stops submit searching for a value that isn't there
-		Environment->addStaticText(spec.flabel.c_str(), rect, false, true, this, spec.fid);
+		addStaticText(Environment, spec.flabel.c_str(), rect, false, true, this, spec.fid);
 	}
 	else
 	{
@@ -1053,7 +1025,7 @@ void GUIFormSpecMenu::parseSimpleField(parserData* data,
 			int font_height = g_fontengine->getTextHeight();
 			rect.UpperLeftCorner.Y -= font_height;
 			rect.LowerRightCorner.Y = rect.UpperLeftCorner.Y + font_height;
-			Environment->addStaticText(spec.flabel.c_str(), rect, false, true, this, 0);
+			addStaticText(Environment, spec.flabel.c_str(), rect, false, true, this, 0);
 		}
 	}
 
@@ -1114,7 +1086,7 @@ void GUIFormSpecMenu::parseTextArea(parserData* data,
 	if (name == "")
 	{
 		// spec field id to 0, this stops submit searching for a value that isn't there
-		Environment->addStaticText(spec.flabel.c_str(), rect, false, true, this, spec.fid);
+		addStaticText(Environment, spec.flabel.c_str(), rect, false, true, this, spec.fid);
 	}
 	else
 	{
@@ -1147,7 +1119,7 @@ void GUIFormSpecMenu::parseTextArea(parserData* data,
 			int font_height = g_fontengine->getTextHeight();
 			rect.UpperLeftCorner.Y -= font_height;
 			rect.LowerRightCorner.Y = rect.UpperLeftCorner.Y + font_height;
-			Environment->addStaticText(spec.flabel.c_str(), rect, false, true, this, 0);
+			addStaticText(Environment, spec.flabel.c_str(), rect, false, true, this, 0);
 		}
 	}
 	m_fields.push_back(spec);
@@ -1216,7 +1188,7 @@ void GUIFormSpecMenu::parseLabel(parserData* data,std::string element)
 				258+m_fields.size()
 			);
 			gui::IGUIStaticText *e =
-				Environment->addStaticText(spec.flabel.c_str(),
+				addStaticText(Environment, spec.flabel.c_str(),
 					rect, false, false, this, spec.fid);
 			e->setTextAlignment(gui::EGUIA_UPPERLEFT,
 						gui::EGUIA_CENTER);
@@ -1270,7 +1242,7 @@ void GUIFormSpecMenu::parseVertLabel(parserData* data,std::string element)
 			258+m_fields.size()
 		);
 		gui::IGUIStaticText *t =
-				Environment->addStaticText(spec.flabel.c_str(), rect, false, false, this, spec.fid);
+				addStaticText(Environment, spec.flabel.c_str(), rect, false, false, this, spec.fid);
 		t->setTextAlignment(gui::EGUIA_CENTER, gui::EGUIA_CENTER);
 		m_fields.push_back(spec);
 		return;
@@ -1897,7 +1869,7 @@ void GUIFormSpecMenu::regenerateGui(v2u32 screensize)
 	if(!m_tooltip_element)
 	{
 		// Note: parent != this so that the tooltip isn't clipped by the menu rectangle
-		m_tooltip_element = Environment->addStaticText(L"",core::rect<s32>(0,0,110,18));
+		m_tooltip_element = addStaticText(Environment, L"",core::rect<s32>(0,0,110,18));
 		m_tooltip_element->enableOverrideColor(true);
 		m_tooltip_element->setBackgroundColor(m_default_tooltip_bgcolor);
 		m_tooltip_element->setDrawBackground(true);
@@ -2243,7 +2215,6 @@ void GUIFormSpecMenu::drawList(const ListDrawSpec &s, int phase,
 			std::wstring tooltip_text = L"";
 			if (hovering && !m_selected_item) {
 				tooltip_text = utf8_to_wide(item.getDefinition(m_gamedef->idef()).description);
-				tooltip_text = unescape_enriched(tooltip_text);
 			}
 			if (tooltip_text != L"") {
 				std::vector<std::wstring> tt_rows = str_split(tooltip_text, L'\n');
@@ -2251,7 +2222,7 @@ void GUIFormSpecMenu::drawList(const ListDrawSpec &s, int phase,
 				m_tooltip_element->setOverrideColor(m_default_tooltip_color);
 				m_tooltip_element->setVisible(true);
 				this->bringToFront(m_tooltip_element);
-				m_tooltip_element->setText(tooltip_text.c_str());
+				setStaticText(m_tooltip_element, tooltip_text.c_str());
 				s32 tooltip_width = m_tooltip_element->getTextWidth() + m_btn_height;
 #if IRRLICHT_VERSION_MAJOR <= 1 && IRRLICHT_VERSION_MINOR <= 8 && IRRLICHT_VERSION_REVISION < 2
 				s32 tooltip_height = m_tooltip_element->getTextHeight() * tt_rows.size() + 5;
@@ -2484,7 +2455,7 @@ void GUIFormSpecMenu::drawMenu()
 		Draw static text elements
 	*/
 	for (u32 i = 0; i < m_static_texts.size(); i++) {
-		const StaticTextSpec &spec = m_static_texts[i];	
+		const StaticTextSpec &spec = m_static_texts[i];
 		core::rect<s32> rect = spec.rect;
 		if (spec.parent_button && spec.parent_button->isPressed()) {
 #if (IRRLICHT_VERSION_MAJOR == 1 && IRRLICHT_VERSION_MINOR < 8)
@@ -2529,8 +2500,10 @@ void GUIFormSpecMenu::drawMenu()
 					iter != m_fields.end(); ++iter) {
 				if (iter->fid == id && m_tooltips[iter->fname].tooltip != L"") {
 					if (m_old_tooltip != m_tooltips[iter->fname].tooltip) {
+						m_tooltip_element->setBackgroundColor(m_tooltips[iter->fname].bgcolor);
+						m_tooltip_element->setOverrideColor(m_tooltips[iter->fname].color);
 						m_old_tooltip = m_tooltips[iter->fname].tooltip;
-						m_tooltip_element->setText(m_tooltips[iter->fname].tooltip.c_str());
+						setStaticText(m_tooltip_element, m_tooltips[iter->fname].tooltip.c_str());
 						std::vector<std::wstring> tt_rows = str_split(m_tooltips[iter->fname].tooltip, L'\n');
 						s32 tooltip_width = m_tooltip_element->getTextWidth() + m_btn_height;
 						s32 tooltip_height = m_tooltip_element->getTextHeight() * tt_rows.size() + 5;
@@ -2552,8 +2525,6 @@ void GUIFormSpecMenu::drawMenu()
 						core::position2d<s32>(tooltip_x, tooltip_y),
 						core::dimension2d<s32>(tooltip_width, tooltip_height)));
 					}
-					m_tooltip_element->setBackgroundColor(m_tooltips[iter->fname].bgcolor);
-					m_tooltip_element->setOverrideColor(m_tooltips[iter->fname].color);
 					m_tooltip_element->setVisible(true);
 					this->bringToFront(m_tooltip_element);
 					break;
@@ -2561,6 +2532,8 @@ void GUIFormSpecMenu::drawMenu()
 			}
 		}
 	}
+
+	m_tooltip_element->draw();
 
 	/*
 		Draw dragged item stack
@@ -3060,6 +3033,25 @@ bool GUIFormSpecMenu::preprocessEvent(const SEvent& event)
 	}
 	#endif
 
+	if (event.EventType == irr::EET_JOYSTICK_INPUT_EVENT) {
+		/* TODO add a check like:
+		if (event.JoystickEvent != joystick_we_listen_for)
+			return false;
+		*/
+		bool handled = m_joystick->handleEvent(event.JoystickEvent);
+		if (handled) {
+			if (m_joystick->wasKeyDown(KeyType::ESC)) {
+				tryClose();
+			} else if (m_joystick->wasKeyDown(KeyType::JUMP)) {
+				if (m_allowclose) {
+					acceptInput(quit_mode_accept);
+					quitMenu();
+				}
+			}
+		}
+		return handled;
+	}
+
 	return false;
 }
 
@@ -3121,19 +3113,24 @@ bool GUIFormSpecMenu::DoubleClickDetection(const SEvent event)
 	return false;
 }
 
+void GUIFormSpecMenu::tryClose()
+{
+	if (m_allowclose) {
+		doPause = false;
+		acceptInput(quit_mode_cancel);
+		quitMenu();
+	} else {
+		m_text_dst->gotText(L"MenuQuit");
+	}
+}
+
 bool GUIFormSpecMenu::OnEvent(const SEvent& event)
 {
 	if (event.EventType==EET_KEY_INPUT_EVENT) {
 		KeyPress kp(event.KeyInput);
 		if (event.KeyInput.PressedDown && ( (kp == EscapeKey) ||
 				(kp == getKeySetting("keymap_inventory")) || (kp == CancelKey))) {
-			if (m_allowclose) {
-				doPause = false;
-				acceptInput(quit_mode_cancel);
-				quitMenu();
-			} else {
-				m_text_dst->gotText(L"MenuQuit");
-			}
+			tryClose();
 			return true;
 		} else if (m_client != NULL && event.KeyInput.PressedDown &&
 				(kp == getKeySetting("keymap_screenshot"))) {

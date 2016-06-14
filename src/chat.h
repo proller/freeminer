@@ -23,12 +23,13 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef CHAT_HEADER
 #define CHAT_HEADER
 
-#include "irrlichttypes.h"
 #include <string>
 #include <vector>
 #include <list>
 
-#include "FMColoredString.h"
+//#include "FMColoredString.h"
+#include "irrlichttypes.h"
+#include "util/enriched_string.h"
 
 // Chat console related classes
 
@@ -37,11 +38,18 @@ struct ChatLine
 	// age in seconds
 	f32 age;
 	// name of sending player, or empty if sent by server
-	std::wstring name;
+	EnrichedString name;
 	// message text
-	std::wstring text;
+	EnrichedString text;
 
 	ChatLine(std::wstring a_name, std::wstring a_text):
+		age(0.0),
+		name(a_name),
+		text(a_text)
+	{
+	}
+
+	ChatLine(EnrichedString a_name, EnrichedString a_text):
 		age(0.0),
 		name(a_name),
 		text(a_text)
@@ -52,7 +60,7 @@ struct ChatLine
 struct ChatFormattedFragment
 {
 	// text string
-	FMColoredString text;
+	EnrichedString text;
 	// starting column
 	u32 column;
 	// formatting
@@ -267,7 +275,7 @@ public:
 	// Get the recent messages buffer
 	ChatBuffer& getRecentBuffer();
 	// Concatenate all recent messages
-	std::wstring getRecentChat();
+	EnrichedString getRecentChat();
 	// Get the console prompt
 	ChatPrompt& getPrompt();
 

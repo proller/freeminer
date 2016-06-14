@@ -661,6 +661,7 @@ add_subdirectory(network)
 add_subdirectory(script)
 add_subdirectory(unittest)
 add_subdirectory(util)
+add_subdirectory(irrlicht_changes)
 
 if(MINETEST_PROTO)
 OPTION(ENABLE_SCTP "Enable SCTP networking" 0)
@@ -828,8 +829,8 @@ endif()
 set(FMclient_SRCS
 	guiTextInputMenu.cpp
 	intlGUIEditBox.cpp
-	FMStaticText.cpp
 )
+	#FMStaticText.cpp
 
 if (USE_TOUCHSCREENGUI)
 	add_definitions(-DHAVE_TOUCHSCREENGUI)
@@ -846,6 +847,7 @@ set(client_SRCS
 	${common_SRCS}
 	${sound_SRCS}
 	${client_network_SRCS}
+	${client_irrlicht_changes_SRCS}
 	camera.cpp
 	client.cpp
 	clientmap.cpp

@@ -22,6 +22,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "chat.h"
 #include "debug.h"
+#include "config.h"
 #include "util/strfnd.h"
 #include <cctype>
 #include <sstream>
@@ -255,8 +256,7 @@ u32 ChatBuffer::formatChatLine(const ChatLine& line, u32 cols,
 	u32 hanging_indentation = 0;
 
 	// Format the sender name and produce fragments
-	if (!line.name.empty())
-	{
+	if (!line.name.empty()) {
 		temp_frag.text = L"<";
 		temp_frag.column = 0;
 		//temp_frag.bold = 0;
@@ -271,30 +271,27 @@ u32 ChatBuffer::formatChatLine(const ChatLine& line, u32 cols,
 		next_frags.push_back(temp_frag);
 	}
 
-	std::wstring name_sanitized = sanitizeChatString(line.name);
+	//fmold: std::wstring name_sanitized = sanitizeChatString(line.name);
+	std::wstring name_sanitized = line.name.c_str();
+
 	// Choose an indentation level
-	if (line.name.empty())
-	{
+	if (line.name.empty()) {
 		// Server messages
 		hanging_indentation = 0;
-	}
-	else if (name_sanitized.size() + 3 <= cols/2)
-	{
+	} else if (name_sanitized.size() + 3 <= cols/2) {
 		// Names shorter than about half the console width
-		hanging_indentation = name_sanitized.size() + 3;
-	}
-	else
-	{
+		hanging_indentation = line.name.size() + 3;
+	} else {
 		// Very long names
 		hanging_indentation = 2;
 	}
-	FMColoredString line_text(line.text);
+	//EnrichedString line_text(line.text);
 
 	next_line.first = true;
 	bool text_processing = false;
 
 	// Produce fragments and layout them into lines
-	while (!next_frags.empty() || in_pos < line_text.size())
+	while (!next_frags.empty() || in_pos < line.text.size())
 	{
 		// Layout fragments into lines
 		while (!next_frags.empty())
@@ -332,9 +329,9 @@ u32 ChatBuffer::formatChatLine(const ChatLine& line, u32 cols,
 		}
 
 		// Produce fragment
-		if (in_pos < line_text.size())
+		if (in_pos < line.text.size())
 		{
-			u32 remaining_in_input = line_text.size() - in_pos;
+			u32 remaining_in_input = line.text.size() - in_pos;
 			u32 remaining_in_output = cols - out_column;
 
 			// Determine a fragment length <= the minimum of
@@ -344,14 +341,14 @@ u32 ChatBuffer::formatChatLine(const ChatLine& line, u32 cols,
 			while (frag_length < remaining_in_input &&
 					frag_length < remaining_in_output)
 			{
-				if (std::isspace(line_text.getString()[in_pos + frag_length]))
+				if (std::isspace(line.text.getString()[in_pos + frag_length]))
 					space_pos = frag_length;
 				++frag_length;
 			}
 			if (space_pos != 0 && frag_length < remaining_in_input)
 				frag_length = space_pos + 1;
 
-			temp_frag.text = line_text.substr(in_pos, frag_length);
+			temp_frag.text = line.text.substr(in_pos, frag_length);
 			temp_frag.column = 0;
 			//temp_frag.bold = 0;
 			next_frags.push_back(temp_frag);
@@ -700,11 +697,6 @@ ChatBackend::~ChatBackend()
 
 void ChatBackend::addMessage(std::wstring name, std::wstring text)
 {
-/*
-	name = unescape_enriched(name);
-	text = unescape_enriched(text);
-*/
-
 	// Note: A message may consist of multiple lines, for example the MOTD.
 	WStrfnd fnd(text);
 	while (!fnd.at_end())
@@ -748,19 +740,23 @@ ChatBuffer& ChatBackend::getRecentBuffer()
 	return m_recent_buffer;
 }
 
-std::wstring ChatBackend::getRecentChat()
+EnrichedString ChatBackend::getRecentChat()
 {
-	std::wostringstream stream;
+	EnrichedString result;
 	for (u32 i = 0; i < m_recent_buffer.getLineCount(); ++i)
 	{
 		const ChatLine& line = m_recent_buffer.getLine(i);
 		if (i != 0)
-			stream << L"\n\vffffff";
-		if (!line.name.empty())
-			stream << L"<" << line.name << L"> ";
-		stream << line.text;
+			result += L"\n";
+			//fmold: \v#ffffff
+		if (!line.name.empty()) {
+			result += L"<";
+			result += line.name;
+			result += L"> ";
+		}
+		result += line.text;
 	}
-	return stream.str();
+	return result;
 }
 
 ChatPrompt& ChatBackend::getPrompt()
