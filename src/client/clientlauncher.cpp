@@ -34,6 +34,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "fontengine.h"
 #include "joystick_controller.h"
 #include "clientlauncher.h"
+#include "version.h"
 
 #include "debug.h"
 
@@ -121,6 +122,9 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 
 	porting::setXorgClassHint(video_driver->getExposedVideoData(), PROJECT_NAME_C);
 
+	porting::setXorgWindowIcon(device,
+		porting::path_share + "/misc/minetest-xorg-icon-128.png");
+
 	/*
 		This changes the minimum allowed number of vertices in a VBO.
 		Default is 500.
@@ -200,7 +204,9 @@ bool ClientLauncher::run(GameParams &game_params, const Settings &cmd_args)
 	{
 		// Set the window caption
 		const wchar_t *text = wgettext("Main Menu");
-		device->setWindowCaption((utf8_to_wide(PROJECT_NAME_C) + L" [" + text + L"]").c_str());
+		device->setWindowCaption((utf8_to_wide(PROJECT_NAME_C) +
+			L" " + utf8_to_wide(g_version_hash) +
+			L" [" + text + L"]").c_str());
 		delete[] text;
 
 		try {	// This is used for catching disconnects
