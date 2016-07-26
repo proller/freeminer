@@ -711,7 +711,6 @@ set(FMcommon_SRCS
 	circuit_element_virtual.cpp
 	key_value_storage.cpp
 	fm_bitset.cpp
-	FMColoredString.cpp
 	mapgen_v5.cpp
 	mapgen_indev.cpp
 	mapgen_math.cpp
@@ -721,6 +720,8 @@ set(FMcommon_SRCS
 	fm_liquid.cpp
 	fm_map.cpp
 )
+#	FMColoredString.cpp
+
 
 set(common_SRCS
 	ban.cpp
