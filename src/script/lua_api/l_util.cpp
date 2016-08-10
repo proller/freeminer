@@ -26,7 +26,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "common/c_content.h"
 #include "cpp_api/s_async.h"
 #include "serialization.h"
-#include "json/json.h"
+#include <json/json.h>
 #include "cpp_api/s_security.h"
 #include "porting.h"
 #include "debug.h"
@@ -475,8 +475,9 @@ int ModApiUtil::l_request_insecure_environment(lua_State *L)
 	// Check secure.trusted_mods
 	const char *mod_name = lua_tostring(L, -1);
 	std::string trusted_mods = g_settings->get("secure.trusted_mods");
-	trusted_mods.erase(std::remove(trusted_mods.begin(),
-			trusted_mods.end(), ' '), trusted_mods.end());
+	trusted_mods.erase(std::remove_if(trusted_mods.begin(),
+			trusted_mods.end(), static_cast<int(*)(int)>(&std::isspace)),
+			trusted_mods.end());
 	std::vector<std::string> mod_list = str_split(trusted_mods, ',');
 	if (std::find(mod_list.begin(), mod_list.end(), mod_name) ==
 			mod_list.end()) {

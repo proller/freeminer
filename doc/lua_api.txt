@@ -157,7 +157,8 @@ to a single modname. Their meaning is that if the specified mod
 is missing, that does not prevent this mod from being loaded.
 
 ### `screenshot.png`
-A screenshot shown in modmanager within mainmenu.
+A screenshot shown in the mod manager within the main menu. It should
+have an aspect ratio of 3:2 and a minimum size of 300×200 pixels.
 
 ### `description.txt`
 A File containing description to be shown within mainmenu.
@@ -1962,7 +1963,7 @@ Call these functions only at load time!
 * `minetest.register_privilege(name, definition)`
     * `definition`: `"description text"`
     * `definition`: `{ description = "description text", give_to_singleplayer = boolean}`
-      the default of `give_to_singleplayer` is true 
+      the default of `give_to_singleplayer` is true
     * To allow players with basic_privs to grant, see basic_privs minetest.conf setting.
 * `minetest.register_authentication_handler(handler)`
     * See `minetest.builtin_auth_handler` in `builtin.lua` for reference
@@ -2606,6 +2607,7 @@ Can be gotten via `minetest.get_meta(pos)`.
 * `get_inventory()`: returns `InvRef`
 * `to_table()`: returns `nil` or `{fields = {...}, inventory = {list1 = {}, ...}}`
 * `from_table(nil or {})`
+    * to clear metadata, use from_table(nil)
     * See "Node Metadata"
 
 ### `NodeTimerRef`

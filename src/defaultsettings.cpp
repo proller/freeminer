@@ -172,7 +172,6 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("wanted_fps", android ? "25" : "30");
 	settings->setDefault("viewing_range_max", (win32 || android) ? "300" : "10000" /*itos(MAX_MAP_GENERATION_LIMIT)*/); // "240"
 	settings->setDefault("shadows", "0");
-	settings->setDefault("zoom_fov", "15");
 	settings->setDefault("farmesh", android ? "2" : "0");
 	settings->setDefault("farmesh_step", android ? "2" : "3");
 	settings->setDefault("farmesh_wanted", android ? "100" :"500");
@@ -391,6 +390,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("keymap_jump", "KEY_SPACE");
 	settings->setDefault("keymap_sneak", "KEY_LSHIFT");
 	settings->setDefault("keymap_drop", "KEY_KEY_Q");
+	settings->setDefault("keymap_zoom", "KEY_KEY_Z");
 	settings->setDefault("keymap_inventory", "KEY_KEY_I");
 	settings->setDefault("keymap_special1", "KEY_KEY_E");
 	settings->setDefault("keymap_chat", "KEY_KEY_T");
@@ -425,6 +425,7 @@ void set_default_settings(Settings *settings)
 	settings->setDefault("always_fly_fast", "true");
 	settings->setDefault("directional_colored_fog", "true");
 	settings->setDefault("tooltip_show_delay", "400");
+	settings->setDefault("zoom_fov", "15");
 
 	// Some (temporary) keys for debugging
 	settings->setDefault("keymap_print_debug_stacks", "KEY_KEY_P");
