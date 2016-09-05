@@ -1409,26 +1409,6 @@ PlayerSAO* Server::StageTwoClientInit(u16 peer_id)
 	if(!m_simple_singleplayer_mode) {
 		// Send information about server to player in chat
 		SendChatMessage(peer_id, getStatusString());
-
-		// Send information about joining in chat
-		{
-			std::string name = "unknown";
-			Player *player = m_env->getPlayer(peer_id);
-			if(player != NULL)
-				name = player->getName();
-
-/*
-			std::wstring message;
-			message += L"*** ";
-			message += narrow_to_wide(name);
-			message += L" joined the game.";
-			SendChatMessage(PEER_ID_INEXISTENT,message);
-*/
-			if (m_admin_chat)
-				m_admin_chat->outgoing_queue.push_back(
-					new ChatEventNick(CET_NICK_ADD, name));
-		}
-
 	}
 
 /*
@@ -3030,18 +3010,6 @@ void Server::DeleteClient(u16 peer_id, ClientDeletionReason reason)
 
 		Player *player = m_env->getPlayer(peer_id);
 
-		// Collect information about leaving in chat
-		{
-			if(player != NULL && reason != CDR_DENY) {
-				std::string name = player->getName();
-				message += "*** ";
-				message += name;
-				message += " left the game.";
-				if(reason == CDR_TIMEOUT)
-					message += " (timed out)";
-			}
-		}
-
 		/* Run scripts and remove from environment */
 		{
 			if(player != NULL)
@@ -3456,7 +3424,7 @@ void Server::hudSetHotbarImage(Player *player, std::string name, int items)
 
 	player->setHotbarImage(name);
 	SendHUDSetParam(player->peer_id, HUD_PARAM_HOTBAR_IMAGE, name);
-	SendHUDSetParam(player->peer_id, HUD_PARAM_HOTBAR_IMAGE_ITEMS, std::string() + to_string(items));
+	SendHUDSetParam(player->peer_id, HUD_PARAM_HOTBAR_IMAGE_ITEMS, std::string() + std::to_string(items));
 }
 
 std::string Server::hudGetHotbarImage(Player *player)

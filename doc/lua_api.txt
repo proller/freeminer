@@ -292,6 +292,16 @@ Example:
 
     default_sandstone.png^[resize:16x16
 
+#### `[opacity:<r>`
+    Makes the base image transparent according to the given ratio.
+    r must be between 0 and 255.
+    0 means totally transparent.
+    255 means totally opaque.
+
+Example:
+
+    default_sandstone.png^[opacity:127
+
 #### `[brighten`
 Brightens the texture.
 
@@ -568,6 +578,22 @@ node definition:
     ^ The rotation of this node is stored in param2. Plants are rotated this way.
       Values range 0 - 179. The value stored in param2 is multiplied by two to
       get the actual rotation of the node.
+    paramtype2 == "meshoptions"
+    ^ Only valid for "plantlike". The value of param2 becomes a bitfield which can
+      be used to change how the client draws plantlike nodes. Bits 0, 1 and 2 form
+      a mesh selector. Currently the following meshes are choosable:
+        0 = a "x" shaped plant (ordinary plant)
+        1 = a "+" shaped plant (just rotated 45 degrees)
+        2 = a "*" shaped plant with 3 faces instead of 2
+        3 = a "#" shaped plant with 4 faces instead of 2
+        4 = a "#" shaped plant with 4 faces that lean outwards
+        5-7 are unused and reserved for future meshes.
+      Bits 3 through 7 are optional flags that can be combined and give these
+      effects:
+        bit 3 (0x08) - Makes the plant slightly vary placement horizontally
+        bit 4 (0x10) - Makes the plant mesh 1.4x larger
+        bit 5 (0x20) - Moves each face randomly a small bit down (1/8 max)
+        bits 6-7 are reserved for future use.
     collision_box = {
       type = "fixed",
       fixed = {
@@ -1477,17 +1503,23 @@ examples.
 * If `true` the background is clipped to formspec size
   (`x` and `y` are used as offset values, `w` and `h` are ignored)
 
-#### `pwdfield[<X>,<Y>;<W>,<H>;<name>;<label>]`
+#### `pwdfield[<X>,<Y>;<W>,<H>;<name>;<label>;<close_on_enter>]`
 * Textual password style field; will be sent to server when a button is clicked
+* When enter is pressed in field, fields.key_enter_field will be sent with the name
+  of this field.
 * `x` and `y` position the field relative to the top left of the menu
 * `w` and `h` are the size of the field
 * Fields are a set height, but will be vertically centred on `h`
 * Position and size units are inventory slots
 * `name` is the name of the field as returned in fields to `on_receive_fields`
 * `label`, if not blank, will be text printed on the top left above the field
+* `close_on_enter` (optional) is whether the form should accept and close when enter is
+  pressed in this field. Defaults to true.
 
-#### `field[<X>,<Y>;<W>,<H>;<name>;<label>;<default>]`
+#### `field[<X>,<Y>;<W>,<H>;<name>;<label>;<default>;<close_on_enter>]`
 * Textual field; will be sent to server when a button is clicked
+* When enter is pressed in field, fields.key_enter_field will be sent with the name
+  of this field.
 * `x` and `y` position the field relative to the top left of the menu
 * `w` and `h` are the size of the field
 * Fields are a set height, but will be vertically centred on `h`
@@ -1498,12 +1530,18 @@ examples.
     * `default` may contain variable references such as `${text}'` which
       will fill the value from the metadata value `text`
     * **Note**: no extra text or more than a single variable is supported ATM.
+* `close_on_enter` (optional) is whether the form should accept and close when enter is
+  pressed in this field. Defaults to true.
 
-#### `field[<name>;<label>;<default>]`
+#### `field[<name>;<label>;<default>;<close_on_enter>]`
 * As above, but without position/size units
+* When enter is pressed in field, fields.key_enter_field will be sent with the name
+  of this field.
 * Special field for creating simple forms, such as sign text input
 * Must be used without a `size[]` element
 * A "Proceed" button will be added automatically
+* `close_on_enter` (optional) is whether the form should accept and close when enter is
+  pressed in this field. Defaults to true.
 
 #### `textarea[<X>,<Y>;<W>,<H>;<name>;<label>;<default>]`
 * Same as fields above, but with multi-line input
@@ -3462,27 +3500,26 @@ Definition tables
 
     {
         description = "Steel Axe",
-        groups = {}, -- key=name, value=rating; rating=1..3.
+        groups = {}, -- key = name, value = rating; rating = 1..3.
                         if rating not applicable, use 1.
-                        e.g. {wool=1, fluffy=3}
-                            {soil=2, outerspace=1, crumbly=1}
-                            {bendy=2, snappy=1},
-                            {hard=1, metal=1, spikes=1}
+                        e.g. {wool = 1, fluffy = 3}
+                            {soil = 2, outerspace = 1, crumbly = 1}
+                            {bendy = 2, snappy = 1},
+                            {hard = 1, metal = 1, spikes = 1}
         inventory_image = "default_tool_steelaxe.png",
         wield_image = "",
-        wield_scale = {x=1,y=1,z=1},
+        wield_scale = {x = 1, y = 1, z = 1},
         stack_max = 99,
         range = 4.0,
         liquids_pointable = false,
         tool_capabilities = {
             full_punch_interval = 1.0,
-            max_drop_level=0,
-            groupcaps={
+            max_drop_level = 0,
+            groupcaps = {
                 -- For example:
-                snappy={times={[2]=0.80, [3]=0.40}, maxwear=0.05, maxlevel=1},
-                choppy={times={[3]=0.90}, maxwear=0.05, maxlevel=0}
+                choppy = {times = {[1] = 2.50, [2] = 1.40, [3] = 1.00}, uses = 20, maxlevel = 2},
             },
-            damage_groups = {groupname=damage},
+            damage_groups = {groupname = damage},
         },
         node_placement_prediction = nil,
         --[[

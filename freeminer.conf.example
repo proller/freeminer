@@ -173,6 +173,11 @@
 #    type: key
 # keymap_noclip = KEY_KEY_H
 
+#    Key for toggling autorun.
+#    See http://irrlicht.sourceforge.net/docu/namespaceirr.html#a54da2a0e231901735e3da1b0edf72eb3
+#    type: key
+# keymap_autorun =
+
 #    Key for toggling cinematic mode.
 #    See http://irrlicht.sourceforge.net/docu/namespaceirr.html#a54da2a0e231901735e3da1b0edf72eb3
 #    type: key
@@ -208,7 +213,7 @@
 #    type: key
 # keymap_toggle_force_fog_off = KEY_F3
 
-#    Key for toggling the camrea update. Only used for development
+#    Key for toggling the camera update. Only used for development
 #    See http://irrlicht.sourceforge.net/docu/namespaceirr.html#a54da2a0e231901735e3da1b0edf72eb3
 #    type: key
 # keymap_toggle_update_camera =
@@ -261,7 +266,7 @@
 #    Servers starting with 0.4.13 will work, 0.4.12-dev servers may work.
 #    Disabling this option will protect your password better.
 #    type: bool
-# send_pre_v25_init = true
+# send_pre_v25_init = false
 
 #    Save the map received by the client on disk.
 #    type: bool
@@ -369,7 +374,7 @@
 
 #### Shaders
 
-#    Shaders allow advanced visul effects and may increase performance on some video cards.
+#    Shaders allow advanced visual effects and may increase performance on some video cards.
 #    Thy only work with the OpenGL video backend.
 #    type: bool
 # enable_shaders = true
@@ -633,7 +638,7 @@
 #    When gui_scaling_filter_txr2img is true, copy those images
 #    from hardware to software for scaling.  When false, fall back
 #    to the old scaling method, for video drivers that don't
-#    propery support downloading textures back from hardware.
+#    properly support downloading textures back from hardware.
 #    type: bool
 # gui_scaling_filter_txr2img = true
 
@@ -789,11 +794,11 @@
 
 ### Advanced
 
-#    How many blocks are flying in the wire simultaneously per client.
+#    Maximum number of blocks that are simultaneously sent per client.
 #    type: int
 # max_simultaneous_block_sends_per_client = 10
 
-#    How many blocks are flying in the wire simultaneously for the whole server.
+#    Maximum number of blocks that are simultaneously sent in total.
 #    type: int
 # max_simultaneous_block_sends_server_total = 40
 
@@ -1464,7 +1469,7 @@
 #    type: string
 # secure.trusted_mods =
 
-#    Comma-seperated list of mods that are allowed to access HTTP APIs, which
+#    Comma-separated list of mods that are allowed to access HTTP APIs, which
 #    allow them to upload and download data to/from the internet.
 #    type: string
 # secure.http_mods =
@@ -1635,9 +1640,9 @@
 #    type: bool
 # enable_vbo = false
 
-#    Greater FOV when running or flying
+#    Reduce FOV when speed increases
 #    type: bool
-# enable_movement_fov = true
+# movement_fov = true
 
 #    FOV when using zoom, default 15
 #    type: int
