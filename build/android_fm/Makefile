@@ -52,7 +52,7 @@ GIT_CLONE = git clone --recursive --depth 10
 ################################################################################
 TARGET_HOST = arm-linux
 #TARGET_ABI = armeabi-v7a
-TARGET_ABI = armeabi-v7a-hard
+TARGET_ABI = armeabi-v7a
 TARGET_LIBDIR = armeabi-v7a
 TARGET_TOOLCHAIN = arm-linux-androideabi-
 TARGET_CFLAGS_ADDON = -mfloat-abi=softfp -mfpu=vfpv3 -O3
@@ -67,10 +67,12 @@ HAVE_LEVELDB = 1
 USE_LUAJIT = 1
 USE_ENET = 1
 APP_STL = gnustl       # gnustl libcxx|libc++ stlport
+CC = clang
+CXX = clang++
 
 #COMPILER_VERSION = clang
 #TARGET_CFLAGS_ADDON = -D_NDK_MATH_NO_SOFTFP=1 -Ofast
-#STANDALONE_ADDON = --use-llvm
+STANDALONE_ADDON = --use-llvm
 
 ifeq ($(TARGET_arm64),1)
 ifneq ($(NO_AUTO_VERSION),1)
@@ -198,6 +200,7 @@ IRRLICHT_GIT_COMMIT = 58fa0cf
 #IRRLICHT_URL_SVN = http://svn.code.sf.net/p/irrlicht/code/branches/ogl-es@$(IRRLICHT_REVISION)
 
 OPENSSL_VERSION = 1.0.2g
+# TODO: OPENSSL_VERSION = 1.1.0
 OPENSSL_BASEDIR = openssl-$(OPENSSL_VERSION)
 OPENSSL_DIR = $(ROOT)/deps/$(OPENSSL_BASEDIR)/
 OPENSSL_LIB = $(OPENSSL_DIR)/libssl.so.1.0.0
@@ -205,14 +208,14 @@ OPENSSL_TIMESTAMP = $(OPENSSL_DIR)timestamp
 OPENSSL_TIMESTAMP_INT = $(ROOT)/deps/openssl_timestamp
 OPENSSL_URL = http://www.openssl.org/source/openssl-$(OPENSSL_VERSION).tar.gz
 
-CURL_VERSION = 7.48.0
+CURL_VERSION = 7.50.1
 CURL_DIR = $(ROOT)/deps/curl-$(CURL_VERSION)
 CURL_LIB = $(CURL_DIR)/lib/.libs/libcurl.a
 CURL_TIMESTAMP = $(CURL_DIR)/timestamp
 CURL_TIMESTAMP_INT = $(ROOT)/deps/curl_timestamp
 CURL_URL_HTTP = https://curl.haxx.se/download/curl-${CURL_VERSION}.tar.bz2
 
-GMP_VERSION = 6.1.0
+GMP_VERSION = 6.1.1
 GMP_DIR = $(ROOT)/deps/gmp-$(GMP_VERSION)
 GMP_LIB = $(GMP_DIR)/usr/lib/libgmp.so
 GMP_TIMESTAMP = $(GMP_DIR)/timestamp
@@ -232,7 +235,7 @@ ICONV_TIMESTAMP = $(ICONV_DIR)timestamp
 ICONV_TIMESTAMP_INT = $(ROOT)/deps/iconv_timestamp
 ICONV_URL_HTTP = http://ftp.gnu.org/pub/gnu/libiconv/libiconv-$(ICONV_VERSION).tar.gz
 
-SQLITE3_FOLDER = sqlite-amalgamation-3120200
+SQLITE3_FOLDER = sqlite-amalgamation-3140100
 SQLITE3_URL = http://www.sqlite.org/2016/$(SQLITE3_FOLDER).zip
 
 -include $(PATHCFGFILE)
@@ -428,7 +431,7 @@ $(OPENSSL_LIB): $(OPENSSL_TIMESTAMP) $(GMP_LIB)
 	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
-	CC=${CROSS_PREFIX}gcc ./Configure enable-gmp -DL_ENDIAN -I${GMP_DIR} -L${GMP_DIR}/usr/lib ${OPENSSL_CONFIGURE_ADDON} android-${TARGET_ARCH};\
+	CC=${CROSS_PREFIX}gcc ./Configure -DL_ENDIAN ${OPENSSL_CONFIGURE_ADDON} android-${TARGET_ARCH};\
 	CC=${CROSS_PREFIX}gcc ANDROID_DEV=/tmp/ndk-${TARGET_HOST} make depend;     \
 	CC=${CROSS_PREFIX}gcc ANDROID_DEV=/tmp/ndk-${TARGET_HOST} make build_libs; \
 	touch ${OPENSSL_TIMESTAMP};                                                \
@@ -478,14 +481,14 @@ $(LEVELDB_LIB): $(LEVELDB_TIMESTAMP)
 	export CROSS_PREFIX=${CROSS_PREFIX};                                       \
 	export TOOLCHAIN=/tmp/ndk-${TARGET_HOST}-leveldb;                          \
 	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
-	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	--stl=${APP_STL} \
 	--platform=${APP_PLATFORM} \
 	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
+	#--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
-	export CC=${CROSS_PREFIX}gcc;                                              \
-	export CXX=${CROSS_PREFIX}g++;                                             \
+	export CC=${CROSS_PREFIX}${CC}; \
+	export CXX=${CROSS_PREFIX}${CXX}; \
 	export CFLAGS="$${CFLAGS} ${TARGET_CFLAGS_ADDON}";                         \
 	export CPPFLAGS="$${CPPFLAGS} ${TARGET_CFLAGS_ADDON}";                     \
 	export LDFLAGS="$${LDFLAGS} ${TARGET_LDFLAGS_ADDON}";                      \
@@ -594,8 +597,8 @@ $(ICONV_LIB) : $(ICONV_TIMESTAMP)
 	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
-	export CC=${CROSS_PREFIX}gcc;                                              \
-	export CXX=${CROSS_PREFIX}g++;                                             \
+	export CC=${CROSS_PREFIX}${CC}; \
+	export CXX=${CROSS_PREFIX}${CXX}; \
 	export TARGET_OS=OS_ANDROID_CROSSCOMPILE;                                  \
 	./configure --host=${TARGET_HOST} || exit 1;                               \
 	sed -i 's/LIBICONV_VERSION_INFO) /LIBICONV_VERSION_INFO) -avoid-version /g' lib/Makefile; \
@@ -714,8 +717,8 @@ $(CURL_LIB): $(CURL_TIMESTAMP) $(OPENSSL_LIB)
 	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
-	export CC=${CROSS_PREFIX}gcc;                                              \
-	export CXX=${CROSS_PREFIX}g++;                                             \
+	export CC=${CROSS_PREFIX}${CC}; \
+	export CXX=${CROSS_PREFIX}${CXX}; \
 	export TARGET_OS=OS_ANDROID_CROSSCOMPILE;                                  \
 	export CPPFLAGS="$${CPPFLAGS} -I${OPENSSL_DIR}/include                     \
 	${TARGET_CFLAGS_ADDON}";                                                   \
@@ -784,8 +787,8 @@ $(GMP_LIB): $(GMP_TIMESTAMP)
 	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
-	export CC=${CROSS_PREFIX}gcc;                                              \
-	export CXX=${CROSS_PREFIX}g++;                                             \
+	export CC=${CROSS_PREFIX}${CC}; \
+	export CXX=${CROSS_PREFIX}${CXX}; \
 	export LIBGMP_LDFLAGS="-avoid-version";                                    \
 	export LIBGMPXX_LDFLAGS="-avoid-version";                                  \
 	./configure --disable-static --host=${TARGET_HOST} --prefix=/usr;          \
@@ -955,8 +958,8 @@ $(MSGPACK_LIB): $(MSGPACK_TIMESTAMP)
 	${STANDALONE_ADDON} \
 	--install-dir=$${TOOLCHAIN};                                               \
 	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
-	export CC=${CROSS_PREFIX}gcc;                                              \
-	export CXX=${CROSS_PREFIX}g++;                                             \
+	export CC=${CROSS_PREFIX}${CC}; \
+	export CXX=${CROSS_PREFIX}${CXX}; \
 	export TARGET_OS=OS_ANDROID_CROSSCOMPILE;                                  \
 	export CPPFLAGS="$${CPPFLAGS} ${TARGET_CFLAGS_ADDON}";                     \
 	export CFLAGS="$${CFLAGS} ${TARGET_CFLAGS_ADDON}";                         \
@@ -1017,7 +1020,7 @@ $(GETTEXT_LIB): $(GETTEXT_TIMESTAMP)
 	#${STANDALONE_ADDON} \
 	#--install-dir=$${TOOLCHAIN};                                               \
 	#export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
-	#export CXX=${CROSS_PREFIX}g++;                                             \
+	#export CXX=${CROSS_PREFIX}${CXX}; \
 	#export AR=${CROSS_PREFIX}ar;                                             \
 	#export TARGET_OS=OS_ANDROID_CROSSCOMPILE;                                  \
 	#export CPPFLAGS="$${CPPFLAGS} ${TARGET_CFLAGS_ADDON}";                     \
