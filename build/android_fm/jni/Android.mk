@@ -75,14 +75,6 @@ LOCAL_SRC_FILES := deps/luajit/src/libluajit.a
 include $(PREBUILT_STATIC_LIBRARY)
 endif
 
-ifeq ($(USE_ENET), 1)
-include $(CLEAR_VARS)
-LOCAL_CFLAGS := -DHAS_INET_PTON=1 -DHAS_INET_NTOP=1 -DHAS_GETHOSTBYNAME_R=1 -DHAS_GETADDRINFO=1 -DHAS_GETNAMEINFO=1 -DHAS_FCNTL=1 -DHAS_POLL=1 -DHAS_MSGHDR_FLAGS=1 -DHAS_SOCKLEN_T=1
-LOCAL_MODULE := enet
-LOCAL_C_INCLUDES := jni/src/enet/include
-LOCAL_SRC_FILES := $(wildcard $(LOCAL_PATH)/jni/src/enet/*.c)
-include $(BUILD_STATIC_LIBRARY)
-endif
 
 ifeq ($(USE_SCTP), 1)
 include $(CLEAR_VARS)
@@ -95,6 +87,15 @@ LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/jni/src/network/usrsctp/usrsctplib/*
 LOCAL_C_INCLUDES += jni/android-ifaddrs
 LOCAL_SRC_FILES += jni/android-ifaddrs/ifaddrs.c
 include $(BUILD_STATIC_LIBRARY)
+else
+ifeq ($(USE_ENET), 1)
+include $(CLEAR_VARS)
+LOCAL_CFLAGS := -DHAS_INET_PTON=1 -DHAS_INET_NTOP=1 -DHAS_GETHOSTBYNAME_R=1 -DHAS_GETADDRINFO=1 -DHAS_GETNAMEINFO=1 -DHAS_FCNTL=1 -DHAS_POLL=1 -DHAS_MSGHDR_FLAGS=1 -DHAS_SOCKLEN_T=1
+LOCAL_MODULE := enet
+LOCAL_C_INCLUDES := jni/src/enet/include
+LOCAL_SRC_FILES := $(wildcard $(LOCAL_PATH)/jni/src/enet/*.c)
+include $(BUILD_STATIC_LIBRARY)
+endif
 endif
 
 include $(CLEAR_VARS)

@@ -155,8 +155,7 @@ endif
 
 APP_PLATFORM = android-$(SDK_VERSION)
 
-#USE_ENET = 0
-#USE_SCTP = 1
+USE_SCTP = 1
 
 
 ################################################################################

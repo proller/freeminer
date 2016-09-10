@@ -81,7 +81,7 @@ sqlite = "sqlite-{}".format(SQLITE_VERSION)
 #error MSB8020: The build tools for Visual Studio 2012 (Platform Toolset = 'v110') cannot be found.
 patch_toolset = 1
 
-enable_sctp = "0"
+enable_sctp = "1"
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
