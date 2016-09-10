@@ -667,9 +667,9 @@ add_subdirectory(util)
 add_subdirectory(irrlicht_changes)
 
 if(MINETEST_PROTO)
-OPTION(ENABLE_SCTP "Enable SCTP networking" 0)
+OPTION(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL, not compatible with other)" 0)
 else()
-OPTION(ENABLE_SCTP "Enable SCTP networking" 1)
+OPTION(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL, not compatible with other)" 0)
 endif()
 
 if(ENABLE_SCTP)

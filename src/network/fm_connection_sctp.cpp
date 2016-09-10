@@ -19,6 +19,20 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+/*
+
+Very experimental sctp networking
+
+to build:
+add submodules:
+git submodule add https://github.com/sctplab/usrsctp.git src/network/usrsctp
+git submodule add https://github.com/proller/android-ifaddrs.git build/android/jni/android-ifaddrs
+
+and make with:
+cmake . -DENABLE_SCTP=1
+
+*/
+
 
 /*
 https://chromium.googlesource.com/external/webrtc/+/master/talk/media/sctp/sctpdataengine.cc
