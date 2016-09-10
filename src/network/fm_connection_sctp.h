@@ -320,7 +320,6 @@ private:
 	void disconnect();
 	void sendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable);
 	void send(u16 peer_id, u8 channelnum, SharedBuffer<u8> data, bool reliable);
-	//!ENetPeer* getPeer(u16 peer_id);
 	struct socket * getPeer(u16 peer_id);
 	bool deletePeer(u16 peer_id, bool timeout = 0);
 
@@ -332,8 +331,6 @@ private:
 	float m_timeout;
 	//struct sctp_udpencaps encaps;
 	struct socket *sock;
-	//!ENetHost *m_enet_host;
-	//!ENetPeer *m_peer;
 	u16 m_peer_id;
 
 	concurrent_map<u16, struct socket *> m_peers;
