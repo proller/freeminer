@@ -11,10 +11,10 @@
 	path = src/external/jsoncpp
 	url = https://github.com/open-source-parsers/jsoncpp.git
 [submodule "src/network/usrsctp"]
-	path = src/external/usrsctp
+	path = src/network/usrsctp
 	url = https://github.com/sctplab/usrsctp.git
 [submodule "build/android/jni/android-ifaddrs"]
-	path = build/android_fm/jni/android-ifaddrs/android-ifaddrs
+	path = build/android/jni/android-ifaddrs
 	url = https://github.com/proller/android-ifaddrs.git
 [submodule "games/pixture"]
 	path = games/pixture
