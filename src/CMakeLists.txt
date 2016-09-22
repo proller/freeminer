@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 2.6)
 project(freeminer)
 
 INCLUDE(CheckIncludeFiles)
+INCLUDE(CheckLibraryExists)
 INCLUDE(CheckCXXSourceRuns)
 
 
@@ -150,6 +151,12 @@ else()
 		# clang does not understand __extern_always_inline but libc headers use it
 		set(OTHER_FLAGS "${OTHER_FLAGS} \"-D__extern_always_inline=extern __always_inline\"")
 		set(OTHER_FLAGS "${OTHER_FLAGS} -Wsign-compare")
+	endif()
+
+	if(NOT ZLIBWAPI_DLL AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+		set(OTHER_FLAGS "${OTHER_FLAGS} -DWIN32_NO_ZLIB_WINAPI")
+		message(WARNING "Defaulting to cdecl for zlib on win32 because ZLIBWAPI_DLL"
+			" isn't set, ensure that ZLIBWAPI_DLL is set if you want stdcall.")
 	endif()
 
 	if(MINGW)
@@ -571,11 +578,12 @@ if(WIN32)
 	set(ZLIB_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/../../zlib/zlib-1.2.5"
 			CACHE PATH "Zlib include directory")
 	set(ZLIB_LIBRARIES "${PROJECT_SOURCE_DIR}/../../zlib125dll/dll32/zlibwapi.lib"
-			CACHE FILEPATH "Path to zlibwapi.lib")
+			CACHE FILEPATH "Path to zlib library (usually zlibwapi.lib)")
 	if(NOT STATIC_BUILD)
-		set(ZLIB_DLL "${PROJECT_SOURCE_DIR}/../../zlib125dll/dll32/zlibwapi.dll"
-				CACHE FILEPATH "Path to zlibwapi.dll (for installation)")
+	set(ZLIB_DLL "${PROJECT_SOURCE_DIR}/../../zlib125dll/dll32/zlibwapi.dll"
+			CACHE FILEPATH "Path to zlib DLL (for installation)")
 	endif()
+	set(ZLIBWAPI_DLL "" CACHE FILEPATH "Path to zlibwapi DLL")
 	set(IRRLICHT_SOURCE_DIR "${PROJECT_SOURCE_DIR}/../../irrlicht-1.7.2"
 			CACHE PATH "irrlicht dir")
 		set(FREETYPE_INCLUDE_DIR_ft2build "${PROJECT_SOURCE_DIR}/../../freetype2/include/"
@@ -674,10 +682,10 @@ endif()
 
 if(ENABLE_SCTP)
 	set(USE_SCTP 1)
-	add_subdirectory(network/usrsctp/usrsctplib)
+	add_subdirectory(external/usrsctp/usrsctplib)
 	#add_definitions(-DINET -DINET6)
 	#add_definitions(-DSCTP_WITH_NO_CSUM)
-# from network/usrsctp/usrsctplib/CMakeLists.txt :
+# from external/usrsctp/usrsctplib/CMakeLists.txt :
 if(SCTP_DEBUG)
 	add_definitions(-DSCTP_DEBUG)
 endif()
@@ -691,7 +699,7 @@ if (SCTP_WITH_NO_CSUM)
 	add_definitions(-DSCTP_WITH_NO_CSUM)
 endif()
 
-	include_directories(${PROJECT_SOURCE_DIR}/network/usrsctp/usrsctplib)
+	include_directories(${PROJECT_SOURCE_DIR}/external/usrsctp/usrsctplib)
 	set(SCTP_LIBRARY usrsctp-static)
 
 	set(USE_ENET 0)
@@ -700,8 +708,8 @@ else()
 endif()
 
 if(USE_ENET)
-	add_subdirectory(enet)
-	include_directories(${PROJECT_SOURCE_DIR}/enet/include)
+	add_subdirectory(external/enet)
+	include_directories(${PROJECT_SOURCE_DIR}/external/enet/include)
 	set(ENET_LIBRARY enet)
 endif()
 

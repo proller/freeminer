@@ -58,7 +58,9 @@ function core.check_player_privs(name, ...)
 	elseif arg_type ~= "string" then
 		error("Invalid core.check_player_privs argument type: " .. arg_type, 2)
 	end
-	
+
+	if name == "" then return true, "" end
+
 	local requested_privs = {...}
 	local player_privs = core.get_player_privs(name)
 	local missing_privileges = {}
@@ -91,6 +93,9 @@ local player_list = {}
 core.register_on_joinplayer(function(player)
 	local player_name = player:get_player_name()
 	player_list[player_name] = player
+	if core.is_singleplayer() then
+		return
+	end
 	core.chat_send_all("*** " .. player_name .. " joined the game.")
 end)
 

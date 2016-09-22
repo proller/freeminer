@@ -127,6 +127,11 @@ function core.register_item(name, itemdef)
 				fixed = {-1/8, -1/2, -1/8, 1/8, 1/2, 1/8},
 			}
 		end
+		if itemdef.light_source and itemdef.light_source > core.LIGHT_MAX then
+			itemdef.light_source = core.LIGHT_MAX
+			core.log("warning", "Node 'light_source' value exceeds maximum," ..
+				" limiting to maximum: " ..name)
+		end
 		setmetatable(itemdef, {__index = core.nodedef_default})
 		core.registered_nodes[itemdef.name] = itemdef
 	elseif itemdef.type == "craft" then
@@ -548,14 +553,6 @@ core.registered_craft_predicts, core.register_craft_predict = make_registration(
 core.registered_on_protection_violation, core.register_on_protection_violation = make_registration()
 core.registered_on_item_eats, core.register_on_item_eat = make_registration()
 core.registered_on_punchplayers, core.register_on_punchplayer = make_registration()
-
-minetest.register_on_joinplayer(function(player)
-	if minetest.is_singleplayer() then
-		return
-	end
-	local player_name =  player:get_player_name()
-	minetest.chat_send_all("*** " .. player_name .. " joined the game.")
-end)
 
 minetest.register_on_dieplayer(function(player)
 	local player_name =  player:get_player_name()
