@@ -10,12 +10,12 @@ git submodule update --init --recursive
 git status
 
 
-git submodule add https://github.com/sctplab/usrsctp.git src/network/usrsctp
-git submodule add https://github.com/proller/android-ifaddrs.git build/android/jni/android-ifaddrs
+git submodule add https://github.com/sctplab/usrsctp.git src/external/usrsctp
+git submodule add https://github.com/proller/android-ifaddrs.git build/android_fm/jni/android-ifaddrs
 
-cd src/network/usrsctp
+cd src/external/usrsctp
 git co master
 git pull
 cd ../../..
-git commit src/network/usrsctp -m "update submodules"
+git commit src/external/usrsctp -m "update submodules"
 git push
