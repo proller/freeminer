@@ -13,12 +13,12 @@
 [submodule "src/network/usrsctp"]
 	path = src/network/usrsctp
 	url = https://github.com/sctplab/usrsctp.git
-[submodule "build/android/jni/android-ifaddrs"]
-	path = build/android_fm/jni/android-ifaddrs
-	url = https://github.com/proller/android-ifaddrs.git
 [submodule "games/pixture"]
 	path = games/pixture
 	url = https://github.com/kaadmy/pixture.git
 [submodule "src/external/msgpack-c"]
 	path = src/external/msgpack-c
 	url = https://github.com/msgpack/msgpack-c.git
+[submodule "build/android_fm/jni/android-ifaddrs"]
+	path = build/android_fm/jni/android-ifaddrs
+	url = https://github.com/proller/android-ifaddrs.git
