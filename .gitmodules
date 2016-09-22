@@ -19,3 +19,6 @@
 [submodule "build/android_fm/jni/android-ifaddrs"]
 	path = build/android_fm/jni/android-ifaddrs
 	url = https://github.com/proller/android-ifaddrs.git
+[submodule "src/external/usrsctp"]
+	path = src/external/usrsctp
+	url = https://github.com/sctplab/usrsctp.git
