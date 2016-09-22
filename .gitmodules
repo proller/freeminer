@@ -10,9 +10,6 @@
 [submodule "src/external/jsoncpp"]
 	path = src/external/jsoncpp
 	url = https://github.com/open-source-parsers/jsoncpp.git
-[submodule "src/network/usrsctp"]
-	path = src/network/usrsctp
-	url = https://github.com/sctplab/usrsctp.git
 [submodule "games/pixture"]
 	path = games/pixture
 	url = https://github.com/kaadmy/pixture.git
