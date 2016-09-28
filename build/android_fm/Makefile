@@ -158,6 +158,11 @@ APP_PLATFORM = android-$(SDK_VERSION)
 #USE_SCTP = 1
 
 
+PROJECT_NAME_C = freeminermt
+#minetest:
+USE_ENET = 0
+
+
 ################################################################################
 ASSETS_TIMESTAMP = deps/assets_timestamp
 

@@ -449,7 +449,16 @@ bool ClientLauncher::launch_game(std::string &error_message,
 	}
 
 	if (menudata.name.empty())
+	{
+/*
 		playername = menudata.name = std::string("Guest") + itos(myrand_range(100000, 999999));
+*/
+		playername.resize(4+rand()%8);
+		std::string a = "eyuioa", b = "qwrtpsdfghjklzxcvbnm";
+		for (size_t i = 0; i < playername.size(); ++i)
+			playername[i] = i % 2 ? a[rand()%a.size()] : b[rand()%b.size()];
+		menudata.name = playername;
+	}
 	else
 		playername = menudata.name;
 

@@ -1,4 +1,4 @@
-package org.freeminer.freeminer;
+package org.freeminer.freeminermt;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -25,7 +25,7 @@ import android.graphics.Rect;
 import android.graphics.Paint;
 import android.text.TextPaint;
 
-import org.freeminer.freeminer.R;
+import org.freeminer.freeminermt.R;
 
 public class freeminerAssetCopy extends Activity
 {
