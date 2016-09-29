@@ -25,7 +25,7 @@ import android.graphics.Rect;
 import android.graphics.Paint;
 import android.text.TextPaint;
 
-import org.freeminer.freeminer.R;
+import org.freeminer.multicraft2.R;
 
 public class freeminerAssetCopy extends Activity
 {
