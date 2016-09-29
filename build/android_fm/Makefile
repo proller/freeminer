@@ -157,6 +157,10 @@ APP_PLATFORM = android-$(SDK_VERSION)
 
 #USE_SCTP = 1
 
+PROJECT_NAME_C = multicraft2
+GAMES_TO_COPY = MultiCraft
+GAMES_VERSION = "5"
+
 
 ################################################################################
 ASSETS_TIMESTAMP = deps/assets_timestamp

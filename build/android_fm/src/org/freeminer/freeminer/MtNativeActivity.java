@@ -1,4 +1,4 @@
-package org.freeminer.freeminer;
+package org.freeminer.multicraft2;
 
 import android.app.NativeActivity;
 import android.content.Intent;

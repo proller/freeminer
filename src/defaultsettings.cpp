@@ -375,6 +375,9 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("touchscreen_threshold","20");
 #endif
 
+	settings->setDefault("default_game", "MultiCraft");
+	//settings->setDefault("mg_name", "v6");
+
 }
 
 

@@ -1,5 +1,19 @@
 #!/bin/sh
 
+cd ../games/MultiCraft
+git checkout master
+git remote add upstream https://github.com/freeminer/default.git
+git fetch --all
+git pull
+git submodule update --init --recursive
+( git merge --no-edit upstream/master | grep -i "conflict" ) && exit
+git submodule foreach --recursive "git checkout master; git pull||true"
+git commit -a -m "update submodules"
+git push
+cd ..
+
+git commit -a -m "update submodules"
+
 cd ..
 git remote add upstream https://github.com/freeminer/freeminer.git
 git fetch --all

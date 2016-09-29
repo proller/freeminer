@@ -1,2 +1,2 @@
-gameid = default
+gameid = MultiCraft
 backend = leveldb

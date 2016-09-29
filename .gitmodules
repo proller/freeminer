@@ -13,6 +13,9 @@
 [submodule "games/pixture"]
 	path = games/pixture
 	url = https://github.com/kaadmy/pixture.git
+[submodule "games/MultiCraft"]
+	path = games/MultiCraft
+	url = https://github.com/proller/MultiCraft.git
 [submodule "src/external/msgpack-c"]
 	path = src/external/msgpack-c
 	url = https://github.com/msgpack/msgpack-c.git
