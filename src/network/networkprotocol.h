@@ -148,9 +148,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 		backface_culling: backwards compatibility for playing with
 		newer client on pre-27 servers.
 		Add nodedef v3 - connected nodeboxes
+	PROTOCOL_VERSION 28:
+		CPT2_MESHOPTIONS
 */
 
-#define LATEST_PROTOCOL_VERSION 27
+#define LATEST_PROTOCOL_VERSION 28
 
 // Server's supported network protocol range
 #define SERVER_PROTOCOL_VERSION_MIN 13
@@ -639,7 +641,8 @@ enum {
 	TOCLIENT_SPAWN_PARTICLE_SIZE,
 	TOCLIENT_SPAWN_PARTICLE_COLLISIONDETECTION,
 	TOCLIENT_SPAWN_PARTICLE_VERTICAL,
-	TOCLIENT_SPAWN_PARTICLE_TEXTURE
+	TOCLIENT_SPAWN_PARTICLE_TEXTURE,
+	TOCLIENT_SPAWN_PARTICLE_COLLISION_REMOVAL,
 };
 	/*
 		v3f1000 pos
@@ -651,6 +654,7 @@ enum {
 		u8 bool vertical
 		u32 len
 		u8[len] texture
+		u8 collision_removal
 	*/
 
 #define TOCLIENT_ADD_PARTICLESPAWNER 0x47
@@ -690,6 +694,7 @@ enum {
 		u32 len
 		u8[len] texture
 		u32 id
+		u8 collision_removal
 	*/
 
 #define TOCLIENT_DELETE_PARTICLESPAWNER_LEGACY 0x48

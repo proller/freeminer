@@ -26,7 +26,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "common/c_content.h"
 #include "cpp_api/s_async.h"
 #include "serialization.h"
-#include "json/json.h"
+#include <json/json.h>
 #include "cpp_api/s_security.h"
 #include "porting.h"
 #include "debug.h"
@@ -35,6 +35,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "filesys.h"
 #include "settings.h"
 #include "util/auth.h"
+#include "util/base64.h"
 #include <algorithm>
 
 // log([level,] text)
@@ -274,6 +275,35 @@ int ModApiUtil::l_get_hit_params(lua_State *L)
 	return 1;
 }
 
+// check_password_entry(name, entry, password)
+int ModApiUtil::l_check_password_entry(lua_State *L)
+{
+	NO_MAP_LOCK_REQUIRED;
+	std::string name = luaL_checkstring(L, 1);
+	std::string entry = luaL_checkstring(L, 2);
+	std::string password = luaL_checkstring(L, 3);
+
+	if (base64_is_valid(entry)) {
+		std::string hash = translate_password(name, password);
+		lua_pushboolean(L, hash == entry);
+		return 1;
+	}
+
+	std::string salt;
+	std::string verifier;
+
+	if (!decode_srp_verifier_and_salt(entry, &verifier, &salt)) {
+		// invalid format
+		warningstream << "Invalid password format for " << name << std::endl;
+		lua_pushboolean(L, false);
+		return 1;
+	}
+	std::string gen_verifier = generate_srp_verifier(name, password, salt);
+
+	lua_pushboolean(L, gen_verifier == verifier);
+	return 1;
+}
+
 // get_password_hash(name, raw_password)
 int ModApiUtil::l_get_password_hash(lua_State *L)
 {
@@ -349,6 +379,34 @@ int ModApiUtil::l_decompress(lua_State *L)
 	return 1;
 }
 
+// encode_base64(string)
+int ModApiUtil::l_encode_base64(lua_State *L)
+{
+	NO_MAP_LOCK_REQUIRED;
+
+	size_t size;
+	const char *data = luaL_checklstring(L, 1, &size);
+
+	std::string out = base64_encode((const unsigned char *)(data), size);
+
+	lua_pushlstring(L, out.data(), out.size());
+	return 1;
+}
+
+// decode_base64(string)
+int ModApiUtil::l_decode_base64(lua_State *L)
+{
+	NO_MAP_LOCK_REQUIRED;
+
+	size_t size;
+	const char *data = luaL_checklstring(L, 1, &size);
+
+	std::string out = base64_decode(std::string(data, size));
+
+	lua_pushlstring(L, out.data(), out.size());
+	return 1;
+}
+
 // mkdir(path)
 int ModApiUtil::l_mkdir(lua_State *L)
 {
@@ -417,8 +475,9 @@ int ModApiUtil::l_request_insecure_environment(lua_State *L)
 	// Check secure.trusted_mods
 	const char *mod_name = lua_tostring(L, -1);
 	std::string trusted_mods = g_settings->get("secure.trusted_mods");
-	trusted_mods.erase(std::remove(trusted_mods.begin(),
-			trusted_mods.end(), ' '), trusted_mods.end());
+	trusted_mods.erase(std::remove_if(trusted_mods.begin(),
+			trusted_mods.end(), static_cast<int(*)(int)>(&std::isspace)),
+			trusted_mods.end());
 	std::vector<std::string> mod_list = str_split(trusted_mods, ',');
 	if (std::find(mod_list.begin(), mod_list.end(), mod_name) ==
 			mod_list.end()) {
@@ -451,6 +510,7 @@ void ModApiUtil::Initialize(lua_State *L, int top)
 	API_FCT(get_dig_params);
 	API_FCT(get_hit_params);
 
+	API_FCT(check_password_entry);
 	API_FCT(get_password_hash);
 
 	API_FCT(is_yes);
@@ -464,6 +524,9 @@ void ModApiUtil::Initialize(lua_State *L, int top)
 	API_FCT(get_dir_list);
 
 	API_FCT(request_insecure_environment);
+
+	API_FCT(encode_base64);
+	API_FCT(decode_base64);
 }
 
 void ModApiUtil::InitializeAsync(AsyncEngine& engine)
@@ -490,5 +553,8 @@ void ModApiUtil::InitializeAsync(AsyncEngine& engine)
 
 	ASYNC_API_FCT(mkdir);
 	ASYNC_API_FCT(get_dir_list);
+
+	ASYNC_API_FCT(encode_base64);
+	ASYNC_API_FCT(decode_base64);
 }
 

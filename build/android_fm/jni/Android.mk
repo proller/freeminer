@@ -75,19 +75,33 @@ LOCAL_SRC_FILES := deps/luajit/src/libluajit.a
 include $(PREBUILT_STATIC_LIBRARY)
 endif
 
+
+ifeq ($(USE_SCTP), 1)
+include $(CLEAR_VARS)
+LOCAL_MODULE := usrsctplib
+LOCAL_CFLAGS += -DUSE_SCTP=1 -DINET -DINET6
+#-DSCTP_WITH_NO_CSUM
+LOCAL_CFLAGS += -DSCTP_SIMPLE_ALLOCATOR -DSCTP_PROCESS_LEVEL_LOCKS -D__Userspace__ -D__Userspace_os_Linux
+LOCAL_C_INCLUDES := jni/src/external/usrsctp/usrsctplib
+LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/jni/src/external/usrsctp/usrsctplib/*.c) $(wildcard $(LOCAL_PATH)/jni/src/external/usrsctp/usrsctplib/netinet/*.c) $(wildcard $(LOCAL_PATH)/jni/src/external/usrsctp/usrsctplib/netinet6/*.c)
+LOCAL_C_INCLUDES += jni/android-ifaddrs
+LOCAL_SRC_FILES += jni/android-ifaddrs/ifaddrs.c
+include $(BUILD_STATIC_LIBRARY)
+else
 ifeq ($(USE_ENET), 1)
 include $(CLEAR_VARS)
 LOCAL_CFLAGS := -DHAS_INET_PTON=1 -DHAS_INET_NTOP=1 -DHAS_GETHOSTBYNAME_R=1 -DHAS_GETADDRINFO=1 -DHAS_GETNAMEINFO=1 -DHAS_FCNTL=1 -DHAS_POLL=1 -DHAS_MSGHDR_FLAGS=1 -DHAS_SOCKLEN_T=1
 LOCAL_MODULE := enet
-LOCAL_C_INCLUDES := jni/src/enet/include
-LOCAL_SRC_FILES := $(wildcard $(LOCAL_PATH)/jni/src/enet/*.c)
+LOCAL_C_INCLUDES := jni/src/external/enet/include
+LOCAL_SRC_FILES := $(wildcard $(LOCAL_PATH)/jni/src/external/enet/*.c)
 include $(BUILD_STATIC_LIBRARY)
+endif
 endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := jsoncpp
-LOCAL_C_INCLUDES := jni/src/jsoncpp/include
-LOCAL_SRC_FILES := $(wildcard $(LOCAL_PATH)/jni/src/jsoncpp/src/lib_json/*.cpp)
+LOCAL_C_INCLUDES := jni/src/external/jsoncpp/include
+LOCAL_SRC_FILES := $(wildcard $(LOCAL_PATH)/jni/src/external/jsoncpp/src/lib_json/*.cpp)
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -166,8 +180,6 @@ endif
 
 LOCAL_SRC_FILES +=                                \
 		jni/src/guiTextInputMenu.cpp              \
-		jni/src/FMColoredString.cpp               \
-		jni/src/FMStaticText.cpp                  \
 		jni/src/fm_bitset.cpp                     \
 		jni/src/fm_liquid.cpp                     \
 		jni/src/fm_map.cpp                        \
@@ -186,6 +198,9 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/contrib/itemsao.cpp               \
 		jni/src/contrib/l_env.cpp                 \
 		jni/src/network/fm_lan.cpp                \
+
+#		jni/src/FMColoredString.cpp               \
+#		jni/src/FMStaticText.cpp                  \
 
 
 LOCAL_SRC_FILES +=                                \
@@ -246,6 +261,7 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/log.cpp                           \
 		jni/src/main.cpp                          \
 		jni/src/map.cpp                           \
+		jni/src/map_settings_manager.cpp          \
 		jni/src/mapblock.cpp                      \
 		jni/src/mapblock_mesh.cpp                 \
 		jni/src/mapgen.cpp                        \
@@ -301,6 +317,7 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/util/auth.cpp                     \
 		jni/src/util/base64.cpp                   \
 		jni/src/util/directiontables.cpp          \
+		jni/src/util/enriched_string.cpp          \
 		jni/src/util/numeric.cpp                  \
 		jni/src/util/pointedthing.cpp             \
 		jni/src/util/serialize.cpp                \
@@ -333,7 +350,9 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/settings.cpp                      \
 		jni/src/wieldmesh.cpp                     \
 		jni/src/client/clientlauncher.cpp         \
-		jni/src/client/tile.cpp
+		jni/src/client/tile.cpp                   \
+		jni/src/client/joystick_controller.cpp    \
+		jni/src/irrlicht_changes/static_text.cpp
 
 # intentionally kept out (we already build openssl itself): jni/src/util/sha256.c
 
@@ -442,12 +461,21 @@ LOCAL_STATIC_LIBRARIES := Irrlicht freetype curl ssl crypto android_native_app_g
 #freeminer:
 LOCAL_STATIC_LIBRARIES += msgpack jsoncpp gettext
 
+
+ifeq ($(USE_SCTP), 1)
+LOCAL_CFLAGS += -DUSE_SCTP=1 -DINET -DINET6 -DSCTP_WITH_NO_CSUM
+LOCAL_CFLAGS += -DSCTP_SIMPLE_ALLOCATOR -DSCTP_PROCESS_LEVEL_LOCKS -D__Userspace__ -D__Userspace_os_Linux
+LOCAL_C_INCLUDES += jni/src/external/usrsctp/usrsctplib
+LOCAL_STATIC_LIBRARIES += usrsctplib
+else
 ifeq ($(USE_ENET), 1)
-LOCAL_C_INCLUDES += jni/src/enet/include
+LOCAL_C_INCLUDES += jni/src/external/enet/include
 LOCAL_STATIC_LIBRARIES += enet
 else
 LOCAL_CFLAGS += -DMINETEST_PROTO=1
 endif
+endif
+
 
 ifeq ($(USE_LUAJIT), 1)
 LOCAL_STATIC_LIBRARIES += luajit

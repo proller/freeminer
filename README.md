@@ -36,6 +36,8 @@ It aims to make the game fun while trading off some bits of perfectionism.
 	cd /usr/ports/games/freeminer-default && sudo make install clean
 	```
 
+- **openSUSE**: https://software.opensuse.org/package/freeminer
+
 ## Further documentation
 - Website: http://freeminer.org/
 - Forums: http://forum.freeminer.org/
@@ -61,10 +63,13 @@ Install dependencies. Here's an example for
 
 Debian/Ubuntu:
 ```sh
-sudo apt-get install build-essential libirrlicht-dev cmake libbz2-dev \
-libpng12-dev libjpeg-dev libfreetype6-dev libxxf86vm-dev libgl1-mesa-dev \
-libsqlite3-dev libvorbis-dev libopenal-dev libcurl4-openssl-dev libluajit-5.1-dev \
-libleveldb-dev libsnappy-dev libgettextpo0 libmsgpack-dev libgmp-dev libspatialindex-dev
+sudo apt-get install build-essential libirrlicht-dev cmake libbz2-dev libgettextpo0 \
+libsqlite3-dev libleveldb-dev libsnappy-dev libcurl4-openssl-dev libluajit-5.1-dev libgmp-dev libspatialindex-dev \
+libpng12-dev libjpeg-dev libfreetype6-dev libxxf86vm-dev libgl1-mesa-dev libvorbis-dev libopenal-dev
+# First  - needed always
+# Second - recommended for servers and singleplayer
+# Third  - needed for client only
+
 # optional:
 sudo apt-get install libhiredis-dev cmake-curses-gui
 ```

@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 2.6)
 project(freeminer)
 
 INCLUDE(CheckIncludeFiles)
+INCLUDE(CheckLibraryExists)
 INCLUDE(CheckCXXSourceRuns)
 
 
@@ -150,6 +151,12 @@ else()
 		# clang does not understand __extern_always_inline but libc headers use it
 		set(OTHER_FLAGS "${OTHER_FLAGS} \"-D__extern_always_inline=extern __always_inline\"")
 		set(OTHER_FLAGS "${OTHER_FLAGS} -Wsign-compare")
+	endif()
+
+	if(NOT ZLIBWAPI_DLL AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+		set(OTHER_FLAGS "${OTHER_FLAGS} -DWIN32_NO_ZLIB_WINAPI")
+		message(WARNING "Defaulting to cdecl for zlib on win32 because ZLIBWAPI_DLL"
+			" isn't set, ensure that ZLIBWAPI_DLL is set if you want stdcall.")
 	endif()
 
 	if(MINGW)
@@ -385,7 +392,7 @@ set(USE_FREETYPE FALSE)
 		set(CGUITTFONT_LIBRARY cguittfont)
 	endif()
 
-if(NOT FREETYPE_FOUND AND NOT NO_BUILD)
+if(NOT FREETYPE_FOUND AND NOT NO_BUILD AND BUILD_CLIENT)
 	message(FATAL_ERROR "FreeType was not found.")
 endif()
 
@@ -494,7 +501,6 @@ if(ENABLE_SQLITE3)
 endif()
 
 if(FORCE_SQLITE3)
-
 	set(USE_SQLITE3 1)
 endif()
 
@@ -571,11 +577,12 @@ if(WIN32)
 	set(ZLIB_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/../../zlib/zlib-1.2.5"
 			CACHE PATH "Zlib include directory")
 	set(ZLIB_LIBRARIES "${PROJECT_SOURCE_DIR}/../../zlib125dll/dll32/zlibwapi.lib"
-			CACHE FILEPATH "Path to zlibwapi.lib")
+			CACHE FILEPATH "Path to zlib library (usually zlibwapi.lib)")
 	if(NOT STATIC_BUILD)
-		set(ZLIB_DLL "${PROJECT_SOURCE_DIR}/../../zlib125dll/dll32/zlibwapi.dll"
-				CACHE FILEPATH "Path to zlibwapi.dll (for installation)")
+	set(ZLIB_DLL "${PROJECT_SOURCE_DIR}/../../zlib125dll/dll32/zlibwapi.dll"
+			CACHE FILEPATH "Path to zlib DLL (for installation)")
 	endif()
+	set(ZLIBWAPI_DLL "" CACHE FILEPATH "Path to zlibwapi DLL")
 	set(IRRLICHT_SOURCE_DIR "${PROJECT_SOURCE_DIR}/../../irrlicht-1.7.2"
 			CACHE PATH "irrlicht dir")
 		set(FREETYPE_INCLUDE_DIR_ft2build "${PROJECT_SOURCE_DIR}/../../freetype2/include/"
@@ -617,7 +624,10 @@ else()
 	if(APPLE)
 		set(PLATFORM_LIBS "-framework CoreFoundation" ${PLATFORM_LIBS})
 	else()
-		set(PLATFORM_LIBS -lrt ${PLATFORM_LIBS})
+		check_library_exists(rt clock_gettime "" HAVE_LIBRT)
+		if (HAVE_LIBRT)
+			set(PLATFORM_LIBS -lrt ${PLATFORM_LIBS})
+		endif(HAVE_LIBRT)
 	endif(APPLE)
 
 	# This way Xxf86vm is found on OpenBSD too
@@ -661,11 +671,44 @@ add_subdirectory(network)
 add_subdirectory(script)
 add_subdirectory(unittest)
 add_subdirectory(util)
+add_subdirectory(irrlicht_changes)
 
+if(MINETEST_PROTO)
+OPTION(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL, not compatible with other)" 0)
+else()
+OPTION(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL, not compatible with other)" 0)
+endif()
+
+if(ENABLE_SCTP)
+	set(USE_SCTP 1)
+	add_subdirectory(external/usrsctp/usrsctplib)
+	#add_definitions(-DINET -DINET6)
+	#add_definitions(-DSCTP_WITH_NO_CSUM)
+# from external/usrsctp/usrsctplib/CMakeLists.txt :
+if(SCTP_DEBUG)
+	add_definitions(-DSCTP_DEBUG)
+endif()
+if (INET)
+	add_definitions(-DINET)
+endif()
+if (INET6)
+	add_definitions(-DINET6)
+endif()
+if (SCTP_WITH_NO_CSUM)
+	add_definitions(-DSCTP_WITH_NO_CSUM)
+endif()
+
+	include_directories(${PROJECT_SOURCE_DIR}/external/usrsctp/usrsctplib)
+	set(SCTP_LIBRARY usrsctp-static)
+
+	set(USE_ENET 0)
+else()
+	set(USE_SCTP 0)
+endif()
 
 if(USE_ENET)
-	add_subdirectory(enet)
-	include_directories(${PROJECT_SOURCE_DIR}/enet/include)
+	add_subdirectory(external/enet)
+	include_directories(${PROJECT_SOURCE_DIR}/external/enet/include)
 	set(ENET_LIBRARY enet)
 endif()
 
@@ -675,7 +718,6 @@ set(FMcommon_SRCS
 	circuit_element_virtual.cpp
 	key_value_storage.cpp
 	fm_bitset.cpp
-	FMColoredString.cpp
 	mapgen_v5.cpp
 	mapgen_indev.cpp
 	mapgen_math.cpp
@@ -685,6 +727,8 @@ set(FMcommon_SRCS
 	fm_liquid.cpp
 	fm_map.cpp
 )
+#	FMColoredString.cpp
+
 
 set(common_SRCS
 	ban.cpp
@@ -719,6 +763,7 @@ set(common_SRCS
 	light.cpp
 	log.cpp
 	map.cpp
+	map_settings_manager.cpp
 	mapblock.cpp
 	mapgen.cpp
 	mapgen_flat.cpp
@@ -796,8 +841,8 @@ endif()
 set(FMclient_SRCS
 	guiTextInputMenu.cpp
 	intlGUIEditBox.cpp
-	FMStaticText.cpp
 )
+	#FMStaticText.cpp
 
 if (USE_TOUCHSCREENGUI)
 	add_definitions(-DHAVE_TOUCHSCREENGUI)
@@ -814,6 +859,7 @@ set(client_SRCS
 	${common_SRCS}
 	${sound_SRCS}
 	${client_network_SRCS}
+	${client_irrlicht_changes_SRCS}
 	camera.cpp
 	client.cpp
 	clientmap.cpp
@@ -852,6 +898,7 @@ set(client_SRCS
 	wieldmesh.cpp
 	${client_SCRIPT_SRCS}
 	${FMclient_SRCS}
+	${UNITTEST_CLIENT_SRCS}
 )
 list(SORT client_SRCS)
 
@@ -874,8 +921,13 @@ include_directories(
 	${LUA_INCLUDE_DIR}
 	${GMP_INCLUDE_DIR}
 	${JSON_INCLUDE_DIR}
-	${MSGPACK_INCLUDE_DIR}
+	${X11_INCLUDE_DIR}
 	${PROJECT_SOURCE_DIR}/script
+)
+
+#freeminer includes:
+include_directories(
+	${MSGPACK_INCLUDE_DIR}
 )
 
 if(USE_FREETYPE)
@@ -911,9 +963,11 @@ if(BUILD_CLIENT)
 		${JSON_LIBRARY}
 		${MSGPACK_LIBRARY}
 		${ENET_LIBRARY}
+		${SCTP_LIBRARY}
 		${PLATFORM_LIBS}
 		${CLIENT_PLATFORM_LIBS}
 	)
+
 	if(STATIC_BUILD AND USE_GETTEXT)
 		target_link_libraries(
 			${PROJECT_NAME}
@@ -983,6 +1037,7 @@ if(BUILD_SERVER)
 		${LUA_LIBRARY}
 		${MSGPACK_LIBRARY}
 		${ENET_LIBRARY}
+		${SCTP_LIBRARY}
 		${GMP_LIBRARY}
 		${PLATFORM_LIBS}
 	)

@@ -118,6 +118,8 @@ enum ContentParamType2
 	CPT2_LEVELED,
 	// 2D rotation for things like plants
 	CPT2_DEGROTATE,
+	// Mesh options for plants
+	CPT2_MESHOPTIONS
 };
 
 enum LiquidType
@@ -516,6 +518,8 @@ public:
 			const ContentFeatures &def)=0;
 	// If returns CONTENT_IGNORE, could not allocate id
 	virtual content_t allocateDummy(const std::string &name)=0;
+	// Remove a node
+	virtual void removeNode(const std::string &name)=0;
 
 	/*
 		Update item alias mapping.

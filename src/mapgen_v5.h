@@ -31,7 +31,7 @@ class BiomeManager;
 extern FlagDesc flagdesc_mapgen_v5[];
 
 
-struct MapgenV5Params : public MapgenSpecificParams {
+struct MapgenV5Params : public MapgenParams {
 	u32 spflags;
 	float cave_width;
 	NoiseParams np_filler_depth;
@@ -57,73 +57,25 @@ struct MapgenV5Params : public MapgenSpecificParams {
 };
 
 
-class MapgenV5 : public Mapgen, public Mapgen_features {
+class MapgenV5 : public MapgenBasic, public Mapgen_features {
 public:
-	EmergeManager *m_emerge;
-	BiomeManager *bmgr;
+	MapgenV5(int mapgenid, MapgenV5Params *params, EmergeManager *emerge);
+	~MapgenV5();
 
-	int ystride;
-	int zstride_1d;
+	virtual MapgenType getType() const { return MAPGEN_V5; }
 
-	v3s16 node_min;
-	v3s16 node_max;
-	v3s16 full_node_min;
-	v3s16 full_node_max;
+	virtual void makeChunk(BlockMakeData *data);
+	int getSpawnLevelAtPoint(v2s16 p);
+	int generateBaseTerrain();
 
-	u32 spflags;
-	float cave_width;
-	Noise *noise_filler_depth;
+private:
 	Noise *noise_factor;
 	Noise *noise_height;
-	Noise *noise_cave1;
-	Noise *noise_cave2;
 	Noise *noise_ground;
-
-	Noise *noise_heat;
-	Noise *noise_humidity;
-	Noise *noise_heat_blend;
-	Noise *noise_humidity_blend;
-
-	content_t c_stone;
-	content_t c_water_source;
-	content_t c_lava_source;
-	content_t c_desert_stone;
-	content_t c_ice;
-	content_t c_sandstone;
-
-	content_t c_cobble;
-	content_t c_stair_cobble;
-	content_t c_mossycobble;
-	content_t c_sandstonebrick;
-	content_t c_stair_sandstonebrick;
 
 	//freeminer:
 	s16 float_islands;
 
-	MapgenV5(int mapgenid, MapgenParams *params, EmergeManager *emerge);
-
-	~MapgenV5();
-
-	virtual void makeChunk(BlockMakeData *data);
-	int getSpawnLevelAtPoint(v2s16 p);
-	void calculateNoise();
-	int generateBaseTerrain();
-	MgStoneType generateBiomes(float *heat_map, float *humidity_map);
-	void generateCaves(int max_stone_y);
-	void dustTopNodes();
-};
-
-
-struct MapgenFactoryV5 : public MapgenFactory {
-	Mapgen *createMapgen(int mgid, MapgenParams *params, EmergeManager *emerge)
-	{
-		return new MapgenV5(mgid, params, emerge);
-	};
-
-	MapgenSpecificParams *createMapgenParams()
-	{
-		return new MapgenV5Params();
-	};
 };
 
 #endif

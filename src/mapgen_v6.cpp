@@ -42,6 +42,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mapgen_v6.h"
 #include "environment.h"
 
+#include "mg_biome.h"
+
 
 FlagDesc flagdesc_mapgen_v6[] = {
 	{"jungles",    MGV6_JUNGLES},
@@ -57,7 +59,7 @@ FlagDesc flagdesc_mapgen_v6[] = {
 /////////////////////////////////////////////////////////////////////////////
 
 
-MapgenV6::MapgenV6(int mapgenid, MapgenParams *params, EmergeManager *emerge)
+MapgenV6::MapgenV6(int mapgenid, MapgenV6Params *params, EmergeManager *emerge)
 	: Mapgen(mapgenid, params, emerge)
 {
 	this->m_emerge = emerge;
@@ -65,26 +67,25 @@ MapgenV6::MapgenV6(int mapgenid, MapgenParams *params, EmergeManager *emerge)
 
 	this->heightmap = new s16[csize.X * csize.Z];
 
-	MapgenV6Params *sp = (MapgenV6Params *)params->sparams;
-	this->spflags     = sp->spflags;
-	this->freq_desert = sp->freq_desert;
-	this->freq_beach  = sp->freq_beach;
+	this->spflags     = params->spflags;
+	this->freq_desert = params->freq_desert;
+	this->freq_beach  = params->freq_beach;
 
-	np_cave        = &sp->np_cave;
-	np_humidity    = &sp->np_humidity;
-	np_trees       = &sp->np_trees;
-	np_apple_trees = &sp->np_apple_trees;
+	np_cave        = &params->np_cave;
+	np_humidity    = &params->np_humidity;
+	np_trees       = &params->np_trees;
+	np_apple_trees = &params->np_apple_trees;
 
 	//// Create noise objects
-	noise_terrain_base   = new Noise(&sp->np_terrain_base,   seed, csize.X, csize.Y);
-	noise_terrain_higher = new Noise(&sp->np_terrain_higher, seed, csize.X, csize.Y);
-	noise_steepness      = new Noise(&sp->np_steepness,      seed, csize.X, csize.Y);
-	noise_height_select  = new Noise(&sp->np_height_select,  seed, csize.X, csize.Y);
-	noise_mud            = new Noise(&sp->np_mud,            seed, csize.X, csize.Y);
-	noise_beach          = new Noise(&sp->np_beach,          seed, csize.X, csize.Y);
-	noise_biome          = new Noise(&sp->np_biome,          seed,
+	noise_terrain_base   = new Noise(&params->np_terrain_base,   seed, csize.X, csize.Y);
+	noise_terrain_higher = new Noise(&params->np_terrain_higher, seed, csize.X, csize.Y);
+	noise_steepness      = new Noise(&params->np_steepness,      seed, csize.X, csize.Y);
+	noise_height_select  = new Noise(&params->np_height_select,  seed, csize.X, csize.Y);
+	noise_mud            = new Noise(&params->np_mud,            seed, csize.X, csize.Y);
+	noise_beach          = new Noise(&params->np_beach,          seed, csize.X, csize.Y);
+	noise_biome          = new Noise(&params->np_biome,          seed,
 			csize.X + 2 * MAP_BLOCKSIZE, csize.Y + 2 * MAP_BLOCKSIZE);
-	noise_humidity       = new Noise(&sp->np_humidity,       seed,
+	noise_humidity       = new Noise(&params->np_humidity,       seed,
 			csize.X + 2 * MAP_BLOCKSIZE, csize.Y + 2 * MAP_BLOCKSIZE);
 
 	//// Resolve nodes to be used
@@ -279,7 +280,7 @@ float MapgenV6::baseTerrainLevel(float terrain_base, float terrain_higher,
 
 float MapgenV6::baseTerrainLevelFromNoise(v2s16 p)
 {
-	if ((spflags & MGV6_FLAT) || (flags & MG_FLAT))
+	if (spflags & MGV6_FLAT)
 		return water_level;
 
 	float terrain_base   = NoisePerlin2D_PO(&noise_terrain_base->np,
@@ -305,7 +306,7 @@ float MapgenV6::baseTerrainLevelFromMap(v2s16 p)
 
 float MapgenV6::baseTerrainLevelFromMap(int index)
 {
-	if ((spflags & MGV6_FLAT) || (flags & MG_FLAT))
+	if (spflags & MGV6_FLAT)
 		return water_level;
 
 	float terrain_base   = noise_terrain_base->result[index];
@@ -373,7 +374,7 @@ float MapgenV6::getHumidity(v3POS p)
 	noise = (noise + 1.0)/2.0;*/
 
 	if (m_emerge->env->m_use_weather_biome) {
-		return (m_emerge->env->getServerMap().updateBlockHumidity(m_emerge->env, p, nullptr, &humidity_cache) - m_emerge->params.np_biome_humidity.offset) / m_emerge->params.np_biome_humidity.scale;
+		return (m_emerge->env->getServerMap().updateBlockHumidity(m_emerge->env, p, nullptr, &humidity_cache) - m_emerge->mgparams->bparams->np_humidity.offset) / m_emerge->mgparams->bparams->np_humidity.scale;
 	}
 
 	int index = (p.Z - full_node_min.Z) * (ystride + 2 * MAP_BLOCKSIZE)
@@ -417,7 +418,7 @@ bool MapgenV6::getHaveAppleTree(v2s16 p)
 
 float MapgenV6::getMudAmount(int index)
 {
-	if ((spflags & MGV6_FLAT) || (flags & MG_FLAT))
+	if (spflags & MGV6_FLAT)
 		return MGV6_AVERAGE_MUD_AMOUNT;
 
 	/*return ((float)AVERAGE_MUD_AMOUNT + 2.0 * noise2d_perlin(
@@ -450,8 +451,8 @@ BiomeV6Type MapgenV6::getBiome(int index, v3POS p)
 	float d, h;
 
 	if (m_emerge->env->m_use_weather_biome) {
-		d = (m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env, p, nullptr, &heat_cache) - m_emerge->params.np_biome_heat.offset) / m_emerge->params.np_biome_heat.scale;
-		h = (m_emerge->env->getServerMap().updateBlockHumidity(m_emerge->env, p, nullptr, &humidity_cache) - m_emerge->params.np_biome_humidity.offset) / m_emerge->params.np_biome_humidity.scale;
+		d = (m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env, p, nullptr, &heat_cache) - m_emerge->mgparams->bparams->np_heat.offset) / m_emerge->mgparams->bparams->np_heat.scale;
+		h = (m_emerge->env->getServerMap().updateBlockHumidity(m_emerge->env, p, nullptr, &humidity_cache) - m_emerge->mgparams->bparams->np_humidity.offset) / m_emerge->mgparams->bparams->np_humidity.scale;
 	} else {
 		d = noise_biome->result[index];
 		h = noise_humidity->result[index];
@@ -582,34 +583,38 @@ void MapgenV6::makeChunk(BlockMakeData *data)
 	if ((flags & MG_DUNGEONS) && (stone_surface_max_y >= node_min.Y)) {
 		DungeonParams dp;
 
-		dp.np_rarity  = nparams_dungeon_rarity;
-		dp.np_density = nparams_dungeon_density;
-		dp.np_wetness = nparams_dungeon_wetness;
-		dp.c_water    = c_water_source;
+		dp.seed = seed;
+		dp.c_water       = c_water_source;
+		dp.c_river_water = c_water_source;
+		dp.rooms_min     = 2;
+		dp.rooms_max     = 16;
+		dp.y_min         = -MAX_MAP_GENERATION_LIMIT;
+		dp.y_max         = MAX_MAP_GENERATION_LIMIT;
+		dp.np_density    = NoiseParams(0.9, 0.5, v3f(500.0, 500.0, 500.0), 0, 2, 0.8, 2.0);
+		dp.np_alt_wall   = NoiseParams(-0.4, 1.0, v3f(40.0, 40.0, 40.0), 32474, 6, 1.1, 2.0);
+
 		if (getBiome(0, node_min) == BT_DESERT) {
-			dp.c_cobble = c_desert_stone;
-			dp.c_moss   = c_desert_stone;
-			dp.c_stair  = c_desert_stone;
+			dp.c_wall     = c_desert_stone;
+			dp.c_alt_wall = CONTENT_IGNORE;
+			dp.c_stair    = c_desert_stone;
 
 			dp.diagonal_dirs = true;
-			dp.mossratio     = 0.0;
 			dp.holesize      = v3s16(2, 3, 2);
 			dp.roomsize      = v3s16(2, 5, 2);
 			dp.notifytype    = GENNOTIFY_TEMPLE;
 		} else {
-			dp.c_cobble = c_cobble;
-			dp.c_moss   = c_mossycobble;
-			dp.c_stair  = c_stair_cobble;
+			dp.c_wall     = c_cobble;
+			dp.c_alt_wall = c_mossycobble;
+			dp.c_stair    = c_stair_cobble;
 
 			dp.diagonal_dirs = false;
-			dp.mossratio     = 3.0;
 			dp.holesize      = v3s16(1, 2, 1);
 			dp.roomsize      = v3s16(0, 0, 0);
 			dp.notifytype    = GENNOTIFY_DUNGEON;
 		}
 
-		DungeonGen dgen(this, &dp);
-		dgen.generate(blockseed, full_node_min, full_node_max);
+		DungeonGen dgen(ndef, &gennotify, &dp);
+		dgen.generate(vm, blockseed, full_node_min, full_node_max);
 	}
 
 	// Add top and bottom side of water to transforming_liquid queue
@@ -619,7 +624,7 @@ void MapgenV6::makeChunk(BlockMakeData *data)
 	growGrass();
 
 	// Generate some trees, and add grass, if a jungle
-	if ((spflags & MGV6_TREES) || (flags & MG_TREES))
+	if (spflags & MGV6_TREES)
 		placeTreesAndJungleGrass();
 
 	// Generate the registered decorations
@@ -646,7 +651,7 @@ void MapgenV6::calculateNoise()
 	int fx = full_node_min.X;
 	int fz = full_node_min.Z;
 
-	if (!((spflags & MGV6_FLAT) || (flags & MG_FLAT))) {
+	if (!(spflags & MGV6_FLAT)) {
 		noise_terrain_base->perlinMap2D_PO(x, 0.5, z, 0.5);
 		noise_terrain_higher->perlinMap2D_PO(x, 0.5, z, 0.5);
 		noise_steepness->perlinMap2D_PO(x, 0.5, z, 0.5);
@@ -1112,9 +1117,10 @@ void MapgenV6::generateCaves(int max_stone_y)
 	}
 
 	for (u32 i = 0; i < caves_count + bruises_count; i++) {
-		bool large_cave = (i >= caves_count);
-		CaveV6 cave(this, &ps, &ps2, large_cave);
+		CavesV6 cave(ndef, &gennotify, water_level, c_water_source, c_lava_source);
 
-		cave.makeCave(node_min, node_max, max_stone_y);
+		bool large_cave = (i >= caves_count);
+		cave.makeCave(vm, node_min, node_max, &ps, &ps2,
+			large_cave, max_stone_y, heightmap);
 	}
 }

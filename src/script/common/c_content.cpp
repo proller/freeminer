@@ -36,7 +36,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "porting.h"
 #include "mg_schematic.h"
 #include "noise.h"
-#include "json/json.h"
+#include <json/json.h>
 
 struct EnumString es_TileAnimationType[] =
 {
@@ -67,10 +67,9 @@ ItemDefinition read_item_definition(lua_State* L,int index,
 		def.wield_scale = check_v3f(L, -1);
 	}
 	lua_pop(L, 1);
-	
-	def.stack_max = getintfield_default(L, index, "stack_max", def.stack_max);
-	if(def.stack_max == 0)
-		def.stack_max = 1;
+
+	int stack_max = getintfield_default(L, index, "stack_max", def.stack_max);
+	def.stack_max = rangelim(stack_max, 1, U16_MAX);
 
 	lua_getfield(L, index, "on_use");
 	def.usable = lua_isfunction(L, -1);
@@ -1342,7 +1341,13 @@ static bool push_json_value_helper(lua_State *L, const Json::Value &value,
 			lua_newtable(L);
 			for (Json::Value::const_iterator it = value.begin();
 					it != value.end(); ++it) {
-				lua_pushstring(L, it.name().c_str());
+#ifndef JSONCPP_STRING
+				const char *str = it.memberName();
+				lua_pushstring(L, str ? str : "");
+#else
+				std::string str = it.name();
+				lua_pushstring(L, str.c_str());
+#endif
 				push_json_value_helper(L, *it, nullindex);
 				lua_rawset(L, -3);
 			}

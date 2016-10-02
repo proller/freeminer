@@ -31,6 +31,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <map>
 #include <sstream>
 #include "SColor.h"
+#include <iomanip>
 #include <cctype>
 
 #define STRINGIFY(x) #x
@@ -91,8 +92,8 @@ std::string wide_to_narrow_real(const std::wstring& wcs);
 std::wstring narrow_to_wide(const std::string &mbs);
 std::string wide_to_narrow(const std::wstring &wcs);
 
-std::string urlencode(std::string str);
-std::string urldecode(std::string str);
+std::string urlencode(const std::string &str);
+std::string urldecode(const std::string &str);
 u32 readFlagString(std::string str, const FlagDesc *flagdesc, u32 *flagmask);
 std::string writeFlagString(u32 flags, const FlagDesc *flagdesc, u32 flagmask);
 size_t mystrlcpy(char *dst, const char *src, size_t size);
@@ -364,23 +365,57 @@ inline T from_string(const std::string &str)
 /// Returns a 64-bit signed value represented by the string \p str (decimal).
 inline s64 stoi64(const std::string &str) { return from_string<s64>(str); }
 
-// TODO: Replace with C++11 std::to_string.
+#if __cplusplus < 201103L || defined(__ANDROID__)
+namespace std {
 
 /// Returns a string representing the value \p val.
 template <typename T>
-inline std::string to_string(T val)
+inline string to_string(T val)
 {
-	std::ostringstream oss;
+	ostringstream oss;
 	oss << val;
 	return oss.str();
 }
+#define DEFINE_STD_TOSTRING_FLOATINGPOINT(T)		\
+	template <>					\
+	inline string to_string<T>(T val)		\
+	{						\
+		ostringstream oss;			\
+		oss << std::fixed			\
+			<< std::setprecision(6)		\
+			<< val;				\
+		return oss.str();			\
+	}
+DEFINE_STD_TOSTRING_FLOATINGPOINT(float)
+DEFINE_STD_TOSTRING_FLOATINGPOINT(double)
+DEFINE_STD_TOSTRING_FLOATINGPOINT(long double)
+
+#undef DEFINE_STD_TOSTRING_FLOATINGPOINT
+
+/// Returns a wide string representing the value \p val
+template <typename T>
+inline wstring to_wstring(T val)
+{
+      return utf8_to_wide(to_string(val));
+}
+}
+#endif
 
 /// Returns a string representing the decimal value of the 32-bit value \p i.
-inline std::string itos(s32 i) { return to_string(i); }
+inline std::string itos(s32 i) { return std::to_string(i); }
 /// Returns a string representing the decimal value of the 64-bit value \p i.
-inline std::string i64tos(s64 i) { return to_string(i); }
+inline std::string i64tos(s64 i) { return std::to_string(i); }
+
+// std::to_string uses the '%.6f' conversion, which is inconsistent with
+// std::ostream::operator<<() and impractical too.  ftos() uses the
+// more generic and std::ostream::operator<<()-compatible '%G' format.
 /// Returns a string representing the decimal value of the float value \p f.
-inline std::string ftos(float f) { return to_string(f); }
+inline std::string ftos(float f)
+{
+	std::ostringstream oss;
+	oss << f;
+	return oss.str();
+}
 
 
 /**
@@ -531,6 +566,38 @@ std::basic_string<T> unescape_enriched(const std::basic_string<T> &s)
 		++i;
 	}
 	return output;
+}
+
+template <typename T>
+std::vector<std::basic_string<T> > split(const std::basic_string<T> &s, T delim)
+{
+	std::vector<std::basic_string<T> > tokens;
+
+	std::basic_string<T> current;
+	bool last_was_escape = false;
+	for (size_t i = 0; i < s.length(); i++) {
+		T si = s[i];
+		if (last_was_escape) {
+			current += '\\';
+			current += si;
+			last_was_escape = false;
+		} else {
+			if (si == delim) {
+				tokens.push_back(current);
+				current = std::basic_string<T>();
+				last_was_escape = false;
+			} else if (si == '\\') {
+				last_was_escape = true;
+			} else {
+				current += si;
+				last_was_escape = false;
+			}
+		}
+	}
+	//push last element
+	tokens.push_back(current);
+
+	return tokens;
 }
 
 /**

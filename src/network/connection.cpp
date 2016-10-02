@@ -22,7 +22,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "config.h"
 
-#if !MINETEST_PROTO
+#if USE_SCTP
+#include "network/fm_connection_sctp.cpp"
+#elif !MINETEST_PROTO
 #include "network/fm_connection.cpp"
 #else
 //Not used, keep for reduce MT merge conflicts
@@ -86,6 +88,9 @@ static inline float CALC_DTIME(unsigned int lasttime, unsigned int curtime) {
 #define MAX_UDP_PEERS 65535
 
 #define PING_TIMEOUT 5.0
+
+/* maximum number of retries for reliable packets */
+#define MAX_RELIABLE_RETRY 5
 
 static u16 readPeerId(u8 *packetdata)
 {
@@ -1422,6 +1427,7 @@ void ConnectionSendThread::runTimeouts(float dtime)
 		}
 
 		float resend_timeout = dynamic_cast<UDPPeer*>(&peer)->getResendTimeout();
+		bool retry_count_exceeded = false;
 		for(u16 i=0; i<CHANNEL_COUNT; i++)
 		{
 			std::list<BufferedPacket> timed_outs;
@@ -1462,6 +1468,13 @@ void ConnectionSendThread::runTimeouts(float dtime)
 				channel->UpdateBytesLost(k->data.getSize());
 				k->resend_count++;
 
+				if (k-> resend_count > MAX_RELIABLE_RETRY) {
+					retry_count_exceeded = true;
+					timeouted_peers.push_back(peer->id);
+					/* no need to check additional packets if a single one did timeout*/
+					break;
+				}
+
 /*
 				LOG(derr_con<<m_connection->getDesc()
 						<<"RE-SENDING timed-out RELIABLE to "
@@ -1478,8 +1491,17 @@ void ConnectionSendThread::runTimeouts(float dtime)
 				// do not handle rtt here as we can't decide if this packet was
 				// lost or really takes more time to transmit
 			}
+
+			if (retry_count_exceeded) {
+				break; /* no need to check other channels if we already did timeout */
+			}
+
 			channel->UpdateTimers(dtime,dynamic_cast<UDPPeer*>(&peer)->getLegacyPeer());
 		}
+
+		/* skip to next peer if we did timeout */
+		if (retry_count_exceeded)
+			continue;
 
 		/* send ping if necessary */
 		if (dynamic_cast<UDPPeer*>(&peer)->Ping(dtime,data)) {

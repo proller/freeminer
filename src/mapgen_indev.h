@@ -96,7 +96,8 @@ public:
 
 	int xstride, ystride, zstride;
 
-	MapgenIndev(int mapgenid, MapgenParams *params, EmergeManager *emerge);
+	virtual MapgenType getType() const { return MAPGEN_INDEV; }
+	MapgenIndev(int mapgenid, MapgenIndevParams *params, EmergeManager *emerge);
 	~MapgenIndev();
 
 	virtual void calculateNoise();
@@ -105,20 +106,12 @@ public:
 	void generateExperimental();
 };
 
-struct MapgenFactoryIndev : public MapgenFactoryV6 {
-	Mapgen *createMapgen(int mgid, MapgenParams *params, EmergeManager *emerge) {
-		return new MapgenIndev(mgid, params, emerge);
-	};
-
-	MapgenSpecificParams *createMapgenParams() {
-		return new MapgenIndevParams();
-	};
-};
-
-class CaveIndev : public CaveV6 {
+/*
+class CaveIndev : public CavesV6 {
 public:
 	CaveIndev(MapgenIndev *mg, PseudoRandom *ps, PseudoRandom *ps2,
 			v3POS node_min, bool is_large_cave);
 };
+*/
 
 #endif

@@ -54,7 +54,8 @@ class MapgenMath : public MapgenV7 {
 public:
 	MapgenMathParams * mg_params;
 
-	MapgenMath(int mapgenid, MapgenParams *mg_params, EmergeManager *emerge);
+	virtual MapgenType getType() const { return MAPGEN_MATH; }
+	MapgenMath(int mapgenid, MapgenMathParams *mg_params, EmergeManager *emerge);
 	~MapgenMath();
 
 	virtual void calculateNoise();
@@ -77,16 +78,6 @@ public:
 
 	double (*func)(double, double, double, double, int);
 	MapNode layers_get(float value, float max);
-};
-
-struct MapgenFactoryMath : public MapgenFactory {
-	Mapgen *createMapgen(int mgid, MapgenParams *params, EmergeManager *emerge) {
-		return new MapgenMath(mgid, params, emerge);
-	};
-
-	MapgenSpecificParams *createMapgenParams() {
-		return new MapgenMathParams();
-	};
 };
 
 #endif
