@@ -266,6 +266,7 @@ MapgenMath::MapgenMath(int mapgenid, MapgenMathParams *params_, EmergeManager *e
 		internal = 1;
 		func = &rooms;
 		invert = params.get("invert", 0).asBool();
+		//result_max = 10;
 		size = params.get("size", 1).asDouble();
 	}
 
@@ -507,7 +508,8 @@ MapgenMath::~MapgenMath() {
 //////////////////////// Map generator
 
 MapNode MapgenMath::layers_get(float value, float max) {
-	auto layer_index = rangelim((unsigned int)myround((value/max) * layers_node.size()), 0, layers_node.size()-1);
+	auto layer_index = rangelim((unsigned int)myround((value/max) * layers_node_size), 0, layers_node_size-1);
+	//errorstream<<"lsM: "<< " layer_index="<<layer_index<< " value="<<value<<" max="<< max<<" noise_layers_width="<<noise_layers_width<<" layers_node_size="<<layers_node_size<<std::endl;
 	return layers_node[layer_index];
 }
 
@@ -564,7 +566,7 @@ int MapgenMath::generateTerrain() {
 					if (!vm->m_data[i]) {
 						//vm->m_data[i] = (y > water_level + biome->filler) ?
 						//     MapNode(biome->c_filler) : n_stone;
-						if (invert) {
+						if (invert || !no_layers) {
 							int index3 = (z - node_min.Z) * zstride_1d +
 								(y - node_min.Y) * ystride +
 								(x - node_min.X);
