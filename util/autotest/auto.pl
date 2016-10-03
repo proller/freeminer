@@ -311,6 +311,7 @@ our $commands = {
         return 0;
     },
     cmake => sub {
+        return if $config->{no_cmake};
         my %D;
         $D{CMAKE_RUNTIME_OUTPUT_DIRECTORY} = "`pwd`";    # -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=`pwd`
         local $config->{cmake_clang} = 1, local $config->{cmake_debug} = 1, $D{SANITIZE_THREAD}  = 1, if $config->{cmake_tsan};

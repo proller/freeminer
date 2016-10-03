@@ -145,7 +145,7 @@ inline double sphere(double x, double y, double z, double d, int ITR = 1) {
 
 inline double rooms(double dx, double dy, double dz, double d, int ITR = 1) {
 	int x = dx, y = dy, z = dz;
-	if (x < y && x < z) return 0; // debug slice
+	//if (x < y && x < z) return 0; // debug slice
 	auto rooms_pow_min = 2, rooms_pow_max = 10;
 	auto rooms_pow_cut_max = 8;
 	for (int pw = rooms_pow_min; pw <= rooms_pow_max; ++pw) {
@@ -168,17 +168,16 @@ inline double rooms(double dx, double dy, double dz, double d, int ITR = 1) {
 				if (pw2 <= rooms_pow_cut_max && !( std::hash<double>()(room_n + 0) % 13)) { 
 					//errorstream << " cutt "<<" x=" << x << " y="<< y << " z="<<z << " every="<< every<<" room_n=" << room_n << " pw="<<pw << " pw2="<<pw2<< "\n";
 					//errorstream << " x>>pw2" << (x>>pw2)  << " (x-1)>>pw2" << ((x-1)>>pw2) << " y>>pw2" << (y>>pw2)  << " (y-1)>>pw2" << ((y-1)>>pw2) << " z>>pw2" << (z>>pw2)  << " (z-1)>>pw2" << ((z-1)>>pw2) << "\n";
-
 					int pw3 = pw2+1;
 					if ((x>>pw3) == (x-1)>>pw3 && (y>>pw3) == (y-1)>>pw3 && (z>>pw3) == (z-1)>>pw3) {
-						return 0; 
+						return 0;
 					}
 				}
 				//errorstream << " t "<<" x=" << x << " y="<< y << " z="<<z   <<" cx=" << cx << " cy="<< cy << " cz="<<cz<< "pw="<<pw<< " every="<<every<< " lv="<< lv << " room_n="<<room_n<< room_size="<<room_size <<"\n";
 				int room_size = 2 << (pw2-1);
-				cx+= ((x < cx) ? -1 : 1) * room_size; 
-				cy+= ((y < cy) ? -1 : 1) * room_size; 
-				cz+= ((z < cz) ? -1 : 1) * room_size; 
+				cx+= ((x < cx) ? -1 : 1) * room_size;
+				cy+= ((y < cy) ? -1 : 1) * room_size;
+				cz+= ((z < cz) ? -1 : 1) * room_size;
 			}
 			return pw;
 		}
@@ -192,7 +191,9 @@ void MapgenMathParams::readParams(Settings *settings) {
 	try {
 		MapgenV7Params::readParams(settings);
 	} catch (...) {}
-	params = settings->getJson("mg_math");
+	auto mg_math = settings->getJson("mg_math");
+	if (!mg_math.isNull())
+		params = mg_math;
 }
 
 void MapgenMathParams::writeParams(Settings *settings) const {
