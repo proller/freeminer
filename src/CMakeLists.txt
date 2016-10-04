@@ -393,7 +393,7 @@ set(USE_FREETYPE FALSE)
 		set(CGUITTFONT_LIBRARY cguittfont)
 	endif()
 
-if(NOT FREETYPE_FOUND AND NOT NO_BUILD)
+if(NOT FREETYPE_FOUND AND NOT NO_BUILD AND BUILD_CLIENT)
 	message(FATAL_ERROR "FreeType was not found.")
 endif()
 
@@ -502,7 +502,6 @@ if(ENABLE_SQLITE3)
 endif()
 
 if(FORCE_SQLITE3)
-
 	set(USE_SQLITE3 1)
 endif()
 
@@ -900,6 +899,7 @@ set(client_SRCS
 	wieldmesh.cpp
 	${client_SCRIPT_SRCS}
 	${FMclient_SRCS}
+	${UNITTEST_CLIENT_SRCS}
 )
 list(SORT client_SRCS)
 
