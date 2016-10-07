@@ -143,10 +143,25 @@ inline double sphere(double x, double y, double z, double d, int ITR = 1) {
 }
 
 
+
+typedef u_int32_t Fnv32_t;
+#define FNV1_32_INIT ((Fnv32_t) 33554467UL)            
+#define FNV_32_PRIME ((Fnv32_t) 0x01000193UL)          
+inline Fnv32_t fnv_32_buf(const void *buf, size_t len, Fnv32_t hval = FNV1_32_INIT) {
+        const u_int8_t *s = (const u_int8_t *)buf;     
+        while (len-- != 0) {                           
+                hval *= FNV_32_PRIME;                  
+                hval ^= *s++;                          
+        }                                              
+        return hval;                                   
+}
+
+
 inline double rooms(double dx, double dy, double dz, double d, int ITR = 1) {
 	int x = dx, y = dy, z = dz;
-	if (x < y && x < z) return 0; // debug slice
-	const auto rooms_pow_min = 2, rooms_pow_max = 10;
+	//if (x < y && x < z) return 0; // debug slice
+	const auto seed = 1;
+	const auto rooms_pow_min = 2, rooms_pow_max = 9;
 	const auto rooms_pow_cut_max = 8;
 	const auto rooms_pow_fill_max = 4;
 	for (int pw = rooms_pow_min; pw <= rooms_pow_max; ++pw) {
@@ -167,33 +182,32 @@ inline double rooms(double dx, double dy, double dz, double d, int ITR = 1) {
 				//errorstream << " t "<<" x=" << x << " y="<< y << " z="<<z << " room_n=" << room_n << " pw="<<pw<< " hash=" << std::hash<int>()(room_n)<<" test="<<(!( std::hash<int>()(room_n) % 7))<< "\n";
 				room_n = lv + room_n * 10;
 
-				bool room_filled = !( std::hash<double>()(room_n + 1) % 13);
-
-				errorstream << " t "<<" x=" << x << " y="<< y << " z="<<z << " room_n=" << room_n << " pw="<<pw<< " hash=" << std::hash<double>()(room_n + 1)<<" test="<<(!( std::hash<double>()(room_n + 1) % 13))<< " rf="<<room_filled<<"\n";
-
-				if (!(xhit || yhit || zhit)) {
-					wall = 0;
-					if (
-					//pw2 < rooms_pow_fill_max &&
-						room_filled
-					)
-						return pw;
-					else
-						continue;
-				} else {
-					wall = pw;
+				auto room_n_hash_1 = room_n + seed + 1;
+				if (
+					pw < rooms_pow_fill_max &&
+					pw2 < rooms_pow_fill_max &&
+				    !( fnv_32_buf(&room_n_hash_1, sizeof(room_n_hash_1)) % 10)
+				    )
+				{
+					//errorstream << " pw=" << pw  << " room_n="<<room_n<< " hash="<< fnv_32_buf(&room_n_hash_1, sizeof(room_n_hash_1))<<"\n";
+					return pw;
 				}
+				//errorstream << " t "<<" x=" << x << " y="<< y << " z="<<z << " room_n=" << room_n << " pw="<<pw<< " hash=" << std::hash<double>()(room_n + 1)<<" test="<<(!( std::hash<double>()(room_n + 1) % 13))<< " rf="<<room_filled<<"\n";
 
-
-				if (pw2 <= rooms_pow_cut_max && !( std::hash<double>()(room_n + 0) % 13)) {
+				//if (pw2 <= rooms_pow_cut_max && !( std::hash<double>()(room_n + 0) % 13)) {
+				auto room_n_hash_2 = room_n + seed + 2;
+				if (pw2 <= rooms_pow_cut_max && !( fnv_32_buf(&room_n_hash_2, sizeof(room_n_hash_2)) % 13)) {
 					//errorstream << " cutt "<<" x=" << x << " y="<< y << " z="<<z << " every="<< every<<" room_n=" << room_n << " pw="<<pw << " pw2="<<pw2<< "\n";
 					//errorstream << " x>>pw2" << (x>>pw2)  << " (x-1)>>pw2" << ((x-1)>>pw2) << " y>>pw2" << (y>>pw2)  << " (y-1)>>pw2" << ((y-1)>>pw2) << " z>>pw2" << (z>>pw2)  << " (z-1)>>pw2" << ((z-1)>>pw2) << "\n";
 					int pw3 = pw2+1;
 					if ((x>>pw3) == (x-1)>>pw3 && (y>>pw3) == (y-1)>>pw3 && (z>>pw3) == (z-1)>>pw3) {
-						return room_filled;
+						return 0;
 					}
 				}
 
+				if (xhit || yhit || zhit) {
+					wall = pw;
+				}
 
 				//errorstream << " t "<<" x=" << x << " y="<< y << " z="<<z   <<" cx=" << cx << " cy="<< cy << " cz="<<cz<< "pw="<<pw<< " every="<<every<< " lv="<< lv << " room_n="<<room_n<< room_size="<<room_size <<"\n";
 				int room_size = 2 << (pw2-1);
