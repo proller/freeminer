@@ -811,7 +811,7 @@ void Server::handleCommand_PlayerPos(NetworkPacket* pkt)
 	pitch = modulo360f(pitch);
 	yaw = modulo360f(yaw);
 
-	Player *player = m_env->getPlayer(pkt->getPeerId());
+	RemotePlayer *player = m_env->getPlayer(pkt->getPeerId());
 	if (player == NULL) {
 		errorstream << "Server::ProcessData(): Canceling: "
 				"No player for peer_id=" << pkt->getPeerId()
@@ -914,7 +914,8 @@ void Server::handleCommand_DeletedBlocks(NetworkPacket* pkt)
 
 void Server::handleCommand_InventoryAction(NetworkPacket* pkt)
 {
-	Player *player = m_env->getPlayer(pkt->getPeerId());
+	RemotePlayer *player = m_env->getPlayer(pkt->getPeerId());
+
 	if (player == NULL) {
 		errorstream << "Server::ProcessData(): Canceling: "
 				"No player for peer_id=" << pkt->getPeerId()
@@ -1088,7 +1089,7 @@ void Server::handleCommand_ChatMessage(NetworkPacket* pkt)
 		message += (wchar_t)tmp_wchar;
 	}
 
-	Player *player = m_env->getPlayer(pkt->getPeerId());
+	RemotePlayer *player = m_env->getPlayer(pkt->getPeerId());
 	if (player == NULL) {
 		errorstream << "Server::ProcessData(): Canceling: "
 				"No player for peer_id=" << pkt->getPeerId()
@@ -1115,7 +1116,8 @@ void Server::handleCommand_Damage(NetworkPacket* pkt)
 
 	*pkt >> damage;
 
-	Player *player = m_env->getPlayer(pkt->getPeerId());
+	RemotePlayer *player = m_env->getPlayer(pkt->getPeerId());
+
 	if (player == NULL) {
 		errorstream << "Server::ProcessData(): Canceling: "
 				"No player for peer_id=" << pkt->getPeerId()
@@ -1151,7 +1153,8 @@ void Server::handleCommand_Breath(NetworkPacket* pkt)
 
 	*pkt >> breath;
 
-	Player *player = m_env->getPlayer(pkt->getPeerId());
+	RemotePlayer *player = m_env->getPlayer(pkt->getPeerId());
+
 	if (player == NULL) {
 		errorstream << "Server::ProcessData(): Canceling: "
 				"No player for peer_id=" << pkt->getPeerId()
@@ -1215,7 +1218,7 @@ void Server::handleCommand_Password(NetworkPacket* pkt)
 		newpwd += c;
 	}
 
-	Player *player = m_env->getPlayer(pkt->getPeerId());
+	RemotePlayer *player = m_env->getPlayer(pkt->getPeerId());
 	if (player == NULL) {
 		errorstream << "Server::ProcessData(): Canceling: "
 				"No player for peer_id=" << pkt->getPeerId()
@@ -1263,7 +1266,8 @@ void Server::handleCommand_PlayerItem(NetworkPacket* pkt)
 	if (pkt->getSize() < 2)
 		return;
 
-	Player *player = m_env->getPlayer(pkt->getPeerId());
+	RemotePlayer *player = m_env->getPlayer(pkt->getPeerId());
+
 	if (player == NULL) {
 		errorstream << "Server::ProcessData(): Canceling: "
 				"No player for peer_id=" << pkt->getPeerId()
@@ -1290,7 +1294,7 @@ void Server::handleCommand_PlayerItem(NetworkPacket* pkt)
 
 void Server::handleCommand_Respawn(NetworkPacket* pkt)
 {
-	Player *player = m_env->getPlayer(pkt->getPeerId());
+	RemotePlayer *player = m_env->getPlayer(pkt->getPeerId());
 	if (player == NULL) {
 		errorstream << "Server::ProcessData(): Canceling: "
 				"No player for peer_id=" << pkt->getPeerId()
@@ -1343,7 +1347,8 @@ void Server::handleCommand_Interact(NetworkPacket* pkt)
 	verbosestream << "TOSERVER_INTERACT: action=" << (int)action << ", item="
 			<< item_i << ", pointed=" << pointed.dump() << std::endl;
 
-	Player *player = m_env->getPlayer(pkt->getPeerId());
+	RemotePlayer *player = m_env->getPlayer(pkt->getPeerId());
+
 	if (player == NULL) {
 		errorstream << "Server::ProcessData(): Canceling: "
 				"No player for peer_id=" << pkt->getPeerId()
@@ -1753,9 +1758,7 @@ void Server::handleCommand_RemovedSounds(NetworkPacket* pkt)
 
 		*pkt >> id;
 
-		std::map<s32, ServerPlayingSound>::iterator i =
-			m_playing_sounds.find(id);
-
+		UNORDERED_MAP<s32, ServerPlayingSound>::iterator i = m_playing_sounds.find(id);
 		if (i == m_playing_sounds.end())
 			continue;
 
@@ -1781,7 +1784,8 @@ void Server::handleCommand_NodeMetaFields(NetworkPacket* pkt)
 		fields[fieldname] = pkt->readLongString();
 	}
 
-	Player *player = m_env->getPlayer(pkt->getPeerId());
+	RemotePlayer *player = m_env->getPlayer(pkt->getPeerId());
+
 	if (player == NULL) {
 		errorstream << "Server::ProcessData(): Canceling: "
 				"No player for peer_id=" << pkt->getPeerId()
@@ -1835,7 +1839,8 @@ void Server::handleCommand_InventoryFields(NetworkPacket* pkt)
 		fields[fieldname] = pkt->readLongString();
 	}
 
-	Player *player = m_env->getPlayer(pkt->getPeerId());
+	RemotePlayer *player = m_env->getPlayer(pkt->getPeerId());
+
 	if (player == NULL) {
 		errorstream << "Server::ProcessData(): Canceling: "
 				"No player for peer_id=" << pkt->getPeerId()
