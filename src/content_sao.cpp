@@ -29,7 +29,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "serialization.h" // For compressZlib
 #include "tool.h" // For ToolCapabilities
 #include "gamedef.h"
-#include "player.h"
+#include "remoteplayer.h"
 #include "server.h"
 #include "scripting_game.h"
 #include "genericobject.h"
@@ -160,6 +160,11 @@ LuaEntitySAO::~LuaEntitySAO()
 {
 	if(m_registered){
 		m_env->getScriptIface()->luaentity_Remove(m_id);
+	}
+
+	for (UNORDERED_SET<u32>::iterator it = m_attached_particle_spawners.begin();
+		it != m_attached_particle_spawners.end(); ++it) {
+		m_env->deleteParticleSpawner(*it, false);
 	}
 }
 
@@ -405,7 +410,7 @@ std::string LuaEntitySAO::getClientInitializationData(u16 protocol_version)
 					(*ii).second.X, (*ii).second.Y)); // m_bone_position.size
 		}
 		os<<serializeLongString(gob_cmd_update_attachment(m_attachment_parent_id, m_attachment_bone, m_attachment_position, m_attachment_rotation)); // 4
-		for (UNORDERED_SET<int>::const_iterator ii = m_attachment_child_ids.begin(); 
+		for (UNORDERED_SET<int>::const_iterator ii = m_attachment_child_ids.begin();
 				(ii != m_attachment_child_ids.end()); ++ii) {
 			if (ServerActiveObject *obj = m_env->getActiveObject(*ii)) {
 				os << serializeLongString(gob_cmd_update_infant(*ii, obj->getSendType(), obj->getClientInitializationData(protocol_version)));
@@ -851,7 +856,6 @@ PlayerSAO::~PlayerSAO()
 	if(m_inventory != &m_player->inventory)
 		delete m_inventory;
 	--m_player->refs;
-
 }
 
 std::string PlayerSAO::getDescription()
@@ -886,8 +890,14 @@ void PlayerSAO::removingFromEnvironment()
 		/*
 		m_env->removePlayer(m_player);
 		*/
+
 		--m_player->refs;
 		m_player = nullptr;
+
+		for (UNORDERED_SET<u32>::iterator it = m_attached_particle_spawners.begin();
+			it != m_attached_particle_spawners.end(); ++it) {
+			m_env->deleteParticleSpawner(*it, false);
+		}
 	}
 }
 
@@ -928,7 +938,7 @@ std::string PlayerSAO::getClientInitializationData(u16 protocol_version)
 				m_physics_override_jump, m_physics_override_gravity, m_physics_override_sneak,
 				m_physics_override_sneak_glitch)); // 5
 		os << serializeLongString(gob_cmd_update_nametag_attributes(m_prop.nametag_color)); // 6 (GENERIC_CMD_UPDATE_NAMETAG_ATTRIBUTES) : Deprecated, for backwards compatibility only.
-		for (UNORDERED_SET<int>::const_iterator ii = m_attachment_child_ids.begin(); 
+		for (UNORDERED_SET<int>::const_iterator ii = m_attachment_child_ids.begin();
 				ii != m_attachment_child_ids.end(); ++ii) {
 			if (ServerActiveObject *obj = m_env->getActiveObject(*ii)) {
 				os << serializeLongString(gob_cmd_update_infant(*ii, obj->getSendType(), obj->getClientInitializationData(protocol_version)));

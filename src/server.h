@@ -37,7 +37,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "environment.h"
 #include "chat_interface.h"
 #include "clientiface.h"
-#include "player.h"
+#include "remoteplayer.h"
 #include "network/networkpacket.h"
 #include <string>
 #include <list>
@@ -275,6 +275,7 @@ public:
 		float minexptime, float maxexptime,
 		float minsize, float maxsize,
 		bool collisiondetection, bool collision_removal,
+		ServerActiveObject *attached,
 		bool vertical, const std::string &texture,
 		const std::string &playername);
 
@@ -467,6 +468,7 @@ private:
 		float minexptime, float maxexptime,
 		float minsize, float maxsize,
 		bool collisiondetection, bool collision_removal,
+		u16 attached_id,
 		bool vertical, const std::string &texture, u32 id);
 
 	void SendDeleteParticleSpawner(u16 peer_id, u32 id);
