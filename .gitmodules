@@ -16,3 +16,6 @@
 [submodule "src/external/msgpack-c"]
 	path = src/external/msgpack-c
 	url = https://github.com/msgpack/msgpack-c.git
+[submodule "src/external/polyvox"]
+	path = src/external/polyvox
+	url = https://bitbucket.org/volumesoffun/polyvox.git

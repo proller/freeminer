@@ -712,6 +712,12 @@ if(USE_ENET)
 	set(ENET_LIBRARY enet)
 endif()
 
+if (BUILD_CLIENT)
+	add_subdirectory(external/polyvox)
+	include_directories(${PROJECT_SOURCE_DIR}/external/polyvox/library/PolyVoxCore/include)
+	set(POLYVOX_LIBRARY PolyVoxCore)
+endif()
+
 set(FMcommon_SRCS
 	circuit.cpp
 	circuit_element.cpp
@@ -965,6 +971,7 @@ if(BUILD_CLIENT)
 		${MSGPACK_LIBRARY}
 		${ENET_LIBRARY}
 		${SCTP_LIBRARY}
+		${POLYVOX_LIBRARY}
 		${PLATFORM_LIBS}
 		${CLIENT_PLATFORM_LIBS}
 	)
