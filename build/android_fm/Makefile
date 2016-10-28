@@ -874,6 +874,9 @@ assets : $(ASSETS_TIMESTAMP) locale
 	do                                                                         \
 	    cp -Lr ${ROOT}/../../games/$$game ${ROOT}/assets/freeminer/games${GAMES_VERSION}/; \
 	done;                                                                      \
+	rm -rf ${ROOT}/assets/freeminer/games${GAMES_VERSION}/MultiCraft/mods/technic/technic/textures/hires; \
+	rm -rf ${ROOT}/assets/freeminer/games${GAMES_VERSION}/MultiCraft/mods/technic/technic/textures/technicx32; \
+	rm -rf ${ROOT}/assets/freeminer/games${GAMES_VERSION}/MultiCraft/mods/pipeworks/screenshot.png; \
 	mkdir ${ROOT}/assets/freeminer/mods; \
 	for mod in ${MODS_TO_COPY}; do                                             \
 	    cp -r ${ROOT}/../../mods/$$mod ${ROOT}/assets/freeminer/mods/; \
