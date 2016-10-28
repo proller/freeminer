@@ -153,7 +153,7 @@ else()
 		set(OTHER_FLAGS "${OTHER_FLAGS} -Wsign-compare")
 	endif()
 
-	if(NOT ZLIBWAPI_DLL AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+	if(WIN32 AND NOT ZLIBWAPI_DLL AND CMAKE_SIZEOF_VOID_P EQUAL 4)
 		set(OTHER_FLAGS "${OTHER_FLAGS} -DWIN32_NO_ZLIB_WINAPI")
 		message(WARNING "Defaulting to cdecl for zlib on win32 because ZLIBWAPI_DLL"
 			" isn't set, ensure that ZLIBWAPI_DLL is set if you want stdcall.")
@@ -392,7 +392,7 @@ set(USE_FREETYPE FALSE)
 		set(CGUITTFONT_LIBRARY cguittfont)
 	endif()
 
-if(NOT FREETYPE_FOUND AND NOT NO_BUILD)
+if(NOT FREETYPE_FOUND AND NOT NO_BUILD AND BUILD_CLIENT)
 	message(FATAL_ERROR "FreeType was not found.")
 endif()
 
@@ -469,11 +469,51 @@ if(ENABLE_LEVELDB)
 	find_library(SNAPPY_LIBRARY snappy)
 	find_path(SNAPPY_INCLUDE_DIR snappy.h PATH_SUFFIXES snappy)
 	message (STATUS "Snappy library: ${SNAPPY_LIBRARY}")
-	message (STATUS "Snappy headers: ${SNAPPY_INCLUDE_DIR}")   
-	if(LEVELDB_LIBRARY AND LEVELDB_INCLUDE_DIR AND SNAPPY_LIBRARY AND SNAPPY_INCLUDE_DIR)
+	message (STATUS "Snappy headers: ${SNAPPY_INCLUDE_DIR}")
+
+	if (NOT SNAPPY_INCLUDE_DIR)
+		find_path(SNAPPY_INCLUDE_DIR leveldb/db.h ${PROJECT_SOURCE_DIR}/external/leveldb/include NO_DEFAULT_PATH)
+	  if (SNAPPY_INCLUDE_DIR)
+		# Snappy have no cmake by default,
+		# git clone --recursive --depth 1 https://github.com/google/snappy src/external/snappy
+		# But we can collect something from pulls
+		# wget -O src/external/snappy/CMakeLists.txt https://raw.githubusercontent.com/adasworks/snappy-cmake/master/CMakeLists.txt
+		add_subdirectory(${PROJECT_SOURCE_DIR}/external/snappy)
+		set(SNAPPY_LIBRARY snappy)
+		message(STATUS "Using bundled snappy ${SNAPPY_INCLUDE_DIR} ${SNAPPY_LIBRARY}")
+	  endif()
+	endif()
+
+	if (NOT LEVELDB_INCLUDE_DIR)
+		find_path(LEVELDB_INCLUDE_DIR leveldb/db.h ${PROJECT_SOURCE_DIR}/external/leveldb/include NO_DEFAULT_PATH)
+	  if (LEVELDB_INCLUDE_DIR)
+		# bad try direct make build 
+		#find_path(LEVELDB_MAKEFILE_DIR Makefile ${PROJECT_SOURCE_DIR}/external/leveldb NO_DEFAULT_PATH)
+		#if (LEVELDB_MAKEFILE_DIR)
+		#	execute_process(COMMAND "make -f ${LEVELDB_MAKEFILE_DIR}/Makefile" WORKING_DIRECTORY LEVELDB_MAKEFILE_DIR OUTPUT_VARIABLE LMKE ERROR_VARIABLE LMKE)
+		#message(STATUS "leveldb mk=${LMKE}")
+		#endif()
+		#
+		# good cmake try
+		# Leveldb have no cmake by default,
+		# git clone --recursive --depth 1 https://github.com/google/leveldb src/external/leveldb
+		# But we can collect something from pulls
+		# wget -O src/external/leveldb/CMakeLists.txt https://raw.githubusercontent.com/proller/leveldb/patch-2/CMakeLists.txt
+		# wget -O src/external/leveldb/leveldbConfig.cmake.in https://raw.githubusercontent.com/tamaskenez/leveldb-cmake-win/native_windows_port_1_18/leveldbConfig.cmake.in
+		add_subdirectory(${PROJECT_SOURCE_DIR}/external/leveldb)
+		set(LEVELDB_LIBRARY leveldb)
+		message(STATUS "Using bundled leveldb ${LEVELDB_INCLUDE_DIR} ${LEVELDB_LIBRARY}")
+	  endif()
+	endif()
+
+	if(SNAPPY_LIBRARY AND SNAPPY_INCLUDE_DIR)
+		include_directories(${SNAPPY_INCLUDE_DIR})
+	endif()
+
+	if(LEVELDB_LIBRARY AND LEVELDB_INCLUDE_DIR)
 		set(USE_LEVELDB TRUE)
 		message(STATUS "LevelDB backend enabled. ${LEVELDB_INCLUDE_DIR}")
-		include_directories(${LEVELDB_INCLUDE_DIR} ${SNAPPY_INCLUDE_DIR})
+		include_directories(${LEVELDB_INCLUDE_DIR})
 	elseif (NOT FORCE_LEVELDB)
 		message(WARNING "LevelDB not found! Player data cannot be saved in singleplayer or server")
 	endif()
@@ -501,7 +541,6 @@ if(ENABLE_SQLITE3)
 endif()
 
 if(FORCE_SQLITE3)
-
 	set(USE_SQLITE3 1)
 endif()
 
@@ -793,6 +832,7 @@ set(common_SRCS
 	porting.cpp
 	profiler.cpp
 	quicktune.cpp
+	remoteplayer.cpp
 	rollback.cpp
 	rollback_interface.cpp
 	serialization.cpp
@@ -899,6 +939,7 @@ set(client_SRCS
 	wieldmesh.cpp
 	${client_SCRIPT_SRCS}
 	${FMclient_SRCS}
+	${UNITTEST_CLIENT_SRCS}
 )
 list(SORT client_SRCS)
 

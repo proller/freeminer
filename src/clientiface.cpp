@@ -25,7 +25,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "clientiface.h"
 #include "util/numeric.h"
 #include "util/mathconstants.h"
-#include "player.h"
+#include "remoteplayer.h"
 #include "settings.h"
 #include "mapblock.h"
 #include "network/connection.h"
@@ -137,10 +137,20 @@ int RemoteClient::GetNextBlocks (
 	if(m_nothing_to_send_pause_timer >= 0)
 		return 0;
 
-	Player *player = env->getPlayer(peer_id);
+	RemotePlayer *player = env->getPlayer(peer_id);
 	// This can happen sometimes; clients and players are not in perfect sync.
-	if(player == NULL)
+	if (player == NULL)
 		return 0;
+
+/*
+	// Won't send anything if already sending
+	if(m_blocks_sending.size() >= g_settings->getU16
+			("max_simultaneous_block_sends_per_client"))
+	{
+		//infostream<<"Not sending any blocks, Queue full."<<std::endl;
+		return;
+	}
+*/
 
 	v3f playerpos = player->getPosition();
 	v3f playerspeed = player->getSpeed();
@@ -848,6 +858,20 @@ ClientInterface::ClientInterface(con::Connection* con)
 }
 ClientInterface::~ClientInterface()
 {
+#if WTF
+	/*
+		Delete clients
+	*/
+	{
+		MutexAutoLock clientslock(m_clients_mutex);
+
+		for (UNORDERED_MAP<u16, RemoteClient*>::iterator i = m_clients.begin();
+			i != m_clients.end(); ++i) {
+			// Delete client
+			delete i->second;
+		}
+	}
+#endif
 }
 
 std::vector<u16> ClientInterface::getClientIDs(ClientState min_state)
@@ -855,22 +879,14 @@ std::vector<u16> ClientInterface::getClientIDs(ClientState min_state)
 	std::vector<u16> reply;
 	auto clientslock = m_clients.lock_shared_rec();
 
-	for(auto
-		i = m_clients.begin();
-		i != m_clients.end(); ++i)
-	{
+	for(auto i = m_clients.begin();
+		i != m_clients.end(); ++i) {
 		if (i->second->getState() >= min_state)
 			reply.push_back(i->second->peer_id);
 	}
 
 	return reply;
 }
-
-std::vector<std::string> ClientInterface::getPlayerNames()
-{
-	return m_clients_names;
-}
-
 
 void ClientInterface::step(float dtime)
 {
@@ -885,8 +901,7 @@ void ClientInterface::step(float dtime)
 
 void ClientInterface::UpdatePlayerList()
 {
-	if (m_env != NULL)
-		{
+	if (m_env != NULL) {
 		std::vector<u16> clients = getClientIDs();
 		m_clients_names.clear();
 
@@ -899,10 +914,8 @@ void ClientInterface::UpdatePlayerList()
 		if (print && !clients.empty())
 			infostream<<"Players ["<<clients.size()<<"]:"<<std::endl;
 
-		for(auto
-			i = clients.begin();
-			i != clients.end(); ++i) {
-			Player *player = m_env->getPlayer(*i);
+		for(auto i = clients.begin(); i != clients.end(); ++i) {
+			RemotePlayer *player = m_env->getPlayer(*i);
 
 			if (player == NULL)
 				continue;
@@ -951,8 +964,7 @@ void ClientInterface::sendToAll(u16 channelnum,
 		NetworkPacket* pkt, bool reliable)
 {
 	auto clientslock = m_clients.lock_shared_rec();
-	for(auto
-		i = m_clients.begin();
+	for(auto i = m_clients.begin();
 		i != m_clients.end(); ++i)
 	{
 		RemoteClient *client = i->second.get();
@@ -1002,7 +1014,7 @@ std::shared_ptr<RemoteClient> ClientInterface::getClient(u16 peer_id, ClientStat
 	auto n = m_clients.find(peer_id);
 	// The client may not exist; clients are immediately removed if their
 	// access is denied, and this event occurs later then.
-	if(n == m_clients.end())
+	if (n == m_clients.end())
 		return NULL;
 
 	if (n->second->getState() >= state_min)
@@ -1014,6 +1026,18 @@ std::shared_ptr<RemoteClient> ClientInterface::getClient(u16 peer_id, ClientStat
 RemoteClient* ClientInterface::lockedGetClientNoEx(u16 peer_id, ClientState state_min)
 {
 	return getClientNoEx(peer_id, state_min);
+#if WTF
+	UNORDERED_MAP<u16, RemoteClient*>::iterator n = m_clients.find(peer_id);
+	// The client may not exist; clients are immediately removed if their
+	// access is denied, and this event occurs later then.
+	if (n == m_clients.end())
+		return NULL;
+
+	if (n->second->getState() >= state_min)
+		return n->second;
+	else
+		return NULL;
+#endif
 }
 
 ClientState ClientInterface::getClientState(u16 peer_id)
@@ -1022,7 +1046,7 @@ ClientState ClientInterface::getClientState(u16 peer_id)
 	auto n = m_clients.find(peer_id);
 	// The client may not exist; clients are immediately removed if their
 	// access is denied, and this event occurs later then.
-	if(n == m_clients.end())
+	if (n == m_clients.end())
 		return CS_Invalid;
 
 	return n->second->getState();
@@ -1040,7 +1064,7 @@ void ClientInterface::setPlayerName(u16 peer_id,std::string name)
 void ClientInterface::DeleteClient(u16 peer_id)
 {
 	auto client = getClient(peer_id, CS_Invalid);
-	if(!client)
+	if (!client)
 		return;
 
 	/*
@@ -1085,7 +1109,7 @@ void ClientInterface::CreateClient(u16 peer_id)
 void ClientInterface::event(u16 peer_id, ClientStateEvent event)
 {
 	auto client = getClient(peer_id, CS_Invalid);
-	if(!client)
+	if (!client)
 		return;
 
 	client->notifyEvent(event);
@@ -1101,7 +1125,7 @@ void ClientInterface::event(u16 peer_id, ClientStateEvent event)
 u16 ClientInterface::getProtocolVersion(u16 peer_id)
 {
 	auto client = getClient(peer_id, CS_Invalid);
-	if(!client)
+	if (!client)
 		return 0;
 
 	return client->net_proto_version;
@@ -1110,7 +1134,7 @@ u16 ClientInterface::getProtocolVersion(u16 peer_id)
 void ClientInterface::setClientVersion(u16 peer_id, u8 major, u8 minor, u8 patch, std::string full)
 {
 	auto client = getClient(peer_id, CS_Invalid);
-	if(!client)
+	if (!client)
 		return;
 
 	client->setVersionInfo(major,minor,patch,full);

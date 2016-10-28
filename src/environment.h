@@ -98,13 +98,6 @@ public:
 
 	virtual Map & getMap() = 0;
 
-	virtual void addPlayer(Player *player);
-	void removePlayer(Player *player);
-	Player * getPlayer(u16 peer_id);
-	Player * getPlayer(const std::string &name);
-	std::vector<Player*> getPlayers();
-	std::vector<Player*> getPlayers(bool ignore_disconnected);
-
 	u32 getDayNightRatio();
 
 	// 0-23999
@@ -115,7 +108,6 @@ public:
 	void stepTimeOfDay(float dtime);
 
 	void setTimeOfDaySpeed(float speed);
-	float getTimeOfDaySpeed();
 
 	void setDayNightRatioOverride(bool enable, u32 value);
 
@@ -124,11 +116,9 @@ public:
 	// counter used internally when triggering ABMs
 	std::atomic_uint m_added_objects;
 
-protected:
-	// peer_ids in here should be unique, except that there may be many 0s
-	concurrent_vector<Player*> m_players;
-
+public:
 	GenericAtomic<float> m_time_of_day_speed;
+protected:
 
 	/*
 	 * Below: values managed by m_time_lock
@@ -358,6 +348,12 @@ enum ClearObjectsMode {
 	This is not thread-safe. Server uses an environment mutex.
 */
 
+/*
+typedef UNORDERED_MAP<u16, ServerActiveObject *> ActiveObjectMap;
+*/
+
+typedef maybe_concurrent_map<u16, ServerActiveObject*> ActiveObjectMap;
+
 class ServerEnvironment : public Environment
 {
 public:
@@ -390,7 +386,9 @@ public:
 	// Save players
 	void saveLoadedPlayers();
 	void savePlayer(RemotePlayer *player);
-	Player *loadPlayer(const std::string &playername);
+	RemotePlayer *loadPlayer(const std::string &playername);
+	void addPlayer(RemotePlayer *player);
+	void removePlayer(RemotePlayer *player);
 
 	/*
 		Save and load time of day and game timer
@@ -402,7 +400,8 @@ public:
 	void loadDefaultMeta();
 
 	u32 addParticleSpawner(float exptime);
-	void deleteParticleSpawner(u32 id);
+	u32 addParticleSpawner(float exptime, u16 attached_id);
+	void deleteParticleSpawner(u32 id, bool remove_from_object = true);
 
 	/*
 		External ActiveObject interface
@@ -440,7 +439,7 @@ public:
 		Find out what new objects have been added to
 		inside a radius around a position
 	*/
-	void getAddedActiveObjects(Player *player, s16 radius,
+	void getAddedActiveObjects(RemotePlayer *player, s16 radius,
 			s16 player_radius,
 			maybe_concurrent_unordered_map<u16, bool> &current_objects,
 			std::queue<u16> &added_objects);
@@ -449,7 +448,7 @@ public:
 		Find out what new objects have been removed from
 		inside a radius around a position
 	*/
-	void getRemovedActiveObjects(Player* player, s16 radius,
+	void getRemovedActiveObjects(RemotePlayer *player, s16 radius,
 			s16 player_radius,
 			maybe_concurrent_unordered_map<u16, bool> &current_objects,
 			std::queue<u16> &removed_objects);
@@ -523,6 +522,9 @@ public:
 
 	void nodeUpdate(const v3s16 pos, u16 recursion_limit = 5, int fast = 2, bool destroy = false);
 	void handleNodeDrops(const ContentFeatures &f, v3f pos, PlayerSAO* player=NULL);
+
+	RemotePlayer *getPlayer(const u16 peer_id);
+	RemotePlayer *getPlayer(const std::string &name);
 private:
 
 	/*
@@ -599,9 +601,11 @@ private:
 	// World path
 	const std::string m_path_world;
 	// Active object list
-	maybe_concurrent_map<u16, ServerActiveObject*> m_active_objects;
+	ActiveObjectMap m_active_objects;
+
 	std::vector<u16> objects_to_remove;
 	std::vector<ServerActiveObject*> objects_to_delete;
+
 	// Outgoing network message buffer for active objects
 public:
 	Queue<ActiveObjectMessage> m_active_object_messages;
@@ -643,9 +647,13 @@ private:
 	// Can raise to high values like 15s with eg. map generation mods.
 	float m_max_lag_estimate;
 
+	// peer_ids in here should be unique, except that there may be many 0s
+	concurrent_vector<RemotePlayer*> m_players;
+
 	// Particles
 	IntervalLimiter m_particle_management_interval;
-	std::map<u32, float> m_particle_spawners;
+	UNORDERED_MAP<u32, float> m_particle_spawners;
+	UNORDERED_MAP<u32, u16> m_particle_spawner_attachments;
 };
 
 #ifndef SERVER
@@ -702,8 +710,8 @@ public:
 
 	void step(f32 dtime, float uptime, unsigned int max_cycle_ms);
 
-	virtual void addPlayer(Player *player);
-	LocalPlayer * getLocalPlayer();
+	virtual void setLocalPlayer(LocalPlayer *player);
+	LocalPlayer *getLocalPlayer() { return m_local_player; }
 
 	/*
 		ClientSimpleObjects
@@ -753,26 +761,24 @@ public:
 
 	u16 attachement_parent_ids[USHRT_MAX + 1];
 
-	std::list<std::string> getPlayerNames()
-	{ return m_player_names; }
-	void addPlayerName(std::string name)
-	{ m_player_names.push_back(name); }
-	void removePlayerName(std::string name)
-	{ m_player_names.remove(name); }
+	const std::list<std::string> &getPlayerNames() { return m_player_names; }
+	void addPlayerName(const std::string &name) { m_player_names.push_back(name); }
+	void removePlayerName(const std::string &name) { m_player_names.remove(name); }
 	void updateCameraOffset(v3s16 camera_offset)
 	{ m_camera_offset = camera_offset; }
-	v3s16 getCameraOffset()
-	{ return m_camera_offset; }
-
+	v3s16 getCameraOffset() const { return m_camera_offset; }
 private:
 	ClientMap *m_map;
+	LocalPlayer *m_local_player;
 	scene::ISceneManager *m_smgr;
 	ITextureSource *m_texturesource;
 	IGameDef *m_gamedef;
 	IrrlichtDevice *m_irr;
-	std::map<u16, ClientActiveObject*> m_active_objects;
+	UNORDERED_MAP<u16, ClientActiveObject*> m_active_objects;
+
 	u32 m_active_objects_client_last;
 	u32 m_move_max_loop;
+
 	std::vector<ClientSimpleObject*> m_simple_objects;
 	std::queue<ClientEnvEvent> m_client_event_queue;
 	IntervalLimiter m_active_object_light_update_interval;

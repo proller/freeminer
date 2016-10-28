@@ -25,6 +25,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #define GUIINVENTORYMENU_HEADER
 
 #include <utility>
+#include <stack>
 
 #include "irrlichttypes_extrabloated.h"
 #include "inventory.h"
@@ -214,7 +215,6 @@ class GUIFormSpecMenu : public GUIModalMenu
 			flabel(label),
 			fid(id),
 			send(false),
-			close_on_enter(false),
 			ftype(f_Unknown),
 			is_exit(false)
 		{
@@ -226,7 +226,6 @@ class GUIFormSpecMenu : public GUIModalMenu
 		std::wstring fdefault;
 		int fid;
 		bool send;
-		bool close_on_enter; // used by text fields
 		FormspecFieldType ftype;
 		bool is_exit;
 		core::rect<s32> rect;
@@ -383,6 +382,8 @@ protected:
 	v2s32 spacing;
 	v2s32 imgsize;
 	v2s32 offset;
+	v2s32 pos_offset;
+	std::stack<v2s32> container_stack;
 
 	irr::IrrlichtDevice* m_device;
 	InventoryManager *m_invmgr;
@@ -400,6 +401,7 @@ protected:
 	std::vector<ImageDrawSpec> m_images;
 	std::vector<ImageDrawSpec> m_itemimages;
 	std::vector<BoxDrawSpec> m_boxes;
+	UNORDERED_MAP<std::string, bool> field_close_on_enter;
 	std::vector<FieldSpec> m_fields;
 	std::vector<StaticTextSpec> m_static_texts;
 	std::vector<std::pair<FieldSpec,GUITable*> > m_tables;
@@ -409,8 +411,6 @@ protected:
 	std::vector<std::pair<FieldSpec, std::vector<std::string> > > m_dropdowns;
 
 	ItemSpec *m_selected_item;
-	f32 m_timer1;
-	f32 m_timer2;
 	u32 m_selected_amount;
 	bool m_selected_dragging;
 
@@ -462,7 +462,7 @@ private:
 		GUITable::TableOptions table_options;
 		GUITable::TableColumns table_columns;
 		// used to restore table selection/scroll/treeview state
-		std::map<std::string, GUITable::DynamicData> table_dyndata;
+		UNORDERED_MAP<std::string, GUITable::DynamicData> table_dyndata;
 	} parserData;
 
 	typedef struct {
@@ -475,13 +475,15 @@ private:
 	fs_key_pendig current_keys_pending;
 	std::string current_field_enter_pending;
 
-	void parseElement(parserData* data,std::string element);
+	void parseElement(parserData* data, std::string element);
 
-	void parseSize(parserData* data,std::string element);
-	void parseList(parserData* data,std::string element);
-	void parseListRing(parserData* data,std::string element);
-	void parseCheckbox(parserData* data,std::string element);
-	void parseImage(parserData* data,std::string element);
+	void parseSize(parserData* data, std::string element);
+	void parseContainer(parserData* data, std::string element);
+	void parseContainerEnd(parserData* data);
+	void parseList(parserData* data, std::string element);
+	void parseListRing(parserData* data, std::string element);
+	void parseCheckbox(parserData* data, std::string element);
+	void parseImage(parserData* data, std::string element);
 	void parseItemImage(parserData* data,std::string element);
 	void parseButton(parserData* data,std::string element,std::string typ);
 	void parseBackground(parserData* data,std::string element);
@@ -490,6 +492,7 @@ private:
 	void parseTable(parserData* data,std::string element);
 	void parseTextList(parserData* data,std::string element);
 	void parseDropDown(parserData* data,std::string element);
+	void parseFieldCloseOnEnter(parserData *data, const std::string &element);
 	void parsePwdField(parserData* data,std::string element);
 	void parseField(parserData* data,std::string element,std::string type);
 	void parseSimpleField(parserData* data,std::vector<std::string> &parts);

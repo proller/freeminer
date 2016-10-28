@@ -154,24 +154,15 @@ vec4 base = texture2D(baseTexture, uv).rgba;
 	float light = max((wieldLight/2.0)/vPosition.z, 0.0);
 	vec4 col = vec4(color.rgb * min(gl_Color.rgb + light, 1.0), 1.0);
 
-#if MATERIAL_TYPE == TILE_MATERIAL_LIQUID_TRANSPARENT || MATERIAL_TYPE == TILE_MATERIAL_LIQUID_OPAQUE
-	float alpha = gl_Color.a;
-	if (fogDistance != 0.0) {
-		float d = max(0.0, min(vPosition.z / fogDistance * 1.5 - 0.6, 1.0));
-		alpha = mix(alpha, 0.0, d);
-	}
-	col = vec4(col.rgb, alpha);
-#else
-	if (fogDistance != 0.0) {
-		float d = max(0.0, min(vPosition.z / fogDistance * 1.5 - 0.6, 1.0));
-		col = mix(col, skyBgColor, d);
-	}
-	col = vec4(col.rgb, base.a);
+#ifdef ENABLE_TONE_MAPPING
+	col = applyToneMapping(col);
 #endif
 
-#ifdef ENABLE_TONE_MAPPING
-	gl_FragColor = applyToneMapping(col);
-#else
+	if (fogDistance != 0.0) {
+		float d = clamp((fogDistance - length(eyeVec)) / (fogDistance * 0.6), 0.0, 1.0);
+		col = mix(skyBgColor, col, d);
+	}
+	col = vec4(col.rgb, base.a);
+
 	gl_FragColor = col;
-#endif
 }

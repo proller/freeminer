@@ -102,6 +102,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := jsoncpp
 LOCAL_C_INCLUDES := jni/src/external/jsoncpp/include
 LOCAL_SRC_FILES := $(wildcard $(LOCAL_PATH)/jni/src/external/jsoncpp/src/lib_json/*.cpp)
+LOCAL_CFLAGS += -DNO_LOCALE_SUPPORT
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -295,6 +296,7 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/porting.cpp                       \
 		jni/src/profiler.cpp                      \
 		jni/src/quicktune.cpp                     \
+		jni/src/remoteplayer.cpp                  \
 		jni/src/rollback.cpp                      \
 		jni/src/rollback_interface.cpp            \
 		jni/src/serialization.cpp                 \

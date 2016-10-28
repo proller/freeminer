@@ -73,10 +73,11 @@ public:
 	int iterations;
 	double distance;
 	double result_max;
+	bool no_layers = false;
 
 	MapNode n_air, n_water, n_stone;
 
-	double (*func)(double, double, double, double, int);
+	double (*func)(double, double, double, double, int, int);
 	MapNode layers_get(float value, float max);
 };
 

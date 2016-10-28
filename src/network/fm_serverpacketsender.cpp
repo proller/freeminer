@@ -215,11 +215,11 @@ void Server::SendSpawnParticle(u16 peer_id, v3f pos, v3f velocity, v3f accelerat
 void Server::SendAddParticleSpawner(u16 peer_id, u16 amount, float spawntime, v3f minpos, v3f maxpos,
 	v3f minvel, v3f maxvel, v3f minacc, v3f maxacc, float minexptime, float maxexptime,
 	float minsize, float maxsize, bool collisiondetection, bool collision_removal,
-	bool vertical, const std::string &texture, u32 id)
+	u16 attached_id, bool vertical, const std::string &texture, u32 id)
 {
 	DSTACK(FUNCTION_NAME);
 
-	MSGPACK_PACKET_INIT(TOCLIENT_ADD_PARTICLESPAWNER, 16);
+	MSGPACK_PACKET_INIT(TOCLIENT_ADD_PARTICLESPAWNER, 18);
 	PACK(TOCLIENT_ADD_PARTICLESPAWNER_AMOUNT, amount);
 	PACK(TOCLIENT_ADD_PARTICLESPAWNER_SPAWNTIME, spawntime);
 	PACK(TOCLIENT_ADD_PARTICLESPAWNER_MINPOS, minpos);
@@ -236,6 +236,8 @@ void Server::SendAddParticleSpawner(u16 peer_id, u16 amount, float spawntime, v3
 	PACK(TOCLIENT_ADD_PARTICLESPAWNER_TEXTURE, texture);
 	PACK(TOCLIENT_ADD_PARTICLESPAWNER_VERTICAL, vertical);
 	PACK(TOCLIENT_ADD_PARTICLESPAWNER_ID, id);
+	PACK(TOCLIENT_ADD_PARTICLESPAWNER_COLLISION_REMOVAL, collision_removal);
+	PACK(TOCLIENT_ADD_PARTICLESPAWNER_ATTACHED_ID, attached_id);
 
 	if (peer_id != PEER_ID_INEXISTENT)
 	{
@@ -590,7 +592,7 @@ s32 Server::playSound(const SimpleSoundSpec &spec,
 void Server::stopSound(s32 handle)
 {
 	// Get sound reference
-	std::map<s32, ServerPlayingSound>::iterator i =
+	auto i =
 			m_playing_sounds.find(handle);
 	if(i == m_playing_sounds.end())
 		return;
@@ -599,7 +601,7 @@ void Server::stopSound(s32 handle)
 	MSGPACK_PACKET_INIT(TOCLIENT_STOP_SOUND, 1);
 	PACK(TOCLIENT_STOP_SOUND_ID, handle);
 	// Send
-	for(std::set<u16>::iterator i = psound.clients.begin();
+	for(auto i = psound.clients.begin();
 			i != psound.clients.end(); i++){
 		// Send as reliable
 		m_clients.send(*i, 0, buffer, true);
@@ -619,7 +621,7 @@ void Server::sendRemoveNode(v3s16 p, u16 ignore_id,
 	MSGPACK_PACKET_INIT(TOCLIENT_REMOVENODE, 1);
 	PACK(TOCLIENT_REMOVENODE_POS, p);
 
-	std::vector<u16> clients = m_clients.getClientIDs();
+	auto clients = m_clients.getClientIDs();
 	for(auto
 		i = clients.begin();
 		i != clients.end(); ++i)
@@ -721,7 +723,7 @@ void Server::sendMediaAnnouncement(u16 peer_id)
 
 	MediaAnnounceList announce_list;
 
-	for(std::map<std::string, MediaInfo>::iterator i = m_media.begin();
+	for(auto i = m_media.begin();
 			i != m_media.end(); i++)
 		announce_list.push_back(std::make_pair(i->first, i->second.sha1_digest));
 

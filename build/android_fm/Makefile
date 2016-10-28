@@ -43,7 +43,7 @@ ANDROID_VERSION_CODE = $(BUILD_NUMBER)
 SDK_VERSION = 15
 PROJECT_NAME_C = freeminer
 
-GAMES_VERSION = ""
+GAMES_VERSION = "5"
 
 GIT_CLONE = git clone --recursive --depth 10
 
@@ -202,7 +202,7 @@ IRRLICHT_GIT_COMMIT = 58fa0cf
 #IRRLICHT_URL_SVN = http://svn.code.sf.net/p/irrlicht/code/branches/ogl-es@$(IRRLICHT_REVISION)
 
 OPENSSL_VERSION = 1.0.2g
-# TODO: OPENSSL_VERSION = 1.1.0
+# TODO: OPENSSL_VERSION = 1.1.0b
 OPENSSL_BASEDIR = openssl-$(OPENSSL_VERSION)
 OPENSSL_DIR = $(ROOT)/deps/$(OPENSSL_BASEDIR)/
 OPENSSL_LIB = $(OPENSSL_DIR)/libssl.so.1.0.0
@@ -210,7 +210,7 @@ OPENSSL_TIMESTAMP = $(OPENSSL_DIR)timestamp
 OPENSSL_TIMESTAMP_INT = $(ROOT)/deps/openssl_timestamp
 OPENSSL_URL = http://www.openssl.org/source/openssl-$(OPENSSL_VERSION).tar.gz
 
-CURL_VERSION = 7.50.1
+CURL_VERSION = 7.50.3
 CURL_DIR = $(ROOT)/deps/curl-$(CURL_VERSION)
 CURL_LIB = $(CURL_DIR)/lib/.libs/libcurl.a
 CURL_TIMESTAMP = $(CURL_DIR)/timestamp
@@ -237,7 +237,7 @@ ICONV_TIMESTAMP = $(ICONV_DIR)timestamp
 ICONV_TIMESTAMP_INT = $(ROOT)/deps/iconv_timestamp
 ICONV_URL_HTTP = http://ftp.gnu.org/pub/gnu/libiconv/libiconv-$(ICONV_VERSION).tar.gz
 
-SQLITE3_FOLDER = sqlite-amalgamation-3140100
+SQLITE3_FOLDER = sqlite-amalgamation-3150000
 SQLITE3_URL = http://www.sqlite.org/2016/$(SQLITE3_FOLDER).zip
 
 -include $(PATHCFGFILE)
@@ -1183,7 +1183,7 @@ $(ROOT)/jni/src/android_version_githash.h : prep_srcdir
 	echo "#define ANDROID_MT_VERSION_GITHASH_H";                               \
 	export GITHASH=$$(git rev-parse --short=8 HEAD);                           \
 	export VERSION_STR="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}.${VERSION_TWEAK}"; \
-	echo "#define VERSION_GITHASH \"$$VERSION_STR-$$GITHASH-Android\"";        \
+	echo "#define VERSION_GITHASH \"$$VERSION_STR-$$GITHASH-Android-${TARGET_ABI}\"";        \
 	echo "#endif";                                                             \
 	} > "$${VERSION_FILE_NEW}";                                                \
 	if ! cmp -s $${VERSION_FILE} $${VERSION_FILE_NEW}; then                    \

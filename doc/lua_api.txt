@@ -1469,6 +1469,15 @@ examples.
 * `fixed_size`: `true`/`false` (optional)
 * deprecated: `invsize[<W>,<H>;]`
 
+#### `container[<X>,<Y>]`
+* Start of a container block, moves all physical elements in the container by (X, Y)
+* Must have matching container_end
+* Containers can be nested, in which case the offsets are added
+  (child containers are relative to parent containers)
+
+#### `container_end[]`
+* End of a container, following elements are no longer relative to this container
+
 #### `list[<inventory location>;<list name>;<X>,<Y>;<W>,<H>;]`
 * Show an inventory list
 
@@ -1533,7 +1542,7 @@ examples.
 * If `true` the background is clipped to formspec size
   (`x` and `y` are used as offset values, `w` and `h` are ignored)
 
-#### `pwdfield[<X>,<Y>;<W>,<H>;<name>;<label>;<close_on_enter>]`
+#### `pwdfield[<X>,<Y>;<W>,<H>;<name>;<label>]`
 * Textual password style field; will be sent to server when a button is clicked
 * When enter is pressed in field, fields.key_enter_field will be sent with the name
   of this field.
@@ -1543,10 +1552,9 @@ examples.
 * Position and size units are inventory slots
 * `name` is the name of the field as returned in fields to `on_receive_fields`
 * `label`, if not blank, will be text printed on the top left above the field
-* `close_on_enter` (optional) is whether the form should accept and close when enter is
-  pressed in this field. Defaults to true.
+* See field_close_on_enter to stop enter closing the formspec
 
-#### `field[<X>,<Y>;<W>,<H>;<name>;<label>;<default>;<close_on_enter>]`
+#### `field[<X>,<Y>;<W>,<H>;<name>;<label>;<default>]`
 * Textual field; will be sent to server when a button is clicked
 * When enter is pressed in field, fields.key_enter_field will be sent with the name
   of this field.
@@ -1560,18 +1568,21 @@ examples.
     * `default` may contain variable references such as `${text}'` which
       will fill the value from the metadata value `text`
     * **Note**: no extra text or more than a single variable is supported ATM.
-* `close_on_enter` (optional) is whether the form should accept and close when enter is
-  pressed in this field. Defaults to true.
+* See field_close_on_enter to stop enter closing the formspec
 
-#### `field[<name>;<label>;<default>;<close_on_enter>]`
+#### `field[<name>;<label>;<default>]`
 * As above, but without position/size units
 * When enter is pressed in field, fields.key_enter_field will be sent with the name
   of this field.
 * Special field for creating simple forms, such as sign text input
 * Must be used without a `size[]` element
 * A "Proceed" button will be added automatically
-* `close_on_enter` (optional) is whether the form should accept and close when enter is
-  pressed in this field. Defaults to true.
+* See field_close_on_enter to stop enter closing the formspec
+
+#### `field_close_on_enter[<name>;<close_on_enter>]`
+* <name> is the name of the field
+* if <close_on_enter> is false, pressing enter in the field will submit the form but not close it
+* defaults to true when not specified (ie: no tag for a field)
 
 #### `textarea[<X>,<Y>;<W>,<H>;<name>;<label>;<default>]`
 * Same as fields above, but with multi-line input
@@ -1801,7 +1812,8 @@ Spatial Vectors
 * `vector.distance(p1, p2)`: returns a number
 * `vector.length(v)`: returns a number
 * `vector.normalize(v)`: returns a vector
-* `vector.round(v)`: returns a vector, each dimension rounded to floor
+* `vector.floor(v)`: returns a vector, each dimension rounded down
+* `vector.round(v)`: returns a vector, each dimension rounded to nearest int
 * `vector.apply(v, func)`: returns a vector
 * `vector.equals(v1, v2)`: returns a boolean
 
@@ -1926,13 +1938,14 @@ Call these functions only at load time!
     * Warning! The type field ("shaped","cooking" or any other) will be ignored if the recipe
       contains output. Erasing is then done independently from the crafting method.
 * `minetest.register_ore(ore definition)`
+* `minetest.register_biome(biome definition)`
 * `minetest.register_decoration(decoration definition)`
 * `minetest.override_item(name, redefinition)`
     * Overrides fields of an item registered with register_node/tool/craftitem.
     * Note: Item must already be defined, (opt)depend on the mod defining it.
     * Example: `minetest.override_item("default:mese", {light_source=LIGHT_MAX})`
-
 * `minetest.clear_registered_ores()`
+* `minetest.clear_registered_biomes()`
 * `minetest.clear_registered_decorations()`
 
 ### Global callback registration functions
@@ -2189,13 +2202,14 @@ and `minetest.auth_reload` call the authetification handler.
 * `minetest.get_mapgen_setting_noiseparams(name)`
     * Same as above, but returns the value as a NoiseParams table if the setting `name` exists
       and is a valid NoiseParams
-* `minetest.set_mapgen_setting(name, value, [override_meta=false])`
+* `minetest.set_mapgen_setting(name, value, [override_meta])`
    * Sets a mapgen param to `value`, and will take effect if the corresponding mapgen setting
-     is not already present in map_meta.txt.  If the optional boolean override_meta is set to true,
-     this setting will become the active setting regardless of the map metafile contents.
+     is not already present in map_meta.txt.
+   * `override_meta` is an optional boolean (default: `false`). If this is set to true,
+     the setting will become the active setting regardless of the map metafile contents.
    * Note: to set the seed, use "seed", not "fixed_map_seed"
-* `minetest.set_mapgen_setting_noiseparams(name, value, [override_meta=false])`
-   * Same as above, except value is a NoiseParams table
+* `minetest.set_mapgen_setting_noiseparams(name, value, [override_meta])`
+   * Same as above, except value is a NoiseParams table.
 * `minetest.set_noiseparams(name, noiseparams, set_default)`
     * Sets the noiseparams setting of `name` to the noiseparams table specified in `noiseparams`.
     * `set_default` is an optional boolean (default: `true`) that specifies whether the setting
@@ -2261,6 +2275,11 @@ and `minetest.auth_reload` call the authetification handler.
     * increase level of leveled node by level, default `level` equals `1`
     * if `totallevel > maxlevel`, returns rest (`total-max`)
     * can be negative for decreasing
+* `nodeupdate_single(pos)`
+    * causes an unsupported `group:falling_node` node to fall and causes an
+      unattached `group:attached_node` node to fall.
+    * does not spread these updates to neighbours
+    * a helper function, not officially part of the API, but useful
 
 ### Inventory
 `minetest.get_inventory(location)`: returns an `InvRef`
@@ -2613,13 +2632,17 @@ These functions return the leftover itemstack.
        the creative mode setting, and checks for "sneak" to set the `invert_wall`
        parameter.
 
-* `minetest.forceload_block(pos)`
+* `minetest.forceload_block(pos[, transient])`
     * forceloads the position `pos`.
     * returns `true` if area could be forceloaded
-    * Please note that forceloaded areas are saved when the server restarts.
+    * If `transient` is `false` or absent, the forceload will be persistent
+      (saved between server runs). If `true`, the forceload will be transient
+      (not saved between server runs).
 
-* `minetest.forceload_free_block(pos)`
+* `minetest.forceload_free_block(pos[, transient])`
     * stops forceloading the position `pos`
+    * If `transient` is `false` or absent, frees a persistent forceload.
+      If `true`, frees a transient forceload.
 
 * `minetest.request_insecure_environment()`: returns an environment containing
   insecure functions if the calling mod has been listed as trusted in the
@@ -2945,13 +2968,11 @@ an itemstring, a table or `nil`.
 #### Methods
 * `is_empty()`: Returns `true` if stack is empty.
 * `get_name()`: Returns item name (e.g. `"default:stone"`).
-* `set_name(item_name)`: Returns boolean success.
-  Clears item on failure.
+* `set_name(item_name)`: Returns boolean whether item was cleared
 * `get_count()`: Returns number of items on the stack.
-* `set_count(count)`
+* `set_count(count)`: Returns boolean whether item was cleared
 * `get_wear()`: Returns tool wear (`0`-`65535`), `0` for non-tools.
-* `set_wear(wear)`: Returns boolean success.
-  Clears item on failure.
+* `set_wear(wear)`: Returns boolean whether item was cleared
 * `get_metadata()`: Returns metadata (a string attached to an item stack).
 * `set_metadata(metadata)`: Returns true.
 * `clear()`: removes all items from the stack, making it empty.
@@ -4099,6 +4120,8 @@ The Biome API is still in an experimental phase and subject to change.
         collision_removal = false,
     --  ^ collision_removal: if true then particle is removed when it collides,
     --  ^ requires collisiondetection = true to have any effect
+        attached = ObjectRef,
+    --  ^ attached: if defined, makes particle positions relative to this object.
         vertical = false,
     --  ^ vertical: if true faces player using y axis only
         texture = "image.png",

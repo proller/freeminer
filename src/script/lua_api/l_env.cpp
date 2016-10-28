@@ -157,6 +157,10 @@ void LuaEmergeAreaCallback(v3s16 blockpos, EmergeAction action, void *param)
 	assert(state->script != NULL);
 	assert(state->refcount > 0);
 
+	// state must be protected by envlock
+	Server *server = state->script->getServer();
+	MutexAutoLock envlock(server->m_env_mutex);
+
 	state->refcount--;
 
 	state->script->on_emerge_area_completion(blockpos, action, state);
@@ -546,8 +550,8 @@ int ModApiEnvMod::l_get_player_by_name(lua_State *L)
 
 	// Do it
 	const char *name = luaL_checkstring(L, 1);
-	Player *player = env->getPlayer(name);
-	if(player == NULL){
+	RemotePlayer *player = dynamic_cast<RemotePlayer *>(env->getPlayer(name));
+	if (player == NULL){
 		lua_pushnil(L);
 		return 1;
 	}

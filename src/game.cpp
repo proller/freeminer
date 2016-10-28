@@ -614,6 +614,8 @@ public:
 	void draw(s32 x_left, s32 y_bottom, video::IVideoDriver *driver,
 		  gui::IGUIFont *font) const
 	{
+		// Do *not* use UNORDERED_MAP here as the order needs
+		// to be the same for each call to prevent flickering
 		std::map<std::string, Meta> m_meta;
 
 		for (std::deque<Piece>::const_iterator k = m_log.begin();
@@ -624,8 +626,7 @@ public:
 					i != piece.values.end(); ++i) {
 				const std::string &id = i->first;
 				const float &value = i->second;
-				std::map<std::string, Meta>::iterator j =
-					m_meta.find(id);
+				std::map<std::string, Meta>::iterator j = m_meta.find(id);
 
 				if (j == m_meta.end()) {
 					m_meta[id] = Meta(value);
@@ -1814,6 +1815,8 @@ private:
 	bool m_cache_enable_joysticks;
 	bool m_cache_enable_particles;
 	bool m_cache_enable_fog;
+	bool m_cache_enable_noclip;
+	bool m_cache_enable_free_move;
 	f32  m_cache_mouse_sensitivity;
 	f32  m_cache_joystick_frustum_sensitivity;
 	f32  m_repeat_right_click_time;
@@ -1867,6 +1870,10 @@ Game::Game() :
 		&settingChangedCallback, this);
 	g_settings->registerChangedCallback("repeat_rightclick_time",
 		&settingChangedCallback, this);
+	g_settings->registerChangedCallback("noclip",
+		&settingChangedCallback, this);
+	g_settings->registerChangedCallback("free_move",
+		&settingChangedCallback, this);
 
 	readSettings();
 
@@ -1915,6 +1922,10 @@ Game::~Game()
 	g_settings->deregisterChangedCallback("mouse_sensitivity",
 		&settingChangedCallback, this);
 	g_settings->deregisterChangedCallback("repeat_rightclick_time",
+		&settingChangedCallback, this);
+	g_settings->deregisterChangedCallback("noclip",
+		&settingChangedCallback, this);
+	g_settings->deregisterChangedCallback("free_move",
 		&settingChangedCallback, this);
 }
 
@@ -2766,7 +2777,7 @@ inline bool Game::handleCallbacks()
 
 	if (g_gamecallback->changevolume_requested) {
 		(new GUIVolumeChange(guienv, guiroot, -1,
-				     &g_menumgr, client))->drop();
+				     &g_menumgr))->drop();
 		g_gamecallback->changevolume_requested = false;
 	}
 
@@ -3139,7 +3150,7 @@ void Game::processItemSelection(u16 *new_playeritem)
 
 	s32 wheel = input->getMouseWheel();
 	u16 max_item = MYMIN(PLAYER_INVENTORY_SIZE - 1,
-		                 player->hud_hotbar_itemcount - 1);
+		    player->hud_hotbar_itemcount - 1);
 
 	s32 dir = wheel;
 
@@ -3737,12 +3748,12 @@ void Game::processClientEvents(CameraOrientation *cam, float *damage_flash)
 			//u16 damage = event.player_damage.amount;
 			//infostream<<"Player damage: "<<damage<<std::endl;
 
-			*damage_flash += 100.0;
-			*damage_flash += 8.0 * event.player_damage.amount;
+			*damage_flash += 95.0 + 3.2 * event.player_damage.amount;
+			*damage_flash = MYMIN(*damage_flash, 127.0);
 
 			player->hurt_tilt_timer = 1.5;
-			player->hurt_tilt_strength = event.player_damage.amount / 4;
-			player->hurt_tilt_strength = rangelim(player->hurt_tilt_strength, 1.0, 4.0);
+			player->hurt_tilt_strength =
+				rangelim(event.player_damage.amount / 4, 1.0, 4.0);
 
 			MtEvent *e = new SimpleTriggerEvent("PlayerDamage");
 			gamedef->event()->put(e);
@@ -4536,8 +4547,8 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats,
 	float direct_brightness = time_brightness;
 	bool sunlight_seen = false;
 
-	if (g_settings->getBool("free_move")) {
-		//direct_brightness = time_brightness;
+	if (m_cache_enable_noclip && m_cache_enable_free_move) {
+		direct_brightness = time_brightness;
 		sunlight_seen = true;
 	} else if (!flags.headless_optimize) {
 		//ScopeProfiler sp(g_profiler, "Detecting background light", SPT_AVG);
@@ -4607,7 +4618,7 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats,
 				runData->fog_range * 1.0,
 				0.01,
 				false, // pixel fog
-				false // range fog
+				true // range fog
 		);
 	} else {
 		driver->setFog(
@@ -4742,10 +4753,7 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats,
 		Damage flash
 	*/
 	if (runData->damage_flash > 0.0) {
-		video::SColor color(std::min(runData->damage_flash, 180.0f),
-				180,
-				0,
-				0);
+		video::SColor color(runData->damage_flash, 180, 0, 0);
 		driver->draw2DRectangle(color,
 					core::rect<s32>(0, 0, screensize.X, screensize.Y),
 					NULL);
@@ -5043,6 +5051,7 @@ void Game::settingChangedCallback(const std::string &setting_name, void *data)
 
 void Game::readSettings()
 {
+	m_cinematic                          = g_settings->getBool("cinematic");
 	m_cache_doubletap_jump               = g_settings->getBool("doubletap_jump");
 	m_cache_enable_clouds                = g_settings->getBool("enable_clouds");
 	m_cache_enable_joysticks             = g_settings->getBool("enable_joysticks");
@@ -5052,7 +5061,8 @@ void Game::readSettings()
 	m_cache_joystick_frustum_sensitivity = g_settings->getFloat("joystick_frustum_sensitivity");
 	m_repeat_right_click_time            = g_settings->getFloat("repeat_rightclick_time");
 
-	m_cinematic                       = g_settings->getBool("cinematic");
+	m_cache_enable_noclip                = g_settings->getBool("noclip");
+	m_cache_enable_free_move             = g_settings->getBool("free_move");
 
 	m_cache_mouse_sensitivity = rangelim(m_cache_mouse_sensitivity, 0.001, 100.0);
 }

@@ -774,6 +774,15 @@ time_speed (Time speed) int 72
 #    Interval of saving important changes in the world, stated in seconds.
 server_map_save_interval (Map save interval) float 5.3
 
+#    Set the maximum character length of a chat message sent by clients.
+# chat_message_max_size int 500
+
+#    Limit a single player to send X messages per 10 seconds.
+# chat_message_limit_per_10sec float 10.0
+
+#    Kick player if send more than X messages per 10 seconds.
+# chat_message_limit_trigger_kick int 50
+
 [**Physics]
 
 movement_acceleration_default (Default acceleration) float 3
@@ -808,7 +817,7 @@ max_clearobjects_extra_loaded_blocks (Max. clearobjects extra blocks) int 4096
 server_unload_unused_data_timeout (Unload unused server data) int 29
 
 #    Maximum number of statically stored objects in a block.
-max_objects_per_block (Maximum objects per block) int 49
+max_objects_per_block (Maximum objects per block) int 64
 
 #    See http://www.sqlite.org/pragma.html#pragma_synchronous
 sqlite_synchronous (Synchronous SQLite) enum 2 0,1,2
@@ -1152,7 +1161,7 @@ mgvalleys_np_inter_valley_slope (Valley Slope) noise_params 0.5, 0.5, (128, 128,
 [*Security]
 
 #    Prevent mods from doing insecure things like running shell commands.
-secure.enable_security (Enable mod security) bool false
+secure.enable_security (Enable mod security) bool true
 
 #    Comma-separated list of trusted mods that are allowed to access insecure
 #    functions even when mod security is on (via request_insecure_environment()).
@@ -1216,7 +1225,7 @@ name (Player name) string
 
 #    Set the language. Leave empty to use the system language.
 #    A restart is required after changing this.
-language (Language) enum   ,be,cs,da,de,eo,es,et,fr,hu,id,it,ja,jbo,ko,ky,lt,nb,nl,pl,pt,pt_BR,ro,ru,tr,uk,zh_CN,zh_TW
+language (Language) enum   ,be,ca,cs,da,de,en,eo,es,et,fr,he,hu,id,it,ja,jbo,ko,ky,lt,nb,nl,pl,pt,pt_BR,ro,ru,sr_Cyrl,tr,uk,zh_CN,zh_TW
 
 #    Level of logging to be written to debug.txt:
 #    -    <nothing> (no logging)

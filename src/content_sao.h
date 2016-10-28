@@ -25,7 +25,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "serverobject.h"
 #include "itemgroup.h"
-#include "player.h"
 #include "object_properties.h"
 
 /*
@@ -70,7 +69,7 @@ public:
 	void getAttachment(int *parent_id, std::string *bone, v3f *position, v3f *rotation);
 	void addAttachmentChild(int child_id);
 	void removeAttachmentChild(int child_id);
-	std::set<int> getAttachmentChildIds();
+	UNORDERED_SET<int> getAttachmentChildIds();
 	ObjectProperties* accessObjectProperties();
 	void notifyObjectPropertiesModified();
 	/* LuaEntitySAO-specific */
@@ -118,11 +117,11 @@ private:
 	bool m_animation_loop;
 	bool m_animation_sent;
 
-	std::map<std::string, core::vector2d<v3f> > m_bone_position;
+	UNORDERED_MAP<std::string, core::vector2d<v3f> > m_bone_position;
 	bool m_bone_position_sent;
 
 	int m_attachment_parent_id;
-	std::set<int> m_attachment_child_ids;
+	UNORDERED_SET<int> m_attachment_child_ids;
 	std::string m_attachment_bone;
 	v3f m_attachment_position;
 	v3f m_attachment_rotation;
@@ -163,10 +162,12 @@ public:
 	}
 };
 
+class RemotePlayer;
+
 class PlayerSAO : public ServerActiveObject
 {
 public:
-	PlayerSAO(ServerEnvironment *env_, Player *player_, u16 peer_id_,
+	PlayerSAO(ServerEnvironment *env_, RemotePlayer *player_, u16 peer_id_,
 			const std::set<std::string> &privs, bool is_singleplayer);
 	~PlayerSAO();
 	ActiveObjectType getType() const
@@ -216,7 +217,7 @@ public:
 	void getAttachment(int *parent_id, std::string *bone, v3f *position, v3f *rotation);
 	void addAttachmentChild(int child_id);
 	void removeAttachmentChild(int child_id);
-	std::set<int> getAttachmentChildIds();
+	UNORDERED_SET<int> getAttachmentChildIds();
 	ObjectProperties* accessObjectProperties();
 	void notifyObjectPropertiesModified();
 
@@ -237,14 +238,8 @@ public:
 
 	void disconnected();
 
-	Player* getPlayer()
-	{
-		return m_player;
-	}
-	u16 getPeerID() const
-	{
-		return m_peer_id;
-	}
+	RemotePlayer *getPlayer() { return m_player; }
+	u16 getPeerID() const { return m_peer_id; }
 
 	// Cheat prevention
 
@@ -299,7 +294,7 @@ public:
 private:
 	std::string getPropertyPacket();
 
-	Player *m_player;
+	RemotePlayer *m_player;
 	u16 m_peer_id;
 	Inventory *m_inventory;
 	s16 m_damage;
@@ -332,11 +327,12 @@ private:
 	bool m_animation_loop;
 	std::atomic_bool m_animation_sent;
 
-	std::map<std::string, core::vector2d<v3f> > m_bone_position; // Stores position and rotation for each bone name
+	// Stores position and rotation for each bone name
+	UNORDERED_MAP<std::string, core::vector2d<v3f> > m_bone_position;
 	bool m_bone_position_sent;
 
 	int m_attachment_parent_id;
-	std::set<int> m_attachment_child_ids;
+	UNORDERED_SET<int> m_attachment_child_ids;
 	std::string m_attachment_bone;
 	v3f m_attachment_position;
 	v3f m_attachment_rotation;

@@ -933,6 +933,18 @@
 #    type: float
 # server_map_save_interval = 5.3
 
+#    Set the maximum character length of a chat message sent by clients. (0 to disable)
+#    type: integer
+# chat_message_max_size = 500
+
+#    Limit a single player to send X messages per 10 seconds. (0 to disable)
+#    type: float
+# chat_message_limit_per_10sec = 8.0
+
+#    Kick player if send more than X messages per 10 seconds. (0 to disable)
+#    type: integer
+# chat_message_limit_trigger_kick = 50
+
 ### Physics
 
 #    type: float
@@ -996,7 +1008,7 @@
 
 #    Maximum number of statically stored objects in a block.
 #    type: int
-# max_objects_per_block = 49
+# max_objects_per_block = 64
 
 #    See http://www.sqlite.org/pragma.html#pragma_synchronous
 #    type: enum values: 0, 1, 2
@@ -1495,7 +1507,7 @@
 
 #    Prevent mods from doing insecure things like running shell commands.
 #    type: bool
-# secure.enable_security = false
+# secure.enable_security = true
 
 #    Comma-separated list of trusted mods that are allowed to access insecure
 #    functions even when mod security is on (via request_insecure_environment()).
@@ -1523,7 +1535,7 @@
 # profiler.default_report_format = txt
 
 #    The file path relative to your worldpath in which profiles will be saved to.
-#    
+#
 #    type: string
 # profiler.report_path = ""
 
@@ -1576,7 +1588,7 @@
 
 #    Set the language. Leave empty to use the system language.
 #    A restart is required after changing this.
-#    type: enum values: , be, cs, da, de, eo, es, et, fr, hu, id, it, ja, jbo, ko, ky, lt, nb, nl, pl, pt, pt_BR, ro, ru, tr, uk, zh_CN, zh_TW
+#    type: enum values: , be, ca, cs, da, de, en, eo, es, et, fr, he, hu, id, it, ja, jbo, ko, ky, lt, nb, nl, pl, pt, pt_BR, ro, ru, sr_Cyrl, tr, uk, zh_CN, zh_TW
 # language =
 
 #    Level of logging to be written to debug.txt:

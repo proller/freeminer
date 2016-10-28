@@ -20,6 +20,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <cmath>
+#include <functional>
+
 #include "mapgen_math.h"
 #include "voxel.h"
 #include "mapblock.h"
@@ -40,7 +42,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mandelbulber/fractal.cpp"
 #endif
 
-double mandelbox(double x, double y, double z, double d, int nn = 10) {
+inline double mandelbox(double x, double y, double z, double d, int nn = 10, int seed = 1) {
 	int s = 7;
 	x *= s;
 	y *= s;
@@ -99,7 +101,7 @@ double mandelbox(double x, double y, double z, double d, int nn = 10) {
 
 }
 
-double mengersponge(double x, double y, double z, double d, int MI = 10) {
+inline double mengersponge(double x, double y, double z, double d, int MI = 10, int seed = 1) {
 	double r = x * x + y * y + z * z;
 	double scale = 3;
 	int i = 0;
@@ -136,8 +138,78 @@ double mengersponge(double x, double y, double z, double d, int MI = 10) {
 	return ((sqrt(r)) * pow(scale, (-i)) < d);
 }
 
-double sphere(double x, double y, double z, double d, int ITR = 1) {
+inline double sphere(double x, double y, double z, double d, int ITR = 1, int seed = 1) {
 	return v3f(x, y, z).getLength() < d;
+}
+
+
+typedef u_int32_t Fnv32_t;
+#define FNV1_32_INIT ((Fnv32_t) 33554467UL)
+#define FNV_32_PRIME ((Fnv32_t) 0x01000193UL)
+inline Fnv32_t fnv_32_buf(const void *buf, size_t len, Fnv32_t hval = FNV1_32_INIT) {
+	const u_int8_t *s = (const u_int8_t *)buf;
+	while (len-- != 0) {
+		hval *= FNV_32_PRIME;
+		hval ^= *s++;
+	}
+	return hval;
+}
+
+
+inline double rooms(double dx, double dy, double dz, double d, int ITR = 1, int seed = 1) {
+	int x = dx, y = dy, z = dz;
+	//if (x < y && x < z) return 0; // debug slice
+	//const auto seed = 1; //params->seed;
+	const auto rooms_pow_min = 2, rooms_pow_max = 9;
+	const auto rooms_pow_cut_max = 8;
+	const auto rooms_pow_fill_max = 4;
+	const auto room_fill_every = 10;
+	const auto room_big_every = 13;
+	//errorstream << " t "<<" x=" << x << " y="<< y << " x="<<z << " pw="<<pw<< " every="<<every<< " ty="<<((int)y%every)<<"\n";
+	int cx = 0, cy = 0, cz = 0;
+	int room_n = 0;
+	int wall = 0;
+	for (int pw2 = rooms_pow_max; pw2 >= rooms_pow_min; --pw2) {
+		int every = 2 << pw2;
+		//errorstream << " t "<<" x=" << x << " y="<< y << " x="<<z << " pw="<<pw<< " every="<<every<< " tx="<<((int)x%every)<<"\n";
+		auto xhit = !(x % every), yhit = !(y % every), zhit = !(z % every);
+		int lv = 1;
+		lv += x < cx;
+		lv += (y < cy) << 1;
+		lv += (z < cz) << 2;
+		//errorstream << " t "<<" x=" << x << " y="<< y << " z="<<z << " room_n=" << room_n << " pw="<<pw<< " hash=" << std::hash<int>()(room_n)<<" test="<<(!( std::hash<int>()(room_n) % 7))<< "\n";
+		room_n = lv + room_n * 10;
+
+		auto room_n_hash_1 = room_n + seed + 1;
+		if ( pw2 < rooms_pow_fill_max &&
+		        !( fnv_32_buf(&room_n_hash_1, sizeof(room_n_hash_1)) % room_fill_every)
+		   ) {
+			//errorstream << " pw=" << pw  << " room_n="<<room_n<< " hash="<< fnv_32_buf(&room_n_hash_1, sizeof(room_n_hash_1))<<"\n";
+			return pw2;
+		}
+		//errorstream << " t "<<" x=" << x << " y="<< y << " z="<<z << " room_n=" << room_n << " pw="<<pw<< " hash=" << std::hash<double>()(room_n + 1)<<" test="<<(!( std::hash<double>()(room_n + 1) % 13))<< " rf="<<room_filled<<"\n";
+
+		auto room_n_hash_2 = room_n + seed + 2;
+		if (pw2 <= rooms_pow_cut_max && !( fnv_32_buf(&room_n_hash_2, sizeof(room_n_hash_2)) % room_big_every)) {
+			//errorstream << " cutt "<<" x=" << x << " y="<< y << " z="<<z << " every="<< every<<" room_n=" << room_n << " pw="<<pw << " pw2="<<pw2<< "\n";
+			//errorstream << " x>>pw2" << (x>>pw2)  << " (x-1)>>pw2" << ((x-1)>>pw2) << " y>>pw2" << (y>>pw2)  << " (y-1)>>pw2" << ((y-1)>>pw2) << " z>>pw2" << (z>>pw2)  << " (z-1)>>pw2" << ((z-1)>>pw2) << "\n";
+			int pw3 = pw2 + 1;
+			if ((x >> pw3) == (x - 1) >> pw3 && (y >> pw3) == (y - 1) >> pw3 && (z >> pw3) == (z - 1) >> pw3) {
+				return 0;
+			}
+		}
+
+		if (xhit || yhit || zhit) {
+			wall = pw2;
+		}
+
+		//errorstream << " t "<<" x=" << x << " y="<< y << " z="<<z   <<" cx=" << cx << " cy="<< cy << " cz="<<cz<< "pw="<<pw<< " every="<<every<< " lv="<< lv << " room_n="<<room_n<< room_size="<<room_size <<"\n";
+		int room_size = 2 << (pw2 - 1);
+		cx += ((x < cx) ? -1 : 1) * room_size;
+		cy += ((y < cy) ? -1 : 1) * room_size;
+		cz += ((z < cz) ? -1 : 1) * room_size;
+	}
+	return wall;
 }
 
 //////////////////////// Mapgen Math parameter read/write
@@ -146,7 +218,9 @@ void MapgenMathParams::readParams(Settings *settings) {
 	try {
 		MapgenV7Params::readParams(settings);
 	} catch (...) {}
-	params = settings->getJson("mg_math");
+	auto mg_math = settings->getJson("mg_math");
+	if (!mg_math.isNull())
+		params = mg_math;
 }
 
 void MapgenMathParams::writeParams(Settings *settings) const {
@@ -159,8 +233,7 @@ void MapgenMathParams::writeParams(Settings *settings) const {
 ///////////////////////////////////////////////////////////////////////////////
 
 MapgenMath::MapgenMath(int mapgenid, MapgenMathParams *params_, EmergeManager *emerge) :
-		MapgenV7(mapgenid, (MapgenV7Params *)params_, emerge)
-	{
+	MapgenV7(mapgenid, (MapgenV7Params *)params_, emerge) {
 	ndef = emerge->ndef;
 	//mg_params = (MapgenMathParams *)params_->sparams;
 	mg_params = params_;
@@ -215,6 +288,12 @@ MapgenMath::MapgenMath(int mapgenid, MapgenMathParams *params_, EmergeManager *e
 		invert = params.get("invert", 0).asBool();
 		size = params.get("size", 100).asDouble();
 		//scale = params.get("scale", 1.0 / size).asDouble();
+	} else if (params["generator"].asString() == "rooms") {
+		internal = 1;
+		func = &rooms;
+		invert = params.get("invert", 0).asBool();
+		//result_max = 10;
+		size = params.get("size", 1).asDouble();
 	}
 
 
@@ -423,7 +502,7 @@ MapgenMath::MapgenMath(int mapgenid, MapgenMathParams *params_, EmergeManager *e
 		//if(!center.getLength()) center = v3f(-1.0 / scale / 2, -1.0 / scale + (-2 * -(int)invert), 2);
 		size = params.get("size", 15000 ).asDouble();
 		//scale = params.get("scale", 1.0 / size).asDouble(); //(double)1 / size;
-		if(!center.getLength()) center = v3f(5000-5,5000+5,5000-5);
+		if(!center.getLength()) center = v3f(5000 - 5, 5000 + 5, 5000 - 5);
 		//par.doubles.N = params.get("N", 4).asInt();
 	}
 
@@ -437,12 +516,11 @@ MapgenMath::MapgenMath(int mapgenid, MapgenMathParams *params_, EmergeManager *e
 #endif
 
 	float s = 1.0 / size;
-	scale = v3f(s,s,s);
+	scale = v3f(s, s, s);
 	if (params["scale"].isDouble()) {
 		s = params.get("scale", 1.0 / size).asDouble();
-		scale = v3f(s,s,s);
-	}
-	else if (params.get("scale", Json::Value()).isObject())
+		scale = v3f(s, s, s);
+	} else if (params.get("scale", Json::Value()).isObject())
 		scale = v3f(params["scale"].get("x", 1.0 / size).asDouble(), params["scale"].get("y", 1.0 / size).asDouble(), params["scale"].get("z", 1.0 / size).asDouble());
 
 	auto center_auto_top = params.get("center_auto_top", Json::Value(false));
@@ -455,7 +533,8 @@ MapgenMath::~MapgenMath() {
 //////////////////////// Map generator
 
 MapNode MapgenMath::layers_get(float value, float max) {
-	auto layer_index = rangelim((unsigned int)myround((value/max) * layers_node.size()), 0, layers_node.size()-1);
+	auto layer_index = rangelim((unsigned int)myround((value / max) * layers_node_size), 0, layers_node_size - 1);
+	//errorstream<<"lsM: "<< " layer_index="<<layer_index<< " value="<<value<<" max="<< max<<" noise_layers_width="<<noise_layers_width<<" layers_node_size="<<layers_node_size<<std::endl;
 	return layers_node[layer_index];
 }
 
@@ -491,7 +570,7 @@ int MapgenMath::generateTerrain() {
 	double d = 0;
 	for (s16 z = node_min.Z; z <= node_max.Z; z++) {
 		for (s16 x = node_min.X; x <= node_max.X; x++, index++) {
-			s16 heat = m_emerge->env->m_use_weather ? m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env, v3POS(x,node_max.Y,z), nullptr, &heat_cache) : 0;
+			s16 heat = m_emerge->env->m_use_weather ? m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env, v3POS(x, node_max.Y, z), nullptr, &heat_cache) : 0;
 
 			u32 i = vm->m_area.index(x, node_min.Y, z);
 			for (s16 y = node_min.Y; y <= node_max.Y; y++) {
@@ -506,16 +585,16 @@ int MapgenMath::generateTerrain() {
 					d = Compute<normal_mode>(CVector3(vec.X, vec.Y, vec.Z), mg_params->par);
 				else
 #endif
-				if (internal)
-					d = (*func)(vec.X, vec.Y, vec.Z, scale.X, iterations);
+					if (internal)
+						d = (*func)(vec.X, vec.Y, vec.Z, scale.X, iterations, mg_params->seed);
 				if ((!invert && d > 0) || (invert && d == 0)  ) {
 					if (!vm->m_data[i]) {
 						//vm->m_data[i] = (y > water_level + biome->filler) ?
 						//     MapNode(biome->c_filler) : n_stone;
-						if (invert) {
+						if (invert || !no_layers) {
 							int index3 = (z - node_min.Z) * zstride_1d +
-								(y - node_min.Y) * ystride +
-								(x - node_min.X);
+							             (y - node_min.Y) * ystride +
+							             (x - node_min.X);
 							vm->m_data[i] = Mapgen_features::layers_get(index3);
 						} else {
 							vm->m_data[i] = layers_get(d, result_max);
@@ -525,7 +604,7 @@ int MapgenMath::generateTerrain() {
 
 					}
 				} else if (y <= water_level) {
-					vm->m_data[i] = (heat < 0 && y > heat/3) ? n_ice : n_water;
+					vm->m_data[i] = (heat < 0 && y > heat / 3) ? n_ice : n_water;
 				} else {
 					vm->m_data[i] = n_air;
 				}
