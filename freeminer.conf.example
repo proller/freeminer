@@ -473,8 +473,7 @@
 # pause_fps_max = 20
 
 #    View distance in nodes.
-#    Min = 20
-#    type: int
+#    type: int min: 20 max: 4000
 # viewing_range = 100
 
 #    Width component of the initial window size.
@@ -509,7 +508,7 @@
 #    Adjust the gamma encoding for the light tables. Lower numbers are brighter.
 #    This setting is for the client only and is ignored by the server.
 #    type: float min: 1 max: 3
-# display_gamma = 1.8
+# display_gamma = 2.2
 
 #    Path to texture directory. All textures are first searched from here.
 #    type: path
@@ -614,6 +613,10 @@
 #    Enables animation of inventory items.
 #    type: bool
 # inventory_items_animations = false
+
+#    Fraction of the visible distance at which fog starts to be rendered
+#    type: float min: 0 max: 0.99
+# fog_start = 0.4
 
 ### Menus
 
@@ -910,7 +913,7 @@
 #    How large area of blocks are subject to the active block stuff, stated in mapblocks (16 nodes).
 #    In active blocks objects are loaded and ABMs run.
 #    type: int
-# active_block_range = 2
+# active_block_range = 3
 
 #    From how far blocks are sent to clients, stated in mapblocks (16 nodes).
 #    type: int
@@ -932,18 +935,6 @@
 #    Interval of saving important changes in the world, stated in seconds.
 #    type: float
 # server_map_save_interval = 5.3
-
-#    Set the maximum character length of a chat message sent by clients. (0 to disable)
-#    type: integer
-# chat_message_max_size = 500
-
-#    Limit a single player to send X messages per 10 seconds. (0 to disable)
-#    type: float
-# chat_message_limit_per_10sec = 8.0
-
-#    Kick player if send more than X messages per 10 seconds. (0 to disable)
-#    type: integer
-# chat_message_limit_trigger_kick = 50
 
 ### Physics
 
@@ -1049,12 +1040,20 @@
 #    type: float
 # liquid_update = 1.0
 
+#    At this distance the server will aggressively optimize which blocks are sent to clients.
+#    Small values potentially improve performance a lot, at the expense of visible rendering glitches.
+#    (some blocks will not be rendered under water and in caves, as well as sometimes on land)
+#    Setting this to a value greater than max_block_send_distance disables this optimization.
+#    Stated in mapblocks (16 nodes)
+#    type: int min: 2
+# block_send_optimize_distance = 4
+
 ## Mapgen
 
 #    Name of map generator to be used when creating a new world.
 #    Creating a world in the main menu will override this.
 #    type: enum values: indev, v7, valleys, v5, math, fractal, flat, singlenode, v6
-# mg_name = indev
+# mg_name = v7
 
 #    Water surface level of the world.
 #    type: int
@@ -1231,15 +1230,33 @@
 #### Mapgen v7
 
 #    Map generation attributes specific to Mapgen v7.
-#    The 'ridges' flag controls the rivers.
+#    The 'ridges' flag enables the rivers.
+#    Floatlands are currently experimental and subject to change.
 #    Flags that are not specified in the flag string are not modified from the default.
 #    Flags starting with 'no' are used to explicitly disable them.
-#    type: flags possible values: mountains, ridges, nomountains, noridges
+#    type: flags possible values: mountains, ridges, floatlands, nomountains, noridges, nofloatlands
 # mgv7_spflags = mountains,ridges
 
 #    Controls width of tunnels, a smaller value creates wider tunnels.
 #    type: float
-# mgv7_cave_width = 0.2
+# mgv7_cave_width = 0.09
+
+#    Controls the density of floatland mountain terrain.
+#    Is an offset added to the 'np_mountain' noise value.
+#    type: float
+# mgv7_float_mount_density = 0.6
+
+#    Typical maximum height, above and below midpoint, of floatland mountain terrain.
+#    type: float
+# mgv7_float_mount_height = 128.0
+
+#    Y-level of floatland midpoint and lake surface.
+#    type: int
+# mgv7_floatland_level = 1280
+
+#    Y-level to which floatland shadows extend.
+#    type: int
+# mgv7_shadow_limit = 1024
 
 #    type: noise_params
 # mgv7_np_terrain_base = 4, 70, (600, 600, 600), 82341, 5, 0.6, 2.0
@@ -1261,6 +1278,12 @@
 
 #    type: noise_params
 # mgv7_np_ridge_uwater = 0, 1, (1000, 1000, 1000), 85039, 5, 0.6, 2.0
+
+#    type: noise_params
+# mgv7_np_floatland_base = -0.6, 1.5, (600, 600, 600), 114, 5, 0.6, 2.0
+
+#    type: noise_params
+# mgv7_np_float_base_height = 48, 24, (300, 300, 300), 907, 4, 0.7, 2.0
 
 #    type: noise_params
 # mgv7_np_mountain = -0.6, 1, (250, 350, 250), 5333, 5, 0.63, 2.0
@@ -1293,7 +1316,7 @@
 
 #    Controls width of tunnels, a smaller value creates wider tunnels.
 #    type: float
-# mgflat_cave_width = 0.2
+# mgflat_cave_width = 0.09
 
 #    Terrain noise threshold for lakes.
 #    Controls proportion of world area covered by lakes.
@@ -1334,7 +1357,7 @@
 
 #    Controls width of tunnels, a smaller value creates wider tunnels.
 #    type: float
-# mgfractal_cave_width = 0.2
+# mgfractal_cave_width = 0.09
 
 #    Choice of 18 fractals from 9 formulas.
 #    1 = 4D "Roundy" mandelbrot set.
@@ -1459,7 +1482,7 @@
 
 #    Controls width of tunnels, a smaller value creates wider tunnels.
 #    type: float
-# mgvalleys_cave_width = 0.2
+# mgvalleys_cave_width = 0.09
 
 ##### Noises
 
@@ -1507,7 +1530,7 @@
 
 #    Prevent mods from doing insecure things like running shell commands.
 #    type: bool
-# secure.enable_security = true
+# secure.enable_security = false
 
 #    Comma-separated list of trusted mods that are allowed to access insecure
 #    functions even when mod security is on (via request_insecure_environment()).
@@ -1535,7 +1558,7 @@
 # profiler.default_report_format = txt
 
 #    The file path relative to your worldpath in which profiles will be saved to.
-#
+#    
 #    type: string
 # profiler.report_path = ""
 

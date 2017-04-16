@@ -14,7 +14,7 @@ set(PROJECT_NAME_CAPITALIZED "multicraft2")
 # Also remember to set PROTOCOL_VERSION in network/networkprotocol.h when releasing
 set(VERSION_MAJOR 0)
 set(VERSION_MINOR 4)
-set(VERSION_PATCH 14)
+set(VERSION_PATCH 15)
 set(VERSION_EXTRA "" CACHE STRING "Stuff to append to version string")
 
 set(VERSION_TWEAK 8)
@@ -184,6 +184,7 @@ install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/fonts" DESTINATION "${SHAREDIR}")
 install(FILES "README.md" DESTINATION "${DOCDIR}")
 install(FILES "doc/lua_api.txt" DESTINATION "${DOCDIR}")
 install(FILES "doc/menu_lua_api.txt" DESTINATION "${DOCDIR}")
+install(FILES "doc/texture_packs.txt" DESTINATION "${DOCDIR}")
 install(FILES "doc/world_format.txt" DESTINATION "${DOCDIR}")
 install(FILES "freeminer.conf.example" DESTINATION "${EXAMPLE_CONF_DIR}")
 

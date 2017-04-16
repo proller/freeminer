@@ -203,6 +203,8 @@ LOCAL_SRC_FILES := \
 		jni/src/porting.cpp                       \
 		jni/src/profiler.cpp                      \
 		jni/src/quicktune.cpp                     \
+		jni/src/reflowscan.cpp                    \
+		jni/src/remoteplayer.cpp                  \
 		jni/src/rollback.cpp                      \
 		jni/src/rollback_interface.cpp            \
 		jni/src/serialization.cpp                 \

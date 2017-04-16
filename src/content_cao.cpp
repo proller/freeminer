@@ -30,6 +30,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/numeric.h" // For IntervalLimiter
 #include "util/serialize.h"
 #include "util/mathconstants.h"
+#include "util/basic_macros.h"
 #include "client/tile.h"
 #include "environment.h"
 #include "collision.h"
@@ -51,8 +52,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 class Settings;
 struct ToolCapabilities;
-
-#define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
 UNORDERED_MAP<u16, ClientActiveObject::Factory> ClientActiveObject::m_types;
 
@@ -317,7 +316,8 @@ public:
 		{return &m_selection_box;}
 	v3f getPosition()
 		{return m_position;}
-
+	inline float getYaw() const
+		{return 0;}
 	std::string infoText()
 		{return m_infotext;}
 

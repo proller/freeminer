@@ -988,6 +988,7 @@ int ModApiMapgen::l_register_decoration(lua_State *L)
 bool read_deco_simple(lua_State *L, DecoSimple *deco)
 {
 	int index = 1;
+	int param2;
 
 	deco->deco_height     = getintfield_default(L, index, "height", 1);
 	deco->deco_height_max = getintfield_default(L, index, "height_max", 0);
@@ -1005,6 +1006,14 @@ bool read_deco_simple(lua_State *L, DecoSimple *deco)
 			"defined" << std::endl;
 		return false;
 	}
+
+	param2 = getintfield_default(L, index, "param2", 0);
+	if ((param2 < 0) || (param2 > 255)) {
+		errorstream << "register_decoration: param2 out of bounds (0-255)"
+			<< std::endl;
+		return false;
+	}
+	deco->deco_param2 = (u8)param2;
 
 	return true;
 }
@@ -1302,7 +1311,7 @@ int ModApiMapgen::l_create_schematic(lua_State *L)
 	INodeDefManager *ndef = getServer(L)->getNodeDefManager();
 
 	const char *filename = luaL_checkstring(L, 4);
-	CHECK_SECURE_PATH_OPTIONAL(L, filename);
+	CHECK_SECURE_PATH(L, filename, true);
 
 	Map *map = &(getEnv(L)->getMap());
 	Schematic schem;

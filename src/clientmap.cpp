@@ -32,34 +32,16 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "settings.h"
 #include "camera.h"               // CameraModes
 #include "util/mathconstants.h"
+#include "util/basic_macros.h"
 #include <algorithm>
 #include <unordered_map>
 #include <utility>
 
-#define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
-
-MapDrawControl::MapDrawControl():
-		range_all(false),
-		wanted_range(500),
-		//wanted_max_blocks(0),
-		//wanted_min_range(0),
-		blocks_drawn(0),
-		blocks_would_have_drawn(0),
-		farthest_drawn(0)
-		,
-		farmesh(0),
-		farmesh_step(1),
-		fps(30),
-		fps_avg(30),
-		fps_wanted(30),
-		drawtime_avg(30)
-		//,block_overflow(false)
-	{
-		farmesh = g_settings->getS32("farmesh");
-		farmesh_step = g_settings->getS32("farmesh_step");
-		fov_want =
-		fov = g_settings->getFloat("fov");
-	}
+void MapDrawControl::fm_init() {
+	farmesh = g_settings->getS32("farmesh");
+	farmesh_step = g_settings->getS32("farmesh_step");
+	fov_want = fov = g_settings->getFloat("fov");
+}
 
 ClientMap::ClientMap(
 		Client *client,
@@ -179,9 +161,9 @@ static bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
 		if (cache)
 			occlude_cache[p] = is_transparent;
 		if(!is_transparent){
-			if(count == needed_count)
-				return true;
 			count++;
+			if(count >= needed_count)
+				return true;
 		}
 		step *= stepfac;
 	}
@@ -378,30 +360,39 @@ void ClientMap::updateDrawList(video::IVideoDriver* driver, float dtime, unsigne
 			float step = BS * 1;
 			float stepfac = 1.2;
 			float startoff = BS * 1;
-			float endoff = -BS*MAP_BLOCKSIZE; //*1.42; //*1.42;
-			v3s16 spn = cam_pos_nodes + v3s16(0, 0, 0);
-			s16 bs2 = MAP_BLOCKSIZE/2 + 1;
-			u32 needed_count = 1;
+			// The occlusion search of 'isOccluded()' must stop short of the target
+			// point by distance 'endoff' (end offset) to not enter the target mapblock.
+			// For the 8 mapblock corners 'endoff' must therefore be the maximum diagonal
+			// of a mapblock, because we must consider all view angles.
+			// sqrt(1^2 + 1^2 + 1^2) = 1.732
+			float endoff = -BS * MAP_BLOCKSIZE * 1.732050807569;
+			v3s16 spn = cam_pos_nodes;
+			s16 bs2 = MAP_BLOCKSIZE / 2 + 1;
+			// to reduce the likelihood of falsely occluded blocks
+			// require at least two solid blocks
+			// this is a HACK, we should think of a more precise algorithm
+			u32 needed_count = 2;
 			if (occlusion_culling_enabled &&
 				range > 1 && smesh_size &&
-				isOccluded(this, spn, cpn + v3s16(0,0,0),
-					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
-				isOccluded(this, spn, cpn + v3s16(bs2,bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
-				isOccluded(this, spn, cpn + v3s16(bs2,bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
-				isOccluded(this, spn, cpn + v3s16(bs2,-bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
-				isOccluded(this, spn, cpn + v3s16(bs2,-bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
-				isOccluded(this, spn, cpn + v3s16(-bs2,bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
-				isOccluded(this, spn, cpn + v3s16(-bs2,bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
-				isOccluded(this, spn, cpn + v3s16(-bs2,-bs2,bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
-				isOccluded(this, spn, cpn + v3s16(-bs2,-bs2,-bs2),
-					step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache)) {
+					// For the central point of the mapblock 'endoff' can be halved
+					isOccluded(this, spn, cpn,
+						step, stepfac, startoff, endoff / 2.0f, needed_count, nodemgr, occlude_cache) &&
+					isOccluded(this, spn, cpn + v3s16(bs2,bs2,bs2),
+						step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
+					isOccluded(this, spn, cpn + v3s16(bs2,bs2,-bs2),
+						step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
+					isOccluded(this, spn, cpn + v3s16(bs2,-bs2,bs2),
+						step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
+					isOccluded(this, spn, cpn + v3s16(bs2,-bs2,-bs2),
+						step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
+					isOccluded(this, spn, cpn + v3s16(-bs2,bs2,bs2),
+						step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
+					isOccluded(this, spn, cpn + v3s16(-bs2,bs2,-bs2),
+						step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
+					isOccluded(this, spn, cpn + v3s16(-bs2,-bs2,bs2),
+						step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache) &&
+					isOccluded(this, spn, cpn + v3s16(-bs2,-bs2,-bs2),
+						step, stepfac, startoff, endoff, needed_count, nodemgr, occlude_cache)) {
 				blocks_occlusion_culled++;
 				continue;
 			}
@@ -657,6 +648,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 				buf->getMaterial().setFlag(video::EMF_TRILINEAR_FILTER, m_cache_trilinear_filter);
 				buf->getMaterial().setFlag(video::EMF_BILINEAR_FILTER, m_cache_bilinear_filter);
 				buf->getMaterial().setFlag(video::EMF_ANISOTROPIC_FILTER, m_cache_anistropic_filter);
+				buf->getMaterial().setFlag(video::EMF_WIREFRAME, m_control.show_wireframe);
 
 				const video::SMaterial& material = buf->getMaterial();
 				video::IMaterialRenderer* rnd =

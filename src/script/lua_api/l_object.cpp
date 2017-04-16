@@ -146,9 +146,9 @@ int ObjectRef::l_remove(lua_State *L)
 	UNORDERED_SET<int> child_ids = co->getAttachmentChildIds();
 	UNORDERED_SET<int>::iterator it;
 	for (it = child_ids.begin(); it != child_ids.end(); ++it) {
-		ServerActiveObject *child = env->getActiveObject(*it);
-		if (child)
-		child->setAttachment(0, "", v3f(0, 0, 0), v3f(0, 0, 0));
+		// Child can be NULL if it was deleted earlier
+		if (ServerActiveObject *child = env->getActiveObject(*it))
+			child->setAttachment(0, "", v3f(0, 0, 0), v3f(0, 0, 0));
 	}
 
 /*
@@ -1042,11 +1042,11 @@ int ObjectRef::l_get_look_dir(lua_State *L)
 {
 	NO_MAP_LOCK_REQUIRED;
 	ObjectRef *ref = checkobject(L, 1);
-	RemotePlayer *player = getplayer(ref);
-	if (player == NULL) return 0;
+	PlayerSAO* co = getplayersao(ref);
+	if (co == NULL) return 0;
 	// Do it
-	float pitch = player->getRadPitchDep();
-	float yaw = player->getRadYawDep();
+	float pitch = co->getRadPitchDep();
+	float yaw = co->getRadYawDep();
 	v3f v(cos(pitch)*cos(yaw), sin(pitch), cos(pitch)*sin(yaw));
 	push_v3f(L, v);
 	return 1;
@@ -1062,10 +1062,10 @@ int ObjectRef::l_get_look_pitch(lua_State *L)
 		"Deprecated call to get_look_pitch, use get_look_vertical instead");
 
 	ObjectRef *ref = checkobject(L, 1);
-	RemotePlayer *player = getplayer(ref);
-	if (player == NULL) return 0;
+	PlayerSAO* co = getplayersao(ref);
+	if (co == NULL) return 0;
 	// Do it
-	lua_pushnumber(L, player->getRadPitchDep());
+	lua_pushnumber(L, co->getRadPitchDep());
 	return 1;
 }
 
@@ -1079,10 +1079,10 @@ int ObjectRef::l_get_look_yaw(lua_State *L)
 		"Deprecated call to get_look_yaw, use get_look_horizontal instead");
 
 	ObjectRef *ref = checkobject(L, 1);
-	RemotePlayer *player = getplayer(ref);
-	if (player == NULL) return 0;
+	PlayerSAO* co = getplayersao(ref);
+	if (co == NULL) return 0;
 	// Do it
-	lua_pushnumber(L, player->getRadYawDep());
+	lua_pushnumber(L, co->getRadYawDep());
 	return 1;
 }
 
@@ -1091,10 +1091,10 @@ int ObjectRef::l_get_look_vertical(lua_State *L)
 {
 	NO_MAP_LOCK_REQUIRED;
 	ObjectRef *ref = checkobject(L, 1);
-	RemotePlayer *player = getplayer(ref);
-	if (player == NULL) return 0;
+	PlayerSAO* co = getplayersao(ref);
+	if (co == NULL) return 0;
 	// Do it
-	lua_pushnumber(L, player->getRadPitch());
+	lua_pushnumber(L, co->getRadPitch());
 	return 1;
 }
 
@@ -1103,10 +1103,10 @@ int ObjectRef::l_get_look_horizontal(lua_State *L)
 {
 	NO_MAP_LOCK_REQUIRED;
 	ObjectRef *ref = checkobject(L, 1);
-	RemotePlayer *player = getplayer(ref);
-	if (player == NULL) return 0;
+	PlayerSAO* co = getplayersao(ref);
+	if (co == NULL) return 0;
 	// Do it
-	lua_pushnumber(L, player->getRadYaw());
+	lua_pushnumber(L, co->getRadYaw());
 	return 1;
 }
 
@@ -1119,7 +1119,7 @@ int ObjectRef::l_set_look_vertical(lua_State *L)
 	if (co == NULL) return 0;
 	float pitch = luaL_checknumber(L, 2) * core::RADTODEG;
 	// Do it
-	co->setPitch(pitch);
+	co->setPitchAndSend(pitch);
 	return 1;
 }
 
@@ -1132,7 +1132,7 @@ int ObjectRef::l_set_look_horizontal(lua_State *L)
 	if (co == NULL) return 0;
 	float yaw = luaL_checknumber(L, 2) * core::RADTODEG;
 	// Do it
-	co->setYaw(yaw);
+	co->setYawAndSend(yaw);
 	return 1;
 }
 
@@ -1150,7 +1150,7 @@ int ObjectRef::l_set_look_pitch(lua_State *L)
 	if (co == NULL) return 0;
 	float pitch = luaL_checknumber(L, 2) * core::RADTODEG;
 	// Do it
-	co->setPitch(pitch);
+	co->setPitchAndSend(pitch);
 	return 1;
 }
 
@@ -1168,7 +1168,7 @@ int ObjectRef::l_set_look_yaw(lua_State *L)
 	if (co == NULL) return 0;
 	float yaw = luaL_checknumber(L, 2) * core::RADTODEG;
 	// Do it
-	co->setYaw(yaw);
+	co->setYawAndSend(yaw);
 	return 1;
 }
 

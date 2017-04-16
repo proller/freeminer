@@ -93,10 +93,9 @@ local player_list = {}
 core.register_on_joinplayer(function(player)
 	local player_name = player:get_player_name()
 	player_list[player_name] = player
-	if core.is_singleplayer() then
-		return
+	if not minetest.is_singleplayer() then
+		core.chat_send_all("*** " .. player_name .. " joined the game.")
 	end
-	core.chat_send_all("*** " .. player_name .. " joined the game.")
 end)
 
 core.register_on_leaveplayer(function(player, timed_out)
@@ -255,5 +254,9 @@ else
 		return core.get_color_escape_sequence(color) .. message .. core.get_color_escape_sequence("#ffffff")
 	end
 
+end
+
+function core.close_formspec(player_name, formname)
+	return minetest.show_formspec(player_name, formname, "")
 end
 

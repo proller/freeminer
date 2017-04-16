@@ -1,4 +1,4 @@
-Minetest Lua Modding API Reference 0.4.14
+Minetest Lua Modding API Reference 0.4.15
 =========================================
 * More information at <http://www.minetest.net/>
 * Developer Wiki: <http://dev.minetest.net/>
@@ -441,18 +441,24 @@ from the available ones of the following files:
 
 Examples of sound parameter tables:
 
-    -- Play location-less on all clients
+    -- Play locationless on all clients
     {
         gain = 1.0, -- default
     }
-    -- Play location-less to a player
+    -- Play locationless to one player
     {
         to_player = name,
         gain = 1.0, -- default
     }
+    -- Play locationless to one player, looped
+    {
+        to_player = name,
+        gain = 1.0, -- default
+        loop = true,
+    }
     -- Play in a location
     {
-        pos = {x=1,y=2,z=3},
+        pos = {x = 1, y = 2, z = 3},
         gain = 1.0, -- default
         max_hear_distance = 32, -- default, uses an euclidean metric
     }
@@ -461,15 +467,18 @@ Examples of sound parameter tables:
         object = <an ObjectRef>,
         gain = 1.0, -- default
         max_hear_distance = 32, -- default, uses an euclidean metric
-        loop = true, -- only sounds connected to objects can be looped
+        loop = true,
     }
+
+Looped sounds must either be connected to an object or played locationless to
+one player using `to_player = name,`
 
 ### `SimpleSoundSpec`
 * e.g. `""`
 * e.g. `"default_place_node"`
 * e.g. `{}`
-* e.g. `{name="default_place_node"}`
-* e.g. `{name="default_place_node", gain=1.0}`
+* e.g. `{name = "default_place_node"}`
+* e.g. `{name = "default_place_node", gain = 1.0}`
 
 Registered definitions of stuff
 -------------------------------
@@ -1759,6 +1768,13 @@ Inventory locations
 * `"nodemeta:<X>,<Y>,<Z>"`: Any node metadata
 * `"detached:<name>"`: A detached inventory
 
+Player Inventory lists
+----------------------
+* `main`: list containing the default inventory
+* `craft`: list containing the craft input
+* `craftpreview`: list containing the craft output
+* `hand`: list containing an override for the empty hand
+
 `ColorString`
 -------------
 `#RGB` defines a color in hexadecimal format.
@@ -1908,6 +1924,17 @@ Helper functions
       * nil: return all entries,
       * true: return only subdirectory names, or
       * false: return only file names.
+* `minetest.get_version()`: returns a table containing components of the
+   engine version.  Components:
+    * `project`: Name of the project, eg, "Minetest"
+    * `string`: Simple version, eg, "1.2.3-dev"
+    * `hash`: Full git version (only set if available), eg, "1.2.3-dev-01234567-dirty"
+  Use this for informational purposes only. The information in the returned
+  table does not represent the capabilities of the engine, nor is it
+  reliable or verifyable. Compatible forks will have a different name and
+  version entirely. To check for the presence of engine features, test
+  whether the functions exported by the wanted features exist. For example:
+  `if core.nodeupdate then ... end`.
 
 ### Logging
 * `minetest.debug(...)`
@@ -2009,9 +2036,10 @@ Call these functions only at load time!
 * `minetest.register_on_cheat(func(ObjectRef, cheat))`
     * Called when a player cheats
     * `cheat`: `{type=<cheat_type>}`, where `<cheat_type>` is one of:
-        * `"moved_too_fast"`
-        * `"interacted_too_far"`
-        * `"finished_unknown_dig"`
+        * `moved_too_fast`
+        * `interacted_too_far`
+        * `interacted_while_dead`
+        * `finished_unknown_dig`
         * `dug_unbreakable`
         * `dug_too_fast`
 * `minetest.register_on_chat_message(func(name, message))`
@@ -2107,7 +2135,7 @@ and `minetest.auth_reload` call the authetification handler.
 * `minetest.set_node(pos, node)`
 * `minetest.add_node(pos, node): alias set_node(pos, node)`
     * Set node at position (`node = {name="foo", param1=0, param2=0}`)
-* `minetest.swap_node(pos, node`
+* `minetest.swap_node(pos, node)`
     * Set node at position, but don't remove metadata
 * `minetest.remove_node(pos)`
     * Equivalent to `set_node(pos, "air")`
@@ -2275,11 +2303,15 @@ and `minetest.auth_reload` call the authetification handler.
     * increase level of leveled node by level, default `level` equals `1`
     * if `totallevel > maxlevel`, returns rest (`total-max`)
     * can be negative for decreasing
-* `nodeupdate_single(pos)`
+* `core.check_single_for_falling(pos)`
     * causes an unsupported `group:falling_node` node to fall and causes an
       unattached `group:attached_node` node to fall.
-    * does not spread these updates to neighbours
-    * a helper function, not officially part of the API, but useful
+    * does not spread these updates to neighbours.
+* `core.check_for_falling(pos)`
+    * causes an unsupported `group:falling_node` node to fall and causes an
+      unattached `group:attached_node` node to fall.
+    * spread these updates to neighbours and can cause a cascade
+      of nodes to fall.
 
 ### Inventory
 `minetest.get_inventory(location)`: returns an `InvRef`
@@ -2288,8 +2320,11 @@ and `minetest.auth_reload` call the authetification handler.
     * `{type="player", name="celeron55"}`
     * `{type="node", pos={x=, y=, z=}}`
     * `{type="detached", name="creative"}`
-* `minetest.create_detached_inventory(name, callbacks)`: returns an `InvRef`
+* `minetest.create_detached_inventory(name, callbacks, [player_name])`: returns an `InvRef`
     * callbacks: See "Detached inventory callbacks"
+    * player_name: Make detached inventory available to one player exclusively,
+      by default they will be sent to every player (even if not used).
+      Note that this parameter is mostly just a workaround and will be removed in future releases.
     * Creates a detached inventory. If it already exists, it is cleared.
 * `minetest.do_item_eat(hp_change, replace_with_item, itemstack, user, pointed_thing)`:
    returns left over ItemStack
@@ -2301,6 +2336,13 @@ and `minetest.auth_reload` call the authetification handler.
     * `formname`: name passed to `on_player_receive_fields` callbacks.
       It should follow the `"modname:<whatever>"` naming convention
     * `formspec`: formspec to display
+* `minetest.close_formspec(playername, formname)`
+    * `playername`: name of player to close formspec
+    * `formname`: has to exactly match the one given in show_formspec, or the formspec will
+       not close.
+    * calling show_formspec(playername, formname, "") is equal to this expression
+    * to close a formspec regardless of the formname, call
+      minetest.close_formspec(playername, ""). USE THIS ONLY WHEN ABSOLUTELY NECESSARY!
 * `minetest.formspec_escape(string)`: returns a string
     * escapes the characters "[", "]", "\", "," and ";", which can not be used in formspecs
 * `minetest.explode_table_event(string)`: returns a table
@@ -2437,6 +2479,7 @@ These functions return the leftover itemstack.
 * `minetest.request_shutdown([message],[reconnect])`: request for server shutdown. Will display `message` to clients,
     and `reconnect` == true displays a reconnect button.
 * `minetest.get_server_status()`: returns server status string
+* `minetest.get_server_uptime()`: returns the server uptime in seconds
 
 ### Bans
 * `minetest.get_ban_list()`: returns the ban list (same as `minetest.get_ban_description("")`)
@@ -2534,6 +2577,10 @@ These functions return the leftover itemstack.
 
 ### Misc.
 * `minetest.get_connected_players()`: returns list of `ObjectRefs`
+* `minetest.hud_replace_builtin(name, hud_definition)`
+    * Replaces definition of a builtin hud element
+    * `name`: `"breath"` or `"health"`
+    * `hud_definition`: definition to replace builtin definition
 * `minetest.hash_node_position({x=,y=,z=})`: returns an 48-bit integer
     * Gives a unique hash number for a node position (16+16+16=48bit)
 * `minetest.get_position_from_hash(hash)`: returns a position
@@ -2859,10 +2906,6 @@ This is basically a reference to a C++ `ServerActiveObject`
 * `hud_set_hotbar_selected_image(texturename)`
     * sets image for selected item of hotbar
 * `hud_get_hotbar_selected_image`: returns texturename
-* `hud_replace_builtin(name, hud_definition)`
-    * replace definition of a builtin hud element
-    * `name`: `"breath"` or `"health"`
-    * `hud_definition`: definition to replace builtin definition
 * `set_sky(bgcolor, type, {texture names})`
     * `bgcolor`: ColorSpec, defaults to white
     * Available types:
@@ -3263,7 +3306,9 @@ will place the schematic inside of the VoxelManip.
 * `set_light_data(light_data)`: Sets the `param1` (light) contents of each node
   in the `VoxelManip`
     * expects lighting data in the same format that `get_light_data()` returns
-* `get_param2_data()`: Gets the raw `param2` data read into the `VoxelManip` object
+* `get_param2_data([buffer])`: Gets the raw `param2` data read into the `VoxelManip` object
+    * Returns an array (indices 1 to volume) of integers ranging from `0` to `255`
+    * If the param `buffer` is present, this table will be used to store the result instead
 * `set_param2_data(param2_data)`: Sets the `param2` contents of each node in the `VoxelManip`
 * `calc_lighting([p1, p2], [propagate_shadow])`:  Calculate lighting within the `VoxelManip`
     * To be used only by a `VoxelManip` object from `minetest.get_mapgen_object`
@@ -3511,8 +3556,9 @@ Definition tables
     --  ^ Called sometimes; the string returned is passed to on_activate when
     --    the entity is re-activated from static state
 
-        -- Also you can define arbitrary member variables here
-        myvariable = whatever,
+        -- Also you can define arbitrary member variables here (see item definition for
+        -- more info)
+        _custom_field = whatever,
     }
 
 ### ABM (ActiveBlockModifier) definition (`register_abm`)
@@ -3587,21 +3633,25 @@ Definition tables
           actual result to client in a short moment.
         ]]
         sound = {
+            breaks = "default_tool_break", -- tools only
             place = --[[<SimpleSoundSpec>]],
         },
 
         on_place = func(itemstack, placer, pointed_thing),
         --[[
         ^ Shall place item and return the leftover itemstack
+        ^ The placer may be any ObjectRef or nil.
         ^ default: minetest.item_place ]]
         on_secondary_use = func(itemstack, user, pointed_thing),
         --[[
         ^ Same as on_place but called when pointing at nothing.
+        ^ The user may be any ObjectRef or nil.
         ^ pointed_thing : always { type = "nothing" }
         ]]
         on_drop = func(itemstack, dropper, pos),
         --[[
         ^ Shall drop item and return the leftover itemstack
+        ^ The dropper may be any ObjectRef or nil.
         ^ default: minetest.item_drop ]]
         on_use = func(itemstack, user, pointed_thing),
         --[[
@@ -3610,6 +3660,7 @@ Definition tables
           inventory, or an itemstack to replace the original itemstack.
             e.g. itemstack:take_item(); return itemstack
         ^ Otherwise, the function is free to do what it wants.
+        ^ The user may be any ObjectRef or nil.
         ^ The default functions handle regular use cases.
         ]]
         after_use = func(itemstack, user, node, digparams),
@@ -3622,6 +3673,13 @@ Definition tables
               itemstack:add_wear(digparams.wear)
               return itemstack
             end
+        ^ The user may be any ObjectRef or nil.
+        ]]
+        _custom_field = whatever,
+        --[[
+        ^ Add your own custom fields. By convention, all custom field names
+          should start with `_` to avoid naming collisions with future engine
+          usage.
         ]]
     }
 
@@ -3983,8 +4041,10 @@ The Biome API is still in an experimental phase and subject to change.
     --  ^ Number of nodes high the decoration is made.
     --  ^ If height_max is not 0, this is the lower bound of the randomly selected height.
         height_max = 0,
-    --      ^ Number of nodes the decoration can be at maximum.
+    --  ^ Number of nodes the decoration can be at maximum.
     --  ^ If absent, the parameter 'height' is used as a constant.
+        param2 = 0,
+    --  ^ Param2 value of placed decoration node.
 
         ----- Schematic-type parameters
         schematic = "foobar.mts",
@@ -4121,7 +4181,8 @@ The Biome API is still in an experimental phase and subject to change.
     --  ^ collision_removal: if true then particle is removed when it collides,
     --  ^ requires collisiondetection = true to have any effect
         attached = ObjectRef,
-    --  ^ attached: if defined, makes particle positions relative to this object.
+    --  ^ attached: if defined, particle positions, velocities and accelerations
+    --  ^ are relative to this object's position and yaw.
         vertical = false,
     --  ^ vertical: if true faces player using y axis only
         texture = "image.png",
