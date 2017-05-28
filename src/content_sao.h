@@ -26,12 +26,35 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "serverobject.h"
 #include "itemgroup.h"
 #include "object_properties.h"
+#include "constants.h"
+
+class UnitSAO: public ServerActiveObject
+{
+public:
+	UnitSAO(ServerEnvironment *env, v3f pos):
+			ServerActiveObject(env, pos),
+			m_hp(-1), m_yaw(0) {}
+	virtual ~UnitSAO() {}
+
+	virtual void setYaw(const float yaw) { m_yaw = yaw; }
+	float getYaw() const { return m_yaw; };
+	f32 getRadYaw() const { return m_yaw * core::DEGTORAD; }
+	// Deprecated
+	f32 getRadYawDep() const { return (m_yaw + 90.) * core::DEGTORAD; }
+
+	s16 getHP() const { return m_hp; }
+	// Use a function, if isDead can be defined by other conditions
+	bool isDead() const { return m_hp == 0; }
+protected:
+	std::atomic_ushort m_hp;
+	float m_yaw;
+};
 
 /*
 	LuaEntitySAO needs some internals exposed.
 */
 
-class LuaEntitySAO : public ServerActiveObject
+class LuaEntitySAO : public UnitSAO
 {
 public:
 	LuaEntitySAO(ServerEnvironment *env, v3f pos,
@@ -53,7 +76,7 @@ public:
 			ServerActiveObject *puncher=NULL,
 			float time_from_last_punch=1000000);
 	void rightClick(ServerActiveObject *clicker);
-	void setPos(v3f pos);
+	void setPos(const v3f &pos);
 	void moveTo(v3f pos, bool continuous);
 	float getMinimumSavedMovement();
 	std::string getDescription();
@@ -77,8 +100,7 @@ public:
 	v3f getVelocity();
 	void setAcceleration(v3f acceleration);
 	v3f getAcceleration();
-	void setYaw(float yaw);
-	float getYaw();
+
 	void setTextureMod(const std::string &mod);
 	void setSprite(v2s16 p, int num_frames, float framelength,
 			bool select_horiz_by_yawpitch);
@@ -96,10 +118,10 @@ protected:
 public:
 	struct ObjectProperties m_prop;
 
-	std::atomic_ushort m_hp;
+	//std::atomic_ushort m_hp;
 	v3f m_velocity;
 	v3f m_acceleration;
-	float m_yaw;
+
 private:
 	ItemGroupList m_armor_groups;
 
@@ -164,11 +186,10 @@ public:
 
 class RemotePlayer;
 
-class PlayerSAO : public ServerActiveObject
+class PlayerSAO : public UnitSAO
 {
 public:
-	PlayerSAO(ServerEnvironment *env_, RemotePlayer *player_, u16 peer_id_,
-			const std::set<std::string> &privs, bool is_singleplayer);
+	PlayerSAO(ServerEnvironment *env_, u16 peer_id_, bool is_singleplayer);
 	~PlayerSAO();
 	ActiveObjectType getType() const
 	{ return ACTIVEOBJECT_TYPE_PLAYER; }
@@ -188,11 +209,24 @@ public:
 	bool isAttached();
 	void step(float dtime, bool send_recommended);
 	void setBasePosition(const v3f &position);
-	void setPos(v3f pos);
+	void setPos(const v3f &pos);
 	void moveTo(v3f pos, bool continuous);
-	void setYaw(float);
-	void setPitch(float);
 	void addSpeed(v3f);
+	void setYaw(const float yaw);
+	// Data should not be sent at player initialization
+	void setYawAndSend(const float yaw);
+	void setPitch(const float pitch);
+	// Data should not be sent at player initialization
+	void setPitchAndSend(const float pitch);
+	f32 getPitch() const { return m_pitch; }
+	f32 getRadPitch() const { return m_pitch * core::DEGTORAD; }
+	// Deprecated
+	f32 getRadPitchDep() const { return -1.0 * m_pitch * core::DEGTORAD; }
+	void setFov(const float pitch);
+	f32 getFov() const { return m_fov; }
+	void setWantedRange(const s16 range);
+	s16 getWantedRange() const { return m_wanted_range; }
+
 	/*
 		Interaction interface
 	*/
@@ -202,11 +236,11 @@ public:
 		ServerActiveObject *puncher,
 		float time_from_last_punch);
 	void rightClick(ServerActiveObject *clicker);
-	s16 getHP() const;
 	void setHP(s16 hp);
+	void setHPRaw(s16 hp) { m_hp = hp; }
 	s16 readDamage();
-	u16 getBreath() const;
-	void setBreath(u16 breath);
+	u16 getBreath() const { return m_breath; }
+	void setBreath(const u16 breath);
 	void setArmorGroups(const ItemGroupList &armor_groups);
 	ItemGroupList getArmorGroups();
 	void setAnimation(v2f frame_range, float frame_speed, float frame_blend, bool frame_loop);
@@ -229,6 +263,8 @@ public:
 	const Inventory* getInventory() const;
 	InventoryLocation getInventoryLocation() const;
 	std::string getWieldList() const;
+	ItemStack getWieldedItem() const;
+	bool setWieldedItem(const ItemStack &item);
 	int getWieldIndex() const;
 	void setWieldIndex(int i);
 
@@ -291,8 +327,14 @@ public:
 	bool getCollisionBox(aabb3f *toset);
 	bool collideWithObjects();
 
+	void initialize(RemotePlayer *player, const std::set<std::string> &privs);
+
+	v3f getEyePosition() const { return m_base_position + getEyeOffset(); }
+	v3f getEyeOffset() const { return v3f(0, BS * 1.625f, 0); }
+
 private:
 	std::string getPropertyPacket();
+	void unlinkPlayerSessionAndSave();
 
 	RemotePlayer *m_player;
 	u16 m_peer_id;
@@ -337,8 +379,10 @@ private:
 	v3f m_attachment_position;
 	v3f m_attachment_rotation;
 	bool m_attachment_sent;
-
-
+	u16 m_breath;
+	f32 m_pitch;
+	f32 m_fov;
+	s16 m_wanted_range;
 public:
 	float m_physics_override_speed;
 	float m_physics_override_jump;

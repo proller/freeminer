@@ -795,8 +795,6 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 		static const s16 radius =
 			g_settings->getS16("active_object_send_range_blocks") * MAP_BLOCKSIZE;
 
-		static const s16 radius_deactivate = radius * 2;
-
 		// Radius inside which players are active
 		static const bool is_transfer_limited =
 			g_settings->exists("unlimited_player_transfer_distance") &&
@@ -822,11 +820,20 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 				continue;
 			}
 
+			PlayerSAO *playersao = player->getPlayerSAO();
+			if (playersao == NULL)
+				continue;
+
+			s16 my_radius = MYMIN(radius, playersao->getWantedRange() * MAP_BLOCKSIZE);
+			if (my_radius <= 0) my_radius = radius;
+			my_radius *= 1.5;
+			//infostream << "Server: Active Radius " << my_radius << std::endl;
+
 			std::queue<u16> removed_objects;
 			std::queue<u16> added_objects;
-			m_env->getRemovedActiveObjects(player, radius_deactivate, player_radius,
+			m_env->getRemovedActiveObjects(playersao, my_radius, player_radius,
 					client->m_known_objects, removed_objects);
-			m_env->getAddedActiveObjects(player, radius, player_radius,
+			m_env->getAddedActiveObjects(playersao, my_radius, player_radius,
 					client->m_known_objects, added_objects);
 
 			// Ignore if nothing happened
@@ -1402,7 +1409,7 @@ PlayerSAO* Server::StageTwoClientInit(u16 peer_id)
 	SendPlayerBreath(peer_id);
 
 	// Show death screen if necessary
-	if (player->isDead())
+	if (playersao->isDead())
 		SendDeathscreen(peer_id, false, v3f(0,0,0));
 
 	// Note things in chat if not in simple singleplayer mode
@@ -1962,8 +1969,12 @@ void Server::SendShowFormspecMessage(u16 peer_id, const std::string &formspec,
 	DSTACK(FUNCTION_NAME);
 
 	NetworkPacket pkt(TOCLIENT_SHOW_FORMSPEC, 0 , peer_id);
-
-	pkt.putLongString(FORMSPEC_VERSION_STRING + formspec);
+	if (formspec == "" ){
+		//the client should close the formspec
+		pkt.putLongString("");
+	} else {
+		pkt.putLongString(FORMSPEC_VERSION_STRING + formspec);
+	}
 	pkt << formname;
 
 	Send(&pkt);
@@ -2179,18 +2190,18 @@ void Server::SendMovePlayer(u16 peer_id)
 	DSTACK(FUNCTION_NAME);
 	RemotePlayer *player = m_env->getPlayer(peer_id);
 	assert(player);
+	PlayerSAO *sao = player->getPlayerSAO();
+	assert(sao);
 
 	NetworkPacket pkt(TOCLIENT_MOVE_PLAYER, sizeof(v3f) + sizeof(f32) * 2, peer_id);
-	pkt << player->getPosition() << player->getPitch() << player->getYaw();
+	pkt << sao->getBasePosition() << sao->getPitch() << sao->getYaw();
 
 	{
-		v3f pos = player->getPosition();
-		f32 pitch = player->getPitch();
-		f32 yaw = player->getYaw();
+		v3f pos = sao->getBasePosition();
 		verbosestream << "Server: Sending TOCLIENT_MOVE_PLAYER"
 				<< " pos=(" << pos.X << "," << pos.Y << "," << pos.Z << ")"
-				<< " pitch=" << pitch
-				<< " yaw=" << yaw
+				<< " pitch=" << sao->getPitch()
+				<< " yaw=" << sao->getYaw()
 				<< std::endl;
 	}
 
@@ -2303,8 +2314,12 @@ s32 Server::playSound(const SimpleSoundSpec &spec,
 			if (!player)
 				continue;
 
+			PlayerSAO *sao = player->getPlayerSAO();
+			if (!sao)
+				continue;
+
 			if (pos_exists) {
-				if(player->getPosition().getDistanceFrom(pos) >
+				if(sao->getBasePosition().getDistanceFrom(pos) >
 						params.max_hear_distance)
 					continue;
 			}
@@ -2363,14 +2378,17 @@ void Server::sendRemoveNode(v3s16 p, u16 ignore_id,
 	pkt << p;
 
 	std::vector<u16> clients = m_clients.getClientIDs();
-	for(std::vector<u16>::iterator i = clients.begin();
-		i != clients.end(); ++i) {
+	for (std::vector<u16>::iterator i = clients.begin(); i != clients.end(); ++i) {
 		if (far_players) {
 			// Get player
 			if (RemotePlayer *player = m_env->getPlayer(*i)) {
+				PlayerSAO *sao = player->getPlayerSAO();
+				if (!sao)
+					continue;
+
 				// If player is far away, only set modified blocks not sent
-				v3f player_pos = player->getPosition();
-				if(player_pos.getDistanceFrom(p_f) > maxd) {
+				v3f player_pos = sao->getBasePosition();
+				if (player_pos.getDistanceFrom(p_f) > maxd) {
 					far_players->push_back(*i);
 					continue;
 				}
@@ -2390,14 +2408,16 @@ void Server::sendAddNode(v3s16 p, MapNode n, u16 ignore_id,
 	v3f p_f = intToFloat(p, BS);
 
 	std::vector<u16> clients = m_clients.getClientIDs();
-	for(std::vector<u16>::iterator i = clients.begin();
-			i != clients.end(); ++i) {
-
-		if(far_players) {
+	for(std::vector<u16>::iterator i = clients.begin();	i != clients.end(); ++i) {
+		if (far_players) {
 			// Get player
 			if (RemotePlayer *player = m_env->getPlayer(*i)) {
+				PlayerSAO *sao = player->getPlayerSAO();
+				if (!sao)
+					continue;
+
 				// If player is far away, only set modified blocks not sent
-				v3f player_pos = player->getPosition();
+				v3f player_pos = sao->getBasePosition();
 				if(player_pos.getDistanceFrom(p_f) > maxd) {
 					far_players->push_back(*i);
 					continue;
@@ -2816,11 +2836,16 @@ void Server::sendDetachedInventory(const std::string &name, u16 peer_id)
 	NetworkPacket pkt(TOCLIENT_DETACHED_INVENTORY, 0, peer_id);
 	pkt.putRawString(s.c_str(), s.size());
 
-	if (peer_id != PEER_ID_INEXISTENT) {
-		Send(&pkt);
-	}
-	else {
-		m_clients.sendToAll(0, &pkt, true);
+	const std::string &check = m_detached_inventories_player[name];
+	if (peer_id == PEER_ID_INEXISTENT) {
+		if (check == "")
+			return m_clients.sendToAll(0, &pkt, true);
+		RemotePlayer *p = m_env->getPlayer(check.c_str());
+		if (p)
+			m_clients.send(p->peer_id, 0, &pkt, true);
+	} else {
+		if (check == "" || getPlayerName(peer_id) == check)
+			Send(&pkt);
 	}
 }
 
@@ -2889,11 +2914,8 @@ void Server::RespawnPlayer(u16 peer_id)
 	playersao->setHP(PLAYER_MAX_HP);
 	playersao->setBreath(PLAYER_MAX_BREATH);
 
-	SendPlayerHP(peer_id);
-	SendPlayerBreath(peer_id);
-
 	bool repositioned = m_script->on_respawnplayer(playersao);
-	if(!repositioned){
+	if (!repositioned) {
 		v3f pos = findSpawnPos();
 		// setPos will send the new position to client
 		playersao->getPlayer()->setSpeed(v3f(0,0,0));
@@ -2903,6 +2925,9 @@ void Server::RespawnPlayer(u16 peer_id)
 	playersao->m_ms_from_last_respawn = 0;
 
 	stat.add("respawn", playersao->getPlayer()->getName());
+
+	SendPlayerHP(peer_id);
+	SendPlayerBreath(peer_id);
 }
 
 
@@ -3011,7 +3036,7 @@ void Server::DeleteClient(u16 peer_id, ClientDeletionReason reason)
 		RemotePlayer *player = m_env->getPlayer(peer_id);
 
 		/* Run scripts and remove from environment */
-		if(player != NULL) {
+		if (player != NULL) {
 			PlayerSAO *playersao = player->getPlayerSAO();
 			assert(playersao);
 
@@ -3581,7 +3606,7 @@ void Server::deleteParticleSpawner(const std::string &playername, u32 id)
 	SendDeleteParticleSpawner(peer_id, id);
 }
 
-Inventory* Server::createDetachedInventory(const std::string &name)
+Inventory* Server::createDetachedInventory(const std::string &name, const std::string &player)
 {
 	if(m_detached_inventories.count(name) > 0){
 		infostream<<"Server clearing detached inventory \""<<name<<"\""<<std::endl;
@@ -3592,6 +3617,7 @@ Inventory* Server::createDetachedInventory(const std::string &name)
 	Inventory *inv = new Inventory(m_itemdef);
 	assert(inv);
 	m_detached_inventories[name] = inv;
+	m_detached_inventories_player[name] = player;
 	//TODO find a better way to do this
 	sendDetachedInventory(name,PEER_ID_INEXISTENT);
 	return inv;
@@ -3820,10 +3846,9 @@ PlayerSAO* Server::emergePlayer(const char *name, u16 peer_id, u16 proto_version
 		return nullptr;
 	}
 
-	// Load player if it isn't already loaded
-	if (!player) {
-		player = m_env->loadPlayer(name);
-	}
+	// Create a new player active object
+	PlayerSAO *playersao = new PlayerSAO(m_env, peer_id, isSingleplayer());
+	player = m_env->loadPlayer(name, playersao);
 
 	// Create player if it doesn't exist
 	if (!player) {
@@ -3832,8 +3857,7 @@ PlayerSAO* Server::emergePlayer(const char *name, u16 peer_id, u16 proto_version
 		// Set player position
 		infostream<<"Server: Finding spawn place for player \""
 				<<name<<"\""<<std::endl;
-		v3f pos = findSpawnPos();
-		player->setPosition(pos);
+		playersao->setBasePosition(findSpawnPos());
 
 		// Add player to environment
 		m_env->addPlayer(player);
@@ -3841,18 +3865,14 @@ PlayerSAO* Server::emergePlayer(const char *name, u16 peer_id, u16 proto_version
 		// If the player exists, ensure that they respawn inside legal bounds
 		// This fixes an assert crash when the player can't be added
 		// to the environment
-		if (objectpos_over_limit(player->getPosition())) {
+		if (objectpos_over_limit(playersao->getBasePosition())) {
 			actionstream << "Respawn position for player \""
 				<< name << "\" outside limits, resetting" << std::endl;
-			v3f pos = findSpawnPos();
-			player->setPosition(pos);
+			playersao->setBasePosition(findSpawnPos());
 		}
 	}
 
-	// Create a new player active object
-	PlayerSAO *playersao = new PlayerSAO(m_env, player, peer_id,
-			getPlayerEffectivePrivs(player->getName()),
-			isSingleplayer());
+	playersao->initialize(player, getPlayerEffectivePrivs(player->getName()));
 
 	player->protocol_version = proto_version;
 

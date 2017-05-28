@@ -117,9 +117,9 @@ if(MSVC)
 	# Visual Studio
 
 	# EHa enables SEH exceptions (used for catching segfaults)
-	set(CMAKE_CXX_FLAGS_RELEASE "/EHa /Ox /Ob2 /Oi /Ot /Oy /GL /FD /MT /GS- /arch:SSE /fp:fast /D NDEBUG /D _HAS_ITERATOR_DEBUGGING=0 /TP")
+	set(CMAKE_CXX_FLAGS_RELEASE "/EHa /Ox /GL /FD /MT /GS- /Zi /arch:SSE /fp:fast /D NDEBUG /D _HAS_ITERATOR_DEBUGGING=0 /TP")
 	#set(CMAKE_EXE_LINKER_FLAGS_RELEASE "/LTCG /NODEFAULTLIB:\"libcmtd.lib\" /NODEFAULTLIB:\"libcmt.lib\"")
-	set(CMAKE_EXE_LINKER_FLAGS_RELEASE "/LTCG")
+	set(CMAKE_EXE_LINKER_FLAGS_RELEASE "/LTCG /DEBUG /OPT:REF /OPT:ICF")
 
 	set(CMAKE_CXX_FLAGS_SEMIDEBUG "/MDd /Zi /Ob0 /O1 /RTC1")
 
@@ -153,6 +153,14 @@ else()
 		set(OTHER_FLAGS "${OTHER_FLAGS} \"-D__extern_always_inline=extern __always_inline\"")
 		set(OTHER_FLAGS "${OTHER_FLAGS} -Wsign-compare")
 	endif()
+
+	if("${CMAKE_GENERATOR}" STREQUAL "Ninja" )
+        if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+			set(OTHER_FLAGS "${OTHER_FLAGS}  -fdiagnostics-color")
+        elseif ( CMAKE_COMPILER_IS_GNUCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 4.8 )
+			set(OTHER_FLAGS "${OTHER_FLAGS}  -fdiagnostics-color=always")
+        endif ()
+	endif ()
 
 	if(WIN32 AND NOT ZLIBWAPI_DLL AND CMAKE_SIZEOF_VOID_P EQUAL 4)
 		set(OTHER_FLAGS "${OTHER_FLAGS} -DWIN32_NO_ZLIB_WINAPI")
@@ -833,6 +841,7 @@ set(common_SRCS
 	porting.cpp
 	profiler.cpp
 	quicktune.cpp
+	reflowscan.cpp
 	remoteplayer.cpp
 	rollback.cpp
 	rollback_interface.cpp
@@ -864,6 +873,7 @@ set(common_SRCS
 # This gives us the icon and file version information
 if(WIN32)
 	set(WINRESOURCE_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../misc/winresource.rc")
+	set(MINETEST_EXE_MANIFEST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../misc/freeminer.exe.manifest")
 	if(MINGW)
 		if(NOT CMAKE_RC_COMPILER)
 			set(CMAKE_RC_COMPILER "windres.exe")
@@ -876,7 +886,7 @@ if(WIN32)
 			DEPENDS ${WINRESOURCE_FILE})
 		SET(common_SRCS ${common_SRCS} ${CMAKE_CURRENT_BINARY_DIR}/winresource_rc.o)
 	else(MINGW) # Probably MSVC
-		set(common_SRCS ${common_SRCS} ${WINRESOURCE_FILE})
+		set(common_SRCS ${common_SRCS} ${WINRESOURCE_FILE} ${MINETEST_EXE_MANIFEST_FILE})
 	endif(MINGW)
 endif()
 
@@ -1112,6 +1122,28 @@ if(BUILD_SERVER)
 	set_target_properties(${PROJECT_NAME}server PROPERTIES COMPILE_DEFINITIONS "SERVER")
 endif(BUILD_SERVER)
 
+# Blacklisted locales that don't work.
+# see issue #4638
+set(GETTEXT_BLACKLISTED_LOCALES
+	be
+	he
+	ko
+	ky
+	zh_CN
+	zh_TW
+)
+
+option(APPLY_LOCALE_BLACKLIST "Use a blacklist to avoid broken locales" TRUE)
+
+if (GETTEXT_FOUND AND APPLY_LOCALE_BLACKLIST)
+	set(GETTEXT_USED_LOCALES "")
+	foreach(LOCALE ${GETTEXT_AVAILABLE_LOCALES})
+		if (NOT ";${GETTEXT_BLACKLISTED_LOCALES};" MATCHES ";${LOCALE};")
+			list(APPEND GETTEXT_USED_LOCALES ${LOCALE})
+		endif()
+	endforeach()
+	message(STATUS "Locale blacklist applied; Locales used: ${GETTEXT_USED_LOCALES}")
+endif()
 
 # Installation
 
@@ -1171,7 +1203,7 @@ if(BUILD_CLIENT)
 	endif()
 
 	if(USE_GETTEXT)
-		foreach(LOCALE ${GETTEXT_AVAILABLE_LOCALES})
+		foreach(LOCALE ${GETTEXT_USED_LOCALES})
 			set_mo_paths(MO_BUILD_PATH MO_DEST_PATH ${LOCALE})
 			set(MO_BUILD_PATH "${MO_BUILD_PATH}/${PROJECT_NAME}.mo")
 			install(FILES ${MO_BUILD_PATH} DESTINATION ${MO_DEST_PATH})
@@ -1200,7 +1232,7 @@ endif()
 if (USE_GETTEXT)
 	set(MO_FILES)
 
-	foreach(LOCALE ${GETTEXT_AVAILABLE_LOCALES})
+	foreach(LOCALE ${GETTEXT_USED_LOCALES})
 		#set(PO_FILE_PATH "${GETTEXT_PO_PATH}/${LOCALE}/${PROJECT_NAME}.po")
 		set(PO_FILE_PATH "${GETTEXT_PO_PATH}/${LOCALE}/minetest.po")
 		set_mo_paths(MO_BUILD_PATH MO_DEST_PATH ${LOCALE})

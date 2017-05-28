@@ -38,10 +38,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #include "util/string.h"
 #include "util/serialize.h"
+#include "util/basic_macros.h"
+
 #include "circuit.h"
 #include "profiler.h"
 
-#define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
 static const char *modified_reason_strings[] = {
 	"initial",
@@ -884,8 +885,10 @@ void MapBlock::pushElementsToCircuit(Circuit* circuit)
 {
 }
 
-	content_t MapBlock::analyzeContent() {
-		auto lock = lock_shared_rec();
+	bool MapBlock::analyzeContent() {
+		auto lock = try_lock_shared_rec();
+		if (!lock->owns_lock())
+			return false;
 		content_only = data[0].param0;
 		content_only_param1 = data[0].param1;
 		content_only_param2 = data[0].param2;
@@ -895,7 +898,7 @@ void MapBlock::pushElementsToCircuit(Circuit* circuit)
 				break;
 			}
 		}
-		return content_only;
+		return true;
 	}
 
 

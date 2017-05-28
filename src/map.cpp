@@ -27,6 +27,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #include "filesys.h"
 #include "voxel.h"
+#include "voxelalgorithms.h"
 #include "porting.h"
 #include "serialization.h"
 #include "nodemetadata.h"
@@ -37,8 +38,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "gamedef.h"
 #include "util/directiontables.h"
 #include "util/mathconstants.h"
+#include "util/basic_macros.h"
 #include "rollback_interface.h"
 #include "environment.h"
+#include "reflowscan.h"
 #include "emerge.h"
 #include "mapgen_v6.h"
 #include "mg_biome.h"
@@ -54,9 +57,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #if USE_POSTGRESQL
 #include "database-postgresql.h"
 #endif
-
-
-#define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
 
 /*
@@ -134,7 +134,7 @@ bool Map::isNodeUnderground(v3s16 p)
 bool Map::isValidPosition(v3s16 p)
 {
 	v3s16 blockpos = getNodeBlockPos(p);
-	MapBlock *block = getBlockNoCreate(blockpos);
+	MapBlock *block = getBlockNoCreateNoEx(blockpos);
 	return (block != NULL);
 }
 
@@ -201,7 +201,6 @@ void Map::setNode(v3s16 p, MapNode & n, bool no_light_check)
 	else
 		block->setNode(relpos, n);
 }
-
 
 /*
 	Goes recursively through the neighbours of the node.
@@ -399,20 +398,6 @@ void Map::unspreadLight(enum LightBank bank,
 }
 
 /*
-	A single-node wrapper of the above
-*/
-void Map::unLightNeighbors(enum LightBank bank,
-		v3s16 pos, u8 lightwas,
-		std::set<v3s16> & light_sources,
-		std::map<v3s16, MapBlock*>  & modified_blocks)
-{
-	std::map<v3s16, u8> from_nodes;
-	from_nodes[pos] = lightwas;
-
-	unspreadLight(bank, from_nodes, light_sources, modified_blocks);
-}
-
-/*
 	Lights neighbors of from_nodes, collects all them and then
 	goes on recursively.
 */
@@ -576,109 +561,6 @@ void Map::spreadLight(enum LightBank bank,
 		spreadLight(bank, lighted_nodes, modified_blocks, end_ms);
 	}
 }
-
-/*
-	A single-node source variation of the above.
-*/
-void Map::lightNeighbors(enum LightBank bank,
-		v3s16 pos,
-		std::map<v3s16, MapBlock*> & modified_blocks)
-{
-	std::set<v3s16> from_nodes;
-	from_nodes.insert(pos);
-	spreadLight(bank, from_nodes, modified_blocks);
-}
-
-v3s16 Map::getBrightestNeighbour(enum LightBank bank, v3s16 p)
-{
-	INodeDefManager *nodemgr = m_gamedef->ndef();
-
-	v3s16 dirs[6] = {
-		v3s16(0,0,1), // back
-		v3s16(0,1,0), // top
-		v3s16(1,0,0), // right
-		v3s16(0,0,-1), // front
-		v3s16(0,-1,0), // bottom
-		v3s16(-1,0,0), // left
-	};
-
-	u8 brightest_light = 0;
-	v3s16 brightest_pos(0,0,0);
-	bool found_something = false;
-
-	// Loop through 6 neighbors
-	for(u16 i=0; i<6; i++){
-		// Get the position of the neighbor node
-		v3s16 n2pos = p + dirs[i];
-		MapNode n2;
-		bool is_valid_position;
-		n2 = getNodeNoEx(n2pos, &is_valid_position);
-		if (!is_valid_position)
-			continue;
-
-		if(n2.getLight(bank, nodemgr) > brightest_light || found_something == false){
-			brightest_light = n2.getLight(bank, nodemgr);
-			brightest_pos = n2pos;
-			found_something = true;
-		}
-	}
-
-	if(found_something == false)
-		throw InvalidPositionException("getBrightestNeighbour nothing found");
-
-	return brightest_pos;
-}
-
-/*
-	Propagates sunlight down from a node.
-	Starting point gets sunlight.
-
-	Returns the lowest y value of where the sunlight went.
-
-	Mud is turned into grass in where the sunlight stops.
-*/
-s16 Map::propagateSunlight(v3s16 start,
-		std::map<v3s16, MapBlock*> & modified_blocks)
-{
-	INodeDefManager *nodemgr = m_gamedef->ndef();
-
-	s16 y = start.Y;
-	for(; ; y--)
-	{
-		v3s16 pos(start.X, y, start.Z);
-
-		v3s16 blockpos = getNodeBlockPos(pos);
-		MapBlock *block;
-		try{
-			block = getBlockNoCreate(blockpos);
-		}
-		catch(InvalidPositionException &e)
-		{
-			break;
-		}
-
-		v3s16 relpos = pos - blockpos*MAP_BLOCKSIZE;
-		bool is_valid_position;
-		MapNode n = block->getNode(relpos, &is_valid_position);
-		if (!is_valid_position)
-			break;
-
-		if(nodemgr->get(n).sunlight_propagates)
-		{
-			n.setLight(LIGHTBANK_DAY, LIGHT_SUN, nodemgr);
-			block->setNode(relpos, n);
-
-			//modified_blocks[blockpos] = block;
-		}
-		else
-		{
-			// Sunlight goes no further
-			break;
-		}
-	}
-	return y + 1;
-}
-
 
 #if 0
 
@@ -976,8 +858,6 @@ TimeTaker timer("updateLighting expireDayNightDiff");
 }
 #endif
 
-/*
-*/
 void Map::addNodeAndUpdate(v3s16 p, MapNode n,
 		std::map<v3s16, MapBlock*> &modified_blocks,
 		bool remove_metadata, int fast)
@@ -1009,141 +889,29 @@ void Map::addNodeAndUpdate(v3s16 p, MapNode n,
 		return;
 	}
 
-	/*PrintInfo(m_dout);
-	m_dout<<"Map::addNodeAndUpdate(): p=("
-			<<p.X<<","<<p.Y<<","<<p.Z<<")"<<std::endl;*/
 
-	/*
-		From this node to nodes underneath:
-		If lighting is sunlight (1.0), unlight neighbours and
-		set lighting to 0.
-		Else discontinue.
-	*/
-
-	v3s16 toppos = p + v3s16(0,1,0);
-	//v3s16 bottompos = p + v3s16(0,-1,0);
-
-	bool node_under_sunlight = true;
-	std::set<v3s16> light_sources;
-
-	/*
-		Collect old node for rollback
-	*/
+	// Collect old node for rollback
 	RollbackNode rollback_oldnode(this, p, m_gamedef);
 
-	/*
-		If there is a node at top and it doesn't have sunlight,
-		there has not been any sunlight going down.
+	// This is needed for updating the lighting
+	MapNode oldnode = getNodeNoEx(p);
 
-		Otherwise there probably is.
-	*/
-
-	bool is_valid_position;
-	MapNode topnode = getNodeNoEx(toppos, &is_valid_position);
-
-	if(is_valid_position && topnode.getLight(LIGHTBANK_DAY, ndef) != LIGHT_SUN)
-		node_under_sunlight = false;
-
-	/*
-		Remove all light that has come out of this node
-	*/
-
-	enum LightBank banks[] =
-	{
-		LIGHTBANK_DAY,
-		LIGHTBANK_NIGHT
-	};
-	for(s32 i=0; i<2; i++)
-	{
-		enum LightBank bank = banks[i];
-
-		u8 lightwas = getNodeNoEx(p).getLight(bank, ndef);
-
-		// Add the block of the added node to modified_blocks
-		v3s16 blockpos = getNodeBlockPos(p);
-		MapBlock * block = getBlockNoCreate(blockpos);
-		if(!block)
-			break;
-		//modified_blocks[blockpos] = block;
-
-		// Unlight neighbours of node.
-		// This means setting light of all consequent dimmer nodes
-		// to 0.
-		// This also collects the nodes at the border which will spread
-		// light again into this.
-		unLightNeighbors(bank, p, lightwas, light_sources, modified_blocks);
-
-		n.setLight(bank, 0, ndef);
-	}
-
-	/*
-		If node lets sunlight through and is under sunlight, it has
-		sunlight too.
-	*/
-	if(node_under_sunlight && ndef->get(n).sunlight_propagates)
-	{
-		n.setLight(LIGHTBANK_DAY, LIGHT_SUN, ndef);
-	}
-
-	/*
-		Remove node metadata
-	*/
+	// Remove node metadata
 	if (remove_metadata) {
 		removeNodeMetadata(p);
 	}
 
-	/*
-		Set the node on the map
-	*/
-
+	// Set the node on the map
+	// Ignore light (because calling voxalgo::update_lighting_nodes)
+	n.setLight(LIGHTBANK_DAY, 0, ndef);
+	n.setLight(LIGHTBANK_NIGHT, 0, ndef);
 	setNode(p, n);
 
-	/*
-		If node is under sunlight and doesn't let sunlight through,
-		take all sunlighted nodes under it and clear light from them
-		and from where the light has been spread.
-		TODO: This could be optimized by mass-unlighting instead
-			  of looping
-	*/
-	if(node_under_sunlight && !ndef->get(n).sunlight_propagates)
-	{
-		s16 y = p.Y - 1;
-		for(;; y--){
-			//m_dout<<"y="<<y<<std::endl;
-			v3s16 n2pos(p.X, y, p.Z);
+	// Update lighting
+	std::vector<std::pair<v3s16, MapNode> > oldnodes;
+	oldnodes.push_back(std::pair<v3s16, MapNode>(p, oldnode));
+	voxalgo::update_lighting_nodes(this, ndef, oldnodes, modified_blocks);
 
-			MapNode n2;
-
-			n2 = getNodeNoEx(n2pos, &is_valid_position);
-			if (!is_valid_position)
-				break;
-
-			if(n2.getLight(LIGHTBANK_DAY, ndef) == LIGHT_SUN)
-			{
-				unLightNeighbors(LIGHTBANK_DAY,
-						n2pos, n2.getLight(LIGHTBANK_DAY, ndef),
-						light_sources, modified_blocks);
-				n2.setLight(LIGHTBANK_DAY, 0, ndef);
-				setNode(n2pos, n2);
-			}
-			else
-				break;
-		}
-	}
-
-	for(s32 i=0; i<2; i++)
-	{
-		enum LightBank bank = banks[i];
-
-		/*
-			Spread light from all nodes that might be capable of doing so
-		*/
-		spreadLight(bank, light_sources, modified_blocks);
-	}
-
-	/*
-		Update information about whether day and night light differ
-	*/
 	for(std::map<v3s16, MapBlock*>::iterator
 			i = modified_blocks.begin();
 			i != modified_blocks.end(); ++i)
@@ -1151,205 +919,7 @@ void Map::addNodeAndUpdate(v3s16 p, MapNode n,
 		i->second->expireDayNightDiff();
 	}
 
-	/*
-		Report for rollback
-	*/
-	if(m_gamedef->rollback())
-	{
-		RollbackNode rollback_newnode(this, p, m_gamedef);
-		RollbackAction action;
-		action.setSetNode(p, rollback_oldnode, rollback_newnode);
-		m_gamedef->rollback()->reportAction(action);
-	}
-
-	/*
-		Add neighboring liquid nodes and the node itself if it is
-		liquid (=water node was added) to transform queue.
-		note: todo: for liquid_real enough to add only self node
-	*/
-	v3s16 dirs[7] = {
-		v3s16(0,0,0), // self
-		v3s16(0,0,1), // back
-		v3s16(0,1,0), // top
-		v3s16(1,0,0), // right
-		v3s16(0,0,-1), // front
-		v3s16(0,-1,0), // bottom
-		v3s16(-1,0,0), // left
-	};
-
-	if (!fast)
-	for(u16 i=0; i<7; i++)
-	{
-		v3s16 p2 = p + dirs[i];
-
-		MapNode n2 = getNodeNoEx(p2, &is_valid_position);
-		if(is_valid_position
-				&& (ndef->get(n2).isLiquid() || n2.getContent() == CONTENT_AIR))
-		{
-			transforming_liquid_add(p2);
-		}
-	}
-}
-
-/*
-*/
-void Map::removeNodeAndUpdate(v3s16 p,
-		std::map<v3s16, MapBlock*> &modified_blocks, int fast)
-{
-	INodeDefManager *ndef = m_gamedef->ndef();
-
-	/*PrintInfo(m_dout);
-	m_dout<<"Map::removeNodeAndUpdate(): p=("
-			<<p.X<<","<<p.Y<<","<<p.Z<<")"<<std::endl;*/
-
-	bool node_under_sunlight = true;
-
-	v3s16 toppos = p + v3s16(0,1,0);
-
-	// Node will be replaced with this
-	content_t replace_material = CONTENT_AIR;
-
-	if (fast == 1 || fast == 2) { // fast: 1: just place node; 2: place ang get light from top; 3: place, recalculate light and skip liquid queue
-		MapNode n(replace_material);
-		if (fast == 2) {
-			MapNode from_node = getNodeNoEx(toppos);
-			if (from_node) {
-				n.setLight(LIGHTBANK_DAY,   from_node.getLight(LIGHTBANK_DAY, ndef), ndef);
-				n.setLight(LIGHTBANK_NIGHT, from_node.getLight(LIGHTBANK_NIGHT, ndef), ndef);
-			}
-		}
-		removeNodeMetadata(p);
-		setNode(p, n);
-		return;
-	}
-
-	/*
-		Collect old node for rollback
-	*/
-	RollbackNode rollback_oldnode(this, p, m_gamedef);
-
-	/*
-		If there is a node at top and it doesn't have sunlight,
-		there will be no sunlight going down.
-	*/
-	bool is_valid_position;
-	MapNode topnode = getNodeNoEx(toppos, &is_valid_position);
-
-	if(is_valid_position && topnode.getLight(LIGHTBANK_DAY, ndef) != LIGHT_SUN)
-		node_under_sunlight = false;
-
-	std::set<v3s16> light_sources;
-
-	enum LightBank banks[] =
-	{
-		LIGHTBANK_DAY,
-		LIGHTBANK_NIGHT
-	};
-	for(s32 i=0; i<2; i++)
-	{
-		enum LightBank bank = banks[i];
-
-		/*
-			Unlight neighbors (in case the node is a light source)
-		*/
-		unLightNeighbors(bank, p,
-				getNodeNoEx(p).getLight(bank, ndef),
-				light_sources, modified_blocks);
-	}
-
-	/*
-		Remove node metadata
-	*/
-
-	removeNodeMetadata(p);
-
-	/*
-		Remove the node.
-		This also clears the lighting.
-	*/
-
-	MapNode n(replace_material);
-	setNode(p, n);
-
-	for(s32 i=0; i<2; i++)
-	{
-		enum LightBank bank = banks[i];
-
-		/*
-			Recalculate lighting
-		*/
-		spreadLight(bank, light_sources, modified_blocks);
-	}
-
-	// Add the block of the removed node to modified_blocks
-	v3s16 blockpos = getNodeBlockPos(p);
-	MapBlock * block = getBlockNoCreate(blockpos);
-	if(!block)
-		return;
-	//modified_blocks[blockpos] = block;
-
-	/*
-		If the removed node was under sunlight, propagate the
-		sunlight down from it and then light all neighbors
-		of the propagated blocks.
-	*/
-	if(node_under_sunlight)
-	{
-		s16 ybottom = propagateSunlight(p, modified_blocks);
-		/*m_dout<<"Node was under sunlight. "
-				"Propagating sunlight";
-		m_dout<<" -> ybottom="<<ybottom<<std::endl;*/
-		s16 y = p.Y;
-		for(; y >= ybottom; y--)
-		{
-			v3s16 p2(p.X, y, p.Z);
-			/*m_dout<<"lighting neighbors of node ("
-					<<p2.X<<","<<p2.Y<<","<<p2.Z<<")"
-					<<std::endl;*/
-			lightNeighbors(LIGHTBANK_DAY, p2, modified_blocks);
-		}
-	}
-	else
-	{
-		// Set the lighting of this node to 0
-		// TODO: Is this needed? Lighting is cleared up there already.
-		MapNode n = getNodeNoEx(p, &is_valid_position);
-		if (is_valid_position) {
-			n.setLight(LIGHTBANK_DAY, 0, ndef);
-			setNode(p, n);
-		} else {
-			//FATAL_ERROR("Invalid position");
-		}
-	}
-
-	for(s32 i=0; i<2; i++)
-	{
-		enum LightBank bank = banks[i];
-
-		// Get the brightest neighbour node and propagate light from it
-		v3s16 n2p = getBrightestNeighbour(bank, p);
-		try{
-			//MapNode n2 = getNode(n2p);
-			lightNeighbors(bank, n2p, modified_blocks);
-		}
-		catch(InvalidPositionException &e)
-		{
-		}
-	}
-
-	/*
-		Update information about whether day and night light differ
-	*/
-	for(std::map<v3s16, MapBlock*>::iterator
-			i = modified_blocks.begin();
-			i != modified_blocks.end(); ++i)
-	{
-		i->second->expireDayNightDiff();
-	}
-
-	/*
-		Report for rollback
-	*/
+	// Report for rollback
 	if(m_gamedef->rollback())
 	{
 		RollbackNode rollback_newnode(this, p, m_gamedef);
@@ -1360,9 +930,8 @@ void Map::removeNodeAndUpdate(v3s16 p,
 
 	/*
 		Add neighboring liquid nodes and this node to transform queue.
-		(it's vital for the node itself to get updated last.)
-		note: todo: for liquid_real enough to add only self node
-	*/
+		(it's vital for the node itself to get updated last, if it was removed.)
+	 */
 	v3s16 dirs[7] = {
 		v3s16(0,0,1), // back
 		v3s16(0,1,0), // top
@@ -1378,14 +947,20 @@ void Map::removeNodeAndUpdate(v3s16 p,
 	{
 		v3s16 p2 = p + dirs[i];
 
-		bool is_position_valid;
-		MapNode n2 = getNodeNoEx(p2, &is_position_valid);
-		if (is_position_valid
+		bool is_valid_position;
+		MapNode n2 = getNodeNoEx(p2, &is_valid_position);
+		if(is_valid_position
 				&& (ndef->get(n2).isLiquid() || n2.getContent() == CONTENT_AIR))
 		{
 			transforming_liquid_add(p2);
 		}
 	}
+}
+
+void Map::removeNodeAndUpdate(v3s16 p,
+		std::map<v3s16, MapBlock*> &modified_blocks, int fast)
+{
+	addNodeAndUpdate(p, MapNode(CONTENT_AIR), modified_blocks, true, fast);
 }
 
 bool Map::addNodeWithEvent(v3s16 p, MapNode n, bool remove_metadata)
@@ -1731,9 +1306,8 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 	// list of nodes that due to viscosity have not reached their max level height
 	std::deque<v3s16> must_reflow;
 
-	// List of MapBlocks that will require a lighting update (due to lava)
 /*
-	std::map<v3s16, MapBlock *> lighting_modified_blocks;
+	std::vector<std::pair<v3s16, MapNode> > changed_nodes;
 */
 
 	u32 liquid_loop_max = g_settings->getS32("liquid_loop_max");
@@ -1774,7 +1348,11 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 			Collect information about current node
 		 */
 		s8 liquid_level = -1;
+		// The liquid node which will be placed there if
+		// the liquid flows into this node.
 		content_t liquid_kind = CONTENT_IGNORE;
+		// The node which will be placed there if liquid
+		// can't flow into this node.
 		content_t floodable_node = CONTENT_AIR;
 		const ContentFeatures &cf = nodemgr->get(n0);
 		LiquidType liquid_type = cf.liquid_type;
@@ -1810,6 +1388,7 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 		NodeNeighbor neutrals[6]; // nodes that are solid or another kind of liquid
 		int num_neutrals = 0;
 		bool flowing_down = false;
+		bool ignored_sources = false;
 		for (u16 i = 0; i < 6; i++) {
 			NeighborType nt = NEIGHBOR_SAME_LEVEL;
 			switch (i) {
@@ -1837,10 +1416,15 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 							flowing_down = true;
 					} else {
 						neutrals[num_neutrals++] = nb;
-						// If neutral below is ignore prevent water spreading outwards
-						if (nb.t == NEIGHBOR_LOWER &&
-								nb.n.getContent() == CONTENT_IGNORE)
-							flowing_down = true;
+						if (nb.n.getContent() == CONTENT_IGNORE) {
+							// If node below is ignore prevent water from
+							// spreading outwards and otherwise prevent from
+							// flowing away as ignore node might be the source
+							if (nb.t == NEIGHBOR_LOWER)
+								flowing_down = true;
+							else
+								ignored_sources = true;
+						}
 					}
 					break;
 				case LIQUID_SOURCE:
@@ -1897,6 +1481,11 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 				new_node_content = liquid_kind;
 			else
 				new_node_content = floodable_node;
+		} else if (ignored_sources && liquid_level >= 0) {
+			// Maybe there are neighbouring sources that aren't loaded yet
+			// so prevent flowing away.
+			new_node_level = liquid_level;
+			new_node_content = liquid_kind;
 		} else {
 			// no surrounding sources, so get the maximum level that can flow into this node
 			for (u16 i = 0; i < num_flows; i++) {
@@ -1977,6 +1566,10 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 		}
 		n0.setContent(new_node_content);
 
+		// Ignore light (because calling voxalgo::update_lighting_nodes)
+		n0.setLight(LIGHTBANK_DAY, 0, nodemgr);
+		n0.setLight(LIGHTBANK_NIGHT, 0, nodemgr);
+
 		// Find out whether there is a suspect for this action
 		std::string suspect;
 		if (m_gamedef->rollback())
@@ -2008,11 +1601,8 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 		v3s16 blockpos = getNodeBlockPos(p0);
 		MapBlock *block = getBlockNoCreateNoEx(blockpos);
 		if (block != NULL) {
-			//modified_blocks[blockpos] =  block;
-			// If new or old node emits light, MapBlock requires lighting update
-			if (nodemgr->get(n0).light_source != 0 ||
-					nodemgr->get(n00).light_source != 0)
-				lighting_modified_blocks.set(block->getPos(), block);
+			modified_blocks[blockpos] =  block;
+			changed_nodes.push_back(std::pair<v3s16, MapNode>(p0, n00));
 		}
 */
 
@@ -2045,7 +1635,9 @@ u32 Map::transformLiquids(Server *m_server, unsigned int max_cycle_ms)
 	for (std::deque<v3s16>::iterator iter = must_reflow.begin(); iter != must_reflow.end(); ++iter)
 		transforming_liquid_add(*iter);
 
-	//updateLighting(lighting_modified_blocks, modified_blocks);
+/*
+	voxalgo::update_lighting_nodes(this, nodemgr, changed_nodes, modified_blocks);
+*/
 
 
 	/* ----------------------------------------------------------------------
@@ -3360,8 +2952,11 @@ MapBlock * ServerMap::loadBlock(v3s16 p3d)
 		block->deSerialize(is, version, true);
 
 		// If it's a new block, insert it to the map
-		if(created_new)
+		if (created_new) {
 			sector->insertBlock(block);
+			ReflowScan scanner(this, m_emerge->ndef);
+			scanner.scan(block, &m_transforming_liquid);
+		}
 
 		/*
 			Save blocks loaded in old format in new format
@@ -3422,6 +3017,43 @@ void ServerMap::loadBlock(std::string *blob, v3s16 p3d, MapSector *sector, bool 
 			block = sector->createBlankBlockNoInsert(p3d.Y);
 			created_new = true;
 
+		// If it's a new block, insert it to the map
+		if (created_new) {
+			sector->insertBlock(block);
+			ReflowScan scanner(this, m_emerge->ndef);
+			scanner.scan(block, &m_transforming_liquid);
+		}
+
+		/*
+			Save blocks loaded in old format in new format
+		*/
+
+		//if(version < SER_FMT_VER_HIGHEST_READ || save_after_load)
+		// Only save if asked to; no need to update version
+		if(save_after_load)
+			saveBlock(block);
+
+		// We just loaded it from, so it's up-to-date.
+		block->resetModified();
+
+	}
+	catch(SerializationError &e)
+	{
+		errorstream<<"Invalid block data in database"
+				<<" ("<<p3d.X<<","<<p3d.Y<<","<<p3d.Z<<")"
+				<<" (SerializationError): "<<e.what()<<std::endl;
+
+		// TODO: Block should be marked as invalid in memory so that it is
+		// not touched but the game can run
+
+		if(g_settings->getBool("ignore_world_load_errors")){
+			errorstream<<"Ignoring block load error. Duck and cover! "
+					<<"(ignore_world_load_errors)"<<std::endl;
+		} else {
+			throw SerializationError("Invalid block data in database");
+		}
+	}
+}
 
 MapBlock* ServerMap::loadBlock(v3s16 blockpos)
 {

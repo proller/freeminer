@@ -32,7 +32,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "environment.h"
 #include "map.h"
 #include "emerge.h"
-#include "serverobject.h"              // TODO this is used for cleanup of only
+#include "content_sao.h"              // TODO this is used for cleanup of only
 #include "log_types.h"
 #include "util/srp.h"
 
@@ -142,6 +142,10 @@ int RemoteClient::GetNextBlocks (
 	if (player == NULL)
 		return 0;
 
+	PlayerSAO *sao = player->getPlayerSAO();
+	if (sao == NULL)
+		return 0;
+
 /*
 	// Won't send anything if already sending
 	if(m_blocks_sending.size() >= g_settings->getU16
@@ -152,7 +156,7 @@ int RemoteClient::GetNextBlocks (
 	}
 */
 
-	v3f playerpos = player->getPosition();
+	v3f playerpos = sao->getBasePosition();
 	v3f playerspeed = player->getSpeed();
 	if(playerspeed.getLength() > 1000.0*BS) //cheater or bug, ignore him
 		return 0;
@@ -167,10 +171,10 @@ int RemoteClient::GetNextBlocks (
 	v3s16 center = getNodeBlockPos(center_nodepos);
 
 	// Camera position and direction
-	v3f camera_pos = player->getEyePosition();
+	v3f camera_pos = sao->getEyePosition();
 	v3f camera_dir = v3f(0,0,1);
-	camera_dir.rotateYZBy(player->getPitch());
-	camera_dir.rotateXZBy(player->getYaw());
+	camera_dir.rotateYZBy(sao->getPitch());
+	camera_dir.rotateXZBy(sao->getYaw());
 
 	//infostream<<"camera_dir=("<<camera_dir<<")"<< " camera_pos="<<camera_pos<<std::endl;
 
@@ -245,6 +249,16 @@ int RemoteClient::GetNextBlocks (
 	*/
 	s32 new_nearest_unsent_d = -1;
 
+	// get view range and camera fov from the client
+	s16 wanted_range = sao->getWantedRange();
+	float camera_fov = sao->getFov();
+	// if FOV, wanted_range are not available (old client), fall back to old default
+	/*
+	if (wanted_range <= 0) wanted_range = 140;
+	*/
+	if (camera_fov <= 0) camera_fov = ((fov+5)*M_PI/180) * 4./3.;
+
+
 	static const auto max_block_send_distance = g_settings->getS16("max_block_send_distance");
 	s16 full_d_max = max_block_send_distance;
 	if (wanted_range) {
@@ -253,8 +267,18 @@ int RemoteClient::GetNextBlocks (
 			full_d_max = wanted_blocks;
 	}
 
+
+/*
+	const s16 full_d_max = MYMIN(g_settings->getS16("max_block_send_distance"), wanted_range);
+	const s16 d_opt = MYMIN(g_settings->getS16("block_send_optimize_distance"), wanted_range);
+*/
+
+	const s16 d_blocks_in_sight = full_d_max * BS * MAP_BLOCKSIZE;
+	//infostream << "Fov from client " << camera_fov << " full_d_max " << full_d_max << std::endl;
+
 	s16 d_max = full_d_max;
-	static const s16 d_max_gen = g_settings->getS16("max_block_generate_distance");
+	static const s16 d_max_gen_s = g_settings->getS16("max_block_generate_distance");
+	s16 d_max_gen = MYMIN(d_max_gen_s, wanted_range);
 
 	// Don't loop very much at a time
 	s16 max_d_increment_at_time = 10;
@@ -369,28 +393,15 @@ int RemoteClient::GetNextBlocks (
 			// If this is true, inexistent block will be made from scratch
 			bool generate = d <= d_max_gen;
 
-			{
-				/*// Limit the generating area vertically to 2/3
-				if(abs(p.Y - center.Y) > d_max_gen - d_max_gen / 3)
-					generate = false;*/
-
-				/* maybe good idea (if not use block culling) but brokes far (25+) area generate by flooding emergequeue with no generate blocks
-				// Limit the send area vertically to 1/2
-				if(can_skip && abs(p.Y - center.Y) > full_d_max / 2)
-					generate = false;
-				*/
-			}
-
-
 			//infostream<<"d="<<d<<std::endl;
+
 			/*
 				Don't generate or send if not in sight
 				FIXME This only works if the client uses a small enough
 				FOV setting. The default of 72 degrees is fine.
 			*/
 
-			float camera_fov = ((fov+5)*M_PI/180) * 4./3.;
-			if(can_skip && isBlockInSight(p, camera_pos, camera_dir, camera_fov, 10000*BS) == false)
+			if(can_skip && isBlockInSight(p, camera_pos, camera_dir, camera_fov, d_blocks_in_sight) == false)
 			{
 				continue;
 			}
@@ -515,7 +526,7 @@ int RemoteClient::GetNextBlocks (
 					differs from day-time mesh.
 				*/
 /*
-				if(d >= 4)
+				if(d >= d_opt)
 				{
 					if(block->getDayNightDiff() == false)
 						continue;

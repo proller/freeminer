@@ -17,10 +17,10 @@ irrlicht_version=1.8.4
 ogg_version=1.3.2
 vorbis_version=1.3.5
 curl_version=7.50.3
-gettext_version=0.14.4
+gettext_version=0.19.8.1
 freetype_version=2.7
 sqlite3_version=3.14.2
-luajit_version=2.0.1
+luajit_version=2.1.0-beta2
 leveldb_version=1.18
 zlib_version=1.2.8
 
@@ -40,14 +40,14 @@ cd $builddir
 	-c -O $packagedir/libvorbis-$vorbis_version.zip
 [ -e $packagedir/curl-$curl_version.zip ] || wget http://minetest.kitsunemimi.pw/curl-$curl_version-win32.zip \
 	-c -O $packagedir/curl-$curl_version.zip
-[ -e $packagedir/gettext-$gettext_version.zip ] || wget http://minetest.kitsunemimi.pw/gettext-$gettext_version.zip \
+[ -e $packagedir/gettext-$gettext_version.zip ] || wget http://minetest.kitsunemimi.pw/gettext-$gettext_version-win32.zip \
 	-c -O $packagedir/gettext-$gettext_version.zip
 [ -e $packagedir/freetype2-$freetype_version.zip ] || wget http://minetest.kitsunemimi.pw/freetype2-$freetype_version-win32.zip \
 	-c -O $packagedir/freetype2-$freetype_version.zip
 [ -e $packagedir/sqlite3-$sqlite3_version.zip ] || wget http://minetest.kitsunemimi.pw/sqlite3-$sqlite3_version-win32.zip \
 	-c -O $packagedir/sqlite3-$sqlite3_version.zip
-[ -e $packagedir/luajit-$luajit_version-static-win32.zip ] || wget http://minetest.kitsunemimi.pw/luajit-$luajit_version-static-win32.zip \
-	-c -O $packagedir/luajit-$luajit_version-static-win32.zip
+[ -e $packagedir/luajit-$luajit_version.zip ] || wget http://minetest.kitsunemimi.pw/luajit-$luajit_version-win32.zip \
+	-c -O $packagedir/luajit-$luajit_version.zip
 [ -e $packagedir/libleveldb-$leveldb_version.zip ] || wget http://minetest.kitsunemimi.pw/libleveldb-$leveldb_version-win32.zip \
 	-c -O $packagedir/libleveldb-$leveldb_version.zip
 [ -e $packagedir/openal_stripped.zip ] || wget http://minetest.kitsunemimi.pw/openal_stripped.zip \
@@ -64,7 +64,7 @@ cd $libdir
 [ -d freetype ] || unzip -o $packagedir/freetype2-$freetype_version.zip -d freetype
 [ -d sqlite3 ] || unzip -o $packagedir/sqlite3-$sqlite3_version.zip -d sqlite3
 [ -d openal_stripped ] || unzip -o $packagedir/openal_stripped.zip
-[ -d luajit ] || unzip -o $packagedir/luajit-$luajit_version-static-win32.zip -d luajit
+[ -d luajit ] || unzip -o $packagedir/luajit-$luajit_version.zip -d luajit
 [ -d leveldb ] || unzip -o $packagedir/libleveldb-$leveldb_version.zip -d leveldb
 
 # Get minetest
@@ -130,10 +130,9 @@ cmake .. \
 	-DCURL_INCLUDE_DIR=$libdir/libcurl/include \
 	-DCURL_LIBRARY=$libdir/libcurl/lib/libcurl.dll.a \
 	\
-	-DCUSTOM_GETTEXT_PATH=$libdir/gettext \
 	-DGETTEXT_MSGFMT=`which msgfmt` \
-	-DGETTEXT_DLL=$libdir/gettext/bin/libintl3.dll \
-	-DGETTEXT_ICONV_DLL=$libdir/gettext/bin/libiconv2.dll \
+	-DGETTEXT_DLL=$libdir/gettext/bin/libintl-8.dll \
+	-DGETTEXT_ICONV_DLL=$libdir/gettext/bin/libiconv-2.dll \
 	-DGETTEXT_INCLUDE_DIR=$libdir/gettext/include \
 	-DGETTEXT_LIBRARY=$libdir/gettext/lib/libintl.dll.a \
 	\

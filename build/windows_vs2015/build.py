@@ -61,11 +61,11 @@ LEVELDB_VERSION = "1.16.0.5"
 CRC32C_VERSION = "1.1.0"
 SNAPPY_VERSION = "1.1.1.7"
 irrlicht = "irrlicht-1.8.4"
-curl = "curl-7.50.3"
+curl = "curl-7.53.1"
 openal = "openal-soft-1.17.2"
 libogg = "libogg-{}".format(LIBOGG_VERSION)
 libvorbis = "libvorbis-1.3.5"
-zlib = "zlib-1.2.8"
+zlib = "zlib-1.2.11"
 freetype = "freetype-2.7"
 freetype_lib = "27"
 luajit = "LuaJIT-2.0.4"
@@ -107,6 +107,7 @@ def main():
 		cmake_add = " -A X64 "
 
 	enable_leveldb = 1 if build_type != "Debug" else 0
+	leveldb_fetch = 0
 
 	path_add = "_" + build_type + "_" + build_arch
 
@@ -350,22 +351,23 @@ def main():
 		#os.system("MSBuild ALL_BUILD.vcxproj /p:Configuration="{build_type}" /p:Platform="{msbuild_platform}"'.format(build_type=build_type, msbuild_platform=msbuild_platform))
 		#os.chdir("..")
 
-	sqlite_external = os.path.join("..", "..", "..", "src", "external", "sqlite3")
-	if not os.path.exists(os.path.join(sqlite_external, "sqlite3.h")):
-		shutil.copyfile(os.path.join(sqlite, "sqlite3.h"), os.path.join(sqlite_external, "sqlite3.h"))    
-	if not os.path.exists(os.path.join(sqlite_external, "sqlite3.c")):
-		shutil.copyfile(os.path.join(sqlite, "sqlite3.c"), os.path.join(sqlite_external, "sqlite3.c"))    
+	if leveldb_fetch:
+		sqlite_external = os.path.join("..", "..", "..", "src", "external", "sqlite3")
+		if not os.path.exists(os.path.join(sqlite_external, "sqlite3.h")):
+			shutil.copyfile(os.path.join(sqlite, "sqlite3.h"), os.path.join(sqlite_external, "sqlite3.h"))    
+		if not os.path.exists(os.path.join(sqlite_external, "sqlite3.c")):
+			shutil.copyfile(os.path.join(sqlite, "sqlite3.c"), os.path.join(sqlite_external, "sqlite3.c"))    
 
-	snappy_external = os.path.join("..", "..", "..", "src", "external", "snappy")
-	if not os.path.exists(snappy_external):
-		os.system("git clone --recursive --depth 1 https://github.com/google/snappy {snappy_external}".format(snappy_external=snappy_external))
-		download("https://raw.githubusercontent.com/adasworks/snappy-cmake/master/CMakeLists.txt", os.path.join(snappy_external, "CMakeLists.txt"))
+		snappy_external = os.path.join("..", "..", "..", "src", "external", "snappy")
+		if not os.path.exists(snappy_external):
+			os.system("git clone --recursive --depth 1 https://github.com/google/snappy {snappy_external}".format(snappy_external=snappy_external))
+			download("https://raw.githubusercontent.com/adasworks/snappy-cmake/master/CMakeLists.txt", os.path.join(snappy_external, "CMakeLists.txt"))
 
-	leveldb_external = os.path.join("..", "..", "..", "src", "external", "leveldb")
-	if not os.path.exists(leveldb_external):
-		os.system("git clone --recursive --depth 1 https://github.com/google/leveldb {leveldb_external}".format(leveldb_external=leveldb_external))
-		download("https://raw.githubusercontent.com/proller/leveldb/patch-2/CMakeLists.txt", os.path.join(leveldb_external, "CMakeLists.txt"))
-		download("https://raw.githubusercontent.com/tamaskenez/leveldb-cmake-win/native_windows_port_1_18/leveldbConfig.cmake.in", os.path.join(leveldb_external, "leveldbConfig.cmake.in"))
+		leveldb_external = os.path.join("..", "..", "..", "src", "external", "leveldb")
+		if not os.path.exists(leveldb_external):
+			os.system("git clone --recursive --depth 1 https://github.com/google/leveldb {leveldb_external}".format(leveldb_external=leveldb_external))
+			download("https://raw.githubusercontent.com/proller/leveldb/patch-2/CMakeLists.txt", os.path.join(leveldb_external, "CMakeLists.txt"))
+			download("https://raw.githubusercontent.com/tamaskenez/leveldb-cmake-win/native_windows_port_1_18/leveldbConfig.cmake.in", os.path.join(leveldb_external, "leveldbConfig.cmake.in"))
 
 	os.chdir("..")
 

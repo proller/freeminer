@@ -21,7 +21,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 
 #include "server.h"
-#include "log.h"
+#include "log_types.h"
 
 #include "content_abm.h"
 #include "content_sao.h"
@@ -339,6 +339,7 @@ void Server::handleCommand_Init_Legacy(NetworkPacket* pkt) {
 		//	PACK(TOCLIENT_INIT_POS, player->getPosition());
 
 		Settings params;
+		m_emerge->mgparams->MapgenParams::writeParams(&params);
 		m_emerge->mgparams->writeParams(&params);
 		PACK(TOCLIENT_INIT_MAP_PARAMS, params);
 
@@ -498,13 +499,19 @@ void Server::handleCommand_PlayerPos(NetworkPacket* pkt) {
 		return;
 	}
 
-	// If player is dead we don't care of this packet
 
-	if (player->hp != 0 && playersao->m_ms_from_last_respawn > 1000)
-		player->setPosition(packet[TOSERVER_PLAYERPOS_POSITION].as<v3f>());
+	// If player is dead we don't care of this packet
+	if (playersao->isDead()) {
+		verbosestream << "TOSERVER_PLAYERPOS: " << player->getName()
+				<< " is dead. Ignoring packet";
+		return;
+	}
+
+	if (playersao->m_ms_from_last_respawn > 1000)
+		playersao->setBasePosition(packet[TOSERVER_PLAYERPOS_POSITION].as<v3f>());
 	player->setSpeed(packet[TOSERVER_PLAYERPOS_SPEED].as<v3f>());
-	player->setPitch(modulo360f(packet[TOSERVER_PLAYERPOS_PITCH].as<f32>()));
-	player->setYaw(modulo360f(packet[TOSERVER_PLAYERPOS_YAW].as<f32>()));
+	playersao->setPitch(modulo360f(packet[TOSERVER_PLAYERPOS_PITCH].as<f32>()));
+	playersao->setYaw(modulo360f(packet[TOSERVER_PLAYERPOS_YAW].as<f32>()));
 	u32 keyPressed = packet[TOSERVER_PLAYERPOS_KEY_PRESSED].as<u32>();
 	player->keyPressed = keyPressed;
 	{
@@ -673,6 +680,16 @@ void Server::handleCommand_InventoryAction(NetworkPacket* pkt) {
 			delete a;
 			return;
 		}
+
+		// Disallow dropping items if dead
+		if (playersao->isDead()) {
+			infostream << "Ignoring IDropAction from "
+					<< (da->from_inv.dump()) << ":" << da->from_list
+					<< " because player is dead." << std::endl;
+			delete a;
+			return;
+		}
+
 		stat.add("drop", player->getName());
 	}
 	/*
@@ -795,7 +812,7 @@ void Server::handleCommand_Damage(NetworkPacket* pkt) {
 
 	if(playersao->getHP() && g_settings->getBool("enable_damage")) {
 		actionstream << player->getName() << " damaged by "
-		             << (int)damage << " hp at " << PP(player->getPosition() / BS)
+		             << (int)damage << " hp at " << (playersao->getBasePosition() / BS)
 		             << std::endl;
 
 		playersao->setHP(playersao->getHP() - damage);
@@ -824,7 +841,7 @@ void Server::handleCommand_Breath(NetworkPacket* pkt) {
 	 * If player is dead, we don't need to update the breath
 	 * He is dead !
 	 */
-	if (!player->isDead()) {
+	if (!playersao->isDead()) {
 		playersao->setBreath(packet[TOSERVER_BREATH_VALUE].as<u16>());
 		SendPlayerBreath(peer_id);
 	}
@@ -902,20 +919,19 @@ void Server::handleCommand_Respawn(NetworkPacket* pkt) {
 		m_con.DisconnectPeer(pkt->getPeerId());
 		return;
 	}
-/*
 	auto playersao = player->getPlayerSAO();
 	if (!playersao) {
 		m_con.DisconnectPeer(pkt->getPeerId());
 		return;
 	}
-*/
-	if(!player->isDead())
+
+	if(!playersao->isDead())
 		return;
 
 	RespawnPlayer(peer_id);
 
 	actionstream << player->getName() << " respawns at "
-	             << PP(player->getPosition() / BS) << std::endl;
+	             << (playersao->getBasePosition() / BS) << std::endl;
 
 	// ActiveObject is added to environment in AsyncRunStep after
 	// the previous addition has been successfully removed
@@ -949,7 +965,7 @@ void Server::handleCommand_Interact(NetworkPacket* pkt) {
 		return;
 	}
 
-	if(player->hp == 0) {
+	if (playersao->isDead()) {
 		verbosestream << "TOSERVER_INTERACT: " << player->getName()
 		              << " tried to interact, but is dead!" << std::endl;
 		return;
@@ -1078,7 +1094,7 @@ void Server::handleCommand_Interact(NetworkPacket* pkt) {
 			ToolCapabilities toolcap =
 			    punchitem.getToolCapabilities(m_itemdef);
 			v3f dir = (pointed_object->getBasePosition() -
-			           (player->getPosition() + player->getEyeOffset())
+			           (playersao->getBasePosition() + playersao->getEyeOffset())
 			          ).normalize();
 			float time_from_last_punch =
 			    playersao->resetTimeFromLastPunch();
@@ -1142,10 +1158,7 @@ void Server::handleCommand_Interact(NetworkPacket* pkt) {
 					m_script->on_cheat(playersao, "finished_unknown_dig");
 				}
 				// Get player's wielded item
-				ItemStack playeritem;
-				InventoryList *mlist = playersao->getInventory()->getList("main");
-				if(mlist != NULL)
-					playeritem = mlist->getItem(playersao->getWieldIndex());
+				ItemStack playeritem = playersao->getWieldedItem();
 				ToolCapabilities playeritem_toolcap =
 				    playeritem.getToolCapabilities(m_itemdef);
 				// Get diggability and expected digging time
@@ -1479,13 +1492,14 @@ void Server::handleCommand_Drawcontrol(NetworkPacket* pkt) {
 		m_con.DisconnectPeer(pkt->getPeerId());
 		return;
 	}
-/*
+
 	auto playersao = player->getPlayerSAO();
+	/*
 	if (!playersao) {
 		m_con.DisconnectPeer(pkt->getPeerId());
 		return;
-	}
-*/
+	}*/
+
 	auto client = getClient(peer_id);
 	auto lock = client->lock_unique_rec();
 	client->wanted_range = packet[TOSERVER_DRAWCONTROL_WANTED_RANGE].as<u32>();
@@ -1493,4 +1507,10 @@ void Server::handleCommand_Drawcontrol(NetworkPacket* pkt) {
 	client->farmesh  = packet[TOSERVER_DRAWCONTROL_FARMESH].as<u8>();
 	client->fov  = packet[TOSERVER_DRAWCONTROL_FOV].as<f32>();
 	//client->block_overflow = packet[TOSERVER_DRAWCONTROL_BLOCK_OVERFLOW].as<bool>();
+
+	// minetest compat, fmtodo: make one place
+	if (playersao) {
+		playersao->setFov(client->fov);
+		playersao->setWantedRange(client->wanted_range);
+	}
 }

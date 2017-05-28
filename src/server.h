@@ -34,6 +34,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "subgame.h"
 #include "util/numeric.h"
 #include "util/thread.h"
+#include "util/basic_macros.h"
 #include "environment.h"
 #include "chat_interface.h"
 #include "clientiface.h"
@@ -45,8 +46,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <vector>
 #include "stat.h"
 #include "network/fm_lan.h"
-
-#define PP(x) "("<<(x).X<<","<<(x).Y<<","<<(x).Z<<")"
 
 class IWritableItemDefManager;
 class IWritableNodeDefManager;
@@ -213,6 +212,10 @@ public:
 
 	void Send(NetworkPacket* pkt);
 
+	// Helper for handleCommand_PlayerPos and handleCommand_Interact
+	void process_PlayerPos(RemotePlayer *player, PlayerSAO *playersao,
+		NetworkPacket *pkt);
+
 	// Both setter and getter need no envlock,
 	// can be called freely from threads
 	void setTimeOfDay(u32 time);
@@ -232,6 +235,7 @@ public:
 
 	// Connection must be locked when called
 	std::string getStatusString();
+	inline double getUptime() const { return m_uptime.m_value; }
 
 	// read shutdown state
 	inline bool getShutdownRequested() const { return m_shutdown_requested; }
@@ -282,7 +286,7 @@ public:
 	void deleteParticleSpawner(const std::string &playername, u32 id);
 
 	// Creates or resets inventory
-	Inventory* createDetachedInventory(const std::string &name);
+	Inventory* createDetachedInventory(const std::string &name, const std::string &player="");
 
 	// Envlock and conlock should be locked when using scriptapi
 	GameScripting *getScriptIface(){ return m_script; }
@@ -311,6 +315,7 @@ public:
 	IWritableNodeDefManager* getWritableNodeDefManager();
 	IWritableCraftDefManager* getWritableCraftDefManager();
 
+	const std::vector<ModSpec> &getMods() const { return m_mods; }
 	const ModSpec* getModSpec(const std::string &modname) const;
 	void getModNames(std::vector<std::string> &modlist);
 	std::string getBuiltinLuaPath();
@@ -704,6 +709,8 @@ private:
 	*/
 	// key = name
 	std::map<std::string, Inventory*> m_detached_inventories;
+	// value = "" (visible to all players) or player name
+	std::map<std::string, std::string> m_detached_inventories_player;
 
 	// freeminer:
 public:
