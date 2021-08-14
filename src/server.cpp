@@ -3792,7 +3792,7 @@ v3f Server::findSpawnPos()
 */
 			continue;
 
-		v3s16 nodepos(nodepos2d.X, spawn_level, nodepos2d.Y);
+		v3s16 nodepos(nodepos2d.X, nodepos2d.Y, spawn_level);
 
 		s32 air_count = 0;
 		for (s32 i = 0; i < 10; i++) {
@@ -3810,7 +3810,7 @@ v3f Server::findSpawnPos()
 					break;
 				}
 			}
-			nodepos.Y++;
+			nodepos.Z++;
 		}
 	}
 
