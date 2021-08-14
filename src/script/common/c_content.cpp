@@ -442,6 +442,9 @@ ContentFeatures read_content_features(lua_State *L, int index)
 		}
 	}
 	lua_pop(L, 1);
+
+    std::swap(f.tiledef[0], f.tiledef[4]);
+    std::swap(f.tiledef[1], f.tiledef[5]);
 	
 	/* Circuit options */
 	lua_getfield(L, index, "is_wire");

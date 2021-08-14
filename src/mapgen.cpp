@@ -276,19 +276,19 @@ u32 Mapgen::getBlockSeed2(v3s16 p, s32 seed)
 s16 Mapgen::findGroundLevelFull(v2s16 p2d)
 {
 	v3s16 em = vm->m_area.getExtent();
-	s16 y_nodes_max = vm->m_area.MaxEdge.Y;
-	s16 y_nodes_min = vm->m_area.MinEdge.Y;
-	u32 i = vm->m_area.index(p2d.X, y_nodes_max, p2d.Y);
-	s16 y;
+	s16 y_nodes_max = vm->m_area.MaxEdge.Z;
+	s16 y_nodes_min = vm->m_area.MinEdge.Z;
+	u32 i = vm->m_area.index(p2d.X, p2d.Y, y_nodes_max);
+	s16 z;
 
-	for (y = y_nodes_max; y >= y_nodes_min; y--) {
+	for (z = y_nodes_max; z >= y_nodes_min; z--) {
 		MapNode &n = vm->m_data[i];
 		if (ndef->get(n).walkable)
 			break;
 
-		vm->m_area.add_y(em, i, -1);
+		vm->m_area.add_z(em, i, -1);
 	}
-	return (y >= y_nodes_min) ? y : y_nodes_min - 1;
+	return (z >= y_nodes_min) ? z : y_nodes_min /*- 1 wtf?*/;
 }
 
 
@@ -296,17 +296,17 @@ s16 Mapgen::findGroundLevelFull(v2s16 p2d)
 s16 Mapgen::findGroundLevel(v2s16 p2d, s16 ymin, s16 ymax)
 {
 	v3s16 em = vm->m_area.getExtent();
-	u32 i = vm->m_area.index(p2d.X, ymax, p2d.Y);
-	s16 y;
+	u32 i = vm->m_area.index(p2d.X, p2d.Y, ymax);
+	s16 z;
 
-	for (y = ymax; y >= ymin; y--) {
+	for (z = ymax; z >= ymin; z--) {
 		MapNode &n = vm->m_data[i];
 		if (ndef->get(n).walkable)
 			break;
 
-		vm->m_area.add_y(em, i, -1);
+		vm->m_area.add_z(em, i, -1);
 	}
-	return (y >= ymin) ? y : -MAX_MAP_GENERATION_LIMIT;
+	return (z >= ymin) ? z : -MAX_MAP_GENERATION_LIMIT;
 }
 
 
@@ -314,19 +314,19 @@ s16 Mapgen::findGroundLevel(v2s16 p2d, s16 ymin, s16 ymax)
 s16 Mapgen::findLiquidSurface(v2s16 p2d, s16 ymin, s16 ymax)
 {
 	v3s16 em = vm->m_area.getExtent();
-	u32 i = vm->m_area.index(p2d.X, ymax, p2d.Y);
-	s16 y;
+	u32 i = vm->m_area.index(p2d.X, p2d.Y, ymax);
+	s16 z;
 
-	for (y = ymax; y >= ymin; y--) {
+	for (z = ymax; z >= ymin; z--) {
 		MapNode &n = vm->m_data[i];
 		if (ndef->get(n).walkable)
 			return -MAX_MAP_GENERATION_LIMIT;
 		else if (ndef->get(n).isLiquid())
 			break;
 
-		vm->m_area.add_y(em, i, -1);
+		vm->m_area.add_z(em, i, -1);
 	}
-	return (y >= ymin) ? y : -MAX_MAP_GENERATION_LIMIT;
+	return (z >= ymin) ? z : -MAX_MAP_GENERATION_LIMIT;
 }
 
 
@@ -337,11 +337,11 @@ void Mapgen::updateHeightmap(v3s16 nmin, v3s16 nmax)
 
 	//TimeTaker t("Mapgen::updateHeightmap", NULL, PRECISION_MICRO);
 	int index = 0;
-	for (s16 z = nmin.Z; z <= nmax.Z; z++) {
+	for (s16 y = nmin.Y; y <= nmax.Y; y++) {
 		for (s16 x = nmin.X; x <= nmax.X; x++, index++) {
-			s16 y = findGroundLevel(v2s16(x, z), nmin.Y, nmax.Y);
+			s16 z = findGroundLevel(v2s16(x, y), nmin.Z, nmax.Z);
 
-			heightmap[index] = y;
+			heightmap[index] = z;
 		}
 	}
 	//printf("updateHeightmap: %dus\n", t.stop());

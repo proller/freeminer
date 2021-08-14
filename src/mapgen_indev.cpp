@@ -64,8 +64,8 @@ void Mapgen_features::layers_init(EmergeManager *emerge, const Json::Value & par
 
 void Mapgen_features::layers_prepare(const v3POS & node_min, const v3POS & node_max) {
 	int x = node_min.X;
-	int y = node_min.Y - y_offset;
-	int z = node_min.Z;
+	int y = node_min.Z - y_offset;
+	int z = node_min.Y;
 
 	noise_layers->perlinMap3D(x, y, z);
 
@@ -97,8 +97,8 @@ void Mapgen_features::float_islands_prepare(const v3POS & node_min, const v3POS 
 	if (min_y && node_max.Y < min_y)
 		return;
 	int x = node_min.X;
-	int y = node_min.Y - y_offset;
-	int z = node_min.Z;
+	int y = node_min.Z - y_offset;
+	int z = node_min.Y;
 	noise_float_islands1->perlinMap3D(x, y, z);
 	noise_float_islands2->perlinMap3D(x, y, z);
 	noise_float_islands3->perlinMap2D(x, z);
@@ -110,8 +110,8 @@ void Mapgen_features::cave_prepare(const v3POS & node_min, const v3POS & node_ma
 		return;
 	}
 	int x = node_min.X;
-	int y = node_min.Y - y_offset;
-	int z = node_min.Z;
+	int y = node_min.Z - y_offset;
+	int z = node_min.Y;
 	noise_cave_indev->perlinMap3D(x, y, z);
 	cave_noise_threshold = 800;
 }
@@ -409,32 +409,40 @@ int MapgenIndev::generateGround() {
 	int stone_surface_max_y = -MAX_MAP_GENERATION_LIMIT;
 	u32 index = 0;
 
-	for (s16 z = node_min.Z; z <= node_max.Z; z++)
+	//for (s16 z = node_min.Z; z <= node_max.Z; z++)
+    for (s16 y = node_min.Y; y <= node_max.Y; y++) {
 	for (s16 x = node_min.X; x <= node_max.X; x++, index++) {
 		// Surface height
+		//s16 surface_y = (s16)baseTerrainLevelFromMap(/*index*/y + x*(node_max.X - node_min.X));
 		s16 surface_y = (s16)baseTerrainLevelFromMap(index);
+		//s16 surface_y = (s16)baseTerrainLevelFromMap({x,y});
 
 		// Log it
 		if (surface_y > stone_surface_max_y)
 			stone_surface_max_y = surface_y;
 
-		auto bt = getBiome(index, v3POS(x, surface_y, z));
+		//auto bt = getBiome(index, v3POS(x, surface_y, z));
+		auto bt = getBiome(index, v3POS(x, y, surface_y));
 
-		s16 heat = m_emerge->env->m_use_weather ? m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env, v3POS(x,node_max.Y,z), nullptr, &heat_cache) : 0;
+		//s16 heat = m_emerge->env->m_use_weather ? m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env, v3POS(x,node_max.Y,z), nullptr, &heat_cache) : 0;
+		s16 heat = m_emerge->env->m_use_weather ? m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env, v3POS(x,y,node_max.Z), nullptr, &heat_cache) : 0;
 
 		// Fill ground with stone
 		v3POS em = vm->m_area.getExtent();
-		u32 i = vm->m_area.index(x, node_min.Y, z);
+//		u32 i = vm->m_area.index(x, y, node_min.Z);
 
-		for (s16 y = node_min.Y; y <= node_max.Y; y++) {
+		//for (s16 y = node_min.Y; y <= node_max.Y; y++) {
+	    for (s16 z = node_min.Z; z <= node_max.Z; z++) {
+		//u32 i = vm->m_area.index(x, y, z);
+		u32 i = vm->m_area.index(x, y, z);
 			if (!vm->m_data[i]) {
 
-				if (y <= surface_y) {
+				if (z <= surface_y) {
 					int index3 = (z - node_min.Z) * zstride + (y - node_min.Y) * csize.X + (x - node_min.X) * 1;
 					if (cave_noise_threshold && noise_cave_indev->result[index3] > cave_noise_threshold) {
 						vm->m_data[i] = n_air;
 					} else { 
-						auto n = (y > water_level - surface_y && bt == BT_DESERT) ? n_desert_stone : layers_get(index3);
+						auto n = (z > water_level - surface_y && bt == BT_DESERT) ? n_desert_stone : layers_get(index3);
 						bool protect = n.getContent() != CONTENT_AIR;
 						if (cave_noise_threshold && noise_cave_indev->result[index3] > cave_noise_threshold - 50) {
 							vm->m_data[i] = protect ? n_stone : n; //cave shell without layers
@@ -445,15 +453,16 @@ int MapgenIndev::generateGround() {
 						if (protect)
 							vm->m_flags[i] |= VOXELFLAG_CHECKED2; // no cave liquid
 					}
-				} else if (y <= water_level) {
-					vm->m_data[i] = (heat < 0 && y > heat/3) ? n_ice : n_water_source;
-					if (liquid_pressure && y <= 0)
-						vm->m_data[i].addLevel(m_emerge->ndef, water_level - y, 1);
+				} else if (z <= water_level) {
+					vm->m_data[i] = (heat < 0 && z > heat/3) ? n_ice : n_water_source;
+					if (liquid_pressure && z <= 0)
+						vm->m_data[i].addLevel(m_emerge->ndef, water_level - z, 1);
 				} else {
 					vm->m_data[i] = n_air;
 				}
+              }
 			}
-			vm->m_area.add_y(em, i, 1);
+			//vm->m_area.add_y(em, i, 1);
 		}
 	}
 

@@ -56,11 +56,11 @@ void make_tree(MMVManip &vmanip, v3s16 p0,
 			u32 vi = vmanip.m_area.index(p1);
 			vmanip.m_data[vi] = treenode;
 		}
-		p1.Y++;
+		p1.Z++;
 	}
 
 	// p1 is now the last piece of the trunk
-	p1.Y -= 1;
+	p1.Z -= 1;
 
 	s16 size = pr.range(2, 3);
 	VoxelArea leaves_a(v3s16(-size, -pr.range(2, 3), -size), v3s16(size, pr.range(2, 3), size));
@@ -701,11 +701,11 @@ void make_jungletree(MMVManip &vmanip, v3s16 p0, INodeDefManager *ndef, s32 seed
 			u32 vi = vmanip.m_area.index(p1);
 			vmanip.m_data[vi] = treenode;
 		}
-		p1.Y++;
+		p1.Z++;
 	}
 
 	// p1 is now the last piece of the trunk
-	p1.Y -= 1;
+	p1.Z -= 1;
 
 	s16 size = pr.range(2, 4);
 	VoxelArea leaves_a(v3s16(-size, -pr.range(2, 4), -size), v3s16(size, pr.range(2, 4), size));
@@ -787,11 +787,11 @@ void make_pine_tree(MMVManip &vmanip, v3s16 p0, INodeDefManager *ndef, s32 seed)
 			u32 vi = vmanip.m_area.index(p1);
 			vmanip.m_data[vi] = treenode;
 		}
-		p1.Y++;
+		p1.Z++;
 	}
 
 	// Make p1 the top node of the trunk
-	p1.Y -= 1;
+	p1.Z -= 1;
 
 	u16 size = pr.range(2, 4);
 	VoxelArea leaves_a(v3s16(-4, -4*2, -4), v3s16(4, 4, 4));
@@ -904,7 +904,7 @@ void make_cavetree(MMVManip &vmanip, v3POS p0,
 				return;
 			vmanip.m_data[vmanip.m_area.index(p1)] = treenode;
 		}
-		p1.Y++;
+		p1.Z++;
 	}
 	if (vmanip.m_area.contains(p1)) {
 		if (vmanip.getNodeNoExNoEmerge(p1).getContent() != CONTENT_AIR)
