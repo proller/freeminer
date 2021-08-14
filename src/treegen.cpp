@@ -794,7 +794,7 @@ void make_pine_tree(MMVManip &vmanip, v3s16 p0, INodeDefManager *ndef, s32 seed)
 	p1.Z -= 1;
 
 	u16 size = pr.range(2, 4);
-	VoxelArea leaves_a(v3s16(-4, -4*2, -4), v3s16(4, 4, 4));
+	VoxelArea leaves_a(v3s16(-4, -4, -4*2), v3s16(4, 4, 4));
 	//SharedPtr<u8> leaves_d(new u8[leaves_a.getVolume()]);
 	Buffer<u8> leaves_d(leaves_a.getVolume());
 	for (s32 i = 0; i < leaves_a.getVolume(); i++)
@@ -802,10 +802,10 @@ void make_pine_tree(MMVManip &vmanip, v3s16 p0, INodeDefManager *ndef, s32 seed)
 
 	// Upper branches
 	u16 dev = size;
-	for (s16 yy = -1; yy <= 1; yy++) {
-		for (s16 zz = -dev; zz <= dev; zz++) {
+	for (s16 zz = -1; zz <= 1; zz++) {
+		for (s16 yy = -dev; yy <= dev; yy++) {
 			u32 i = leaves_a.index(v3s16(-dev, yy, zz));
-			u32 ia = leaves_a.index(v3s16(-dev, yy+1, zz));
+			u32 ia = leaves_a.index(v3s16(-dev, yy, zz+1));
 			for (s16 xx = -dev; xx <= dev; xx++) {
 				if (pr.range(0, 20) <= 19 - dev) {
 					leaves_d[i] = 1;
@@ -819,24 +819,24 @@ void make_pine_tree(MMVManip &vmanip, v3s16 p0, INodeDefManager *ndef, s32 seed)
 	}
 
 	// Centre top nodes
-	u32 i = leaves_a.index(v3s16(0, 1, 0));
+	u32 i = leaves_a.index(v3s16(0, 0, 1));
 	leaves_d[i] = 1;
-	i = leaves_a.index(v3s16(0, 2, 0));
+	i = leaves_a.index(v3s16(0, 0, 2));
 	leaves_d[i] = 1;
-	i = leaves_a.index(v3s16(0, 3, 0));
+	i = leaves_a.index(v3s16(0, 0, 3));
 	leaves_d[i] = 2;
 
 	// Lower branches
 	s16 my = -6;
 	for (u32 iii = 0; iii < 20; iii++) {
 		s16 xi = pr.range(-3, 2);
-		s16 yy = pr.range(-6, -5);
-		s16 zi = pr.range(-3, 2);
-		if (yy > my)
-			my = yy;
-		for (s16 zz = zi; zz <= zi + 1; zz++) {
+		s16 zz = pr.range(-6, -5);
+		s16 yi = pr.range(-3, 2);
+		if (zz > my)
+			my = zz;
+		for (s16 yy = yi; yy <= yi + 1; yy++) {
 			u32 i = leaves_a.index(v3s16(xi, yy, zz));
-			u32 ia = leaves_a.index(v3s16(xi, yy + 1, zz));
+			u32 ia = leaves_a.index(v3s16(xi, yy, zz + 1));
 			for (s16 xx = xi; xx <= xi + 1; xx++) {
 				leaves_d[i] = 1;
 				if (leaves_d[ia] == 0)
@@ -848,10 +848,10 @@ void make_pine_tree(MMVManip &vmanip, v3s16 p0, INodeDefManager *ndef, s32 seed)
 	}
 
 	dev = size-1;
-	for (s16 yy = my + 1; yy <= my + 2; yy++) {
-		for (s16 zz = -dev; zz <= dev; zz++) {
+	for (s16 zz = my + 1; zz <= my + 2; zz++) {
+		for (s16 yy = -dev; yy <= dev; yy++) {
 			u32 i = leaves_a.index(v3s16(-dev, yy, zz));
-			u32 ia = leaves_a.index(v3s16(-dev, yy + 1, zz));
+			u32 ia = leaves_a.index(v3s16(-dev, yy, zz + 1));
 			for (s16 xx = -dev; xx <= dev; xx++) {
 				if (pr.range(0, 20) <= 19 - dev) {
 					leaves_d[i] = 1;
@@ -865,8 +865,9 @@ void make_pine_tree(MMVManip &vmanip, v3s16 p0, INodeDefManager *ndef, s32 seed)
 	}
 
 	// Blit leaves to vmanip
+	for (s16 y = leaves_a.MinEdge.Y; y <= leaves_a.MaxEdge.Y; y++)
 	for (s16 z = leaves_a.MinEdge.Z; z <= leaves_a.MaxEdge.Z; z++)
-	for (s16 y = leaves_a.MinEdge.Y; y <= leaves_a.MaxEdge.Y; y++) {
+    {
 		v3s16 pmin(leaves_a.MinEdge.X, y, z);
 		u32 i = leaves_a.index(pmin);
 		u32 vi = vmanip.m_area.index(pmin + p1);

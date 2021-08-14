@@ -335,7 +335,7 @@ bool EmergeManager::isBlockUnderground(v3s16 blockpos)
 #endif
 
 	// Use a simple heuristic; the above method is wildly inaccurate anyway.
-	return blockpos.Y * (MAP_BLOCKSIZE + 1) <= mgparams->water_level;
+	return blockpos.Z * (MAP_BLOCKSIZE + 1) <= mgparams->water_level;
 }
 
 bool EmergeManager::pushBlockEmergeData(
