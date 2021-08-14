@@ -700,7 +700,7 @@ MgStoneType MapgenBasic::generateBiomes()
 	u32 index = 0;
 	MgStoneType stone_type = MGSTONE_STONE;
 
-	noise_filler_depth->perlinMap2D(node_min.X, node_min.Z);
+	noise_filler_depth->perlinMap2D(node_min.X, node_min.Y);
 
 	for (s16 z = node_min.Z; z <= node_max.Z; z++)
 	for (s16 x = node_min.X; x <= node_max.X; x++, index++) {
@@ -896,7 +896,7 @@ void MapgenBasic::dustTopNodes()
 
 void MapgenBasic::generateCaves(s16 max_stone_y, s16 large_cave_depth)
 {
-	if (max_stone_y < node_min.Y)
+	if (max_stone_y < node_min.Z)
 		return;
 
 	CavesNoiseIntersection caves_noise(ndef, m_bmgr, csize,
@@ -904,7 +904,7 @@ void MapgenBasic::generateCaves(s16 max_stone_y, s16 large_cave_depth)
 
 	caves_noise.generateCaves(vm, node_min, node_max, biomemap);
 
-	if (node_max.Y > large_cave_depth)
+	if (node_max.Z > large_cave_depth)
 		return;
 
 	PseudoRandom ps(blockseed + 21343);
@@ -920,7 +920,7 @@ void MapgenBasic::generateCaves(s16 max_stone_y, s16 large_cave_depth)
 
 void MapgenBasic::generateDungeons(s16 max_stone_y, MgStoneType stone_type)
 {
-	if (max_stone_y < node_min.Y)
+	if (max_stone_y < node_min.Z)
 		return;
 
 	DungeonParams dp;

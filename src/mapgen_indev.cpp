@@ -64,7 +64,7 @@ void Mapgen_features::layers_init(EmergeManager *emerge, const Json::Value & par
 
 void Mapgen_features::layers_prepare(const v3POS & node_min, const v3POS & node_max) {
 	int x = node_min.X;
-	int y = node_min.Z - y_offset;
+	int y = node_min.Y - y_offset;
 	int z = node_min.Y;
 
 	noise_layers->perlinMap3D(x, y, z);
@@ -73,7 +73,7 @@ void Mapgen_features::layers_prepare(const v3POS & node_min, const v3POS & node_
 
 	layers_node.clear();
 	for (const auto & layer : layers) {
-		if (layer.height_max < node_min.Y || layer.height_min > node_max.Y)
+		if (layer.height_max < node_min.Z || layer.height_min > node_max.Z)
 			continue;
 		for (int i = 0; i < layer.thickness; ++i) {
 			layers_node.emplace_back(layer.node);
@@ -94,24 +94,24 @@ MapNode Mapgen_features::layers_get(unsigned int index) {
 }
 
 void Mapgen_features::float_islands_prepare(const v3POS & node_min, const v3POS & node_max, int min_y) {
-	if (min_y && node_max.Y < min_y)
+	if (min_y && node_max.Z < min_y)
 		return;
 	int x = node_min.X;
-	int y = node_min.Z - y_offset;
-	int z = node_min.Y;
+	int y = node_min.Y - y_offset;
+	int z = node_min.Z;
 	noise_float_islands1->perlinMap3D(x, y, z);
 	noise_float_islands2->perlinMap3D(x, y, z);
-	noise_float_islands3->perlinMap2D(x, z);
+	noise_float_islands3->perlinMap2D(x, y);
 }
 
 void Mapgen_features::cave_prepare(const v3POS & node_min, const v3POS & node_max, int max_y) {
-	if (!max_y || node_min.Y > max_y) {
+	if (!max_y || node_min.Z > max_y) {
 		cave_noise_threshold = 0;
 		return;
 	}
 	int x = node_min.X;
-	int y = node_min.Z - y_offset;
-	int z = node_min.Y;
+	int y = node_min.Y - y_offset;
+	int z = node_min.Z;
 	noise_cave_indev->perlinMap3D(x, y, z);
 	cave_noise_threshold = 800;
 }
@@ -355,7 +355,7 @@ int Mapgen_features::float_islands_generate(const v3POS & node_min, const v3POS 
 	int generated = 0;
 	if (node_min.Y < min_y) return generated;
 	// originally from http://forum.minetest.net/viewtopic.php?id=4776
-	float RAR = 0.8 * farscale(0.4, node_min.Y); // 0.4; // Island rarity in chunk layer. -0.4 = thick layer with holes, 0 = 50%, 0.4 = desert rarity, 0.7 = very rare.
+	float RAR = 0.8 * farscale(0.4, node_min.Z); // 0.4; // Island rarity in chunk layer. -0.4 = thick layer with holes, 0 = 50%, 0.4 = desert rarity, 0.7 = very rare.
 	float AMPY = 24; // 24; // Amplitude of island centre y variation.
 	float TGRAD = 24; // 24; // Noise gradient to create top surface. Tallness of island top.
 	float BGRAD = 24; // 24; // Noise gradient to create bottom surface. Tallness of island bottom.

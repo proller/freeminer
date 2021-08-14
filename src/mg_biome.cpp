@@ -182,10 +182,10 @@ void BiomeGenOriginal::calcBiomeNoise(v3s16 pmin)
 {
 	m_pmin = pmin;
 
-	noise_heat->perlinMap2D(pmin.X, pmin.Y);
-	noise_humidity->perlinMap2D(pmin.X, pmin.Y);
-	noise_heat_blend->perlinMap2D(pmin.X, pmin.Y);
-	noise_humidity_blend->perlinMap2D(pmin.X, pmin.Y);
+	noise_heat->perlinMap2D(pmin.X, pmin.Z);
+	noise_humidity->perlinMap2D(pmin.X, pmin.Z);
+	noise_heat_blend->perlinMap2D(pmin.X, pmin.Z);
+	noise_humidity_blend->perlinMap2D(pmin.X, pmin.Z);
 
 	for (s32 i = 0; i < m_csize.X * m_csize.Y; i++) {
 		noise_heat->result[i]     += noise_heat_blend->result[i];
@@ -196,7 +196,7 @@ void BiomeGenOriginal::calcBiomeNoise(v3s16 pmin)
 
 biome_t *BiomeGenOriginal::getBiomes(s16 *heightmap)
 {
-	for (s32 i = 0; i != m_csize.X * m_csize.Z; i++) {
+	for (s32 i = 0; i != m_csize.X * m_csize.Y; i++) {
 		Biome *biome = calcBiomeFromNoise(
 			noise_heat->result[i],
 			noise_humidity->result[i],

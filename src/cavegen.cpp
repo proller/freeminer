@@ -638,8 +638,8 @@ void CavesV6::makeTunnel(bool dirswitch)
 	// in carveRoute while still running all PseudoRandom calls to ensure caves
 	// are consistent with existing worlds.
 	bool tunnel_above_ground =
-		p1.Y > getSurfaceFromHeightmap(p1) &&
-		p2.Y > getSurfaceFromHeightmap(p2);
+		p1.Z > getSurfaceFromHeightmap(p1) &&
+		p2.Z > getSurfaceFromHeightmap(p2);
 
 	vec += main_direction;
 
@@ -732,19 +732,19 @@ void CavesV6::carveRoute(v3f vec, float f, bool randomize_xz,
 					continue;
 
 				if (large_cave) {
-					int full_ymin = node_min.Y - MAP_BLOCKSIZE;
-					int full_ymax = node_max.Y + MAP_BLOCKSIZE;
+					int full_ymin = node_min.Z - MAP_BLOCKSIZE;
+					int full_ymax = node_max.Z + MAP_BLOCKSIZE;
 
 					bool protect_huge = vm->m_flags[i] & VOXELFLAG_CHECKED2;
 
 					if (flooded && full_ymin < water_level && full_ymax > water_level) {
 						if (!protect_huge) {
-							MapNode n_water_or_ice = (heat < 0 && (p.Y > water_level + heat/4 || p.Y > startp.Y - 2 + heat/4)) ? n_ice : waternode;
-							vm->m_data[i] = (p.Y <= water_level) ? n_water_or_ice : airnode;
+							MapNode n_water_or_ice = (heat < 0 && (p.Z > water_level + heat/4 || p.Z > startp.Z - 2 + heat/4)) ? n_ice : waternode;
+							vm->m_data[i] = (p.Z <= water_level) ? n_water_or_ice : airnode;
 						}
 					} else if (flooded && full_ymax < water_level) {
 						if (!protect_huge)
-						vm->m_data[i] = (p.Y < startp.Y - 2) ? lavanode : airnode;
+						vm->m_data[i] = (p.Z < startp.Z - 2) ? lavanode : airnode;
 					} else {
 						vm->m_data[i] = airnode;
 					}
