@@ -105,6 +105,7 @@ void Mapgen_features::float_islands_prepare(const v3POS & node_min, const v3POS 
 }
 
 void Mapgen_features::cave_prepare(const v3POS & node_min, const v3POS & node_max, int max_y) {
+    return; // TODO
 	if (!max_y || node_min.Z > max_y) {
 		cave_noise_threshold = 0;
 		return;
