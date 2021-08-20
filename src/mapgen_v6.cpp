@@ -784,39 +784,39 @@ void MapgenV6::flowMud(s16 &mudflow_minpos, s16 &mudflow_maxpos)
 
 	// Iterate a few times
 	for (s16 k = 0; k < 3; k++) {
-		for (s16 z = mudflow_minpos; z <= mudflow_maxpos; z++)
+		for (s16 y = mudflow_minpos; y <= mudflow_maxpos; y++)
 		for (s16 x = mudflow_minpos; x <= mudflow_maxpos; x++) {
 			// Invert coordinates every 2nd iteration
 			if (k % 2 == 0) {
 				x = mudflow_maxpos - (x - mudflow_minpos);
-				z = mudflow_maxpos - (z - mudflow_minpos);
+				y = mudflow_maxpos - (y - mudflow_minpos);
 			}
 
 			// Node position in 2d
-			v2s16 p2d = v2s16(node_min.X, node_min.Z) + v2s16(x, z);
+			v2s16 p2d = v2s16(node_min.X, node_min.Y) + v2s16(x, y);
 
 			v3s16 em = vm->m_area.getExtent();
-			u32 i = vm->m_area.index(p2d.X, node_max.Y, p2d.Y);
-			s16 y = node_max.Y;
+			u32 i = vm->m_area.index(p2d.X, p2d.Y, node_max.Z);
+			s16 z = node_max.Z;
 
-			while (y >= node_min.Y) {
+			while (z >= node_min.Z) {
 
-			for (;; y--) {
+			for (;; z--) {
 				MapNode *n = NULL;
 				// Find mud
-				for (; y >= node_min.Y; y--) {
+				for (; z >= node_min.Z; z--) {
 					n = &vm->m_data[i];
 					if (n->getContent() == c_dirt ||
 							n->getContent() == c_dirt_with_grass ||
 							n->getContent() == c_gravel)
 						break;
 
-					vm->m_area.add_y(em, i, -1);
+					vm->m_area.add_z(em, i, -1);
 				}
 
 				// Stop if out of area
 				//if(vmanip.m_area.contains(i) == false)
-				if (y < node_min.Y)
+				if (z < node_min.Z)
 					break;
 
 				if (n->getContent() == c_dirt ||
@@ -827,7 +827,7 @@ void MapgenV6::flowMud(s16 &mudflow_minpos, s16 &mudflow_maxpos)
 					// Don't flow it if the stuff under it is not mud
 					{
 						u32 i2 = i;
-						vm->m_area.add_y(em, i2, -1);
+						vm->m_area.add_z(em, i2, -1);
 						// Cancel if out of area
 						if (vm->m_area.contains(i2) == false)
 							continue;
@@ -839,16 +839,16 @@ void MapgenV6::flowMud(s16 &mudflow_minpos, s16 &mudflow_maxpos)
 				}
 
 				v3s16 dirs4[4] = {
-					v3s16(0, 0, 1), // back
+					v3s16(0, 1, 0), // back
 					v3s16(1, 0, 0), // right
-					v3s16(0, 0, -1), // front
+					v3s16(0, -1, 0), // front
 					v3s16(-1, 0, 0), // left
 				};
 
 				// Check that upper is air or doesn't exist.
 				// Cancel dropping if upper keeps it in place
 				u32 i3 = i;
-				vm->m_area.add_y(em, i3, 1);
+				vm->m_area.add_z(em, i3, 1);
 				if (vm->m_area.contains(i3) == true &&
 						ndef->get(vm->m_data[i3]).walkable)
 					continue;
@@ -867,7 +867,7 @@ void MapgenV6::flowMud(s16 &mudflow_minpos, s16 &mudflow_maxpos)
 					if (ndef->get(*n2).walkable)
 						continue;
 					// Check that under side is air
-					vm->m_area.add_y(em, i2, -1);
+					vm->m_area.add_z(em, i2, -1);
 					if (vm->m_area.contains(i2) == false)
 						continue;
 					n2 = &vm->m_data[i2];
@@ -876,7 +876,7 @@ void MapgenV6::flowMud(s16 &mudflow_minpos, s16 &mudflow_maxpos)
 					// Loop further down until not air
 					bool dropped_to_unknown = false;
 					do {
-						vm->m_area.add_y(em, i2, -1);
+						vm->m_area.add_z(em, i2, -1);
 						n2 = &vm->m_data[i2];
 						// if out of known area
 						if (vm->m_area.contains(i2) == false ||
@@ -886,7 +886,7 @@ void MapgenV6::flowMud(s16 &mudflow_minpos, s16 &mudflow_maxpos)
 						}
 					} while (ndef->get(*n2).walkable == false);
 					// Loop one up so that we're in air
-					vm->m_area.add_y(em, i2, 1);
+					vm->m_area.add_z(em, i2, 1);
 					n2 = &vm->m_data[i2];
 
 					bool old_is_water = (n->getContent() == c_water_source);
