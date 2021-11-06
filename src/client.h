@@ -710,7 +710,9 @@ private:
 	Database *m_localdb;
 	IntervalLimiter m_localdb_save_interval;
 	u16 m_cache_save_interval;
+public:
 	Server *m_localserver;
+private:
 
 	// TODO: Add callback to update these when g_settings changes
 	bool m_cache_smooth_lighting;

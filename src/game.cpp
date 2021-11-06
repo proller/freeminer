@@ -34,6 +34,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "content_cao.h"
 #include "drawscene.h"
 #include "event_manager.h"
+#include "fm_farmesh.h"
 #include "fontengine.h"
 #include "itemdef.h"
 #include "log_types.h"
@@ -1893,6 +1894,7 @@ private:
 	std::future<void> updateDrawList_future;
 #endif
 private:
+	FarMesh * farmesh = nullptr;
 	// minetest:
 
 	KeyCache keycache;
@@ -1995,6 +1997,8 @@ Game::Game() :
 
 Game::~Game()
 {
+	if (farmesh)
+		delete farmesh;
 	delete client;
 	delete soundmaker;
 	if (!sound_is_dummy)
@@ -2432,6 +2436,11 @@ bool Game::createClient(const std::string &playername,
 	sky = new Sky(smgr->getRootSceneNode(), smgr, -1, texture_src);
 	scsf->setSky(sky);
 	skybox = NULL;	// This is used/set later on in the main run loop
+
+
+	//if (g_settings->getBool("enable_farmesh")) {
+		farmesh = new FarMesh(smgr->getRootSceneNode(), smgr, -1, client, server);
+	//}
 
 	/* freeminer: look up ^
 	local_inventory = new Inventory(itemdef_manager);
@@ -4765,6 +4774,21 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats,
 			clouds->setVisible(false);
 		}
 	}
+
+		if(farmesh)
+		{
+			auto farmesh_range = draw_control->wanted_range; // * 10;
+			if(draw_control->range_all && farmesh_range < 512)
+				farmesh_range = 512;
+			if(farmesh_range > 1024)
+				farmesh_range = 1024;
+		
+			farmesh->update(camera->getPosition(), camera->getDirection(), camera->getFovMax(),
+			camera->getCameraMode(), player->getYaw(), player->getPitch(),
+			camera->getOffset(),
+			sky->getBrightness(), farmesh_range);
+		}
+
 
 	/*
 		Update particles
