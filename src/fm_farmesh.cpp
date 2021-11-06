@@ -3,6 +3,7 @@
 #include "client.h"
 #include "constants.h"
 #include "emerge.h"
+#include "enet/types.h"
 #include "irr_v3d.h"
 #include "log.h"
 #include "log_types.h"
@@ -11,7 +12,9 @@
 #include "mapnode.h"
 #include "nodedef.h"
 #include "server.h"
+#include "util/timetaker.h"
 #include "util/unordered_map_hash.h"
+#include <cstdint>
 #include <utility>
 
 inline bool todo_mg(double x, double y, double z, double d = 10000, int ITR = 1,
@@ -103,10 +106,11 @@ FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
                        : client->m_localserver ? client->m_localserver
                                                : nullptr;
   if (server_use) {
-    verbosestream << " mgtype="
-                  << server_use->getEmergeManager()->mgparams->mgtype << " wl="
-                  << server_use->getEmergeManager()->mgparams->water_level
-                  << "\n";
+    errorstream << "Farmesh: mgtype="
+                << server_use->getEmergeManager()->mgparams->mgtype
+                << " water_level="
+                << server_use->getEmergeManager()->mgparams->water_level
+                << "\n";
     mg = Mapgen::createMapgen(server_use->getEmergeManager()->mgparams->mgtype,
                               0, server_use->getEmergeManager()->mgparams,
                               server_use->getEmergeManager());
@@ -138,12 +142,14 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
   m_camera_pitch = camera_pitch;
   m_camera_yaw = camera_yaw;
   m_camera_offset = camera_offset;
+  m_render_range = render_range;
 
-  /*
-    errorstream << "update pos=" << camera_pos << " dir=" << camera_dir
-                << " fov=" << camera_fov << " pitch=" << m_camera_pitch
-                << " yaw=" << camera_yaw << std::endl;
-  */
+  // /*
+  errorstream << "update pos=" << camera_pos << " dir=" << camera_dir
+              << " fov=" << camera_fov << " pitch=" << m_camera_pitch
+              << " yaw=" << camera_yaw << " render_range=" << render_range
+              << std::endl;
+  // */
 
   /*
           const f32 block_max_radius = MAP_BLOCKSIZE * BS;
@@ -217,9 +223,12 @@ void FarMesh::render() {
 
   const int depth_steps = 512 + 100; // TODO CALC  256+128+64+32+16+8+4+2+1+?
   const int grid_size = 32;          // 255;
-  int depth = 255;
+  int depth = m_render_range;        // 255;
   unordered_map_v2POS<std::pair<bool, v3POS>> grid_cache;
 
+  TimeTaker timer_step("Client: Farmesh");
+
+  uint32_t stat_probes = 0, stat_cached = 0, stat_mg = 0;
   for (short step_num = 0; step_num < depth_steps; ++step_num) {
     auto pos_ld = dir_ld * depth + m_camera_pos;
     auto pos_rd = dir_rd * depth + m_camera_pos;
@@ -227,13 +236,14 @@ void FarMesh::render() {
     auto step_r = (pos_rd - pos_ld) / grid_size;
     auto step_u = (pos_lu - pos_ld) / grid_size;
     auto step_width = (int(step_r.getLength()) >> 1 << 1);
+
     /*
-        errorstream << " step_num=" << step_num << " depth=" << depth
-                    << " pos_ld=" << pos_ld << " pos_rd=" << pos_rd
-                    << " step_r=" << step_r << " srl=" << step_r.getLength()
-                    << " sN=" << (int(step_r.getLength()) >> 1 << 1)
-                    << " step_u=" << step_u << " sul=" << step_u.getLength()
-                    << "\n";
+            errorstream << " step_num=" << step_num << " depth=" << depth
+                        << " pos_ld=" << pos_ld << " pos_rd=" << pos_rd
+                        << " step_r=" << step_r << " srl=" << step_r.getLength()
+                        << " sN=" << (int(step_r.getLength()) >> 1 << 1)
+                        << " step_u=" << step_u << " sul=" << step_u.getLength()
+                        << "\n";
     */
 
     for (short y = 0; y < grid_size; ++y) {
@@ -241,18 +251,31 @@ void FarMesh::render() {
       // errorstream << "pos_l=" << pos_l << "\n";
 
       for (short x = 0; x < grid_size; ++x) {
+        ++stat_probes;
         auto &cache = grid_cache[{x, y}];
-        if (cache.first)
+        if (cache.first) {
+          ++stat_cached;
           continue;
+        }
         auto pos = pos_l + (step_r * x);
         v3POS pos_int = floatToInt(pos, BS);
 
         if (pos_int.Y < m_water_level) {
           cache.first = true;
           cache.second = pos_int;
-        } else if (mg && mg->visible(pos_int.X, pos_int.Y, pos_int.Z)) {
-          cache.first = true;
-          cache.second = pos_int;
+        } else if (mg) {
+          if (mg_cache.find(pos_int) != mg_cache.end()) {
+            cache.first = mg_cache[pos_int];
+          } else {
+
+            ++stat_mg;
+            cache.first = mg->visible(pos_int.X, pos_int.Y, pos_int.Z);
+            if (cache.first) {
+              // cache.first = true;
+              cache.second = pos_int;
+            }
+            mg_cache[pos_int] = cache.first;
+          }
         }
         if (!cache.first)
           continue;
@@ -268,4 +291,9 @@ void FarMesh::render() {
         depth < -MAX_MAP_GENERATION_LIMIT * 2)
       break;
   }
+
+  errorstream << " time=" << timer_step.getTimerTime()
+              << " stat_probes=" << stat_probes
+              << " stat_cached=" << stat_cached << " stat_mg=" << stat_mg
+              << "\n";
 }

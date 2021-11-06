@@ -5,6 +5,7 @@
 #include "camera.h"
 #include "constants.h"
 #include "irr_v3d.h"
+#include "util/unordered_map_hash.h"
 class Client;
 class Mapgen;
 constexpr size_t FARMESH_MATERIAL_COUNT = 2;
@@ -44,5 +45,6 @@ private:
   v3POS m_camera_offset;
 
   Mapgen *mg = nullptr;
+  unordered_map_v3POS<bool> mg_cache;
   // irr::core::line3df line;
 };
