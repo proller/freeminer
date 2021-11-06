@@ -1997,8 +1997,11 @@ Game::Game() :
 
 Game::~Game()
 {
-	if (farmesh)
+	/*if (farmesh) {
 		delete farmesh;
+		farmesh = nullptr;
+	}*/
+
 	delete client;
 	delete soundmaker;
 	if (!sound_is_dummy)

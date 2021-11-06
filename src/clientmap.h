@@ -81,6 +81,10 @@ struct MapDrawControl
 
 };
 
+bool isOccluded(Map *map, v3s16 p0, v3s16 p1, float step, float stepfac,
+		float start_off, float end_off, u32 needed_count, INodeDefManager *nodemgr,
+		unordered_map_v3POS<bool> & occlude_cache);
+
 class Client;
 class ITextureSource;
 

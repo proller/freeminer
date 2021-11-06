@@ -41,6 +41,7 @@ private:
   float m_time;
   Client *m_client;
   s16 m_render_range;
+  uint32_t m_render_range_max;
   POS m_water_level = 0;
   v3POS m_camera_offset;
 
