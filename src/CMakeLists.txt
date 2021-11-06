@@ -794,6 +794,7 @@ set(FMcommon_SRCS
 	stat.cpp
 	fm_liquid.cpp
 	fm_map.cpp
+	fm_farmesh.cpp
 )
 #	FMColoredString.cpp
 
