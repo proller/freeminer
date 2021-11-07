@@ -1,11 +1,12 @@
 #pragma once
 
-#include "ISceneNode.h"
 #include "IVideoDriver.h"
 #include "camera.h"
 #include "constants.h"
 #include "irr_v3d.h"
 #include "util/unordered_map_hash.h"
+#include <ISceneNode.h>
+#include <cstdint>
 class Client;
 class Mapgen;
 constexpr size_t FARMESH_MATERIAL_COUNT = 2;
@@ -45,8 +46,8 @@ private:
 	v3POS m_camera_offset;
 	constexpr static uint16_t grid_size_min = 16;
 	constexpr static uint16_t grid_size_max = 256;
-	//uint16_t grid_size = grid_size_min;
-	uint16_t grid_size = 32;
+	// uint16_t grid_size = grid_size_min;
+	uint16_t grid_size = 64;
 	Mapgen *mg = nullptr;
 	unordered_map_v3POS<bool> mg_cache;
 
@@ -54,6 +55,10 @@ private:
 	{
 		uint32_t time = 0;
 		unordered_map_v3POS<POS> depth;
+		unordered_map_v3POS<v3POS> pos;
+		unordered_map_v3POS<POS> step_width; // debug only
 	};
 	unordered_map_v3POS<ls_cache> plane_cache;
+
+	uint16_t m_cycle_stop_x = 0, m_cycle_stop_y = 0;
 };
