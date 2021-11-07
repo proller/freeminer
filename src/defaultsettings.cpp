@@ -176,6 +176,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("farmesh", android ? "2" : "4");
 	settings->setDefault("farmesh_step", android ? "2" : "4");
 	settings->setDefault("farmesh_wanted", android ? "100" :"500");
+	settings->setDefault("farmesh5", android ? "5000" : "62000");
 	settings->setDefault("headless_optimize", "false");
 	//settings->setDefault("node_highlighting", "halo");
 	//settings->setDefault("enable_vbo", win ? "false" : "true");
