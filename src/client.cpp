@@ -821,6 +821,10 @@ void Client::initLocalMapSaving(const Address &address,
 
 	m_localdb = NULL;
 
+#if !MINETEST_PROTO
+	if (g_settings->getS32("farmesh5") && !is_local_server) { } else
+#endif
+
 	if (!g_settings->getBool("enable_local_map_saving") || is_local_server) {
 		return;
 	}
