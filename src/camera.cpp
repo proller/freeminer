@@ -598,8 +598,10 @@ void Camera::updateViewingRange()
 
 	g_profiler->add("CM: wanted_range", m_draw_control.wanted_range);
 
-	auto farmesh5 = g_settings->getS32("farmesh5");
-	if (farmesh5) { m_cameranode->setFarValue(farmesh5); return;}
+	if (const auto farmesh5 = g_settings->getS32("farmesh5"); farmesh5) {
+		m_cameranode->setFarValue(farmesh5*BS);
+		return;
+	}
 
 	const auto viewing_range_new = m_draw_control.wanted_range;
 

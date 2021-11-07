@@ -2441,9 +2441,9 @@ bool Game::createClient(const std::string &playername,
 	skybox = NULL;	// This is used/set later on in the main run loop
 
 
-	//if (g_settings->getBool("enable_farmesh")) {
+	if (g_settings->getS32("farmesh5")) {
 		farmesh = new FarMesh(smgr->getRootSceneNode(), smgr, -1, client, server);
-	//}
+	}
 
 	/* freeminer: look up ^
 	local_inventory = new Inventory(itemdef_manager);

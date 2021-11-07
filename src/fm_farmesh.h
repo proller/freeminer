@@ -34,6 +34,7 @@ private:
   float m_cloud_y;
   float m_brightness;
   v3f m_camera_pos;
+  v3POS m_camera_pos_aligned;
   v3f m_camera_dir;
   f32 m_camera_fov;
   f32 m_camera_pitch;
@@ -47,5 +48,10 @@ private:
 
   Mapgen *mg = nullptr;
   unordered_map_v3POS<bool> mg_cache;
-  // irr::core::line3df line;
+
+  struct ls_cache {
+    uint32_t time = 0;
+    unordered_map_v3POS<POS> depth;  
+  };
+  unordered_map_v3POS<ls_cache> plane_cache;
 };
