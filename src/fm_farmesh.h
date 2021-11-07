@@ -45,7 +45,8 @@ private:
 	v3POS m_camera_offset;
 	constexpr static uint16_t grid_size_min = 16;
 	constexpr static uint16_t grid_size_max = 256;
-	uint16_t grid_size = grid_size_min;
+	//uint16_t grid_size = grid_size_min;
+	uint16_t grid_size = 32;
 	Mapgen *mg = nullptr;
 	unordered_map_v3POS<bool> mg_cache;
 
