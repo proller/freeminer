@@ -152,7 +152,7 @@ void FarMesh::render()
 	driver->setMaterial(material);
 
 	const int depth_steps = 512 + 100; // TODO CALC  256+128+64+32+16+8+4+2+1+?
-	const int grid_size = 32;		   // 255;
+	// const int grid_size = 64;		   // 255;
 	const int depth_max = m_render_range_max;
 	// const int grid_size = 64; // 255;
 	//  unordered_map_v2POS<std::pair<bool, v3POS>> grid_cache;
@@ -170,10 +170,20 @@ void FarMesh::render()
 	float endoff = -MAP_BLOCKSIZE;
 	unordered_map_v3POS<bool> occlude_cache;
 	const auto cache_time = m_client->getEnv().getTimeOfDay();
+
+	const int max_cycle_ms = 20;
+	u32 end_ms = porting::getTimeMs() + max_cycle_ms;
+
 	for (short y = 0; y < grid_size; ++y) {
 		// errorstream << "pos_l=" << pos_l << "\n";
 
 		for (short x = 0; x < grid_size; ++x) {
+
+			if (porting::getTimeMs() > end_ms) {
+				// grid_size = std::max<POS>(grid_size/2, grid_size_min);
+				return;
+			}
+
 			int depth = m_render_range /** BS*/; // 255;
 
 			/*auto &cache = grid_cache[{x, y}];
@@ -368,11 +378,12 @@ void FarMesh::render()
 			}
 		}
 	}
+	// grid_size = std::min<POS>(grid_size * 2, grid_size_max);
 
-	errorstream << " time=" << timer_step.getTimerTime() << " stat_probes=" << stat_probes
-				<< " stat_cached=" << stat_cached << " stat_mg=" << stat_mg
-				<< " stat_occluded=" << stat_occluded
+	errorstream << " time=" << timer_step.getTimerTime() << " grid_size=" << grid_size
+				<< " stat_probes=" << stat_probes << " stat_cached=" << stat_cached
+				<< " stat_mg=" << stat_mg << " stat_occluded=" << stat_occluded
 				<< " stat_plane_cache=" << stat_plane_cache
 				<< " mg_cache=" << mg_cache.size() << " cpa=" << m_camera_pos_aligned
-				<< "\n";
+				<< " pcache=" << plane_cache[m_camera_pos_aligned].depth.size() << "\n";
 }
