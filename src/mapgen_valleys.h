@@ -137,6 +137,9 @@ private:
 	float adjustedTerrainLevelFromNoise(TerrainNoise *tn);
 
 	virtual void generateCaves(s16 max_stone_y, s16 large_cave_depth);
+
+	//freeminer:
+	bool visible(POS x, POS y, POS z) override { return terrainLevelAtPoint(x,z) >= y; }
 };
 
 #endif
