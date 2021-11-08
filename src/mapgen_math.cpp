@@ -606,8 +606,7 @@ double d = 0;
 }
 
 bool MapgenMath::visible(POS x, POS y, POS z) {
-	bool have; double d;
-	std::tie(have, d) = calc_point(x,y,z);
+	auto [have, d] = calc_point(x,y,z);
 	return have;
 }
 
@@ -646,8 +645,7 @@ int MapgenMath::generateTerrain() {
 
 			u32 i = vm->m_area.index(x, node_min.Y, z);
 			for (s16 y = node_min.Y; y <= node_max.Y; y++) {
-			bool have; double d;
-			std::tie(have, d) = calc_point(x,y,z);
+			auto [have, d] = calc_point(x,y,z);
 				if ((!invert && d > 0) || (invert && d == 0)  ) {
 					if (!vm->m_data[i]) {
 						//vm->m_data[i] = (y > water_level + biome->filler) ?
