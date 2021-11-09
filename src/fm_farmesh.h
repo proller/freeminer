@@ -33,7 +33,12 @@ private:
 	float m_cloud_y;
 	float m_brightness;
 	v3f m_camera_pos;
-	v3POS m_camera_pos_aligned;
+#if cache0
+// v3POS m_camera_pos_aligned;
+#endif
+	//#if cache_step
+	std::vector<v3POS> m_camera_pos_aligned;
+	//#endif
 	v3f m_camera_dir;
 	f32 m_camera_fov;
 	f32 m_camera_pitch;
@@ -48,6 +53,8 @@ private:
 	constexpr static uint16_t grid_size_max = 256;
 	// uint16_t grid_size = grid_size_min;
 	uint16_t grid_size = 64;
+	// uint16_t grid_size = 32;
+	// uint16_t grid_size = 8;
 	Mapgen *mg = nullptr;
 	unordered_map_v3POS<bool> mg_cache;
 
@@ -57,8 +64,22 @@ private:
 		unordered_map_v3POS<POS> depth;
 		unordered_map_v3POS<v3POS> pos;
 		unordered_map_v3POS<POS> step_width; // debug only
+		unordered_map_v3POS<POS> step;		 // debug only
 	};
 	unordered_map_v3POS<ls_cache> plane_cache;
+
+	struct grid_result_item
+	{
+		v3POS pos;
+		POS depth;
+		POS step_width; // debug
+	};
+	using result_array =
+			std::array<std::array<grid_result_item, grid_size_max>, grid_size_max>;
+	result_array grid_result_1, grid_result_2;
+	result_array *grid_result_use = &grid_result_1;
+	// result_array * grid_result_fill = &grid_result_2;
+	result_array *grid_result_fill = &grid_result_1;
 
 	uint16_t m_cycle_stop_x = 0, m_cycle_stop_y = 0;
 };

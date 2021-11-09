@@ -100,9 +100,17 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 {
 
 	m_camera_pos = camera_pos;
+
+	//#if cache_step
+	m_camera_pos_aligned.clear();
+	m_camera_pos_aligned.reserve(256); // todo calc from grid_size?
+//#endif
+#if cache0
 	m_camera_pos_aligned =
 			floatToInt(intToFloat(floatToInt(m_camera_pos, BS * 16), BS * 16),
 					BS); // todo optimize
+#endif
+
 	m_camera_dir = camera_dir;
 	m_camera_fov = camera_fov;
 	m_camera_pitch = camera_pitch;
@@ -111,21 +119,13 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 	m_render_range = std::min<POS>(render_range, 255);
 
 	/*
-	errorstream << "update pos=" << m_camera_pos << " dir=" << m_camera_dir
-							<< " fov=" << m_camera_fov << " pitch=" <<
-	m_camera_pitch
-							<< " yaw=" << m_camera_yaw << " render_range=" <<
-	m_render_range
-							<< std::endl;
+   errorstream << "update pos=" << m_camera_pos << " dir=" << m_camera_dir
+			   << " fov=" << m_camera_fov << " pitch=" << m_camera_pitch
+			   << " yaw=" << m_camera_yaw << " render_range=" << m_render_range
+			   << std::endl;
 	*/
-}
 
-void FarMesh::render()
-{
-	video::IVideoDriver *driver = SceneManager->getVideoDriver();
-	driver->setTransform(video::ETS_WORLD, AbsoluteTransformation);
-
-	const auto start = 2 << 7;
+	// const auto start = 2 << 7;
 
 	// auto from_center = m_camera_pos + m_camera_dir /** BS */ * start;
 
@@ -146,13 +146,6 @@ void FarMesh::render()
 	dir_rd.rotateYZBy(m_camera_yaw);
 	dir_rd.rotateXZBy(m_camera_pitch);
 
-	driver->setTransform(irr::video::ETS_WORLD, irr::core::IdentityMatrix);
-	irr::video::SMaterial material;
-	material.Lighting = false;
-	material.BackfaceCulling = false;
-	material.ZBuffer = irr::video::ECFN_ALWAYS;
-	driver->setMaterial(material);
-
 	const int depth_steps = 512 + 100; // TODO CALC  256+128+64+32+16+8+4+2+1+?
 	// const int grid_size = 64;		   // 255;
 	const int depth_max = m_render_range_max;
@@ -162,7 +155,7 @@ void FarMesh::render()
 	TimeTaker timer_step("Client: Farmesh");
 
 	uint32_t stat_probes = 0, stat_cached = 0, stat_mg = 0, stat_occluded = 0,
-			 stat_plane_cache = 0;
+			 stat_plane_cache = 0, stat_cache_used = 0, stat_cache_sky = 0;
 
 	INodeDefManager *nodemgr = m_client->getNodeDefManager();
 
@@ -182,7 +175,13 @@ void FarMesh::render()
 		for (short x = m_cycle_stop_x; x < grid_size; ++x) {
 
 			if (porting::getTimeMs() > end_ms) {
+				m_cycle_stop_x = x;
+				m_cycle_stop_y = y;
 				// grid_size = std::max<POS>(grid_size/2, grid_size_min);
+/*				errorstream << " stop "
+							<< " m_cycle_stop_x=" << m_cycle_stop_x << " x=" << x
+							<< " m_cycle_stop_y=" << m_cycle_stop_y << " y=" << y << "\n";
+*/
 				return;
 			}
 
@@ -193,7 +192,8 @@ void FarMesh::render()
 			  ++stat_cached;
 			  continue;
 			}*/
-			v3POS pos_int_0;
+			// v3POS pos_int_0;
+			std::vector<v3POS> plane_cache_step_pos;
 			for (short step_num = 0; step_num < depth_steps; ++step_num) {
 
 				auto pos_ld = dir_ld * depth * BS + m_camera_pos;
@@ -204,8 +204,12 @@ void FarMesh::render()
 				// auto step_width = std::max(1, int(step_r.getLength()) >> 1 << 1);
 				auto step_width =
 						std::min(std::max<int>(1, step_r.getLength() / BS), 1024);
+				//#if cache0
 				int step_aligned = pow(2, ceil(log(step_width) / log(2)));
+				//#else
 				// int step_aligned = pow(2, std::floor(log(step_width) / log(2)));
+				//#endif
+
 				depth += step_width;
 
 				if (depth > depth_max)
@@ -227,12 +231,136 @@ void FarMesh::render()
 				v3POS pos_int((pos_int_raw.X / step_aligned) * step_aligned,
 						(pos_int_raw.Y / step_aligned) * step_aligned,
 						(pos_int_raw.Z / step_aligned) * step_aligned);
+/*
+				if (x == grid_size / 2 && y == grid_size / 2)
+					errorstream << " step_num=" << step_num
+								<< " step_width=" << step_width
+								<< " step_aligned=" << step_aligned << " depth=" << depth
+								<< "  pos=" << pos << " pos_int=" << pos_int
+								<< " pos_l=" << pos_l << " pos_ld=" << pos_ld << "\n";
+*/
+				// if (step_num == 0) {
 
-				auto &plane_cache_item = plane_cache[m_camera_pos_aligned];
+				// m_camera_pos_aligned.reserve(step_num);
+				// m_camera_pos_aligned[step_num] =
+				// floatToInt(intToFloat(floatToInt(m_camera_pos, BS * step_aligned), BS *
+				// step_aligned),	BS); // todo optimize
+				if (step_num >= m_camera_pos_aligned.size())
+					m_camera_pos_aligned.emplace_back(floatToInt(
+							intToFloat(floatToInt(m_camera_pos, BS * step_aligned),
+									BS * step_aligned),
+							BS)); // todo optimize
+				//}
+				auto &plane_cache_item = plane_cache[m_camera_pos_aligned[step_num]];
+
+/*
+				if (x == grid_size / 2 && y == grid_size / 2)
+					errorstream << " planecache ini"
+								<< " step_num=" << step_num
+								<< " cpa=" << m_camera_pos_aligned[step_num]
+								<< " pos_int=" << pos_int
+								<< " step_aligned=" << step_aligned
+								<< " m_camera_pos_aligned.size="
+								<< m_camera_pos_aligned.size()
+								<< " m_camera_pos_aligned0=" << m_camera_pos_aligned[0]
+								<< " tm=" << plane_cache_item.time
+								<< " sz=" << plane_cache_step_pos.size() << "\n";
+*/
+				plane_cache_step_pos.emplace_back(pos_int);
+
+				// cache try 2
+				{
+					// pos_int_0 = pos_int;
+					/*					if (const auto &it =
+					   plane_cache.find(m_camera_pos_aligned); it != plane_cache.end()) {
+																	if (const auto &it2 =
+					   it->second.depth.find(pos_int); it2 != it->second.depth.end()) {*/
+					// TODO: deleter
+					plane_cache_item.time = cache_time;
+					if (const auto &it2 = plane_cache_item.depth.find(pos_int);
+							it2 != plane_cache_item.depth.end()) {
+						++stat_plane_cache;
+						const auto depth_cached = it2->second;
+						const auto &pos_cached = plane_cache_item.pos[pos_int];
+						const auto cache_valid =
+								step_num < plane_cache_item.step[pos_int];
+
+/*						if (x == grid_size / 2 && y == grid_size / 2)
+							errorstream
+									<< " planecache got"
+									<< " step_num=" << step_num
+									<< " cpa=" << m_camera_pos_aligned[step_num]
+									<< " pos_int=" << pos_int << " => " << depth_cached
+									<< " pos_cached=" << pos_cached << " t="
+									<< plane_cache[m_camera_pos_aligned[step_num]].time
+									<< " s1=" << plane_cache.size() << " s2="
+									<< plane_cache[m_camera_pos_aligned[step_num]]
+											   .depth.size()
+									//<< " sw=" << step_width
+									<< " swc=" << plane_cache_item.step_width[pos_int]
+									<< " snc=" << plane_cache_item.step[pos_int]
+									<< " cache_valid=" << cache_valid << "\n";
+*/
+						if (!depth_cached && cache_valid) {
+							++stat_cache_sky;
+							break;
+						}
+						if (cache_valid) {
+							++stat_cache_used;
+							/*
+							auto l = depth_cached / (MAX_MAP_GENERATION_LIMIT * 2);
+							uint8_t color = 255 * l;
+							driver->draw3DLine(
+									intToFloat(pos_cached - m_camera_offset, BS),
+									intToFloat(v3POS(plane_cache_item.step_width[pos_int],
+													   0, 0 + !pos_cached.Y) +
+													   pos_cached - m_camera_offset,
+											BS),
+									irr::video::SColor(255 * (pos_cached.Y < 0), color,
+											255 * !pos_cached.Y, 0));
+*/
+/*
+							if (x == grid_size / 2 && y == grid_size / 2)
+								errorstream
+										<< " draw cached "
+										<< intToFloat(pos_cached - m_camera_offset, BS)
+										<< " , "
+										<< intToFloat(
+												   v3POS(plane_cache_item
+																   .step_width[pos_int],
+														   0, 0 + !pos_cached.Y) +
+														   pos_cached - m_camera_offset,
+												   BS)
+										<< "\n";
+*/
+							break;
+						}
+						/*						} else {
+																				plane_cache[m_camera_pos_aligned].depth[pos_int]
+						   = 0;
+																		}*/
+					} else {
+/*
+						if (x == grid_size / 2 && y == grid_size / 2)
+							errorstream
+									<< " planecache MISS "
+									<< " cpa=" << m_camera_pos_aligned[step_num]
+									<< " pos_int=" << pos_int << " t="
+									<< plane_cache[m_camera_pos_aligned[step_num]].time
+									<< " s1=" << plane_cache.size() << " s2="
+									<< plane_cache[m_camera_pos_aligned[step_num]]
+											   .depth.size()
+									<< "\n";
+*/
+						plane_cache_item.depth[pos_int] = 0;
+						// plane_cache_item.step_width[pos_int] = step_num;
+						plane_cache_item.step[pos_int] = step_num;
+					}
+				}
 
 				if (step_num == 0) {
 
-					//#if 0
+#if cache0
 					pos_int_0 = pos_int;
 					/*					if (const auto &it =
 					   plane_cache.find(m_camera_pos_aligned); it != plane_cache.end()) {
@@ -281,7 +409,7 @@ void FarMesh::render()
 												<< "\n";*/
 						plane_cache_item.depth[pos_int] = 0;
 					}
-					//#endif
+#endif
 					// /*					 OK
 					// TODO: test speed, really faster with?:
 					if (isOccluded(&m_client->getEnv().getClientMap(),
@@ -315,7 +443,7 @@ void FarMesh::render()
 				*/
 				bool visible = false;
 
-				if (pos_int.Y <= m_water_level) {
+				if (pos_int.Y <= m_water_level && m_camera_pos.Y > m_water_level) {
 					visible = true;
 					// cache.second = pos_int;
 
@@ -384,13 +512,25 @@ void FarMesh::render()
 						*/
 					}
 				}
-				if (!visible)
+
+				if (!visible) {
+
+					/*
+									   for (short step_old = 0; step_old <= step_num;
+					   ++step_old) { auto &plane_cache_item_save =
+												   plane_cache[m_camera_pos_aligned[step_old]];
+										   plane_cache_item_save.depth[plane_cache_step_pos[step_old]]
+					   = 0;
+									   }*/
+
 					continue;
+				}
 
 				/*
-												if (x == grid_size / 2 && y == grid_size
-				   / 2) // errorstream << "draw "
-																				<< " x="
+												if (x == grid_size / 2 && y ==
+				   grid_size / 2) // errorstream << "draw "
+																				<< "
+				   x="
 				   << x << " y=" << y << " step_num=" << step_num
 																				<< "
 				   depth=" << depth << " pos=" << pos << " pos_int "
@@ -402,9 +542,32 @@ void FarMesh::render()
 				   step_aligned=" << step_aligned << "\n";
 												*/
 				// plane_cache[m_camera_pos_aligned]
+#if cache0
 				plane_cache_item.depth[pos_int_0] = depth;
 				plane_cache_item.pos[pos_int_0] = pos_int;
 				plane_cache_item.step_width[pos_int_0] = step_width;
+#endif
+
+				// for ( auto & step_old : plane_cache_step_pos)
+				for (short step_old = 0; step_old <= step_num; ++step_old) {
+/*
+					if (x == grid_size / 2 && y == grid_size / 2)
+						errorstream << " plane cache set step_old=" << step_old << "/"
+									<< step_num << " step pos"
+									<< plane_cache_step_pos[step_old]
+									<< " depth=" << depth << " pos_int=" << pos_int
+									<< " step_width=" << step_width << "\n";
+*/
+
+					auto &plane_cache_item_save =
+							plane_cache[m_camera_pos_aligned[step_old]];
+					plane_cache_item_save.depth[plane_cache_step_pos[step_old]] = depth;
+					plane_cache_item_save.pos[plane_cache_step_pos[step_old]] = pos_int;
+					plane_cache_item_save.step_width[plane_cache_step_pos[step_old]] =
+							step_width;
+					plane_cache_item_save.step[plane_cache_step_pos[step_old]] =
+							step_num; // step_old;
+				}
 
 				/*errorstream << " set pcache " << m_camera_pos_aligned << " : "
 										<< pos_int_0 << " = " << depth << " s1=" <<
@@ -416,23 +579,67 @@ void FarMesh::render()
 				pos -= intToFloat(m_camera_offset, BS);
 				// driver->draw3DLine(pos, pos + v3f(step_width*BS, 0, 0),
 				// driver->draw3DLine(pos, intToFloat(pos_int - m_camera_offset, BS),
-				driver->draw3DLine(intToFloat(pos_int - m_camera_offset, BS),
-						intToFloat(v3POS(step_width, 0, 0 + step_width * !pos_int.Y) +
-										   pos_int - m_camera_offset,
-								BS),
-						irr::video::SColor(255 * (pos_int.Y < 0), 255 - step_num,
-								255 * !pos_int.Y, 0));
+
+				(*grid_result_fill)[x][y].pos = pos_int;
+				(*grid_result_fill)[x][y].depth = depth;
+				(*grid_result_fill)[x][y].step_width = step_width;
+
+				/*
+								driver->draw3DLine(intToFloat(pos_int - m_camera_offset,
+				   BS), intToFloat(v3POS(step_width, 0, 0 + step_width * !pos_int.Y) +
+														   pos_int - m_camera_offset,
+												BS),
+										irr::video::SColor(255 * (pos_int.Y < 0), 255 -
+				   step_num, 255 * !pos_int.Y, 0));
+				*/
 				break;
 			}
 		}
+		m_cycle_stop_x = 0;
 	}
-	m_cycle_stop_x = m_cycle_stop_y = 0;
+	m_cycle_stop_y = 0;
 	// grid_size = std::min<POS>(grid_size * 2, grid_size_max);
 
-	infostream << " time=" << timer_step.getTimerTime() << " grid_size=" << grid_size
-			   << " stat_probes=" << stat_probes << " stat_cached=" << stat_cached
-			   << " stat_mg=" << stat_mg << " stat_occluded=" << stat_occluded
-			   << " stat_plane_cache=" << stat_plane_cache
-			   << " mg_cache=" << mg_cache.size() << " cpa=" << m_camera_pos_aligned
-			   << " pcache=" << plane_cache[m_camera_pos_aligned].depth.size() << "\n";
+	// info
+	errorstream << " time=" << timer_step.getTimerTime() << " grid_size=" << grid_size
+				<< " stat_probes=" << stat_probes << " stat_cached=" << stat_cached
+				<< " stat_mg=" << stat_mg << " stat_occluded=" << stat_occluded
+				<< " plane_cache=" << stat_plane_cache
+				<< " cache_used=" << stat_cache_used << " cache_sky=" << stat_cache_sky
+				<< " mg_cache=" << mg_cache.size() << " cpa0=" << m_camera_pos_aligned[0]
+				<< " pcache=" << plane_cache[m_camera_pos_aligned[0]].depth.size()
+				<< "\n";
+
+	// grid_result = std::move(grid_result_wip);
+	//std::swap(grid_result_use, grid_result_fill);
+}
+
+void FarMesh::render()
+{
+	video::IVideoDriver *driver = SceneManager->getVideoDriver();
+	driver->setTransform(video::ETS_WORLD, AbsoluteTransformation);
+	driver->setTransform(irr::video::ETS_WORLD, irr::core::IdentityMatrix);
+	irr::video::SMaterial material;
+	material.Lighting = false;
+	material.BackfaceCulling = false;
+	material.ZBuffer = irr::video::ECFN_ALWAYS;
+	driver->setMaterial(material);
+
+	for (auto &ya : *grid_result_use) {
+		for (auto &point : ya) {
+			const auto &pos_int = point.pos;
+			const auto step_width = point.step_width;
+			const auto depth_cached = point.depth;
+
+							auto l = depth_cached / (MAX_MAP_GENERATION_LIMIT * 2);
+							uint8_t color = 255 * l;
+
+			driver->draw3DLine(intToFloat(pos_int - m_camera_offset, BS),
+					intToFloat(v3POS(step_width, 0, 0 + step_width * !pos_int.Y) +
+									   pos_int - m_camera_offset,
+							BS),
+					irr::video::SColor(255 - 100*(pos_int.Y < 0), 255 /*- step_num*/,
+							255 * !pos_int.Y, color));
+		}
+	}
 }
