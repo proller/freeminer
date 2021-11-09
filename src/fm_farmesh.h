@@ -7,6 +7,9 @@
 #include "util/unordered_map_hash.h"
 #include <ISceneNode.h>
 #include <cstdint>
+
+#define cache0 1
+
 class Client;
 class Mapgen;
 constexpr size_t FARMESH_MATERIAL_COUNT = 2;
@@ -36,9 +39,12 @@ private:
 #if cache0
 // v3POS m_camera_pos_aligned;
 #endif
-	//#if cache_step
-	std::vector<v3POS> m_camera_pos_aligned;
-	//#endif
+	#if cache_step
+	std::vector<v3POS> m_camera_pos_aligned_by_step;
+	#endif
+	#if cache0
+	v3POS m_camera_pos_aligned;
+	#endif
 	v3f m_camera_dir;
 	f32 m_camera_fov;
 	f32 m_camera_pitch;
@@ -51,8 +57,14 @@ private:
 	v3POS m_camera_offset;
 	constexpr static uint16_t grid_size_min = 16;
 	constexpr static uint16_t grid_size_max = 256;
+	std::array<uint16_t, grid_size_max*grid_size_max> process_order;
 	// uint16_t grid_size = grid_size_min;
-	uint16_t grid_size = 64;
+	//uint16_t grid_size = 64;
+	uint16_t grid_size = 256;
+	//constexpr static uint16_t skip_x_num = 7;
+	//constexpr static uint16_t skip_y_num = 7;
+	//uint16_t m_skip_x_current = 0;
+	//uint16_t m_skip_y_current = 1;
 	// uint16_t grid_size = 32;
 	// uint16_t grid_size = 8;
 	Mapgen *mg = nullptr;
@@ -81,5 +93,5 @@ private:
 	// result_array * grid_result_fill = &grid_result_2;
 	result_array *grid_result_fill = &grid_result_1;
 
-	uint16_t m_cycle_stop_x = 0, m_cycle_stop_y = 0;
+	uint16_t m_cycle_stop_x = 0, m_cycle_stop_y = 0, m_cycle_stop_i = 0;
 };
