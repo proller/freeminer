@@ -693,16 +693,21 @@ void FarMesh::render()
 			const auto &pos_int = point.pos;
 			const auto step_width = point.step_width;
 			const auto depth_cached = point.depth;
+			if (!depth_cached)
+				continue;
+			// auto l = (float)depth_cached / (MAX_MAP_GENERATION_LIMIT * 2);
+			auto color = (4 - log(depth_cached)) * 50;
+			// uint8_t color = 255 * l;
+			// log(step_width) / log(2)
 
-			auto l = depth_cached / (MAX_MAP_GENERATION_LIMIT * 2);
-			uint8_t color = 255 * l;
-
+			// errorstream << "depth_cached=" << depth_cached << " l=" << l << " color="
+			// << (int)color << "\n";
 			driver->draw3DLine(intToFloat(pos_int - m_camera_offset, BS),
 					intToFloat(v3POS(step_width, 0, 0 + step_width * !pos_int.Y) +
 									   pos_int - m_camera_offset,
 							BS),
 					irr::video::SColor(255, 255 - 100 * (pos_int.Y < 0), /*- step_num*/
-							255 * (m_water_level == pos_int.Y), color));
+							255 * (m_water_level - 1 == pos_int.Y), color));
 		}
 	}
 }
