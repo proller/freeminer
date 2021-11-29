@@ -4778,7 +4778,7 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats,
 		}
 	}
 
-		if(farmesh)
+		if(!flags.headless_optimize && farmesh)
 		{
 			auto farmesh_range = draw_control->wanted_range; // * 10;
 			if(draw_control->range_all && farmesh_range < 512)

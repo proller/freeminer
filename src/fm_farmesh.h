@@ -30,6 +30,8 @@ public:
 
 	virtual const core::aabbox3d<f32> &getBoundingBox() const override { return m_box; }
 
+    void CreateMesh();
+
 private:
 	video::SMaterial m_materials[FARMESH_MATERIAL_COUNT];
 	core::aabbox3d<f32> m_box;
@@ -56,11 +58,14 @@ private:
 	POS m_water_level = 0;
 	v3POS m_camera_offset;
 	constexpr static uint16_t grid_size_min = 16;
-	constexpr static uint16_t grid_size_max = 256;
+	//constexpr static uint16_t grid_size_max = 256;
+	constexpr static uint16_t grid_size_max = 64;
+	//constexpr static uint16_t grid_size_max = 16;
 	std::array<uint16_t, grid_size_max*grid_size_max> process_order;
 	// uint16_t grid_size = grid_size_min;
 	//uint16_t grid_size = 64;
-	uint16_t grid_size = 256;
+	//uint16_t grid_size = 256;
+	uint16_t grid_size = 	grid_size_max;
 	//constexpr static uint16_t skip_x_num = 7;
 	//constexpr static uint16_t skip_y_num = 7;
 	//uint16_t m_skip_x_current = 0;
@@ -94,4 +99,7 @@ private:
 	result_array *grid_result_fill = &grid_result_1;
 
 	uint16_t m_cycle_stop_x = 0, m_cycle_stop_y = 0, m_cycle_stop_i = 0;
+
+	//irr::scene::IMesh* mesh = nullptr;
+	irr::scene::SMesh* mesh = nullptr;
 };

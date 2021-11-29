@@ -1,5 +1,7 @@
 
 #include "fm_farmesh.h"
+#include "EMaterialFlags.h"
+#include "IMeshBuffer.h"
 #include "client.h"
 #include "clientmap.h"
 #include "constants.h"
@@ -81,7 +83,7 @@ FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
 	for (size_t i = 0; i < process_order.size(); ++i)
 		process_order[i] = i;
 	auto rng = std::default_random_engine{};
-	std::shuffle(std::begin(process_order), std::end(process_order), rng);
+	// ENABLE!?: std::shuffle(std::begin(process_order), std::end(process_order), rng);
 }
 
 FarMesh::~FarMesh()
@@ -202,6 +204,8 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 				*/
 				return;
 			}
+
+			(*grid_result_fill)[x][y].depth = 0; // clean cache
 
 			int depth = m_render_range /** BS*/; // 255;
 
@@ -638,7 +642,11 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 				(*grid_result_fill)[x][y].pos = pos_int;
 				(*grid_result_fill)[x][y].depth = depth;
 				(*grid_result_fill)[x][y].step_width = step_width;
-
+/*
+				errorstream << "grid res"
+							<< " x=" << x << " y=" << y << " depth=" << depth
+							<< " step_width=" << step_width << "\n";
+*/
 				/*
 								driver->draw3DLine(intToFloat(pos_int - m_camera_offset,
 				   BS), intToFloat(v3POS(step_width, 0, 0 + step_width * !pos_int.Y) +
@@ -673,8 +681,224 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 			//<< " pcache=" << plane_cache[m_camera_pos_aligned_by_step[0]].depth.size()
 			<< "\n";
 */
+	//errorstream << "fin\n";
 	// grid_result = std::move(grid_result_wip);
-	// std::swap(grid_result_use, grid_result_fill);
+	std::swap(grid_result_use, grid_result_fill);
+
+	CreateMesh();
+
+}
+
+// creates a hill plane
+void FarMesh::CreateMesh()
+{
+
+	/*irr::scene::IMesh* createHillPlaneMesh(
+			const core::dimension2d<f32>& tileSize,
+			const core::dimension2d<u32>& tc, video::SMaterial* material,
+			f32 hillHeight, const core::dimension2d<f32>& ch,
+			const core::dimension2d<f32>& textureRepeatCount) //const
+	*/
+
+	core::dimension2d<u32> tc = {grid_result_use->size(), grid_result_use->size()};
+	core::dimension2d<f32> textureRepeatCount{1, 1};
+	f32 hillHeight = 1;
+	const core::dimension2d<f32> &ch{1, 1};
+
+	core::dimension2d<u32> tileCount = tc;
+	core::dimension2d<f32> countHills = ch;
+
+	if (countHills.Width < 0.01f)
+		countHills.Width = 1.f;
+	if (countHills.Height < 0.01f)
+		countHills.Height = 1.f;
+
+	// center
+	// const core::position2d<f32> center((tileSize.Width * tileCount.Width) * 0.5f,
+	// (tileSize.Height * tileCount.Height) * 0.5f);
+
+	// texture coord step
+	const core::dimension2d<f32> tx(textureRepeatCount.Width / tileCount.Width,
+			textureRepeatCount.Height / tileCount.Height);
+
+	// add one more point in each direction for proper tile count
+	//++tileCount.Height;
+	//++tileCount.Width;
+
+	irr::scene::SMeshBuffer *buffer = new irr::scene::SMeshBuffer();
+	video::S3DVertex vtx;
+	vtx.Color.set(255, 155, 155, 155);
+
+	// create vertices from left-front to right-back
+	// u32 x;
+
+constexpr auto debug1 = 0;
+
+	// f32 sx=0.f, tsx=0.f;
+	size_t cnt = 0;
+	size_t x = 0;
+	for (auto &ya : *grid_result_use) {
+		// f32 sy=0.f, tsy=0.f;
+		size_t y = 0;
+		for (auto &point : ya) {
+			const auto &pos_int = point.pos;
+			const auto step_width = point.step_width;
+			const auto depth_cached = point.depth;
+			// if (!depth_cached)
+			//	continue;
+			/*
+				f32 sx=0.f, tsx=0.f;
+				for (x=0; x<tileCount.Width; ++x)
+				{
+					f32 sy=0.f, tsy=0.f;
+					for (u32 y=0; y<tileCount.Height; ++y)
+					{*/
+			// vtx.Pos.set(sx - center.X, 0, sy - center.Y);
+			if (depth_cached)
+				vtx.Pos = intToFloat(pos_int - m_camera_offset, BS);
+			// vtx.Pos.set(pos_int.X, pos_int.Y, pos_int.Z);
+			// vtx.TCoords.set(tsx, 1.0f - tsy);
+
+			/*			if (core::isnotzero(hillHeight))
+							vtx.Pos.Y = sinf(vtx.Pos.X * countHills.Width * core::PI /
+			   center.X) * cosf(vtx.Pos.Z * countHills.Height * core::PI / center.Y) *
+								hillHeight;
+			*/
+if (debug1)
+			errorstream << "vtx add " << cnt << " depth_cached=" << depth_cached
+						<< " x=" << x << " y=" << y << " pos=" << vtx.Pos << "\n";
+
+
+			auto color = (4 - log(depth_cached)) * 50;
+					vtx.Color =
+					irr::video::SColor(255, 255 - 100 * (pos_int.Y < 0), /*- step_num*/
+							255 * (m_water_level - 1 == pos_int.Y), color);
+
+
+			buffer->Vertices.push_back(vtx);
+			// sy += tileSize.Height;
+			// tsy += tx.Height;
+			++cnt;
+			++y;
+		}
+		// sx += tileSize.Width;
+		// tsx += tx.Width;
+		++x;
+	}
+
+	// create indices
+	/*   	size_t x = 0;
+		for (auto &ya : *grid_result_use) {
+
+	size_t y = 0;
+			f32 sy=0.f, tsy=0.f;
+			for (auto &point : ya) {
+				*/
+	/*	for (x=0; x<tileCount.Width-1; ++x)
+		{
+			for (u32 y=0; y<tileCount.Height-1; ++y)
+			{*/
+
+	for (size_t x = 0; x < grid_size - 1; ++x) {
+		for (u32 y = 0; y < grid_size - 1; ++y) {
+			const auto &point = (*grid_result_use)[x][y];
+			// const auto &pos_int = point.pos;
+			// const auto step_width = point.step_width;
+			const auto depth_cached = point.depth;
+			if (!depth_cached)
+				continue;
+
+			// const s32 current = x * tileCount.Height + y;
+			const s32 current = x * grid_size + y;
+
+			if ((*grid_result_use)[x][y + 1].depth &&
+					(*grid_result_use)[x + 1][y].depth) {
+
+				if ((*grid_result_use)[x][y].depth) {
+if (debug1)
+					errorstream << "tri add1 " << current
+								<< " depth_cached=" << depth_cached << " x=" << x
+								<< " y=" << y << " pos1=" << (*grid_result_use)[x][y].pos
+								<< " pos2=" << (*grid_result_use)[x][y + 1].pos
+								<< " pos3=" << (*grid_result_use)[x + 1][y].pos
+								<< std::endl;
+
+					buffer->Indices.push_back(current);
+					buffer->Indices.push_back(current + 1);
+					buffer->Indices.push_back(current + tileCount.Height);
+					// buffer->Indices.push_back(current + grid_size);
+				}
+
+				if ((*grid_result_use)[x + 1][y + 1].depth) {
+
+if (debug1)
+					errorstream << "tri add2 " << current
+								<< " depth_cached=" << depth_cached << " x=" << x
+								<< " y=" << y << " pos=" << (*grid_result_use)[x][y].pos
+								<< " pos2=" << (*grid_result_use)[x + 1][y + 1].pos
+								<< " pos3=" << (*grid_result_use)[x + 1][y].pos
+								<< std::endl;
+
+					buffer->Indices.push_back(current + 1);
+					buffer->Indices.push_back(current + 1 + tileCount.Height);
+					buffer->Indices.push_back(current + tileCount.Height);
+				}
+			} else {
+if (debug1)
+				errorstream << "tri skip " << current << " depth_cached=" << depth_cached
+							<< " x=" << x << " y=" << y << std::endl;
+			}
+			//++y;
+		}
+		//++x;
+	}
+
+	// recalculate normals
+	for (u32 i = 0; i < buffer->Indices.size(); i += 3) {
+		const core::vector3df normal =
+				core::plane3d<f32>(buffer->Vertices[buffer->Indices[i + 0]].Pos,
+						buffer->Vertices[buffer->Indices[i + 1]].Pos,
+						buffer->Vertices[buffer->Indices[i + 2]].Pos)
+						.Normal;
+
+		buffer->Vertices[buffer->Indices[i + 0]].Normal = normal;
+		buffer->Vertices[buffer->Indices[i + 1]].Normal = normal;
+		buffer->Vertices[buffer->Indices[i + 2]].Normal = normal;
+	}
+
+
+/*	irr::video::SMaterial material_;
+	material_.setFlag(irr::video::EMF_FOG_ENABLE, 1);
+	// material_.setFlag(irr::video::EMF_NORMALIZE_NORMALS, 1);
+	//  material_.ZBuffer = irr::video::ECFN_ALWAYS;
+	// material_.setFlag(irr::video::EMF_ZBUFFER, irr::video::ECFN_ALWAYS);
+	material_.setFlag(irr::video::EMF_WIREFRAME, 1);
+	auto material = &material_;
+*/
+irr::video::SMaterial * material= nullptr;
+
+	if (material)
+		buffer->Material = *material;
+
+	buffer->recalculateBoundingBox();
+	buffer->setHardwareMappingHint(irr::scene::EHM_STATIC);
+
+	// irr::scene::SMesh*
+	if (mesh)
+		mesh->drop();
+	mesh = new irr::scene::SMesh();
+	mesh->addMeshBuffer(buffer);
+	mesh->recalculateBoundingBox();
+	buffer->drop();
+
+	mesh->setMaterialFlag(irr::video::EMF_FOG_ENABLE, 1);
+	//mesh->setMaterialFlag(irr::video::EMF_NORMALIZE_NORMALS, 1);
+	//  material_.ZBuffer = irr::video::ECFN_ALWAYS;
+	// material_.setFlag(irr::video::EMF_ZBUFFER, irr::video::ECFN_ALWAYS);
+	//mesh->setMaterialFlag(irr::video::EMF_WIREFRAME, 1);
+
+	// return mesh;
+	// errorstream << "mesh=" << mesh << "\n";
 }
 
 void FarMesh::render()
@@ -710,4 +934,9 @@ void FarMesh::render()
 							255 * (m_water_level - 1 == pos_int.Y), color));
 		}
 	}
+	// auto tmesh = createHillPlaneMesh({10,10},{10,10},&material,1,{1,1},{1,1});
+	// driver->drawMeshBuffer(tmesh->getMeshBuffer(0));
+
+	if (mesh)
+		driver->drawMeshBuffer(mesh->getMeshBuffer(0));
 }
