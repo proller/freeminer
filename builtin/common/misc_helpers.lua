@@ -216,14 +216,7 @@ assert(string.trim("\n \t\tfoo bar\t ") == "foo bar")
 
 --------------------------------------------------------------------------------
 function math.hypot(x, y)
-	local t
-	x = math.abs(x)
-	y = math.abs(y)
-	t = math.min(x, y)
-	x = math.max(x, y)
-	if x == 0 then return 0 end
-	t = t / x
-	return x * math.sqrt(1 + t * t)
+	return math.sqrt(x * x + y * y)
 end
 
 --------------------------------------------------------------------------------
@@ -294,6 +287,15 @@ function cleanup_path(temppath)
 
 	return temppath
 end
+
+
+function math.round(x)
+	if x >= 0 then
+		return math.floor(x + 0.5)
+	end
+	return math.ceil(x - 0.5)
+end
+
 
 function core.formspec_escape(text)
 	if text ~= nil then
@@ -570,7 +572,7 @@ if minetest then
 
 	core.rotate_node = function(itemstack, placer, pointed_thing)
 		core.rotate_and_place(itemstack, placer, pointed_thing,
-				core.setting_getbool("creative_mode"),
+				core.settings:get_bool("creative_mode"),
 				{invert_wall = placer:get_player_control().sneak})
 		return itemstack
 	end
