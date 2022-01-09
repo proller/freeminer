@@ -270,7 +270,6 @@ void Client::Stop()
 		m_localdb->endSave();
 	}
 
-	delete m_localserver;
 	delete m_localdb;
 }
 
@@ -307,6 +306,11 @@ Client::~Client()
 
 	delete m_mapper;
 	delete m_media_downloader;
+
+	//freeminer:
+	if (m_settings_mgr)
+		delete m_settings_mgr;
+	m_settings_mgr = nullptr;
 }
 
 void Client::connect(Address address,
@@ -817,13 +821,7 @@ void Client::initLocalMapSaving(const Address &address,
 		bool is_local_server)
 {
 
-	m_localserver = nullptr;
-
 	m_localdb = NULL;
-
-#if !MINETEST_PROTO
-	if (g_settings->getS32("farmesh5") && !is_local_server) { } else
-#endif
 
 	if (!g_settings->getBool("enable_local_map_saving") || is_local_server) {
 		return;
@@ -837,25 +835,35 @@ void Client::initLocalMapSaving(const Address &address,
 		+ DIR_DELIM + "server_"
 		+ address_replaced;
 
-	SubgameSpec gamespec;
-
-	if (!getWorldExists(world_path)) {
-		gamespec = findSubgame(g_settings->get("default_game"));
-		if (!gamespec.isValid())
-			gamespec = findSubgame("minimal");
-	} else {
-		gamespec = findWorldSubgame(world_path);
-	}
-
 	fs::CreateAllDirs(world_path);
 
-#if !MINETEST_PROTO
-	m_localserver = new Server(world_path, gamespec, false, false);
-#endif
-	/*
-	m_localdb = new Database_SQLite3(world_path);
+    std::string conf_path = world_path + DIR_DELIM + "world.mt";
+	Settings conf;
+	bool succeeded = conf.readConfigFile(conf_path.c_str());
+	if (!succeeded || !conf.exists("backend")) {
+		// fall back to sqlite3
+		#if USE_LEVELDB
+		conf.set("backend", "leveldb");
+		#elif USE_SQLITE3
+		conf.set("backend", "sqlite3");
+		#elif USE_REDIS
+		conf.set("backend", "redis");
+		#endif
+
+		SubgameSpec gamespec = findSubgame(g_settings->get("default_game"));
+		if (!gamespec.isValid())
+			gamespec = findSubgame("minimal");
+		conf.set("gameid", gamespec.id); // Later rewrited from server data
+	}
+	std::string backend = conf.get("backend");
+	m_localdb = ServerMap::createDatabase(backend, world_path, conf);
+
+	if (!conf.updateConfigFile(conf_path.c_str()))
+		errorstream << __FUNCTION__ << ": Failed to update " << conf_path << std::endl;
+
+	m_world_path = world_path;
+
 	m_localdb->beginSave();
-	*/
 	actionstream << "Local map saving started, map will be saved at '" << world_path << "'" << std::endl;
 }
 

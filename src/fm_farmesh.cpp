@@ -63,27 +63,23 @@ FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
 			-BS * m_render_range_max, BS * m_render_range_max, BS * m_render_range_max,
 			BS * m_render_range_max);
 
-	Settings user_settings;
-	std::string test_mapmeta_path = ""; // makeMetaFile(false);
-	MapSettingsManager map_settings_manager(&user_settings, test_mapmeta_path);
+	EmergeManager *	emerge_use = server	 ? server->getEmergeManager() : 
+						client->m_emerge ? client->m_emerge :
+						nullptr;
 
-	Server *server_use = server					 ? server
-						 : client->m_localserver ? client->m_localserver
-												 : nullptr;
-	if (server_use) {
+	if (emerge_use) {
 		errorstream << "Farmesh: mgtype="
-					<< server_use->getEmergeManager()->mgparams->mgtype << " water_level="
-					<< server_use->getEmergeManager()->mgparams->water_level
+					<< emerge_use->mgparams->mgtype << " water_level="
+					<< emerge_use->mgparams->water_level
 					<< " render_range_max=" << m_render_range_max << "\n";
-		mg = Mapgen::createMapgen(server_use->getEmergeManager()->mgparams->mgtype, 0,
-				server_use->getEmergeManager()->mgparams, server_use->getEmergeManager());
-		m_water_level = server_use->getEmergeManager()->mgparams->water_level;
+		mg = emerge_use->getFirstMapgen();
+		m_water_level = emerge_use->mgparams->water_level;
 	}
 
 	for (size_t i = 0; i < process_order.size(); ++i)
 		process_order[i] = i;
 	auto rng = std::default_random_engine{};
-	// ENABLE!?: std::shuffle(std::begin(process_order), std::end(process_order), rng);
+	std::shuffle(std::begin(process_order), std::end(process_order), rng);
 }
 
 FarMesh::~FarMesh()

@@ -183,6 +183,14 @@ private:
 	friend class EmergeThread;
 
 	DISABLE_CLASS_COPY(EmergeManager);
+
+
+	//freeminer:
+public:
+	Mapgen *getFirstMapgen() {
+		return m_mapgens[0];
+	}
+
 };
 
 #endif

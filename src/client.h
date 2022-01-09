@@ -23,6 +23,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef CLIENT_HEADER
 #define CLIENT_HEADER
 
+#include "map_settings_manager.h"
 #include "network/connection.h"
 #include "environment.h"
 #include "irrlichttypes_extrabloated.h"
@@ -711,7 +712,10 @@ private:
 	IntervalLimiter m_localdb_save_interval;
 	u16 m_cache_save_interval;
 public:
-	Server *m_localserver;
+	std::string m_world_path;
+	EmergeManager *m_emerge = nullptr;
+	MapSettingsManager *m_settings_mgr = nullptr;
+
 private:
 
 	// TODO: Add callback to update these when g_settings changes
