@@ -47,10 +47,11 @@ static void applyFacesShading(video::SColor &color, const float factor)
 int getFarmeshStep(MapDrawControl& draw_control, const v3POS & playerpos, const v3POS & blockpos) {
 	int range = radius_box(playerpos, blockpos);
 	if (draw_control.farmesh) {
-		if		(range >= draw_control.farmesh+draw_control.farmesh_step*3)	return 16;
-		else if (range >= draw_control.farmesh+draw_control.farmesh_step*2)	return 8;
-		else if (range >= draw_control.farmesh+draw_control.farmesh_step)	return 4;
-		else if (range >= draw_control.farmesh)								return 2;
+		const POS nearest = 256/MAP_BLOCKSIZE;
+		if		(range >= std::min<POS>(nearest*8, draw_control.farmesh+draw_control.farmesh_step*4))	return 16;
+		else if (range >= std::min<POS>(nearest*4, draw_control.farmesh+draw_control.farmesh_step*2))	return 8;
+		else if (range >= std::min<POS>(nearest*2, draw_control.farmesh+draw_control.farmesh_step))	return 4;
+		else if (range >= std::min<POS>(nearest, draw_control.farmesh))								return 2;
 	}
 	return 1;
 };
@@ -837,7 +838,12 @@ static void getTileInfo(
 	INodeDefManager *ndef = data->m_gamedef->ndef();
 	v3s16 blockpos_nodes = data->m_blockpos * MAP_BLOCKSIZE;
 
-	MapNode &n0 = vmanip.getNodeRefUnsafe(blockpos_nodes + p*step);
+	MapNode n0;
+	for(int find = 0; find < step; ++find) {
+		n0 = vmanip.getNodeRefUnsafe(blockpos_nodes + p*step + find);
+		if (step <= 1 || (n0.getContent() != CONTENT_IGNORE && n0.getContent() != CONTENT_AIR))
+			break;
+	}
 
 	// Don't even try to get n1 if n0 is already CONTENT_IGNORE
 	if (step <= 1 && n0.getContent() == CONTENT_IGNORE) {
@@ -845,7 +851,12 @@ static void getTileInfo(
 		return;
 	}
 
-	const MapNode &n1 = vmanip.getNodeRefUnsafeCheckFlags(blockpos_nodes + p*step + face_dir*step);
+	MapNode n1;
+	for(int find = 0; find < step; ++find) {
+		n1 = vmanip.getNodeRefUnsafeCheckFlags(blockpos_nodes + p*step + face_dir*step + find);
+		if (step <= 1 || (n1.getContent() != CONTENT_IGNORE && n1.getContent() != CONTENT_AIR))
+			break;
+	}
 	// if(data->debug) infostream<<" GN "<<n0<< n1<< blockpos_nodes<<blockpos_nodes + p*step<<blockpos_nodes + p*step + face_dir*step<<std::endl;
 
 	if (step <= 1 && n1.getContent() == CONTENT_IGNORE) {

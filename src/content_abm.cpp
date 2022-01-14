@@ -92,6 +92,11 @@ public:
 	bool getSimpleCatchUp() { return true; }
 	virtual void trigger(ServerEnvironment *env, v3POS p, MapNode n,
 	                     u32 active_object_count, u32 active_object_count_wider, MapNode neighbor, bool activate) {
+		static int water_level = g_settings->getS16("water_level");
+		// Try avoid flying square freezed blocks
+		if (p.Y > water_level && activate)
+			return;
+
 		ServerMap *map = &env->getServerMap();
 		INodeDefManager *ndef = env->getGameDef()->ndef();
 
@@ -99,7 +104,6 @@ public:
 		//heater = rare
 		content_t c = map->getNodeTry(p - v3POS(0,  -1, 0 )).getContent(); // top
 		//more chance to freeze if air at top
-		static int water_level = g_settings->getS16("water_level");
 		bool top_liquid = ndef->get(n).liquid_type > LIQUID_NONE && p.Y > water_level;
 		int freeze = ((ItemGroupList) ndef->get(n).groups)["freeze"];
 		if (heat <= freeze - 1 && ((!top_liquid && (activate || (heat <= freeze - 50))) || heat <= freeze - 50 ||
@@ -134,7 +138,7 @@ public:
 			}
 			if (allow) {
 				n.freeze_melt(ndef, -1);
-				map->setNode(p, n);
+				map->setNode(p, n, 2);
 			}
 		}
 	}
@@ -176,7 +180,7 @@ public:
 					return; // do not melt when falling (dirt->dirt_with_grass on air)
 			}
 			n.freeze_melt(ndef, +1);
-			map->setNode(p, n);
+			map->setNode(p, n, 2);
 			env->nodeUpdate(p, 2); //enable after making FAST nodeupdate
 		}
 	}
@@ -211,7 +215,7 @@ public:
 		int melt = ((ItemGroupList) ndef->get(n).groups)["melt"];
 		if (hot > melt) {
 			n.freeze_melt(ndef, +1);
-			map->setNode(p, n);
+			map->setNode(p, n, 2);
 			env->nodeUpdate(p, 2);
 		}
 	}
@@ -245,7 +249,7 @@ public:
 		int freeze = ((ItemGroupList) ndef->get(n).groups)["freeze"];
 		if (cold < freeze) {
 			n.freeze_melt(ndef, -1);
-			map->setNode(p, n);
+			map->setNode(p, n, 2);
 		}
 	}
 };

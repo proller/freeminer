@@ -3756,7 +3756,9 @@ v3f Server::findSpawnPos()
 {
 	ServerMap &map = m_env->getServerMap();
 	v3f nodeposf;
-	if (g_settings->getV3FNoEx("static_spawnpoint", nodeposf)) {
+	POS find = 0;
+	g_settings->getS16NoEx("static_spawnpoint_find", find);
+	if (g_settings->getV3FNoEx("static_spawnpoint", nodeposf) && !find) {
 		return nodeposf * BS;
 	}
 
@@ -3767,14 +3769,16 @@ v3f Server::findSpawnPos()
 	auto cache_block_before_spawn = g_settings->getBool("cache_block_before_spawn");
 
 	bool is_good = false;
+	POS min_air_height = 3;
+	g_settings->getS16NoEx("static_spawnpoint_find_height", min_air_height);
 
 	// Try to find a good place a few times
 	for(s32 i = 0; i < 4000 && !is_good; i++) {
 		s32 range = 1 + i;
 		// We're going to try to throw the player to this position
 		v2s16 nodepos2d = v2s16(
-				-range + (myrand() % (range * 2)),
-				-range + (myrand() % (range * 2)));
+			nodeposf.X -range + (myrand() % (range * 2)),
+			nodeposf.Z -range + (myrand() % (range * 2)));
 
 // FM version:
 		// Get ground height at point
@@ -3792,16 +3796,16 @@ v3f Server::findSpawnPos()
 */
 			continue;
 
-		v3s16 nodepos(nodepos2d.X, nodepos2d.Y, spawn_level);
+		v3s16 nodepos(nodepos2d.X, nodepos2d.Y, nodeposf.Z +spawn_level);
 
 		s32 air_count = 0;
-		for (s32 i = 0; i < 10; i++) {
+		for (s32 i = vertical_spawn_range > 0 ? 0 : vertical_spawn_range - 50; i < vertical_spawn_range; i++) {
 			v3s16 blockpos = getNodeBlockPos(nodepos);
 			map.emergeBlock(blockpos, false);
 			content_t c = map.getNodeNoEx(nodepos).getContent();
-			if (c == CONTENT_AIR || c == CONTENT_IGNORE) {
+			if (c == CONTENT_AIR /*|| c == CONTENT_IGNORE*/) {
 				air_count++;
-				if (air_count >= 2) {
+				if (air_count >= min_air_height) {
 					nodeposf = intToFloat(nodepos, BS);
 					// Don't spawn the player outside map boundaries
 					if (objectpos_over_limit(nodeposf))
@@ -3809,6 +3813,8 @@ v3f Server::findSpawnPos()
 					is_good = true;
 					break;
 				}
+			} else {
+				air_count = 0;
 			}
 			nodepos.Z++;
 		}

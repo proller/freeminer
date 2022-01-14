@@ -152,6 +152,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("mgv6_spflags", "jungles, biome_blend, snowbiomes"); // "jungles, snowbiomes"
 	settings->setDefault("mg_math", ""); // configuration in json struct
 	settings->setDefault("mg_params", ""); // configuration in json struct
+	settings->setDefault("static_spawnpoint_find", "0");
 
 	// Filters
 	settings->setDefault("anisotropic_filter", "true"); // "false"
@@ -173,7 +174,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("viewing_range_max", (win32 || android) ? "300" : "10000" /*itos(MAX_MAP_GENERATION_LIMIT)*/); // "240"
 	settings->setDefault("shadows", "0");
 	settings->setDefault("farmesh", android ? "2" : "4");
-	settings->setDefault("farmesh_step", android ? "2" : "3");
+	settings->setDefault("farmesh_step", android ? "2" : "4");
 	settings->setDefault("farmesh_wanted", android ? "100" :"500");
 	settings->setDefault("headless_optimize", "false");
 	//settings->setDefault("node_highlighting", "halo");
