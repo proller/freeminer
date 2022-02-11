@@ -59,13 +59,18 @@ private:
 	v3POS m_camera_offset;
 	constexpr static uint16_t grid_size_min = 16;
 	//constexpr static uint16_t grid_size_max = 256;
-	constexpr static uint16_t grid_size_max = 64;
+	//constexpr static uint16_t grid_size_max = 64;
+	//constexpr static uint16_t grid_size_max_y = 64;
+	constexpr static uint16_t grid_size_max_y = 16;
+	constexpr static uint16_t grid_size_max_x = grid_size_max_y * 4;
 	//constexpr static uint16_t grid_size_max = 16;
-	std::array<uint16_t, grid_size_max*grid_size_max> process_order;
+	std::array<uint16_t, grid_size_max_x*grid_size_max_y> process_order;
 	// uint16_t grid_size = grid_size_min;
 	//uint16_t grid_size = 64;
 	//uint16_t grid_size = 256;
-	uint16_t grid_size = 	grid_size_max;
+	//uint16_t grid_size = 	grid_size_max;
+	uint16_t grid_size_x = 	grid_size_max_x;
+	uint16_t grid_size_y = 	grid_size_max_y;
 	//constexpr static uint16_t skip_x_num = 7;
 	//constexpr static uint16_t skip_y_num = 7;
 	//uint16_t m_skip_x_current = 0;
@@ -92,7 +97,7 @@ private:
 		POS step_width; // debug
 	};
 	using result_array =
-			std::array<std::array<grid_result_item, grid_size_max>, grid_size_max>;
+			std::array<std::array<grid_result_item, grid_size_max_y>, grid_size_max_x>;
 	result_array grid_result_1, grid_result_2;
 	result_array *grid_result_use = &grid_result_1;
 	// result_array * grid_result_fill = &grid_result_2;

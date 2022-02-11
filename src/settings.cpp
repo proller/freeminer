@@ -526,8 +526,10 @@ bool Settings::getNoiseParamsFromValue(const std::string &name,
 	if (!getNoEx(name, value))
 		return false;
 
-	Strfnd f(value);
+errorstream << __FILE__ << ":" << __LINE__ << " v=" <<value<<"\n";
 
+	Strfnd f(value);
+	
 	np.offset   = stof(f.next(","));
 	np.scale    = stof(f.next(","));
 	f.next("(");
@@ -540,9 +542,12 @@ bool Settings::getNoiseParamsFromValue(const std::string &name,
 	np.persist  = stof(f.next(","));
 
 	std::string optional_params = f.next("");
+errorstream << __FILE__ << ":" << __LINE__ << " " << np.lacunarity << " " << optional_params 
+<< " np.spread.Z="  << np.spread.Z
+<< "\n";
 	if (optional_params != "")
 		np.lacunarity = stof(optional_params);
-
+errorstream << __FILE__ << ":" << __LINE__ << " lacunarity=" << np.lacunarity << "\n";
 	warningstream << " Noise params from string [" << name << "] deprecated. far* values ignored." << std::endl;
 
 	return true;
@@ -575,7 +580,9 @@ bool Settings::getNoiseParamsFromGroup(const std::string &name,
 	group->getS32NoEx("seed",          np.seed);
 	group->getU16NoEx("octaves",       np.octaves);
 	group->getFloatNoEx("persistence", np.persist);
+	//errorstream << __FILE__ << ":" << __LINE__ <<" " <<  std::hash<std::thread::id>{}(std::this_thread::get_id()) << " lacunarity=" << np.lacunarity << "\n";
 	group->getFloatNoEx("lacunarity",  np.lacunarity);
+//	errorstream << __FILE__ << ":" << __LINE__ <<" " <<  std::hash<std::thread::id>{}(std::this_thread::get_id()) <<  " lacunarity=" << np.lacunarity << "\n";
 
 	np.flags = 0;
 	if (!group->getFlagStrNoEx("flags", np.flags, flagdesc_noiseparams))
@@ -900,6 +907,8 @@ bool Settings::setNoiseParams(const std::string &name,
 	group->setS32("seed",          np.seed);
 	group->setU16("octaves",       np.octaves);
 	group->setFloat("persistence", np.persist);
+	//errorstream << __FILE__ << ":" << __LINE__ << " " << np.lacunarity << "\n";
+
 	group->setFloat("lacunarity",  np.lacunarity);
 	group->setFlagStr("flags",     np.flags, flagdesc_noiseparams, np.flags);
 

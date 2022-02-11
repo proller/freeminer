@@ -171,6 +171,7 @@ bool EmergeManager::initMapgens(MapgenParams *params)
 		return false;
 
 	this->mgparams = params;
+	errorstream << "init emerge this->mgparams = " << (long) this->mgparams << " threads=" << m_threads.size() <<"\n";
 
 	for (u32 i = 0; i != m_threads.size(); i++) {
 		Mapgen *mg = Mapgen::createMapgen(params->mgtype, i, params, this);
@@ -194,7 +195,6 @@ Mapgen *EmergeManager::getCurrentMapgen()
 
 	return NULL;
 }
-
 
 void EmergeManager::startThreads()
 {
@@ -709,3 +709,8 @@ void *EmergeThread::run()
 	END_DEBUG_EXCEPTION_HANDLER
 	return NULL;
 }
+
+/*
+Mapgen *EmergeManager::getFirstMapgen() {
+		return m_mapgens[0];
+}*/

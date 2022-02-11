@@ -190,6 +190,7 @@ const char *Mapgen::getMapgenName(MapgenType mgtype)
 Mapgen *Mapgen::createMapgen(MapgenType mgtype, int mgid,
 	MapgenParams *params, EmergeManager *emerge)
 {
+errorstream  << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id()) << " creating MG=" << mgtype << " params=" << (long)params<<"\n";
 	switch (mgtype) {
 
 	case MAPGEN_INDEV:
@@ -1069,6 +1070,9 @@ void MapgenParams::readParams(Settings *settings)
 	std::string mg_name;
 	if (settings->getNoEx("mg_name", mg_name))
 		this->mgtype = Mapgen::getMapgenType(mg_name);
+else 
+errorstream  << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id()) << "no mg_name in settings " << *settings << "\n";
+errorstream  << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id()) << " creating MGtype=" << this->mgtype << " from name=" << mg_name << "\n";
 
 	settings->getS16NoEx("water_level", water_level);
 	settings->getS16NoEx("chunksize", chunksize);
@@ -1082,6 +1086,7 @@ void MapgenParams::readParams(Settings *settings)
 		bparams->readParams(settings);
 		bparams->seed = seed;
 	}
+errorstream  << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id()) << " created bparams=" <<	(long)bparams << "\n";
 }
 
 

@@ -22,6 +22,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <math.h>
+#include "log.h"
 #include "noise.h"
 #include <iostream>
 #include <string.h> // memset
@@ -446,7 +447,25 @@ float NoisePerlin3D(NoiseParams *np, float x, float y, float z, s32 seed)
 
 Noise::Noise(NoiseParams *np_, s32 seed, u32 sx, u32 sy, u32 sz)
 {
-	memcpy(&np, np_, sizeof(np));
+
+errorstream << __FILE__ << ":" << __LINE__ << " precp "
+<< (long)&np << "= "
+<< (long)&np_ << " "
+<< " SET npspread.z" <<
+np.spread.Z
+<< "\n";
+
+	//memcpy(&np, np_, sizeof(np));
+	np = *np_;
+
+errorstream << __FILE__ << ":" << __LINE__ << " pstcp "
+<< (long)&np << "= "
+<< (long)&np_ << " "
+<< " SET npspread.z" <<
+np.spread.Z
+<< "\n";
+if (!np.spread.Z || !np.octaves)  abort();
+
 	this->seed = seed;
 	this->sx   = sx;
 	this->sy   = sy;
@@ -496,6 +515,7 @@ void Noise::allocBuffers()
 		this->gradient_buf = new float[bufsize];
 		this->result       = new float[bufsize];
 	} catch (std::bad_alloc &e) {
+errorstream << __FILE__ << ":" << __LINE__ << " " << "\n";
 		throw InvalidNoiseParamsException();
 	}
 }
@@ -513,6 +533,12 @@ void Noise::setSize(u32 sx, u32 sy, u32 sz)
 
 void Noise::setSpreadFactor(v3f spread)
 {
+errorstream << __FILE__ << ":" << __LINE__ << " "
+<< (long)&this->np << " "
+<< " SET spread.z" <<
+spread.Z
+<< "\n";
+
 	this->np.spread = spread;
 
 	resizeNoiseBuf(sz > 1);
@@ -529,6 +555,7 @@ void Noise::setOctaves(int octaves)
 
 void Noise::resizeNoiseBuf(bool is3d)
 {
+errorstream << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id())<< " "<< (long)&np<< " l=" << np.lacunarity << " , o=" << np.octaves << "\n";
 	//maximum possible spread value factor
 	float ofactor = (np.lacunarity > 1.0) ?
 		pow(np.lacunarity, np.octaves - 1) :
@@ -536,6 +563,12 @@ void Noise::resizeNoiseBuf(bool is3d)
 
 	// noise lattice point count
 	// (int)(sz * spread * ofactor) is # of lattice points crossed due to length
+errorstream << __FILE__ << ":" << __LINE__ << " " << (long)&np << " "
+<< sx << "*" << ofactor << "/" << np.spread.X << " " 
+<< sy << "*" << ofactor << "/" << np.spread.Y << " " 
+<< sz << "*" << ofactor << "/" << np.spread.Z << " " 
+<< "\n";
+if ( !np.spread.X || !np.spread.Y || !np.spread.Z) abort();
 	float num_noise_points_x = sx * ofactor / np.spread.X;
 	float num_noise_points_y = sy * ofactor / np.spread.Y;
 	float num_noise_points_z = sz * ofactor / np.spread.Z;
@@ -544,7 +577,11 @@ void Noise::resizeNoiseBuf(bool is3d)
 	if (num_noise_points_x > 1000000000.f ||
 		num_noise_points_y > 1000000000.f ||
 		num_noise_points_z > 1000000000.f)
+{
+errorstream << __FILE__ << ":" << __LINE__ << " " << "\n";
+
 		throw InvalidNoiseParamsException();
+}
 
 	// + 2 for the two initial endpoints
 	// + 1 for potentially crossing a boundary due to offset
@@ -553,9 +590,13 @@ void Noise::resizeNoiseBuf(bool is3d)
 	size_t nlz = is3d ? (size_t)ceil(num_noise_points_z) + 3 : 1;
 
 	delete[] noise_buf;
+errorstream << __FILE__ << ":" << __LINE__ << " " << nlx << "*" <<  nly  << "*" <<  nlz << "\n";
 	try {
 		noise_buf = new float[nlx * nly * nlz];
 	} catch (std::bad_alloc &e) {
+
+errorstream << __FILE__ << ":" << __LINE__ << " " << "\n";
+
 		throw InvalidNoiseParamsException();
 	}
 }

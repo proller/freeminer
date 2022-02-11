@@ -29,6 +29,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "irr_v3d.h"
 #include "exceptions.h"
 #include "util/string.h"
+#include "log.h"
 
 extern FlagDesc flagdesc_noiseparams[];
 
@@ -107,36 +108,32 @@ private:
 #define NOISE_FLAG_SIMPLEX     0x10
 
 struct NoiseParams {
-	float offset;
-	float scale;
-	v3f spread;
-	s32 seed;
-	u16 octaves;
-	float persist;
-	float lacunarity;
-	u32 flags;
+	float offset = 0.0f;
+	float scale = 1.0f;
+	v3f spread = v3f(250, 250, 250);
+	s32 seed = 12345;
+	u16 octaves = 3;
+	float persist = 0.6f;
+	float lacunarity = 2.0f;
+	u32 flags = NOISE_FLAG_DEFAULTS;
 
-	float far_scale;
-	float far_spread;
-	float far_persist;
-	float far_lacunarity;
+	NoiseParams() = default;
 
-	NoiseParams()
+	float far_scale = 1;
+	float far_spread = 1;
+	float far_persist = 1;
+	float far_lacunarity = 1;
+
+/*	NoiseParams()
 	{
-		offset     = 0.0f;
-		scale      = 1.0f;
-		spread     = v3f(250, 250, 250);
-		seed       = 12345;
-		octaves    = 3;
-		persist    = 0.6f;
-		lacunarity = 2.0f;
-		flags      = NOISE_FLAG_DEFAULTS;
-
-		far_scale  = 1;
-		far_spread = 1;
-		far_persist = 1;
-		far_lacunarity = 1;
+		errorstream << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id()) << " " << (long)this << " " 
+		<< " spread.Z=" << spread.Z
+		<< " lacunarity=" << lacunarity
+		<< " octaves="  << octaves
+		<< "\n";
+		//if (lacunarity > 1000000) abort();
 	}
+*/
 
 	NoiseParams(float offset_, float scale_, v3f spread_, s32 seed_,
 		u16 octaves_, float persist_, float lacunarity_,
@@ -151,6 +148,12 @@ struct NoiseParams {
 		octaves    = octaves_;
 		persist    = persist_;
 		lacunarity = lacunarity_;
+		/*errorstream << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id())  <<" " << (long)this << " " 
+		<< " spread.Z=" << spread.Z
+		<< " lacunarity=" << lacunarity
+		<< " octaves="  << octaves
+		<< "\n";*/
+		if (lacunarity > 1000000) abort();
 		flags      = flags_;
 
 		far_scale  = far_scale_;

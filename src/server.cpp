@@ -251,6 +251,7 @@ Server::Server(
 
 	// Create emerge manager
 	m_emerge = new EmergeManager(this);
+	errorstream << "MAKED EMERGE " << 	(long)m_emerge  << "\n";
 
 	if (m_more_threads) {
 		m_map_thread = new MapThread(this);

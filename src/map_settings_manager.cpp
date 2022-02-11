@@ -94,7 +94,7 @@ bool MapSettingsManager::setMapSettingNoiseParams(
 
 bool MapSettingsManager::loadMapMeta()
 {
-
+errorstream << " loading ms from "  << (m_map_meta_path + ".json") << "\n";
 	if (m_map_settings->readJsonFile(m_map_meta_path + ".json")) {
 		return true;
 	}
@@ -189,6 +189,8 @@ MapgenParams *MapSettingsManager::makeMapgenParams()
 
 	// Create our MapgenParams
 	MapgenParams *params = Mapgen::createMapgenParams(mgtype);
+	errorstream  << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id()) << " mmmmgparams=" << (long)params << " mgtype=" << mgtype << " mg_name=" << mg_name <<"\n";
+	//abort();
 	if (params == NULL)
 		return NULL;
 

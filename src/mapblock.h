@@ -563,8 +563,8 @@ public:
 
 	void pushElementsToCircuit(Circuit* circuit);
 
-#ifndef SERVER // Only on client
 	typedef std::shared_ptr<MapBlockMesh> mesh_type;
+#ifndef SERVER // Only on client
 
 	MapBlock::mesh_type getMesh(int step = 1);
 	void setMesh(MapBlock::mesh_type & rmesh);
