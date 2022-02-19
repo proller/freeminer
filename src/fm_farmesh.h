@@ -37,7 +37,7 @@ private:
 	core::aabbox3d<f32> m_box;
 	float m_cloud_y;
 	float m_brightness;
-	v3f m_camera_pos;
+	v3f m_camera_pos = {-1337, -1337, -1337};
 #if cache0
 // v3POS m_camera_pos_aligned;
 #endif
@@ -53,7 +53,7 @@ private:
 	f32 m_camera_yaw;
 	float m_time;
 	Client *m_client;
-	s16 m_render_range;
+	s16 m_render_range  = 16*16;
 	uint32_t m_render_range_max;
 	POS m_water_level = 0;
 	v3POS m_camera_offset;
@@ -83,7 +83,7 @@ private:
 	struct ls_cache
 	{
 		uint32_t time = 0;
-		unordered_map_v3POS<POS> depth;
+		unordered_map_v3POS<int> depth;
 		unordered_map_v3POS<v3POS> pos;
 		unordered_map_v3POS<POS> step_width; // debug only
 		unordered_map_v3POS<POS> step;		 // debug only
@@ -93,7 +93,7 @@ private:
 	struct grid_result_item
 	{
 		v3POS pos;
-		POS depth;
+		int depth;
 		POS step_width; // debug
 	};
 	using result_array =

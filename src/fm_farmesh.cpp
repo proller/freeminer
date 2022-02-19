@@ -122,9 +122,9 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		if (m_camera_pos == camera_pos_aligned)
 			return;
 		m_camera_pos = camera_pos_aligned;
-		errorstream << " camera_pos_aligned=" << camera_pos_aligned << "\n";
-		// v1:
-		// m_camera_pos = camera_pos;
+		// errorstream << " camera_pos_aligned=" << camera_pos_aligned << "\n";
+		//  v1:
+		//  m_camera_pos = camera_pos;
 
 		m_camera_dir = camera_dir;
 		m_camera_fov = camera_fov;
@@ -132,14 +132,12 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		m_camera_yaw = camera_yaw;
 		m_camera_offset = camera_offset;
 		m_render_range = std::min<POS>(render_range, 255);
+
+		errorstream << "update pos=" << m_camera_pos << " dir=" << m_camera_dir
+					<< " fov=" << m_camera_fov << " pitch=" << m_camera_pitch
+					<< " yaw=" << m_camera_yaw << " render_range=" << m_render_range
+					<< std::endl;
 	}
-	/*
-  errorstream << "update pos=" << m_camera_pos << " dir=" << m_camera_dir
-					   << " fov=" << m_camera_fov << " pitch=" << m_camera_pitch
-					   << " yaw=" << m_camera_yaw << " render_range=" <<
-  m_render_range
-					   << std::endl;
-	*/
 
 	// const auto start = 2 << 7;
 
@@ -232,7 +230,10 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 				return;
 			}
 
-			(*grid_result_fill)[x][y].depth = 0; // clean cache
+			(*grid_result_fill)[x][y].depth =
+					0; // clean cache
+					   // errorstream << "grid clean" << " x=" << x << " y=" << y <<
+					   // "depth=" << (*grid_result_fill)[x][y].depth << "\n";
 
 			int depth = m_render_range /** BS*/; // 255;
 
@@ -253,7 +254,8 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 			// todo fov y
 
 			if (0)
-				errorstream << "deg x=" << x << "/" << grid_size_x << " y=" << y << "/"
+				errorstream << "deg "
+							<< " x=" << x << "/" << grid_size_x << " y=" << y << "/"
 							<< grid_size_y << " movx=" << movx << " stpy=" << stpy
 							<< " degy=" << degy << " dir_l=" << dir_l << "\n";
 
@@ -282,8 +284,11 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 				// int step_aligned = pow(2, std::floor(log(step_width) / log(2)));
 				//#endif
 
-				depth += step_width * 8; // TODO: TUNE ME
-
+				const auto dstep = (step_num + 1);
+				// errorstream << " x=" << x << " y=" << y << " " << " depth += step_width
+				// * 8 :" << depth << "+=" << step_width << "*" << dstep << " = ";
+				depth += step_width * dstep; // TODO: TUNE ME
+				// errorstream << depth << "\n";
 				if (depth > depth_max)
 					break;
 
@@ -728,19 +733,20 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 				(*grid_result_fill)[x][y].pos = pos_int;
 				(*grid_result_fill)[x][y].depth = depth;
 				(*grid_result_fill)[x][y].step_width = step_width;
+
+				if (0)
+					errorstream << "grid res"
+								<< " x=" << x << " y=" << y << " depth=" << depth
+								<< " step_width = " << step_width
+								<< " pos_int=" << pos_int << "\n";
+
 				/*
-												errorstream << "grid res"
-																		<< " x=" << x <<
-				   " y=" << y << " depth=" << depth
-																		<< "
-				   step_width=" << step_width << "\n";
-				*/
-				/*
-												driver->draw3DLine(intToFloat(pos_int -
-				   m_camera_offset, BS), intToFloat(v3POS(step_width, 0, 0 + step_width
+												driver->draw3DLine(intToFloat(pos_int
+				   - m_camera_offset, BS), intToFloat(v3POS(step_width, 0, 0 +
+				   step_width
 				   * !pos_int.Y) + pos_int - m_camera_offset, BS),
-																irr::video::SColor(255 *
-				   (pos_int.Y < 0), 255 - step_num, 255 * !pos_int.Y, 0));
+																irr::video::SColor(255
+				   * (pos_int.Y < 0), 255 - step_num, 255 * !pos_int.Y, 0));
 				*/
 				break;
 			}
@@ -828,9 +834,11 @@ void FarMesh::CreateMesh()
 	// f32 sx=0.f, tsx=0.f;
 	size_t cnt = 0;
 	size_t x = 0;
+	// size_t y = 0;
 	for (auto &ya : *grid_result_use) {
 		// f32 sy=0.f, tsy=0.f;
 		size_t y = 0;
+		// size_t x = 0;
 		for (auto &point : ya) {
 			const auto &pos_int = point.pos;
 			const auto step_width = point.step_width;
@@ -869,10 +877,12 @@ void FarMesh::CreateMesh()
 			// tsy += tx.Height;
 			++cnt;
 			++y;
+			//++x;
 		}
 		// sx += tileSize.Width;
 		// tsx += tx.Width;
 		++x;
+		//++y;
 	}
 
 	// create indices
@@ -903,7 +913,14 @@ void FarMesh::CreateMesh()
 			if ((*grid_result_use)[x][y + 1].depth &&
 					(*grid_result_use)[x + 1][y].depth) {
 
-				if ((*grid_result_use)[x][y].depth) {
+				if ((*grid_result_use)[x][y].depth /*&&
+					   (*grid_result_use)[x][y].pos.getDistanceFrom(
+							   (*grid_result_use)[x + 1][y].pos) <
+							   (*grid_result_use)[x][y].step_width * 2 &&
+					   (*grid_result_use)[x][y].pos.getDistanceFrom(
+							   (*grid_result_use)[x][y + 1].pos) <
+							   (*grid_result_use)[x][y].step_width * 2*/
+				) {
 					if (debug1)
 						errorstream << "tri add1 " << current
 									<< " depth_cached=" << depth_cached << " x=" << x
@@ -911,24 +928,55 @@ void FarMesh::CreateMesh()
 									<< " pos1=" << (*grid_result_use)[x][y].pos
 									<< " pos2=" << (*grid_result_use)[x][y + 1].pos
 									<< " pos3=" << (*grid_result_use)[x + 1][y].pos
+									<< " dp1=" << (*grid_result_use)[x][y].depth
+									<< " dp2=" << (*grid_result_use)[x][y + 1].depth
+									<< " dp3=" << (*grid_result_use)[x + 1][y].depth
+									<< " sw1=" << (*grid_result_use)[x][y].step_width
+									<< " sw2=" << (*grid_result_use)[x][y + 1].step_width
+									<< " sw3=" << (*grid_result_use)[x + 1][y].step_width
 									<< std::endl;
-
+					/*
+						* --- *
+						|
+						*
+					*/
 					buffer->Indices.push_back(current);
 					buffer->Indices.push_back(current + 1);
 					buffer->Indices.push_back(current + tileCount.Height);
 					// buffer->Indices.push_back(current + grid_size);
 				}
 
-				if ((*grid_result_use)[x + 1][y + 1].depth) {
+				if ((*grid_result_use)[x + 1][y + 1].depth
+						/*&&
+								(*grid_result_use)[x + 1][y].pos.getDistanceFrom(
+										(*grid_result_use)[x + 1][y + 1].pos) <
+										(*grid_result_use)[x + 1][y].step_width * 2 &&
+								(*grid_result_use)[x + 1][y].pos.getDistanceFrom(
+										(*grid_result_use)[x][y + 1].pos) <
+										(*grid_result_use)[x + 1][y].step_width * 2 */
+
+				) {
 
 					if (debug1)
-						errorstream << "tri add2 " << current
-									<< " depth_cached=" << depth_cached << " x=" << x
-									<< " y=" << y
-									<< " pos=" << (*grid_result_use)[x][y].pos
-									<< " pos2=" << (*grid_result_use)[x + 1][y + 1].pos
-									<< " pos3=" << (*grid_result_use)[x + 1][y].pos
-									<< std::endl;
+						errorstream
+								<< "tri add2 " << current
+								<< " depth_cached=" << depth_cached << " x=" << x
+								<< " y=" << y
+								<< " pos1=" << (*grid_result_use)[x][y + 1].pos
+								<< " pos2=" << (*grid_result_use)[x + 1][y + 1].pos
+								<< " pos3=" << (*grid_result_use)[x + 1][y].pos
+								<< " dp1=" << (*grid_result_use)[x][y + 1].depth
+								<< " dp2=" << (*grid_result_use)[x + 1][y + 1].depth
+								<< " dp3=" << (*grid_result_use)[x + 1][y].depth
+								<< " sw1=" << (*grid_result_use)[x][y + 1].step_width
+								<< " sw2=" << (*grid_result_use)[x + 1][y + 1].step_width
+								<< " sw3=" << (*grid_result_use)[x + 1][y].step_width
+								<< std::endl;
+					/*
+							  *
+							  |
+						* --- *
+					*/
 
 					buffer->Indices.push_back(current + 1);
 					buffer->Indices.push_back(current + 1 + tileCount.Height);
