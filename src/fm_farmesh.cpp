@@ -78,7 +78,7 @@ FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
 	for (size_t i = 0; i < process_order.size(); ++i)
 		process_order[i] = i;
 	auto rng = std::default_random_engine{};
-	//std::shuffle(std::begin(process_order), std::end(process_order), rng);
+	// std::shuffle(std::begin(process_order), std::end(process_order), rng);
 }
 
 FarMesh::~FarMesh()
@@ -101,11 +101,9 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		CameraMode camera_mode, f32 camera_pitch, f32 camera_yaw, v3POS camera_offset,
 		float brightness, s16 render_range)
 {
-//errorstream << "update    " << (long)mesh << std::endl;
+	// errorstream << "update    " << (long)mesh << std::endl;
 
 	if (!m_cycle_stop_i) {
-
-		m_camera_pos = camera_pos;
 
 #if cache_step
 		m_camera_pos_aligned_by_step.clear();
@@ -113,9 +111,20 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 #endif
 #if cache0
 		m_camera_pos_aligned =
-				floatToInt(intToFloat(floatToInt(m_camera_pos, BS * 16), BS * 16),
+				floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16),
 						BS); // todo optimize
 #endif
+
+		const auto camera_pos_aligned = intToFloat(m_camera_pos_aligned, BS);
+		// errorstream << " camera_pos_aligned=" << camera_pos_aligned	<< "
+		// m_camera_pos="
+		// << m_camera_pos << "\n";
+		if (m_camera_pos == camera_pos_aligned)
+			return;
+		m_camera_pos = camera_pos_aligned;
+		errorstream << " camera_pos_aligned=" << camera_pos_aligned << "\n";
+		// v1:
+		// m_camera_pos = camera_pos;
 
 		m_camera_dir = camera_dir;
 		m_camera_fov = camera_fov;
@@ -155,23 +164,22 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 	dir_rd.rotateXZBy(m_camera_pitch);
 	*/
 
-
 	v3f dir_lu = v3f(0, 0, 1);
-	//dir_lu.rotateXZBy(irr::core::radToDeg(m_camera_fov / 2)); //    <- left
+	// dir_lu.rotateXZBy(irr::core::radToDeg(m_camera_fov / 2)); //    <- left
 	dir_lu.rotateYZBy(irr::core::radToDeg(-m_camera_fov / 2)); // ^ up
 
 	v3f dir_ld = v3f(0, 0, 1);
-	//dir_ld.rotateXZBy(irr::core::radToDeg(m_camera_fov / 2)); //  <- left
+	// dir_ld.rotateXZBy(irr::core::radToDeg(m_camera_fov / 2)); //  <- left
 	dir_ld.rotateYZBy(irr::core::radToDeg(m_camera_fov / 2)); //  _ down
-	//v3f dir_rd = v3f(0, 0, 1);
-	//dir_rd.rotateXZBy(irr::core::radToDeg(-m_camera_fov / 2)); //  -> right
-	//dir_rd.rotateYZBy(irr::core::radToDeg(m_camera_fov / 2)); //  _ down
+	// v3f dir_rd = v3f(0, 0, 1);
+	// dir_rd.rotateXZBy(irr::core::radToDeg(-m_camera_fov / 2)); //  -> right
+	// dir_rd.rotateYZBy(irr::core::radToDeg(m_camera_fov / 2)); //  _ down
 
 	v3f dir_l1 = v3f(0, 0, 1);
-	dir_l1.rotateXZBy(360.0/grid_size_x); //    -> right 1 step
+	dir_l1.rotateXZBy(360.0 / grid_size_x);					   //    -> right 1 step
 	dir_l1.rotateYZBy(irr::core::radToDeg(-m_camera_fov / 2)); // ^ up
-//errorstream << " dir_l1=" << dir_l1 << "\n";
- 
+	// errorstream << " dir_l1=" << dir_l1 << "\n";
+
 	const int depth_steps = 512 + 100; // TODO CALC  256+128+64+32+16+8+4+2+1+?
 	// const int grid_size = 64;		   // 255;
 	const int depth_max = m_render_range_max;
@@ -207,7 +215,8 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		{
 			uint16_t y = uint16_t(process_order[i] / grid_size_x);
 			uint16_t x = process_order[i] % grid_size_x;
-//			errorstream << " x=" << x << " y=" << y << " i=" << i << " v="<<process_order[i] << "\n";
+			//			errorstream << " x=" << x << " y=" << y << " i=" << i << "
+			// v="<<process_order[i] << "\n";
 
 			if (porting::getTimeMs() > end_ms) {
 				m_cycle_stop_i = i;
@@ -233,25 +242,20 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 			  continue;
 			}*/
 
+			v3f dir_l = v3f(0, 0, 1);
 
-	v3f dir_l = v3f(0, 0, 1);
-float movx = (((float)x/grid_size_x));
-	dir_l.rotateXZBy(360.0*movx); //    -> right 1 step
-// todo fov y
-auto stpy = (((float)y)/grid_size_y);
-auto degy = 70-(140.0*stpy);
-	dir_l.rotateYZBy(degy); // ^ up same as dir_lu
-if (0)
-errorstream<< "deg x=" << x << "/" <<  grid_size_x 
-<< " y=" <<y<<"/" << grid_size_y
-<< " movx=" << movx 
-<< " stpy="<<stpy
-<< " degy="<<degy
-<< " dir_l=" << dir_l
-<< "\n"; 
+			auto stpy = (((float)y) / grid_size_y);
+			auto degy = 70 - (140.0 * stpy);
+			dir_l.rotateYZBy(degy); // ^ up same as dir_lu
 
+			float movx = (((float)x / grid_size_x));
+			dir_l.rotateXZBy(360.0 * movx); //    -> right 1 step
+			// todo fov y
 
-
+			if (0)
+				errorstream << "deg x=" << x << "/" << grid_size_x << " y=" << y << "/"
+							<< grid_size_y << " movx=" << movx << " stpy=" << stpy
+							<< " degy=" << degy << " dir_l=" << dir_l << "\n";
 
 #if cache0
 			v3POS pos_int_0;
@@ -262,12 +266,12 @@ errorstream<< "deg x=" << x << "/" <<  grid_size_x
 			for (short step_num = 0; step_num < depth_steps; ++step_num) {
 
 				const auto pos_ld = dir_ld * depth * BS + m_camera_pos;
-				//v1 const auto pos_rd = dir_rd * depth * BS + m_camera_pos;
+				// v1 const auto pos_rd = dir_rd * depth * BS + m_camera_pos;
 				const auto pos_l1 = dir_l1 * depth * BS + m_camera_pos;
 
 				const auto pos_lu = dir_lu * depth * BS + m_camera_pos;
-				const auto step_r = pos_l1 - pos_lu; 
-				//const auto step_r = (pos_rd - pos_ld) / grid_size_x;
+				const auto step_r = pos_l1 - pos_lu;
+				// const auto step_r = (pos_rd - pos_ld) / grid_size_x;
 				const auto step_u = (pos_lu - pos_ld) / grid_size_y;
 				// auto step_width = std::max(1, int(step_r.getLength()) >> 1 << 1);
 				const auto step_width =
@@ -285,13 +289,11 @@ errorstream<< "deg x=" << x << "/" <<  grid_size_x
 
 				// v1 auto pos_l = pos_ld + (step_u * y);
 
-
-
-				//auto pos_l = pos_ld + (step_u * y);
+				// auto pos_l = pos_ld + (step_u * y);
 				const auto pos = dir_l * depth * BS + m_camera_pos;
 
 				++stat_probes;
-				//auto pos = pos_l + (step_r * x);
+				// auto pos = pos_l + (step_r * x);
 				if (pos.X > MAX_MAP_GENERATION_LIMIT * BS ||
 						pos.X < -MAX_MAP_GENERATION_LIMIT * BS ||
 						pos.Y > MAX_MAP_GENERATION_LIMIT * BS ||
@@ -304,20 +306,22 @@ errorstream<< "deg x=" << x << "/" <<  grid_size_x
 				v3POS pos_int((pos_int_raw.X / step_aligned) * step_aligned,
 						(pos_int_raw.Y / step_aligned) * step_aligned,
 						(pos_int_raw.Z / step_aligned) * step_aligned);
-/*
+				/*
 
-				if (x == grid_size_x / 2 && y == grid_size_y / 2)
-						errorstream << " step_num=" << step_num
-												<< " step_width=" << step_width
-												<< " step_aligned=" << step_aligned << "depth=" << depth
-												<< " pos=" << pos 
-												<< " pos_int=" <<  pos_int
-												//<< " pos_l=" << pos_l 
-												<< " pos_ld=" <<
-				   pos_ld 
-				   << " dir_l=" << dir_l
-				   << "\n";
-*/
+								if (x == grid_size_x / 2 && y == grid_size_y / 2)
+										errorstream << " step_num=" << step_num
+																<< " step_width=" <<
+				   step_width
+																<< " step_aligned=" <<
+				   step_aligned << "depth=" << depth
+																<< " pos=" << pos
+																<< " pos_int=" <<  pos_int
+																//<< " pos_l=" << pos_l
+																<< " pos_ld=" <<
+								   pos_ld
+								   << " dir_l=" << dir_l
+								   << "\n";
+				*/
 				// if (step_num == 0) {
 #if cache_step
 				// m_camera_pos_aligned.reserve(step_num);
@@ -971,15 +975,15 @@ void FarMesh::CreateMesh()
 	buffer->setHardwareMappingHint(irr::scene::EHM_STATIC);
 
 	// irr::scene::SMesh*
-//errorstream << "mesh replace  " << (long)mesh << std::endl;
+	// errorstream << "mesh replace  " << (long)mesh << std::endl;
 	if (mesh)
 		mesh->drop();
 	mesh = new irr::scene::SMesh();
-//errorstream << "mesh replaced " << (long)mesh << std::endl;
+	// errorstream << "mesh replaced " << (long)mesh << std::endl;
 	mesh->addMeshBuffer(buffer);
 	mesh->recalculateBoundingBox();
 	buffer->drop();
-//errorstream << "mesh filleed  " << (long)mesh << std::endl;
+	// errorstream << "mesh filleed  " << (long)mesh << std::endl;
 
 	mesh->setMaterialFlag(irr::video::EMF_FOG_ENABLE, 1);
 	// mesh->setMaterialFlag(irr::video::EMF_NORMALIZE_NORMALS, 1);
@@ -993,7 +997,7 @@ void FarMesh::CreateMesh()
 
 void FarMesh::render()
 {
-//errorstream << "render  " << (long)mesh << std::endl;
+	// errorstream << "render  " << (long)mesh << std::endl;
 	video::IVideoDriver *driver = SceneManager->getVideoDriver();
 	driver->setTransform(video::ETS_WORLD, AbsoluteTransformation);
 	driver->setTransform(irr::video::ETS_WORLD, irr::core::IdentityMatrix);
@@ -1028,7 +1032,9 @@ void FarMesh::render()
 	}
 	// auto tmesh = createHillPlaneMesh({10,10},{10,10},&material,1,{1,1},{1,1});
 	// driver->drawMeshBuffer(tmesh->getMeshBuffer(0));
-//errorstream << "mesh use  " << (long)mesh << std::endl;
+	// errorstream << "mesh use  " << (long)mesh << std::endl;
 
-	//																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																				if (mesh)		driver->drawMeshBuffer(mesh->getMeshBuffer(0));
+	//
+	if (mesh)
+		driver->drawMeshBuffer(mesh->getMeshBuffer(0));
 }
