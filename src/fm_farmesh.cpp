@@ -6,7 +6,6 @@
 #include "clientmap.h"
 #include "constants.h"
 #include "emerge.h"
-#include "enet/types.h"
 #include "irr_v3d.h"
 #include "log.h"
 #include "log_types.h"
@@ -1083,6 +1082,5 @@ void FarMesh::render()
 	// errorstream << "mesh use  " << (long)mesh << std::endl;
 
 	//
-	if (mesh)
-		driver->drawMeshBuffer(mesh->getMeshBuffer(0));
+	if (mesh)		driver->drawMeshBuffer(mesh->getMeshBuffer(0));
 }
