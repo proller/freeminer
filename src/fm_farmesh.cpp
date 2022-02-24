@@ -229,10 +229,9 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 				return;
 			}
 
-			(*grid_result_fill)[x][y].depth =
-					0; // clean cache
-					   // errorstream << "grid clean" << " x=" << x << " y=" << y <<
-					   // "depth=" << (*grid_result_fill)[x][y].depth << "\n";
+			(*grid_result_fill)[x][y].depth = 0; // clean cache
+					// errorstream << "grid clean" << " x=" << x << " y=" << y <<
+					// "depth=" << (*grid_result_fill)[x][y].depth << "\n";
 
 			int depth = m_render_range /** BS*/; // 255;
 
@@ -272,8 +271,6 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 				}
 			};
 			rotateSquareXZBy(dir_l, 360.0 * movx);
-
-
 
 			if (0)
 				errorstream << "deg "
@@ -1105,5 +1102,6 @@ void FarMesh::render()
 	// errorstream << "mesh use  " << (long)mesh << std::endl;
 
 	//
-	if (mesh)		driver->drawMeshBuffer(mesh->getMeshBuffer(0));
+	if (mesh)
+		driver->drawMeshBuffer(mesh->getMeshBuffer(0));
 }
