@@ -252,6 +252,29 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 			dir_l.rotateXZBy(360.0 * movx); //    -> right 1 step
 			// todo fov y
 
+			auto rotateSquareXZBy = [](auto &dir, auto angle) {
+				//        0    45
+				// 315  ___.___
+				//    |       |
+				//    |       |
+				// 270 -   o   - 90
+				//    |       |
+				//    |       |
+				//     ___.___  135
+				//  225  180
+				errorstream << "rotateSquareXZBy ddir? " << dir << " angle=" << angle
+							<< "\n";
+				if (angle <= 45) {
+					// dir.X
+				} else if (angle < 135) {
+				} else if (angle < 225) {
+				} else if (angle < 315) {
+				}
+			};
+			rotateSquareXZBy(dir_l, 360.0 * movx);
+
+
+
 			if (0)
 				errorstream << "deg "
 							<< " x=" << x << "/" << grid_size_x << " y=" << y << "/"
