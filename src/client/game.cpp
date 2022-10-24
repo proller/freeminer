@@ -39,6 +39,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "content_cao.h"
 #include "content/subgames.h"
 #include "client/event_manager.h"
+#include "fm_farmesh.h"
 #include "fontengine.h"
 #include "itemdef.h"
 #include "log.h"
@@ -863,6 +864,7 @@ private:
 	std::future<void> updateDrawList_future;
 #endif
 	bool m_cinematic = false;
+	FarMesh * farmesh = nullptr;
 	// minetest:
 
 
@@ -1550,6 +1552,10 @@ bool Game::createClient(const GameStartData &start_data)
 	if (mapper && client->modsLoaded())
 		client->getScript()->on_minimap_ready(mapper);
 
+
+	if (g_settings->getS32("farmesh5")) {
+		farmesh = new FarMesh(smgr->getRootSceneNode(), smgr, -1, client, server);
+	}
 
 	//freeminer:
 /* todo?
@@ -4269,6 +4275,21 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 			clouds->setVisible(false);
 		}
 	}
+
+		if(!runData.headless_optimize && farmesh)
+		{
+			auto farmesh_range = draw_control->wanted_range; // * 10;
+			if(draw_control->range_all && farmesh_range < 512)
+				farmesh_range = 512;
+			if(farmesh_range > 1024)
+				farmesh_range = 1024;
+		
+			farmesh->update(camera->getPosition(), camera->getDirection(), camera->getFovMax(),
+			camera->getCameraMode(), player->getYaw(), player->getPitch(),
+			camera->getOffset(),
+			sky->getBrightness(), farmesh_range);
+		}
+
 
 	/*
 		Update particles

@@ -149,6 +149,9 @@ MapgenIndev::MapgenIndev(MapgenIndevParams *params, EmergeParams *emerge)
 	ystride = csize.X * xstride;
 	zstride = csize.Y * ystride;
 
+		errorstream << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id())<< " "<< (long)&sp->np_float_islands1<<"\n";
+
+
 	noise_float_islands1  = new Noise(&sp->np_float_islands1, seed, csize.X, csize.Y + y_offset * 2, csize.Z);
 	noise_float_islands2  = new Noise(&sp->np_float_islands2, seed, csize.X, csize.Y + y_offset * 2, csize.Z);
 	noise_float_islands3  = new Noise(&sp->np_float_islands3, seed, csize.X, csize.Z);
@@ -157,6 +160,8 @@ MapgenIndev::MapgenIndev(MapgenIndevParams *params, EmergeParams *emerge)
 	layers_init(emerge, sp->paramsj);
 
 	noise_cave_indev      = new Noise(&sp->np_cave_indev,     seed, csize.X, csize.Y + y_offset * 2, csize.Z);
+
+
 }
 
 MapgenIndev::~MapgenIndev() {

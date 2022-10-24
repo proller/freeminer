@@ -172,6 +172,7 @@ const char *Mapgen::getMapgenName(MapgenType mgtype)
 Mapgen *Mapgen::createMapgen(MapgenType mgtype, MapgenParams *params,
 	EmergeParams *emerge)
 {
+errorstream  << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id()) << " creating MG=" << mgtype << " params=" << (long)params<<"\n";
 	switch (mgtype) {
 
 	case MAPGEN_INDEV:
@@ -1124,6 +1125,7 @@ void MapgenParams::readParams(const Settings *settings)
 		bparams->readParams(settings);
 		bparams->seed = seed;
 	}
+errorstream  << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id()) << " created bparams=" <<	(long)bparams << "\n";
 }
 
 

@@ -96,7 +96,7 @@ bool MapSettingsManager::setMapSettingNoiseParams(
 
 bool MapSettingsManager::loadMapMeta()
 {
-
+errorstream << " loading ms from "  << (m_map_meta_path + ".json") << "\n";
 	if (m_map_settings->readJsonFile(m_map_meta_path + ".json")) {
 		return true;
 	}

@@ -629,7 +629,7 @@ void Camera::updateViewingRange()
 
 	m_draw_control.wanted_range = std::fmin(adjustDist(viewing_range, getFovMax()), 4000);
 	if (m_draw_control.range_all) {
-		m_cameranode->setFarValue(100000.0);
+		m_cameranode->setFarValue(MAX_MAP_GENERATION_LIMIT * 2 * BS);
 		return;
 	}
 
@@ -709,6 +709,11 @@ void Camera::updateViewingRange()
 	} // static_viewing_range
 
 	g_profiler->avg("CM: wanted_range", m_draw_control.wanted_range);
+
+	if (thread_local static const auto farmesh5 = g_settings->getS32("farmesh5"); farmesh5) {
+		m_cameranode->setFarValue(farmesh5*BS);
+		return;
+	}
 
 	const auto viewing_range_new = m_draw_control.wanted_range;
 

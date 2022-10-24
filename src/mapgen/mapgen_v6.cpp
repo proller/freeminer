@@ -82,15 +82,23 @@ MapgenV6::MapgenV6(MapgenV6Params *params, EmergeParams *emerge)
 	np_dungeons = NoiseParams(0.9, 0.5, v3f(500.0, 500.0, 500.0), 0, 2, 0.8, 2.0);
 
 	//// Create noise objects
+	errorstream << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id())<< " "<< (long)&params->np_terrain_base<<"\n";
 	noise_terrain_base   = new Noise(&params->np_terrain_base,   seed, csize.X, csize.Y);
-	noise_terrain_higher = new Noise(&params->np_terrain_higher, seed, csize.X, csize.Y);
+errorstream << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id())<< " "<< (long)&params->np_terrain_higher<<"\n";
+		noise_terrain_higher = new Noise(&params->np_terrain_higher, seed, csize.X, csize.Y);
+errorstream << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id())<< " "<< (long)&params->np_steepness<<"\n";
 	noise_steepness      = new Noise(&params->np_steepness,      seed, csize.X, csize.Y);
-	noise_height_select  = new Noise(&params->np_height_select,  seed, csize.X, csize.Y);
+errorstream << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id())<< " "<< (long)&params->np_height_select<<"\n";
+		noise_height_select  = new Noise(&params->np_height_select,  seed, csize.X, csize.Y);
+errorstream << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id())<< " "<< (long)&params->np_mud<<"\n";
 	noise_mud            = new Noise(&params->np_mud,            seed, csize.X, csize.Y);
-	noise_beach          = new Noise(&params->np_beach,          seed, csize.X, csize.Y);
-	noise_biome          = new Noise(&params->np_biome,          seed,
+errorstream << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id())<< " "<< (long)&params->np_beach<<"\n";
+		noise_beach          = new Noise(&params->np_beach,          seed, csize.X, csize.Y);
+errorstream << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id())<< " "<< (long)&params->np_biome<<"\n";
+		noise_biome          = new Noise(&params->np_biome,          seed,
 			csize.X + 2 * MAP_BLOCKSIZE, csize.Y + 2 * MAP_BLOCKSIZE);
-	noise_humidity       = new Noise(&params->np_humidity,       seed,
+errorstream << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id())<< " "<< (long)&params->np_humidity<<"\n";
+		noise_humidity       = new Noise(&params->np_humidity,       seed,
 			csize.X + 2 * MAP_BLOCKSIZE, csize.Y + 2 * MAP_BLOCKSIZE);
 
 	//// Resolve nodes to be used

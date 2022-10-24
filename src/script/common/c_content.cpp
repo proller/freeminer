@@ -1772,6 +1772,7 @@ bool read_noiseparams(lua_State *L, int index, NoiseParams *np)
 	getfloatfield(L, index, "persist",     np->persist);
 	getfloatfield(L, index, "persistence", np->persist);
 	getfloatfield(L, index, "lacunarity",  np->lacunarity);
+
 	getintfield(L,   index, "seed",        np->seed);
 	getintfield(L,   index, "octaves",     np->octaves);
 
@@ -1807,6 +1808,8 @@ void push_noiseparams(lua_State *L, NoiseParams *np)
 	push_flags_string(L, flagdesc_noiseparams, np->flags,
 		np->flags);
 	lua_setfield(L, -2, "flags");
+
+	errorstream << __FILE__ << ":" << __LINE__ << " " << (long)&np->spread << " np->spread.Z=" << np->spread.Z << "\n" ;
 
 	push_v3f(L, np->spread);
 	lua_setfield(L, -2, "spread");

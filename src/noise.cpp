@@ -414,6 +414,7 @@ void Noise::allocBuffers()
 		this->gradient_buf = new float[bufsize];
 		this->result       = new float[bufsize];
 	} catch (std::bad_alloc &e) {
+errorstream << __FILE__ << ":" << __LINE__ << " " << "\n";
 		throw InvalidNoiseParamsException();
 	}
 }

@@ -301,7 +301,6 @@ Mapgen *EmergeManager::getCurrentMapgen()
 	return nullptr;
 }
 
-
 void EmergeManager::startThreads()
 {
 	if (m_threads_active)
@@ -816,3 +815,8 @@ void *EmergeThread::run()
 	END_DEBUG_EXCEPTION_HANDLER
 	return NULL;
 }
+
+/*
+Mapgen *EmergeManager::getFirstMapgen() {
+		return m_mapgens[0];
+}*/

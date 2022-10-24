@@ -28,6 +28,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "irr_v3d.h"
 #include "exceptions.h"
 #include "util/string.h"
+#include "log.h"
 
 #if defined(RANDOM_MIN)
 #undef RANDOM_MIN
@@ -143,6 +144,12 @@ struct NoiseParams {
 		octaves    = octaves_;
 		persist    = persist_;
 		lacunarity = lacunarity_;
+		/*errorstream << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id())  <<" " << (long)this << " " 
+		<< " spread.Z=" << spread.Z
+		<< " lacunarity=" << lacunarity
+		<< " octaves="  << octaves
+		<< "\n";*/
+		if (lacunarity > 1000000) abort();
 		flags      = flags_;
 
 		far_scale  = far_scale_;
