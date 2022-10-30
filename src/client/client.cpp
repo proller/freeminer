@@ -337,8 +337,8 @@ void Client::Stop()
 	if (m_mods_loaded)
 		delete m_script;
 
-    if(m_localserver)
-        delete m_localserver;
+	if(m_localserver)
+		delete m_localserver;
 
 	if (m_localdb)
 		delete m_localdb;
