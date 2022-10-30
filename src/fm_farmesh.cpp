@@ -1070,8 +1070,12 @@ void FarMesh::render()
 	irr::video::SMaterial material;
 	material.Lighting = false;
 	material.BackfaceCulling = false;
-	material.ZBuffer = irr::video::ECFN_ALWAYS;
+	//material.ZBuffer = irr::video::ECFN_ALWAYS;
+	material.ZBuffer = irr::video::ECFN_LESSEQUAL;
 	driver->setMaterial(material);
+
+	if (mesh)
+		driver->drawMeshBuffer(mesh->getMeshBuffer(0));
 
 	for (auto &ya : *grid_result_use) {
 		for (auto &point : ya) {
@@ -1088,6 +1092,12 @@ void FarMesh::render()
 			// errorstream << "depth_cached=" << depth_cached << " l=" << l << "
 			// color="
 			// << (int)color << "\n";
+			driver->draw3DBox({intToFloat(pos_int - m_camera_offset, BS), intToFloat(v3POS(step_width, 0, 0 + step_width * !pos_int.Y) +
+									   pos_int - m_camera_offset, BS)},
+			
+			 irr::video::SColor(255, 255 - 100 * (pos_int.Y < 0), /*- step_num*/
+							255 * (m_water_level - 1 == pos_int.Y), color));
+			if (0)
 			driver->draw3DLine(intToFloat(pos_int - m_camera_offset, BS),
 					intToFloat(v3POS(step_width, 0, 0 + step_width * !pos_int.Y) +
 									   pos_int - m_camera_offset,
@@ -1101,6 +1111,4 @@ void FarMesh::render()
 	// errorstream << "mesh use  " << (long)mesh << std::endl;
 
 	//
-	if (mesh)
-		driver->drawMeshBuffer(mesh->getMeshBuffer(0));
 }

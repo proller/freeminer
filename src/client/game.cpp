@@ -78,6 +78,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "hud.h"
 
 #include <future>
+#include <memory>
 
 
 #if USE_SOUND
@@ -864,7 +865,7 @@ private:
 	std::future<void> updateDrawList_future;
 #endif
 	bool m_cinematic = false;
-	FarMesh * farmesh = nullptr;
+	std::unique_ptr<FarMesh> farmesh;
 	// minetest:
 
 
@@ -1554,7 +1555,7 @@ bool Game::createClient(const GameStartData &start_data)
 
 
 	if (g_settings->getS32("farmesh5")) {
-		farmesh = new FarMesh(smgr->getRootSceneNode(), smgr, -1, client, server);
+		farmesh.reset(new FarMesh(smgr->getRootSceneNode(), smgr, -1, client, server));
 	}
 
 	//freeminer:

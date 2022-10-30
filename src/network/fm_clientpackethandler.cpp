@@ -20,10 +20,10 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "client.h"
+#include "client/client.h"
 
 #include "util/base64.h"
-#include "clientmedia.h"
+#include "client/clientmedia.h"
 #include "log_types.h"
 #include "map.h"
 #include "mapsector.h"

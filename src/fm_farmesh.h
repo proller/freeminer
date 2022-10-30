@@ -62,6 +62,7 @@ private:
 	//constexpr static uint16_t grid_size_max = 256;
 	//constexpr static uint16_t grid_size_max = 64;
 	constexpr static uint16_t grid_size_max_y = 64;
+	//constexpr static uint16_t grid_size_max_y = 128;
 	//constexpr static uint16_t grid_size_max_y = 16;
 	constexpr static uint16_t grid_size_max_x = grid_size_max_y * 4;
 	//constexpr static uint16_t grid_size_max = 16;

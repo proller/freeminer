@@ -23,6 +23,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "network/fm_clientpackethandler.cpp"
 #else //TODO
 #include "emerge.h"
+#include "filesys.h"
 
 #include "client/client.h"
 
