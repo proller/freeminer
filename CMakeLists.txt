@@ -76,7 +76,16 @@ if(${CMAKE_VERSION} VERSION_LESS 3.13)
 endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    add_link_options(-fuse-ld=lld)
+	include (CheckCXXSourceCompiles)
+	include (CMakePushCheckState)
+
+	set (TEST_FLAG "-fuse-ld=lld")
+	set (CMAKE_REQUIRED_FLAGS ${TEST_FLAG})
+	check_cxx_source_compiles(" int main() { return 0; } " HAVE_LLD)
+	set (CMAKE_REQUIRED_FLAGS "")
+	if (HAVE_LLD)
+		add_link_options(-fuse-ld=lld)
+	endif ()
 endif()
 
 if(USE_LIBCXX AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -94,6 +103,8 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR SANITIZE_ADDRESS OR SANITIZE_THREAD OR 
 		set(ENABLE_SYSTEM_JSONCPP 0 CACHE BOOL "")
 endif()
 
+option (USE_STATIC_LIBRARIES "Set to FALSE to use shared libraries" ON)
+
 
 set(BUILD_UNITTESTS TRUE CACHE BOOL "Build unittests")
 set(BUILD_BENCHMARKS FALSE CACHE BOOL "Build benchmarks")
@@ -106,7 +117,7 @@ endif()
 
 
 MESSAGE(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
-if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+if (NOT NO_LTO AND (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo"))
 	# include(CheckIPOSupported)
 	# check_ipo_supported(RESULT supported OUTPUT error)
 	set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
@@ -296,6 +307,10 @@ install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/games/minetest_game" DESTINATION 
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/games/devtest" DESTINATION "${SHAREDIR}/games/"
 	COMPONENT "SUBGAME_MINIMAL" OPTIONAL PATTERN ".git*" EXCLUDE )
 
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/games/default" DESTINATION "${SHAREDIR}/games/"
+	COMPONENT "SUBGAME_DEFAULT" OPTIONAL PATTERN ".git*" EXCLUDE )
+
+
 if(BUILD_CLIENT)
 	install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/client/shaders" DESTINATION "${SHAREDIR}/client")
 	install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/textures/base/pack" DESTINATION "${SHAREDIR}/textures/base")
@@ -478,3 +493,7 @@ if(DOXYGEN_FOUND)
 		COMMENT "Generating API documentation with Doxygen" VERBATIM
 	)
 endif()
+
+
+#target_link_libraries(IrrlichtMt::IrrlichtMt PRIVATE xcb)
+#target_link_libraries(IrrlichtMt PRIVATE xcb)

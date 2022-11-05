@@ -1080,6 +1080,15 @@ u32 ServerMap::updateLighting(lighting_map_t &a_blocks,
 	return ret;
 }
 
+const v3POS g_4dirs[4] =
+{
+    // +right, +top, +back
+    { 0, 0, 1}, // back
+    { 1, 0, 0}, // right
+    { 0, 0,-1}, // front
+    {-1, 0, 0}, // left
+};
+
 bool ServerMap::propagateSunlight(
 		const v3POS &pos, std::set<v3POS> &light_sources, bool remove_light)
 {
@@ -1105,7 +1114,7 @@ bool ServerMap::propagateSunlight(
 
 			MapNode n = getNode(pos_relative + v3POS(x, MAP_BLOCKSIZE, z));
 			if (n) {
-				if (n.getLight(LIGHTBANK_DAY, m_gamedef->ndef()) != LIGHT_SUN &&
+				if (n.getLight(LIGHTBANK_DAY, nodemgr) != LIGHT_SUN &&
 						!light_ambient) {
 					no_sunlight = true;
 				}
@@ -1117,7 +1126,7 @@ bool ServerMap::propagateSunlight(
 					no_sunlight = true;
 				} else {
 					MapNode n = block->getNode(v3POS(x, MAP_BLOCKSIZE - 1, z));
-					if (n && m_gamedef->ndef()->get(n).sunlight_propagates == false)
+					if (n && nodemgr->get(n).sunlight_propagates == false)
 						no_sunlight = true;
 				}
 				// NOTE: As of now, this just would make everything dark.
@@ -1151,6 +1160,15 @@ bool ServerMap::propagateSunlight(
 					// Diminish light
 					current_light = diminish_light(current_light);
 				}
+
+                if (y == 0 && !remove_light /* && current_light == LIGHT_SUN - 1*/) {
+                    for (const auto &dir : g_4dirs) {
+                        if (getNode(pos + dir).getLight(LIGHTBANK_DAY,m_gamedef->ndef()) == LIGHT_SUN) {
+                            current_light = LIGHT_SUN;
+                            break;
+                        }
+                    }
+                }
 
 				u8 old_light = n.getLight(LIGHTBANK_DAY, nodemgr);
 
