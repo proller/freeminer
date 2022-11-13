@@ -678,7 +678,6 @@ set(FMcommon_SRCS ${FMcommon_SRCS}
 	fm_clientiface.cpp
 	content_abm.cpp
 	fm_serverenvironment.cpp
-	fm_farmesh.cpp
 )
 #	FMColoredString.cpp
 
@@ -791,6 +790,7 @@ endif()
 
 set(FMclient_SRCS
 	guiTextInputMenu.cpp
+	fm_farmesh.cpp
 )
 	#gui/intlGUIEditBox.cpp
 	#FMStaticText.cpp

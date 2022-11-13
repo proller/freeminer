@@ -27,7 +27,7 @@ public:
 	void update(v3f camera_pos, v3f camera_dir, f32 camera_fov, CameraMode camera_mode,
 			f32 camera_pitch, f32 camera_yaw, v3POS m_camera_offset, float brightness,
 			s16 render_range);
-	virtual void OnRegisterSceneNode();
+	virtual void OnRegisterSceneNode() override;
 
 	virtual const core::aabbox3d<f32> &getBoundingBox() const override { return m_box; }
 
