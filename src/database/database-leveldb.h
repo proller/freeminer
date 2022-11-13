@@ -26,6 +26,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #if USE_LEVELDB
 
+#include <json/reader.h>
 #include <string>
 #include "database.h"
 #include "leveldb/db.h"
@@ -56,7 +57,7 @@ private:
 class PlayerDatabaseLevelDB : public PlayerDatabase
 {
 public:
-	PlayerDatabaseLevelDB(const std::string &savedir);
+	PlayerDatabaseLevelDB(const std::string &savedir, const std::string &name = "players.db");
 	~PlayerDatabaseLevelDB();
 
 	void savePlayer(RemotePlayer *player);
@@ -64,14 +65,14 @@ public:
 	bool removePlayer(const std::string &name);
 	void listPlayers(std::vector<std::string> &res);
 
-private:
+protected:
 	leveldb::DB *m_database;
 };
 
 class AuthDatabaseLevelDB : public AuthDatabase
 {
 public:
-	AuthDatabaseLevelDB(const std::string &savedir);
+	AuthDatabaseLevelDB(const std::string &savedir, const std::string &name = "auth.db");
 	virtual ~AuthDatabaseLevelDB();
 
 	virtual bool getAuth(const std::string &name, AuthEntry &res);
@@ -81,8 +82,42 @@ public:
 	virtual void listNames(std::vector<std::string> &res);
 	virtual void reload();
 
-private:
+protected:
 	leveldb::DB *m_database;
 };
+
+
+// p.name : json
+class PlayerDatabaseLevelDBFM : public PlayerDatabaseLevelDB
+{
+public:
+	PlayerDatabaseLevelDBFM(const std::string &savedir);
+
+	void savePlayer(RemotePlayer *player);
+	bool loadPlayer(RemotePlayer *player, PlayerSAO *sao);
+	bool removePlayer(const std::string &name);
+	void listPlayers(std::vector<std::string> &res);
+
+private:
+	Json::CharReaderBuilder m_json_char_reader_builder;
+	const std::string m_prefix {"p."};
+};
+
+
+class AuthDatabaseLevelDBFM : public AuthDatabaseLevelDB
+{
+public:
+	AuthDatabaseLevelDBFM(const std::string &savedir);
+
+	virtual bool getAuth(const std::string &name, AuthEntry &res);
+	virtual bool saveAuth(const AuthEntry &authEntry);
+	virtual bool deleteAuth(const std::string &name);
+	virtual void listNames(std::vector<std::string> &res);
+
+private:
+	Json::CharReaderBuilder m_json_char_reader_builder;
+	const std::string m_prefix {"auth_"};
+};
+
 
 #endif // USE_LEVELDB
