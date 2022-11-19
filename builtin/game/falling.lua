@@ -276,9 +276,17 @@ core.register_entity(":__builtin:falling_node", {
 			if (addlevel or 0) <= 0 then
 				addlevel = bcd.leveled
 			end
-			if core.add_node_level(bcp, addlevel) < addlevel then
+			local rest = core.add_node_level(bcp, addlevel)
+			if rest == 0 then
 				return true
-			elseif bcd.buildable_to then
+			end
+			if rest > 0 then
+				self.node.level = rest
+				local bcpc = bcp:offset(0, 1, 0)
+				local bcnc = core.get_node(bcpc)
+				return self:try_place(bcpc, bcnc)
+			end
+			if bcd.buildable_to then
 				-- Node level has already reached max, don't place anything
 				return true
 			end
@@ -314,6 +322,7 @@ core.register_entity(":__builtin:falling_node", {
 		local def = core.registered_nodes[self.node.name]
 		if def then
 			core.add_node(np, self.node)
+			core.set_node_level(np, self.node.level)
 			if self.meta then
 				core.get_meta(np):from_table(self.meta)
 			end
@@ -326,7 +335,7 @@ core.register_entity(":__builtin:falling_node", {
 	end,
 
 	on_step = function(self, dtime, moveresult)
-		if dtime > 0.2 then remove_fast = 2 else remove_fast = 0 end
+		if dtime > 0.1 then remove_fast = 2 else remove_fast = 0 end
 		-- Fallback code since collision detection can't tell us
 		-- about liquids (which do not collide)
 		if self.floats then
@@ -354,6 +363,15 @@ core.register_entity(":__builtin:falling_node", {
 		if moveresult.touching_ground then
 			for _, info in ipairs(moveresult.collisions) do
 				if info.type == "object" then
+
+					-- merge with same leveled objects
+					local le = info.object:get_luaentity()
+					if le and le.node and self.node.name == le.node.name and le.node.level > 0 then
+						le.node.level = le.node.level + self.node.level
+						self.object:remove()
+						return
+					end
+
 					if info.axis == "y" and info.object:is_player() then
 						player_collision = info
 					end
