@@ -105,6 +105,20 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 {
 	// errorstream << "update    " << (long)mesh << std::endl;
 
+if (!mg) return;
+
+#if cache0
+		auto camera_pos_aligned =
+				floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16),
+						BS); // todo optimize
+// reset on significant move
+		if (m_camera_pos_aligned != camera_pos_aligned) {
+			m_cycle_stop_i	= 0 ;
+		}
+
+#endif
+
+
 	if (!m_cycle_stop_i) {
 
 #if cache_step
@@ -112,9 +126,8 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		m_camera_pos_aligned_by_step.reserve(256); // todo calc from grid_size?
 #endif
 #if cache0
-		m_camera_pos_aligned =
-				floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16),
-						BS); // todo optimize
+		m_camera_pos_aligned = camera_pos_aligned;
+				//floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
 #endif
 
 		const auto camera_pos_aligned = intToFloat(m_camera_pos_aligned, BS);
@@ -232,9 +245,10 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 				return;
 			}
 
-			(*grid_result_fill)[x][y].depth = 0; // clean cache
-					// errorstream << "grid clean" << " x=" << x << " y=" << y <<
-					// "depth=" << (*grid_result_fill)[x][y].depth << "\n";
+			(*grid_result_fill)[x][y].depth =
+					0; // clean cache
+					   // errorstream << "grid clean" << " x=" << x << " y=" << y <<
+					   // "depth=" << (*grid_result_fill)[x][y].depth << "\n";
 
 			int depth = m_render_range /** BS*/; // 255;
 
@@ -264,7 +278,8 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 				//    |       |
 				//     ___.___  135
 				//  225  180
-				// errorstream << "rotateSquareXZBy ddir? " << dir << " angle=" << angle << "\n";
+				// errorstream << "rotateSquareXZBy ddir? " << dir << " angle=" << angle
+				// << "\n";
 				if (angle <= 45) {
 					// dir.X
 				} else if (angle < 135) {
@@ -299,16 +314,17 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 				// auto step_width = std::max(1, int(step_r.getLength()) >> 1 << 1);
 				const auto step_width =
 						std::min(std::max<int>(1, step_r.getLength() / BS), 1024);
-				//#if cache0
+				// #if cache0
 				const int step_aligned = pow(2, ceil(log(step_width) / log(2)));
-				//#else
-				// int step_aligned = pow(2, std::floor(log(step_width) / log(2)));
-				//#endif
+				// #else
+				//  int step_aligned = pow(2, std::floor(log(step_width) / log(2)));
+				// #endif
 
 				const auto dstep = (step_num + 1);
-//DUMP(x,y, depth, dstep, step_width);
-				// errorstream << " x=" << x << " y=" << y << " " << " depth += step_width
-				// * 8 :" << depth << "+=" << step_width << "*" << dstep << " = ";
+				// DUMP(x,y, depth, dstep, step_width);
+				//  errorstream << " x=" << x << " y=" << y << " " << " depth +=
+				//  step_width
+				//  * 8 :" << depth << "+=" << step_width << "*" << dstep << " = ";
 				depth += step_width * dstep; // TODO: TUNE ME
 				// errorstream << depth << "\n";
 				if (depth > depth_max)
@@ -618,7 +634,8 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		  */
 				} else
 
-						if (mg) {
+						//if (mg) 
+						{
 					/*
 			   if (x == grid_size / 2 && y == grid_size / 2) // if (!x && !y)
 							   errorstream << "have mg"
@@ -1074,14 +1091,14 @@ void FarMesh::render()
 	irr::video::SMaterial material;
 	material.Lighting = false;
 	material.BackfaceCulling = false;
-	//material.ZBuffer = irr::video::ECFN_ALWAYS;
+	// material.ZBuffer = irr::video::ECFN_ALWAYS;
 	material.ZBuffer = irr::video::ECFN_LESSEQUAL;
 	driver->setMaterial(material);
 
-/*
-	if (mesh)
-		driver->drawMeshBuffer(mesh->getMeshBuffer(0));
-*/
+	/*
+		if (mesh)
+			driver->drawMeshBuffer(mesh->getMeshBuffer(0));
+	*/
 
 	for (auto &ya : *grid_result_use) {
 		for (auto &point : ya) {
@@ -1099,136 +1116,131 @@ void FarMesh::render()
 			// color="
 			// << (int)color << "\n";
 
+			{
+				video::SMaterial m_material;
+				video::S3DVertex m_vertices[4];
 
-{
-			video::SMaterial m_material;
-	video::S3DVertex m_vertices[4];
+				{
+					f32 tx0, tx1, ty0, ty1;
+					v2f scale;
+					float m_size = 10;
+					video::SColor m_color;
 
+					m_color = irr::video::SColor(255, 255 - 100 * (pos_int.Y < 0),
+							255 * (m_water_level - 1 == pos_int.Y), color);
 
-{
-	f32 tx0, tx1, ty0, ty1;
-	v2f scale;
-	float m_size = 10;
-	video::SColor m_color;
+					/*
+						if (m_texture.tex != nullptr)
+							scale = m_texture.tex -> scale.blend(m_time /
+					   (m_expiration+0.1)); else
+					*/
+					scale = v2f(1.f, 1.f);
 
-	m_color = irr::video::SColor(255, 255 - 100 * (pos_int.Y < 0),255 * (m_water_level - 1 == pos_int.Y), color);
+					/*	if (m_animation.type != TAT_NONE) {
+							const v2u32 texsize = m_material.getTexture(0)->getSize();
+							v2f texcoord, framesize_f;
+							v2u32 framesize;
+							texcoord = m_animation.getTextureCoords(texsize,
+					   m_animation_frame); m_animation.determineParams(texsize, NULL,
+					   NULL, &framesize); framesize_f = v2f(framesize.X / (float)
+					   texsize.X, framesize.Y / (float) texsize.Y);
 
+							tx0 = m_texpos.X + texcoord.X;
+							tx1 = m_texpos.X + texcoord.X + framesize_f.X * m_texsize.X;
+							ty0 = m_texpos.Y + texcoord.Y;
+							ty1 = m_texpos.Y + texcoord.Y + framesize_f.Y * m_texsize.Y;
+						} else {
+							tx0 = m_texpos.X;
+							tx1 = m_texpos.X + m_texsize.X;
+							ty0 = m_texpos.Y;
+							ty1 = m_texpos.Y + m_texsize.Y;
+						}
+					*/
 
-/*
-	if (m_texture.tex != nullptr)
-		scale = m_texture.tex -> scale.blend(m_time / (m_expiration+0.1));
-	else
-*/
-		scale = v2f(1.f, 1.f);
+					auto half = m_size * .5f, hx = half * scale.X, hy = half * scale.Y;
 
-/*	if (m_animation.type != TAT_NONE) {
-		const v2u32 texsize = m_material.getTexture(0)->getSize();
-		v2f texcoord, framesize_f;
-		v2u32 framesize;
-		texcoord = m_animation.getTextureCoords(texsize, m_animation_frame);
-		m_animation.determineParams(texsize, NULL, NULL, &framesize);
-		framesize_f = v2f(framesize.X / (float) texsize.X, framesize.Y / (float) texsize.Y);
+					m_vertices[0] =
+							video::S3DVertex(-hx, -hy, 0, 0, 0, 0, m_color, tx0, ty1);
+					m_vertices[1] =
+							video::S3DVertex(hx, -hy, 0, 0, 0, 0, m_color, tx1, ty1);
+					m_vertices[2] =
+							video::S3DVertex(hx, hy, 0, 0, 0, 0, m_color, tx1, ty0);
+					m_vertices[3] =
+							video::S3DVertex(-hx, hy, 0, 0, 0, 0, m_color, tx0, ty0);
 
-		tx0 = m_texpos.X + texcoord.X;
-		tx1 = m_texpos.X + texcoord.X + framesize_f.X * m_texsize.X;
-		ty0 = m_texpos.Y + texcoord.Y;
-		ty1 = m_texpos.Y + texcoord.Y + framesize_f.Y * m_texsize.Y;
-	} else {
-		tx0 = m_texpos.X;
-		tx1 = m_texpos.X + m_texsize.X;
-		ty0 = m_texpos.Y;
-		ty1 = m_texpos.Y + m_texsize.Y;
-	}
-*/
+					// see #10398
+					// v3s16 camera_offset = m_env->getCameraOffset();
+					// particle position is now handled by step()
+					/*
+						m_box.reset(v3f());
 
-	auto half = m_size * .5f,
-	     hx   = half * scale.X,
-	     hy   = half * scale.Y;
+						for (video::S3DVertex &vertex : m_vertices) {
+							if (m_vertical) {
+								v3f ppos = m_player->getPosition()/BS;
+								vertex.Pos.rotateXZBy(std::atan2(ppos.Z - m_pos.Z, ppos.X
+					   - m_pos.X) / core::DEGTORAD + 90); } else {
+								vertex.Pos.rotateYZBy(m_player->getPitch());
+								vertex.Pos.rotateXZBy(m_player->getYaw());
+							}
+							m_box.addInternalPoint(vertex.Pos);
+						}
+					*/
 
+					{
+						const auto ppos = intToFloat(pos_int - m_camera_offset, BS);
+						for (video::S3DVertex &vertex : m_vertices) {
+							vertex.Pos += ppos;
+						}
+					}
+				}
 
-	m_vertices[0] = video::S3DVertex(-hx, -hy,
-		0, 0, 0, 0, m_color, tx0, ty1);
-	m_vertices[1] = video::S3DVertex(hx, -hy,
-		0, 0, 0, 0, m_color, tx1, ty1);
-	m_vertices[2] = video::S3DVertex(hx, hy,
-		0, 0, 0, 0, m_color, tx1, ty0);
-	m_vertices[3] = video::S3DVertex(-hx, hy,
-		0, 0, 0, 0, m_color, tx0, ty0);
+				{
+					m_material.FogEnable = true;
+					m_material.Thickness =
+							// step_width;
+							// BS * MAP_BLOCKSIZE;
+							// BS * MAP_BLOCKSIZE * 100000;
+							200;
 
+					video::IVideoDriver *driver = SceneManager->getVideoDriver();
+					driver->setMaterial(m_material);
+					driver->setTransform(video::ETS_WORLD, AbsoluteTransformation);
 
-	// see #10398
-	// v3s16 camera_offset = m_env->getCameraOffset();
-	// particle position is now handled by step()
-/*
-	m_box.reset(v3f());
-
-	for (video::S3DVertex &vertex : m_vertices) {
-		if (m_vertical) {
-			v3f ppos = m_player->getPosition()/BS;
-			vertex.Pos.rotateXZBy(std::atan2(ppos.Z - m_pos.Z, ppos.X - m_pos.X) /
-				core::DEGTORAD + 90);
-		} else {
-			vertex.Pos.rotateYZBy(m_player->getPitch());
-			vertex.Pos.rotateXZBy(m_player->getYaw());
-		}
-		m_box.addInternalPoint(vertex.Pos);
-	}
-*/
-
-{
-	const auto ppos = intToFloat(pos_int - m_camera_offset, BS);
-	for (video::S3DVertex &vertex : m_vertices) {
-		vertex.Pos += ppos;
-	}
-}
-
-}
-
-{
-	m_material.FogEnable = true;
-m_material.Thickness = 
-//step_width;
-//BS * MAP_BLOCKSIZE;
-//BS * MAP_BLOCKSIZE * 100000;
-200;
-
-
-	video::IVideoDriver *driver = SceneManager->getVideoDriver();
-	driver->setMaterial(m_material);
-	driver->setTransform(video::ETS_WORLD, AbsoluteTransformation);
-
-	u16 indices[] = {0,1,2, 2,3,0};
-/*
-	driver->drawVertexPrimitiveList(m_vertices, 4,
-			indices, 2, video::EVT_STANDARD,
-			scene::EPT_TRIANGLES, 
-			//scene::EPT_POINTS, 
-			//scene::EPT_POINT_SPRITES,
-			video::EIT_16BIT);
-*/
-	driver->drawVertexPrimitiveList(m_vertices, 4,
-			indices, 1, video::EVT_STANDARD,
-			//scene::EPT_TRIANGLES, 
-			//scene::EPT_POINTS, 
-			scene::EPT_POINT_SPRITES,
-			video::EIT_16BIT);
-
-
-}
-		}
-if (0)
-			driver->draw3DBox({intToFloat(pos_int - m_camera_offset, BS), intToFloat(v3POS(step_width, 0, 0 + step_width * !pos_int.Y) +
-									   pos_int - m_camera_offset, BS)},
-			
-			 irr::video::SColor(255, 255 - 100 * (pos_int.Y < 0), /*- step_num*/
-							255 * (m_water_level - 1 == pos_int.Y), color));
+					u16 indices[] = {0, 1, 2, 2, 3, 0};
+					/*
+						driver->drawVertexPrimitiveList(m_vertices, 4,
+								indices, 2, video::EVT_STANDARD,
+								scene::EPT_TRIANGLES,
+								//scene::EPT_POINTS,
+								//scene::EPT_POINT_SPRITES,
+								video::EIT_16BIT);
+					*/
+					driver->drawVertexPrimitiveList(m_vertices, 4, indices, 1,
+							video::EVT_STANDARD,
+							// scene::EPT_TRIANGLES,
+							// scene::EPT_POINTS,
+							scene::EPT_POINT_SPRITES, video::EIT_16BIT);
+				}
+			}
 			if (0)
-			driver->draw3DLine(intToFloat(pos_int - m_camera_offset, BS),
-					intToFloat(v3POS(step_width, 0, 0 + step_width * !pos_int.Y) +
-									   pos_int - m_camera_offset,
-							BS),
-					irr::video::SColor(255, 255 - 100 * (pos_int.Y < 0), /*- step_num*/
-							255 * (m_water_level - 1 == pos_int.Y), color));
+				driver->draw3DBox(
+						{intToFloat(pos_int - m_camera_offset, BS),
+								intToFloat(v3POS(step_width, 0,
+												   0 + step_width * !pos_int.Y) +
+												   pos_int - m_camera_offset,
+										BS)},
+
+						irr::video::SColor(255,
+								255 - 100 * (pos_int.Y < 0), /*- step_num*/
+								255 * (m_water_level - 1 == pos_int.Y), color));
+			if (0)
+				driver->draw3DLine(intToFloat(pos_int - m_camera_offset, BS),
+						intToFloat(v3POS(step_width, 0, 0 + step_width * !pos_int.Y) +
+										   pos_int - m_camera_offset,
+								BS),
+						irr::video::SColor(255,
+								255 - 100 * (pos_int.Y < 0), /*- step_num*/
+								255 * (m_water_level - 1 == pos_int.Y), color));
 		}
 	}
 	// auto tmesh = createHillPlaneMesh({10,10},{10,10},&material,1,{1,1},{1,1});
