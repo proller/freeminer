@@ -55,31 +55,41 @@ public:
 	std::vector<MapNode> layers_node;
 	unsigned int layers_node_size = 0;
 	void layers_init(EmergeParams *emerge, const Json::Value & layersj);
-	void layers_prepare(const v3POS & node_min, const v3POS & node_max);
+	void layers_prepare(const v3pos_t & node_min, const v3pos_t & node_max);
 	MapNode layers_get(unsigned int index);
 
 	Noise *noise_float_islands1 = nullptr;
 	Noise *noise_float_islands2 = nullptr;
 	Noise *noise_float_islands3 = nullptr;
-	void float_islands_prepare(const v3POS & node_min, const v3POS & node_max, int min_y);
-	int float_islands_generate(const v3POS & node_min, const v3POS & node_max, int min_y, MMVManip *vm);
+	void float_islands_prepare(const v3pos_t & node_min, const v3pos_t & node_max, int min_y);
+	int float_islands_generate(const v3pos_t & node_min, const v3pos_t & node_max, int min_y, MMVManip *vm);
 
 	Noise *noise_cave_indev = nullptr;
 	int cave_noise_threshold = 0;
 	bool cave_noise_enabled = 0;
-	void cave_prepare(const v3POS & node_min, const v3POS & node_max, int max_y);
+	void cave_prepare(const v3pos_t & node_min, const v3pos_t & node_max, int max_y);
 
 };
 
 
 struct MapgenIndevParams : public MapgenV6Params {
-	s16 float_islands;
+	//s16 float_islands;
 
-	NoiseParams np_float_islands1;
+	s16 floatland_ymin = 1024;
+	s16 floatland_ymax =  mapgen_limit;
+	s16 floatland_taper = 256;
+	float float_taper_exp = 2.0f;
+	float floatland_density = -0.6f;
+	s16 floatland_ywater = 10000;
+
+
+/*	NoiseParams np_float_islands1;
 	NoiseParams np_float_islands2;
-	NoiseParams np_float_islands3;
+	NoiseParams np_float_islands3;*/
+	NoiseParams np_floatland;
 	NoiseParams np_layers;
 	NoiseParams np_cave_indev;
+
 
 	Json::Value paramsj;
 
@@ -92,10 +102,20 @@ struct MapgenIndevParams : public MapgenV6Params {
 };
 
 class MapgenIndev : public MapgenV6, public Mapgen_features {
+	Noise *noise_floatland = nullptr;
+	s16 floatland_taper;
+	float float_taper_exp;
+	float floatland_density;
+	s16 floatland_ywater;
+
+	float *float_offset_cache = nullptr;
+
 public:
 	MapgenIndevParams *sp;
 
 	int xstride, ystride, zstride;
+	int zstride_1u1d;
+
 
 	virtual MapgenType getType() const { return MAPGEN_INDEV; }
 	MapgenIndev(MapgenIndevParams *params, EmergeParams *emerge);
@@ -105,6 +125,7 @@ public:
 	int generateGround();
 	void generateCaves(int max_stone_y);
 	void generateExperimental();
+	bool getFloatlandTerrainFromMap(int idx_xyz, float float_offset);
 };
 
 /*

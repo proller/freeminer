@@ -8,6 +8,7 @@
 #include "constants.h"
 #include "emerge.h"
 #include "irr_v3d.h"
+#include "irrlichttypes.h"
 #include "log.h"
 #include "log_types.h"
 #include "map.h"
@@ -100,7 +101,7 @@ void FarMesh::OnRegisterSceneNode()
 }
 
 void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
-		CameraMode camera_mode, f32 camera_pitch, f32 camera_yaw, v3POS camera_offset,
+		CameraMode camera_mode, f32 camera_pitch, f32 camera_yaw, v3pos_t camera_offset,
 		float brightness, s16 render_range)
 {
 	// errorstream << "update    " << (long)mesh << std::endl;
@@ -146,7 +147,7 @@ if (!mg) return;
 		m_camera_pitch = camera_pitch;
 		m_camera_yaw = camera_yaw;
 		m_camera_offset = camera_offset;
-		m_render_range = std::min<POS>(render_range, 255);
+		m_render_range = std::min<pos_t>(render_range, 255);
 
 		errorstream << "update pos=" << m_camera_pos << " dir=" << m_camera_dir
 					<< " fov=" << m_camera_fov << " pitch=" << m_camera_pitch
@@ -197,7 +198,7 @@ if (!mg) return;
 	// const int grid_size = 64;		   // 255;
 	const int depth_max = m_render_range_max;
 	// const int grid_size = 64; // 255;
-	//  unordered_map_v2POS<std::pair<bool, v3POS>> grid_cache;
+	//  unordered_map_v2POS<std::pair<bool, v3pos_t>> grid_cache;
 
 	TimeTaker timer_step("Client: Farmesh");
 
@@ -210,7 +211,7 @@ if (!mg) return;
 	float stepfac = 1.2;
 	float startoff = BS * 1;
 	float endoff = -MAP_BLOCKSIZE;
-	unordered_map_v3POS<bool> occlude_cache;
+	unordered_map_v3pos<bool> occlude_cache;
 	const auto cache_time = m_client->getEnv().getTimeOfDay();
 
 	const int max_cycle_ms = 20;
@@ -296,10 +297,10 @@ if (!mg) return;
 							<< " degy=" << degy << " dir_l=" << dir_l << "\n";
 
 #if cache0
-			v3POS pos_int_0;
+			v3pos_t pos_int_0;
 #endif
 #if cache_step
-			std::vector<v3POS> plane_cache_step_pos;
+			std::vector<v3pos_t> plane_cache_step_pos;
 #endif
 			for (short step_num = 0; step_num < depth_steps; ++step_num) {
 
@@ -345,8 +346,8 @@ if (!mg) return;
 						pos.Z < -MAX_MAP_GENERATION_LIMIT * BS)
 					break;
 
-				v3POS pos_int_raw = floatToInt(pos, BS);
-				v3POS pos_int((pos_int_raw.X / step_aligned) * step_aligned,
+				v3pos_t pos_int_raw = floatToInt(pos, BS);
+				v3pos_t pos_int((pos_int_raw.X / step_aligned) * step_aligned,
 						(pos_int_raw.Y / step_aligned) * step_aligned,
 						(pos_int_raw.Z / step_aligned) * step_aligned);
 				/*
@@ -457,7 +458,7 @@ if (!mg) return;
 							uint8_t color = 255 * l;
 							driver->draw3DLine(
 											intToFloat(pos_cached - m_camera_offset, BS),
-											intToFloat(v3POS(plane_cache_item.step_width[pos_int],
+											intToFloat(v3pos_t(plane_cache_item.step_width[pos_int],
 																			   0, 0 +
 							!pos_cached.Y) + pos_cached - m_camera_offset, BS),
 											irr::video::SColor(255 * (pos_cached.Y < 0),
@@ -471,7 +472,7 @@ if (!mg) return;
 							   intToFloat(pos_cached - m_camera_offset, BS)
 																											<< " , "
 																											<< intToFloat(
-																															   v3POS(plane_cache_item
+																															   v3pos_t(plane_cache_item
 																																							   .step_width[pos_int],
 																																			   0,
 							   0 + !pos_cached.Y) + pos_cached - m_camera_offset, BS)
@@ -551,7 +552,7 @@ if (!mg) return;
 						   depth_cached / (MAX_MAP_GENERATION_LIMIT * 2); uint8_t color =
 						   255 * l; driver->draw3DLine(intToFloat(pos_cached -
 						   m_camera_offset, BS),
-																						intToFloat(v3POS(plane_cache_item.step_width[pos_int_0],
+																						intToFloat(v3pos_t(plane_cache_item.step_width[pos_int_0],
 																														   0, 0 +
 						   !pos_cached.Y) + pos_cached - m_camera_offset, BS),
 																						irr::video::SColor(255
@@ -781,7 +782,7 @@ if (!mg) return;
 
 				/*
 												driver->draw3DLine(intToFloat(pos_int
-				   - m_camera_offset, BS), intToFloat(v3POS(step_width, 0, 0 +
+				   - m_camera_offset, BS), intToFloat(v3pos_t(step_width, 0, 0 +
 				   step_width
 				   * !pos_int.Y) + pos_int - m_camera_offset, BS),
 																irr::video::SColor(255
@@ -1225,7 +1226,7 @@ void FarMesh::render()
 			if (0)
 				driver->draw3DBox(
 						{intToFloat(pos_int - m_camera_offset, BS),
-								intToFloat(v3POS(step_width, 0,
+								intToFloat(v3pos_t(step_width, 0,
 												   0 + step_width * !pos_int.Y) +
 												   pos_int - m_camera_offset,
 										BS)},
@@ -1235,7 +1236,7 @@ void FarMesh::render()
 								255 * (m_water_level - 1 == pos_int.Y), color));
 			if (0)
 				driver->draw3DLine(intToFloat(pos_int - m_camera_offset, BS),
-						intToFloat(v3POS(step_width, 0, 0 + step_width * !pos_int.Y) +
+						intToFloat(v3pos_t(step_width, 0, 0 + step_width * !pos_int.Y) +
 										   pos_int - m_camera_offset,
 								BS),
 						irr::video::SColor(255,

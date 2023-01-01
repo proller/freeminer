@@ -4,6 +4,7 @@
 #include "client/camera.h"
 #include "constants.h"
 #include "irr_v3d.h"
+#include "irrlichttypes.h"
 #include "server.h"
 #include "util/unordered_map_hash.h"
 #include <ISceneNode.h>
@@ -25,7 +26,7 @@ public:
 
 	virtual void render() override;
 	void update(v3f camera_pos, v3f camera_dir, f32 camera_fov, CameraMode camera_mode,
-			f32 camera_pitch, f32 camera_yaw, v3POS m_camera_offset, float brightness,
+			f32 camera_pitch, f32 camera_yaw, v3pos_t m_camera_offset, float brightness,
 			s16 render_range);
 	virtual void OnRegisterSceneNode() override;
 
@@ -40,13 +41,13 @@ private:
 	float m_brightness;
 	v3f m_camera_pos = {-1337, -1337, -1337};
 #if cache0
-// v3POS m_camera_pos_aligned;
+// v3pos_t m_camera_pos_aligned;
 #endif
 	#if cache_step
-	std::vector<v3POS> m_camera_pos_aligned_by_step;
+	std::vector<v3pos_t> m_camera_pos_aligned_by_step;
 	#endif
 	#if cache0
-	v3POS m_camera_pos_aligned;
+	v3pos_t m_camera_pos_aligned;
 	#endif
 	v3f m_camera_dir;
 	f32 m_camera_fov;
@@ -56,8 +57,8 @@ private:
 	Client *m_client;
 	s16 m_render_range  = 16*16;
 	uint32_t m_render_range_max;
-	POS m_water_level = 0;
-	v3POS m_camera_offset;
+	pos_t m_water_level = 0;
+	v3pos_t m_camera_offset;
 	constexpr static uint16_t grid_size_min = 16;
 	//constexpr static uint16_t grid_size_max = 256;
 	//constexpr static uint16_t grid_size_max = 64;
@@ -80,23 +81,23 @@ private:
 	// uint16_t grid_size = 32;
 	// uint16_t grid_size = 8;
 	Mapgen *mg = nullptr;
-	unordered_map_v3POS<bool> mg_cache;
+	unordered_map_v3pos<bool> mg_cache;
 
 	struct ls_cache
 	{
 		uint32_t time = 0;
-		unordered_map_v3POS<int> depth;
-		unordered_map_v3POS<v3POS> pos;
-		unordered_map_v3POS<POS> step_width; // debug only
-		unordered_map_v3POS<POS> step;		 // debug only
+		unordered_map_v3pos<int> depth;
+		unordered_map_v3pos<v3pos_t> pos;
+		unordered_map_v3pos<pos_t> step_width; // debug only
+		unordered_map_v3pos<pos_t> step;		 // debug only
 	};
-	unordered_map_v3POS<ls_cache> plane_cache;
+	unordered_map_v3pos<ls_cache> plane_cache;
 
 	struct grid_result_item
 	{
-		v3POS pos;
+		v3pos_t pos;
 		int depth;
-		POS step_width; // debug
+		pos_t step_width; // debug
 	};
 	using result_array =
 			std::array<std::array<grid_result_item, grid_size_max_y>, grid_size_max_x>;
