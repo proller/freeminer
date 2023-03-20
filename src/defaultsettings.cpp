@@ -206,6 +206,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("weather_humidity_season", "30");
 	settings->setDefault("weather_humidity_daily", "-12");
 	settings->setDefault("weather_humidity_width", "300");
+	settings->setDefault("weather_humidity_height", "-250");
 	settings->setDefault("weather_humidity_days", "2");
 
 	settings->setDefault("respawn_auto", "false");
@@ -254,6 +255,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("server_map_save_interval", "300"); // "5.3"
 	settings->setDefault("sqlite_synchronous", "1"); // "2"
 	settings->setDefault("save_generated_block", "true");
+	settings->setDefault("save_changed_block", "true");
 	settings->setDefault("block_delete_time", threads && arm ? "60" : threads ? "30" : "10");
 
 #if (ENET_IPV6 || MINETEST_TRANSPORT || USE_SCTP)
