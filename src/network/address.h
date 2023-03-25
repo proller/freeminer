@@ -72,6 +72,8 @@ public:
 	// Resolve() may throw ResolveError (address is unchanged in this case)
 	void Resolve(const char *name);
 
+        void ResolveAsync(const char *name, std::function<void(BaseException*)> resolve);
+
 	void setAddress(u32 address);
 	void setAddress(u8 a, u8 b, u8 c, u8 d);
 	void setAddress(const IPv6AddressBytes *ipv6_bytes);

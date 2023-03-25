@@ -21,10 +21,15 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 shadowScreenQuad::shadowScreenQuad()
 {
+	m_meshbuffer.reset(new scene::SMeshBuffer());
+
+	video::SMaterial &Material = m_meshbuffer->getMaterial();
 	Material.Wireframe = false;
 	Material.Lighting = false;
 
 	video::SColor color(0x0);
+	core::array<video::S3DVertex>& Vertices = m_meshbuffer->Vertices;
+	Vertices.set_used(6);
 	Vertices[0] = video::S3DVertex(
 			-1.0f, -1.0f, 0.0f, 0, 0, 1, color, 0.0f, 1.0f);
 	Vertices[1] = video::S3DVertex(
@@ -37,14 +42,21 @@ shadowScreenQuad::shadowScreenQuad()
 			-1.0f, -1.0f, 0.0f, 0, 0, 1, color, 0.0f, 1.0f);
 	Vertices[5] = video::S3DVertex(
 			1.0f, 1.0f, 0.0f, 0, 0, 1, color, 1.0f, 0.0f);
+
+	core::array<u16>& Indices = m_meshbuffer->Indices;
+	Indices.set_used(6);
+	u16 indices[6] = {0, 1, 2, 3, 4, 5};
+	for (u32 i = 0; i < 6; i++) {
+		Indices[i] = indices[i];
+	}
+	m_meshbuffer->setDirty();
 }
 
 void shadowScreenQuad::render(video::IVideoDriver *driver)
 {
-	u16 indices[6] = {0, 1, 2, 3, 4, 5};
-	driver->setMaterial(Material);
+	driver->setMaterial(m_meshbuffer->getMaterial());
 	driver->setTransform(video::ETS_WORLD, core::matrix4());
-	driver->drawIndexedTriangleList(&Vertices[0], 6, &indices[0], 2);
+	driver->drawMeshBuffer(m_meshbuffer.get());
 }
 
 void shadowScreenQuadCB::OnSetConstants(

@@ -559,7 +559,7 @@ if(WIN32)
 	endif()
 else()
 	# Unix probably
-	if(BUILD_CLIENT AND NOT NO_BUILD)
+	if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten" AND BUILD_CLIENT AND NOT NO_BUILD)
 		if(NOT HAIKU AND NOT APPLE)
 			find_package(X11 REQUIRED)
 		endif(NOT HAIKU AND NOT APPLE)
@@ -726,6 +726,7 @@ set(common_SRCS
 	lighting.cpp
 	log.cpp
 	main.cpp
+	mainloop.cpp
 	map.cpp
 	map_settings_manager.cpp
 	mapblock.cpp
@@ -877,7 +878,6 @@ if(BUILD_CLIENT)
 	include_directories(SYSTEM
 		${FREETYPE_INCLUDE_DIRS}
 		${SOUND_INCLUDE_DIRS}
-		${X11_INCLUDE_DIR}
 	)
 endif()
 
@@ -908,7 +908,6 @@ if(BUILD_CLIENT)
 		${ZLIB_LIBRARIES}
 		IrrlichtMt::IrrlichtMt
 		${ZSTD_LIBRARY}
-		${X11_LIBRARIES}
 		${SOUND_LIBRARIES}
 		${LUA_LIBRARY}
 		${GMP_LIBRARY}

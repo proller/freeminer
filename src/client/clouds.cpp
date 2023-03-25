@@ -50,14 +50,17 @@ Clouds::Clouds(scene::ISceneManager* mgr,
 	scene::ISceneNode(mgr->getRootSceneNode(), mgr, id),
 	m_seed(seed)
 {
-	m_material.setFlag(video::EMF_LIGHTING, false);
-	//m_material.setFlag(video::EMF_BACK_FACE_CULLING, false);
-	m_material.setFlag(video::EMF_BACK_FACE_CULLING, true);
-	m_material.setFlag(video::EMF_BILINEAR_FILTER, false);
-	m_material.setFlag(video::EMF_FOG_ENABLE, true);
-	m_material.setFlag(video::EMF_ANTI_ALIASING, true);
-	//m_material.MaterialType = video::EMT_TRANSPARENT_VERTEX_ALPHA;
-	m_material.MaterialType = video::EMT_TRANSPARENT_ALPHA_CHANNEL;
+	m_meshbuffer = new scene::SMeshBuffer();
+	video::SMaterial& mat = m_meshbuffer->getMaterial();
+
+	mat.setFlag(video::EMF_LIGHTING, false);
+	//mat.setFlag(video::EMF_BACK_FACE_CULLING, false);
+	mat.setFlag(video::EMF_BACK_FACE_CULLING, true);
+	mat.setFlag(video::EMF_BILINEAR_FILTER, false);
+	mat.setFlag(video::EMF_FOG_ENABLE, true);
+	mat.setFlag(video::EMF_ANTI_ALIASING, true);
+	//mat.MaterialType = video::EMT_TRANSPARENT_VERTEX_ALPHA;
+	mat.MaterialType = video::EMT_TRANSPARENT_ALPHA_CHANNEL;
 
 	m_params.height        = 120;
 	m_params.density       = 0.4f;
@@ -77,6 +80,7 @@ Clouds::~Clouds()
 {
 	g_settings->deregisterChangedCallback("enable_3d_clouds",
 		&cloud_3d_setting_changed, this);
+	m_meshbuffer->drop();
 }
 
 void Clouds::OnRegisterSceneNode()
@@ -113,12 +117,14 @@ void Clouds::render()
 	ScopeProfiler sp(g_profiler, "Clouds::render()", SPT_AVG);
 */
 
+	video::SMaterial& mat = m_meshbuffer->getMaterial();
+
 	int num_faces_to_draw = m_enable_3d ? 6 : 1;
 
-	m_material.setFlag(video::EMF_BACK_FACE_CULLING, m_enable_3d);
+	mat.setFlag(video::EMF_BACK_FACE_CULLING, m_enable_3d);
 
 	driver->setTransform(video::ETS_WORLD, AbsoluteTransformation);
-	driver->setMaterial(m_material);
+	driver->setMaterial(mat);
 
 	/*
 		Clouds move from Z+ towards Z-
@@ -192,11 +198,7 @@ void Clouds::render()
 			cloud_full_radius*1.2, fog_density, fog_pixelfog, fog_rangefog);
 
 	// Read noise
-
-	std::vector<bool> grid(m_cloud_radius_i * 2 * m_cloud_radius_i * 2);
-	std::vector<video::S3DVertex> vertices;
-	vertices.reserve(16 * m_cloud_radius_i * m_cloud_radius_i);
-
+	grid.assign(m_cloud_radius_i * 2 * m_cloud_radius_i * 2, false);
 	for(s16 zi = -m_cloud_radius_i; zi < m_cloud_radius_i; zi++) {
 		u32 si = (zi + m_cloud_radius_i) * m_cloud_radius_i * 2 + m_cloud_radius_i;
 
@@ -210,6 +212,9 @@ void Clouds::render()
 			);
 		}
 	}
+
+	core::array<video::S3DVertex>& Vertices = m_meshbuffer->Vertices;
+	Vertices.set_used(0);
 
 #define GETINDEX(x, z, radius) (((z)+(radius))*(radius)*2 + (x)+(radius))
 #define INAREA(x, z, radius) \
@@ -335,23 +340,25 @@ void Clouds::render()
 
 			for (video::S3DVertex &vertex : v) {
 				vertex.Pos += pos;
-				vertices.push_back(vertex);
+				Vertices.push_back(vertex);
 			}
 		}
 	}
-	int quad_count = vertices.size() / 4;
-	std::vector<u16> indices;
-	indices.reserve(quad_count * 6);
+
+	int quad_count = Vertices.size() / 4;
+	core::array<u16>& Indices = m_meshbuffer->Indices;
+	Indices.set_used(0);
 	for (int k = 0; k < quad_count; k++) {
-		indices.push_back(4 * k + 0);
-		indices.push_back(4 * k + 1);
-		indices.push_back(4 * k + 2);
-		indices.push_back(4 * k + 2);
-		indices.push_back(4 * k + 3);
-		indices.push_back(4 * k + 0);
+		Indices.push_back(4 * k + 0);
+		Indices.push_back(4 * k + 1);
+		Indices.push_back(4 * k + 2);
+		Indices.push_back(4 * k + 2);
+		Indices.push_back(4 * k + 3);
+		Indices.push_back(4 * k + 0);
 	}
-	driver->drawVertexPrimitiveList(vertices.data(), vertices.size(), indices.data(), 2 * quad_count,
-			video::EVT_STANDARD, scene::EPT_TRIANGLES, video::EIT_16BIT);
+
+	m_meshbuffer->setDirty();
+	driver->drawMeshBuffer(m_meshbuffer);
 
 	// Restore fog settings
 	driver->setFog(fog_color, fog_type, fog_start, fog_end, fog_density,

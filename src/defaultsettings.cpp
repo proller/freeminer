@@ -572,6 +572,9 @@ void set_default_settings()
 	settings->setDefault("lighting_boost_spread", "0.2");
 	settings->setDefault("texture_path", "");
 	settings->setDefault("shader_path", "");
+#ifdef __EMSCRIPTEN__
+	settings->setDefault("video_driver", "webgl1");
+#else
 #if ENABLE_GLES
 #ifdef _IRR_COMPILE_WITH_OGLES1_
 	settings->setDefault("video_driver", "ogles1");
@@ -580,6 +583,8 @@ void set_default_settings()
 #endif
 #else
 	settings->setDefault("video_driver", "opengl");
+#endif
+
 #endif
 	settings->setDefault("cinematic", "false");
 	settings->setDefault("camera_smoothing", "0");
@@ -615,11 +620,7 @@ void set_default_settings()
 	settings->setDefault("texture_clean_transparent", "false");
 	settings->setDefault("texture_min_size", "64");
 	settings->setDefault("ambient_occlusion_gamma", "1.8");
-#if ENABLE_GLES
-	settings->setDefault("enable_shaders", "false");
-#else
 	settings->setDefault("enable_shaders", "true");
-#endif
 	settings->setDefault("enable_particles", "true");
 	settings->setDefault("arm_inertia", "true");
 	settings->setDefault("show_nametag_backgrounds", "true");
@@ -737,7 +738,7 @@ void set_default_settings()
 #endif
 
 	// Network
-	settings->setDefault("enable_ipv6", "true");
+	settings->setDefault("enable_ipv6", "false"); // TODO: enable this
 	settings->setDefault("ipv6_server", "false");
 	settings->setDefault("max_packets_per_iteration","1024");
 	settings->setDefault("port", "30000");

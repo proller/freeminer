@@ -23,6 +23,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include "irrlichttypes.h"
+#include <functional>
 #include <string>
 
 class InputHandler;
@@ -50,8 +51,9 @@ struct CameraOrientation {
 bool the_game(bool *kill,
 		InputHandler *input,
 		RenderingEngine *rendering_engine,
-		const GameStartData &start_data,
+		const GameStartData *start_data,
 		std::string &error_message,
-		ChatBackend &chat_backend,
+		ChatBackend *chat_backend,
 		bool *reconnect_requested,
-		unsigned int autoexit);
+		unsigned int autoexit,
+                std::function<void()> resolve);

@@ -20,6 +20,7 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "mainloop.h"
 #include "guiEngine.h"
 
 #include <IGUIStaticText.h>
@@ -136,7 +137,8 @@ GUIEngine::GUIEngine(JoystickController *joystick,
 		RenderingEngine *rendering_engine,
 		IMenuManager *menumgr,
 		MainMenuData *data,
-		bool &kill) :
+		bool &kill,
+		std::function<void()> resolve) :
 	m_rendering_engine(rendering_engine),
 	m_parent(parent),
 	m_menumanager(menumgr),
@@ -155,7 +157,6 @@ GUIEngine::GUIEngine(JoystickController *joystick,
 	m_texture_source = new MenuTextureSource(rendering_engine->get_video_driver());
 
 	//create soundmanager
-	MenuMusicFetcher soundfetcher;
 #if USE_SOUND
 	if (g_settings->getBool("enable_sound") && g_sound_manager_singleton.get())
 		m_sound_manager = createOpenALSoundManager(g_sound_manager_singleton.get(), &soundfetcher);
@@ -166,12 +167,14 @@ GUIEngine::GUIEngine(JoystickController *joystick,
 	//create topleft header
 	m_toplefttext = L"";
 
-	core::rect<s32> rect(0, 0, g_fontengine->getTextWidth(m_toplefttext.c_str()),
-		g_fontengine->getTextHeight());
-	rect += v2s32(4, 0);
+	{
+		core::rect<s32> rect(0, 0, g_fontengine->getTextWidth(m_toplefttext.c_str()),
+			g_fontengine->getTextHeight());
+		rect += v2s32(4, 0);
 
-	m_irr_toplefttext = gui::StaticText::add(rendering_engine->get_gui_env(),
-			m_toplefttext, rect, false, true, 0, -1);
+		m_irr_toplefttext = gui::StaticText::add(rendering_engine->get_gui_env(),
+				m_toplefttext, rect, false, true, 0, -1);
+	}
 
 	//create formspecsource
 	m_formspecgui = new FormspecFormSource("");
@@ -207,16 +210,18 @@ GUIEngine::GUIEngine(JoystickController *joystick,
 			errorstream << "No future without main menu!" << std::endl;
 			abort();
 		}
-
-		run();
 	} catch (LuaError &e) {
 		errorstream << "Main menu error: " << e.what() << std::endl;
 		m_data->script_data.errormessage = e.what();
 	}
 
-	m_menu->quitMenu();
-	m_menu->drop();
-	m_menu = NULL;
+	run([this, resolve]() {
+		m_menu->quitMenu();
+		m_menu->drop();
+		m_menu = NULL;
+		delete this; // should probably be handed at a higher level
+		resolve();
+	});
 }
 
 /******************************************************************************/
@@ -244,20 +249,20 @@ bool GUIEngine::loadMainMenuScript()
 }
 
 /******************************************************************************/
-void GUIEngine::run()
+void GUIEngine::run(std::function<void()> resolve)
 {
 	// Always create clouds because they may or may not be
 	// needed based on the game selected
-	video::IVideoDriver *driver = m_rendering_engine->get_video_driver();
+	driver = m_rendering_engine->get_video_driver();
 
 	cloudInit();
 
-	unsigned int text_height = g_fontengine->getTextHeight();
+	text_height = g_fontengine->getTextHeight();
 
-	irr::core::dimension2d<u32> previous_screen_size(g_settings->getU16("screen_w"),
+	previous_screen_size = irr::core::dimension2d<u32>(g_settings->getU16("screen_w"),
 		g_settings->getU16("screen_h"));
 
-	static const video::SColor sky_color(255, 140, 186, 250);
+	sky_color = video::SColor(255, 140, 186, 250);
 
 	// Reset fog color
 	{
@@ -274,9 +279,16 @@ void GUIEngine::run()
 		driver->setFog(sky_color, fog_type, fog_start, fog_end, fog_density,
 				fog_pixelfog, fog_rangefog);
 	}
+	run_loop(resolve);
+}
 
-	while (m_rendering_engine->run() && (!m_startgame) && (!m_kill)) {
-
+void GUIEngine::run_loop(std::function<void()> resolve) {
+	// EXTRANEOUS INDENT
+		bool keep_going = m_rendering_engine->run() && (!m_startgame) && (!m_kill);
+		if (!keep_going) {
+			resolve();
+			return;
+		}
 		const irr::core::dimension2d<u32> &current_screen_size =
 			m_rendering_engine->get_video_driver()->getScreenSize();
 		// Verify if window size has changed and save it if it's the case
@@ -317,17 +329,18 @@ void GUIEngine::run()
 		u32 frametime_min = 1000 / (device->isWindowFocused()
 			? g_settings->getFloat("fps_max")
 			: g_settings->getFloat("fps_max_unfocused"));
-		if (m_clouds_enabled)
-			cloudPostProcess(frametime_min, device);
-		else
-			sleep_ms(frametime_min);
+		//if (m_clouds_enabled)
+		//	cloudPostProcess(frametime_min, device);
+		//else
+		//	sleep_ms(frametime_min);
 
 		m_script->step();
 
 #ifdef __ANDROID__
 		m_menu->getAndroidUIInput();
 #endif
-	}
+
+		MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
 }
 
 /******************************************************************************/

@@ -157,7 +157,8 @@ public:
 			RenderingEngine *rendering_engine,
 			IMenuManager *menumgr,
 			MainMenuData *data,
-			bool &kill);
+			bool &kill,
+			std::function<void()> resolve);
 
 	/** default destructor */
 	virtual ~GUIEngine();
@@ -184,7 +185,13 @@ private:
 	bool loadMainMenuScript();
 
 	/** run main menu loop */
-	void run();
+	void run(std::function<void()> resolve);
+	void run_loop(std::function<void()> resolve);
+	video::IVideoDriver *driver;
+	unsigned int text_height;
+	irr::core::dimension2d<u32> previous_screen_size;
+        video::SColor sky_color;
+        MenuMusicFetcher soundfetcher;
 
 	/** update size of topleftext element */
 	void updateTopLeftTextSize();

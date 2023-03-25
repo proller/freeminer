@@ -38,7 +38,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__) && \
 		!defined(SERVER) && !defined(__HAIKU__)
-#define XORG_USED
+//#define XORG_USED
 #endif
 #ifdef XORG_USED
 #include <X11/Xlib.h>
@@ -288,6 +288,7 @@ static bool getWindowHandle(irr::video::IVideoDriver *driver, HWND &hWnd)
 #if ENABLE_GLES
 	case video::EDT_OGLES1:
 	case video::EDT_OGLES2:
+	case video::EDT_WEBGL1:
 #endif
 	case video::EDT_OPENGL:
 		hWnd = reinterpret_cast<HWND>(exposedData.OpenGLWin32.HWnd);
@@ -522,15 +523,16 @@ std::vector<irr::video::E_DRIVER_TYPE> RenderingEngine::getSupportedVideoDrivers
 {
 	// Only check these drivers.
 	// We do not support software and D3D in any capacity.
-	static const irr::video::E_DRIVER_TYPE glDrivers[4] = {
+	static const irr::video::E_DRIVER_TYPE glDrivers[5] = {
 		irr::video::EDT_NULL,
 		irr::video::EDT_OPENGL,
 		irr::video::EDT_OGLES1,
 		irr::video::EDT_OGLES2,
+                irr::video::EDT_WEBGL1,
 	};
 	std::vector<irr::video::E_DRIVER_TYPE> drivers;
 
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < 5; i++) {
 		if (irr::IrrlichtDevice::isDriverSupported(glDrivers[i]))
 			drivers.push_back(glDrivers[i]);
 	}
@@ -563,6 +565,7 @@ const VideoDriverInfo &RenderingEngine::getVideoDriverInfo(irr::video::E_DRIVER_
 		{(int)video::EDT_OPENGL, {"opengl", "OpenGL"}},
 		{(int)video::EDT_OGLES1, {"ogles1", "OpenGL ES1"}},
 		{(int)video::EDT_OGLES2, {"ogles2", "OpenGL ES2"}},
+                {(int)video::EDT_WEBGL1, {"webgl1", "WebGL 1"}},
 	};
 	return driver_info_map.at((int)type);
 }

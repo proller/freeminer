@@ -38,7 +38,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #else
 	#include <AL/al.h>
 	#include <AL/alc.h>
-	#include <AL/alext.h>
+	//#include <AL/alext.h>
 #endif
 #include <cmath>
 #include <vorbis/vorbisfile.h>
