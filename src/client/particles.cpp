@@ -166,7 +166,9 @@ void Particle::OnRegisterSceneNode()
 	if (IsVisible) {
 		SceneManager->registerNodeForRendering(this, scene::ESNRP_TRANSPARENT_EFFECT);
 		video::IVideoDriver *driver = SceneManager->getVideoDriver();
+#if __EMSCRIPTEN__
 		driver->prepareMeshBuffer(m_meshbuffer);
+#endif
 	}
 
 	ISceneNode::OnRegisterSceneNode();

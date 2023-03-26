@@ -1,3 +1,5 @@
+#ifdef __EMSCRIPTEN__
+
 #include "mainloop.h"
 #include <emscripten.h>
 #include <emscripten/html5.h>
@@ -383,3 +385,4 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+#endif

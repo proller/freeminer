@@ -245,8 +245,10 @@ void ClientLauncher::run(std::function<void(bool)> resolve)
 	retval = true;
 	kill = porting::signal_handler_killstatus();
 
+#ifdef __EMSCRIPTEN__
 	// HEREHERE
 	MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
+#endif
 }
 
 void ClientLauncher::run_loop(std::function<void(bool)> resolve) {

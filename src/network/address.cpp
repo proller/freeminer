@@ -33,8 +33,11 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "debug.h"
 #include "settings.h"
 #include "log.h"
+
+#ifdef __EMSCRIPTEN__
 #include <emsocket.h>
 #include <mainloop.h>
+#endif
 
 #ifdef _WIN32
 // Without this some of the network functions are not found on mingw
@@ -108,6 +111,7 @@ bool Address::operator==(const Address &other)
 }
 
 void Address::ResolveAsync(const char *name, std::function<void(BaseException*)> resolve) {
+#ifdef __EMSCRIPTEN__
         char *nameCopy = name ? strdup(name) : nullptr;
 	MainLoop::RunAsyncThenResume([this, nameCopy, resolve]() {
 		std::function<void()> ret;
@@ -123,6 +127,7 @@ void Address::ResolveAsync(const char *name, std::function<void(BaseException*)>
 		ret = [resolve]() { resolve(nullptr); };
 		return ret;
 	});
+#endif
 }
 
 void Address::Resolve(const char *name)

@@ -154,10 +154,12 @@ bool MyEventReceiver::OnEvent(const SEvent &event)
 		// Handle mouse events
 		KeyPress key;
 		switch (event.MouseInput.Event) {
+#if __EMSCRIPTEN__
 		case EMIE_MOUSE_MOVED:
 			relX += event.MouseInput.XRel;
 			relY += event.MouseInput.YRel;
 			break;
+#endif
 		case EMIE_LMOUSE_PRESSED_DOWN:
 			key = "KEY_LBUTTON";
 			keyIsDown.set(key);

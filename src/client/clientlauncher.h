@@ -19,6 +19,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #pragma once
 
+#include "chat.h"
+#include "gui/guiMainMenu.h"
 #include "irrlichttypes_extrabloated.h"
 #include "client/inputhandler.h"
 #include "gameparams.h"

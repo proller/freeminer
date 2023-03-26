@@ -21,7 +21,9 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#if __EMSCRIPTEN__
 #include <emscripten/html5.h>
+#endif
 
 #include "mainloop.h"
 #include "irrlichttypes.h" // must be included before anything irrlicht, see comment in the file
@@ -62,6 +64,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <netinet/in.h>
 #include "profiler.h"
 #include "util/timetaker.h"
+#include "client/clientlauncher.h"
 #if USE_ENET
 // todo: move to connection
 #include "enet/enet.h"
@@ -326,6 +329,7 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 		run_dedicated_server(game_params, cmd_args);
 	}
 
+#ifdef __EMSCRIPTEN__
 	if (cmd_args.getFlag("warm")) {
 		// Create a dummy server to initialize but then delete.
 		// This lets us grab the media list.
@@ -334,6 +338,7 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 		warmup_media = server->getMedia();
 		delete server;
         }
+#endif		
 
 #ifndef SERVER
 	std::cout << "Creating ClientLauncher" << std::endl;
@@ -353,6 +358,15 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 	resolve(0);
 #endif
 }
+
+#ifndef __EMSCRIPTEN__
+int main(int argc, char *argv[])
+{
+		int ret = 0;
+		main2(argc, argv, [&](int r) { ret = r; });
+		return ret;
+}
+#endif
 
 /*****************************************************************************
  * Startup / Init
@@ -1282,6 +1296,11 @@ static bool run_dedicated_server(const GameParams &game_params, const Settings &
 #endif
 		Server *server = new Server(game_params.world_path, game_params.game_spec, false,
 			bind_addr, true);
+
+		int autoexit_ = 0;
+		cmd_args.getS32NoEx("autoexit", autoexit_);
+		server->m_autoexit = autoexit_;
+
 		if (cmd_args.getFlag("withserver")) {
 			// Launch in separate thread and return right away
 			auto stepThread = new StepThread(server);
@@ -1298,10 +1317,6 @@ static bool run_dedicated_server_run(Server *server) {
 		try {
 			// Create server
 			server->start();
-
-			int autoexit_ = 0;
-			cmd_args.getS32NoEx("autoexit", autoexit_);
-			server.m_autoexit = autoexit_;
 
 			// Run server
 			bool &kill = *porting::signal_handler_killstatus();
