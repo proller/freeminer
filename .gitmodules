@@ -18,4 +18,4 @@
 	url = https://github.com/msgpack/msgpack-c.git
 [submodule "lib/irrlichtmt"]
 	path = lib/irrlichtmt
-	url = https://github.com/minetest/irrlicht
+	url = https://github.com/paradust7/irrlicht.git
