@@ -23,6 +23,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <utility>
 
 #include "debug/iostream_debug_helpers.h"
+#include "filesys.h"
 #include "irr_v2d.h"
 #include "irrlichttypes.h"
 #include "mapgen/earth/hgt.h"
@@ -108,7 +109,7 @@ long double distance(
 
 MapgenEarth::MapgenEarth(MapgenEarthParams *params_, EmergeParams *emerge) :
 		MapgenV7((MapgenV7Params *)params_, emerge),
-		hgt_reader("/home/proller/games/freeminer_p3/earth")
+		hgt_reader(porting::path_share + DIR_DELIM + "earth")
 {
 	ndef = emerge->ndef;
 	// mg_params = (MapgenEarthParams *)params_->sparams;
