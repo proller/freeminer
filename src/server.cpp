@@ -78,6 +78,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "gameparams.h"
 
 
+#if BUILD_CLIENT && !NDEBUG
+#include "network/clientopcodes.h"
+#endif
 #include "content_abm.h"
 #include "log_types.h"
 #include "tool.h"
@@ -655,6 +658,9 @@ void Server::start()
 #endif
 #if USE_ENET
 				 << " enet \t"
+#endif
+#if USE_WEBSOCKET
+				 << " ws \t"
 #endif
 				 << " cpp=" << __cplusplus << " \t"
 
@@ -1522,6 +1528,15 @@ void Server::ProcessData(NetworkPacket *pkt)
 			//errorstream << "overload cmd=" << command << " n="<< toServerCommandTable[command].name << "\n";
 		}
 
+#if BUILD_CLIENT && !NDEBUG
+		tracestream << "Server processing packet" << (int)command << " ["
+					<< toServerCommandTable[command].name
+					<< "] state=" << (int)toServerCommandTable[command].state
+					<< " size=" << pkt->getSize()
+					<< " from=" << peer_id
+					<< std::endl;
+#endif
+
 		if (toServerCommandTable[command].state == TOSERVER_STATE_NOT_CONNECTED) {
 			handleCommand(pkt);
 			return;
@@ -1690,6 +1705,15 @@ void Server::Send(NetworkPacket *pkt)
 
 void Server::Send(session_t peer_id, NetworkPacket *pkt)
 {
+#if !NDEBUG
+	tracestream << "Sever sending packet " << (int)pkt->getCommand() << " ["
+				<< toClientCommandTable[pkt->getCommand()].name
+				<< "] state=" << (int)toClientCommandTable[pkt->getCommand()].state
+				<< " size=" << pkt->getSize() 
+				<< " to=" << peer_id
+				<< std::endl;
+#endif
+
 	g_profiler->add("Server: Packets sent", 1);
 	m_clients.send(peer_id,
 		clientCommandFactoryTable[pkt->getCommand()].channel,
