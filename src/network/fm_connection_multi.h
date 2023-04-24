@@ -29,12 +29,17 @@ class NetworkPacket;
 namespace con
 {
 class Connection;
+class PeerHandler;
 }
 namespace con_sctp
 {
 class Connection;
 }
 namespace con_enet
+{
+class Connection;
+}
+namespace con_ws
 {
 class Connection;
 }
@@ -67,6 +72,9 @@ public:
 private:
 #if USE_SCTP
 	std::shared_ptr<con_sctp::Connection> m_con_sctp;
+#endif
+#if USE_WEBSOCKET
+	std::shared_ptr<con_ws::Connection> m_con_ws;
 #endif
 #if USE_ENET
 	std::shared_ptr<con_enet::Connection> m_con_enet;

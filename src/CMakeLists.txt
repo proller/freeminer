@@ -607,6 +607,7 @@ add_custom_target(GenerateVersion
 add_subdirectory(contrib)
 add_subdirectory(debug)
 
+
 add_subdirectory(threading)
 add_subdirectory(content)
 add_subdirectory(database)
@@ -621,10 +622,11 @@ add_subdirectory(irrlicht_changes)
 add_subdirectory(server)
 
 
-OPTION(USE_MULTI "Enable MT+SCTP networking" 0)
+OPTION(USE_MULTI "Enable MT+SCTP networking" 1)
 if(USE_MULTI)
 	set(ENABLE_SCTP 1)
 	set(USE_ENET 1)
+	set(USE_WEBSOCKET 1)
 endif()
 
 OPTION(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL, not compatible with other)" 0)
@@ -656,9 +658,9 @@ else()
 	set(USE_SCTP 0)
 endif()
 
-#if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/enet/include/enet/enet.h)
-#    set(USE_ENET 1)
-#endif()
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/enet/include/enet/enet.h)
+    set(USE_ENET 1)
+endif()
 
 if(USE_ENET)
 	if(NOT ENABLE_SYSTEM_ENET AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/enet/include/enet/enet.h)
@@ -672,6 +674,17 @@ if(USE_ENET)
 	endif()
 	include_directories(${ENET_INCLUDE_DIR})
 	message(STATUS "Using enet: ${ENET_INCLUDE_DIR} ${ENET_LIBRARY}")
+endif()
+
+if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp/CMakeLists.txt)
+    set(USE_WEBSOCKET 0)
+endif()
+
+if(USE_WEBSOCKET)
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp)
+    #add_subdirectory(external/websocketpp)
+    #set(WEBSOCKETPP_LIBRARY websocketpp::websocketpp)
+	message(STATUS "Using websocket: ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp")
 endif()
 
 set(FMcommon_SRCS ${FMcommon_SRCS}
@@ -917,6 +930,7 @@ if(BUILD_CLIENT)
 		${MSGPACK_LIBRARY}
 		${ENET_LIBRARY}
 		${SCTP_LIBRARY}
+        ${WEBSOCKETPP_LIBRARY}
 
 		${LUA_BIT_LIBRARY}
 		${FREETYPE_LIBRARY}
@@ -995,6 +1009,7 @@ if(BUILD_SERVER)
 		${MSGPACK_LIBRARY}
 		${ENET_LIBRARY}
 		${SCTP_LIBRARY}
+        ${WEBSOCKETPP_LIBRARY}
 
 		${LUA_LIBRARY}
 		${LUA_BIT_LIBRARY}
