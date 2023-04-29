@@ -145,7 +145,6 @@ Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout, bool
 		m_timeout(timeout), sock(nullptr), m_peer_id(0), m_bc_peerhandler(peerhandler),
 		m_last_recieved(0), m_last_recieved_warn(0)
 {
-
 	start();
 }
 
@@ -257,7 +256,7 @@ void Connection::sctp_setup(u16 port)
 
 	cs << "sctp_setup(" << port << ")" << std::endl;
 
-	usrsctp_init(port, nullptr, debug_func);
+	usrsctp_init(port, sctp_conn_output, debug_func);
 	// usrsctp_init_nothreads(port, nullptr, debug_func);
 
 #if SCTP_DEBUG
@@ -748,7 +747,7 @@ void Connection::serve(Address bind_address)
 	sctp_setup(bind_address.getPort());
 
 	if ((sock = usrsctp_socket(
-				 PF_INET6, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
+				 domain, SOCK_STREAM, IPPROTO_SCTP, NULL, server_send_cb, 0, NULL)) == NULL) {
 		cs << ("usrsctp_socket is NULL") << std::endl;
 		putEvent(ConnectionEvent::bindFailed());
 		return;
@@ -802,7 +801,7 @@ void Connection::connect(Address address)
 	struct socket *sock;
 
 	if ((sock = usrsctp_socket(
-				 AF_INET6, SOCK_STREAM, IPPROTO_SCTP, NULL, NULL, 0, NULL)) == NULL) {
+				 domain, SOCK_STREAM, IPPROTO_SCTP, NULL, client_send_cb, 0, NULL)) == NULL) {
 		cs << ("usrsctp_socket=") << sock << std::endl;
 		putEvent(ConnectionEvent::bindFailed());
 		return;
