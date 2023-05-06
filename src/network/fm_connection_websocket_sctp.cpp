@@ -53,7 +53,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 // #include <iostream>
 
-namespace con_ws
+namespace con_ws_sctp
 {
 
 #define WS_DEBUG 1

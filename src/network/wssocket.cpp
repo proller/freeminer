@@ -197,80 +197,78 @@ WSSocket::WSSocket(bool ipv6)
 
 bool WSSocket::init(bool ipv6, bool noExceptions)
 {
-	
-		if (socket_enable_debug_output /*con_debug*/) {
 
-			server.set_error_channels(websocketpp::log::elevel::all);
-			server.set_access_channels(websocketpp::log::alevel::all ^
-									   websocketpp::log::alevel::frame_payload ^
-									   websocketpp::log::alevel::frame_header);
+	if (socket_enable_debug_output /*con_debug*/) {
 
-		} else {
-			server.set_error_channels(websocketpp::log::elevel::none);
-			server.set_access_channels(websocketpp::log::alevel::none);
-		}
-		const auto timeouts = 30; // Config.GetWsTimeoutsMs();
-		server.set_open_handshake_timeout(timeouts);
-		server.set_close_handshake_timeout(timeouts);
-		server.set_pong_timeout(timeouts);
-		server.set_listen_backlog(100);
-		server.init_asio();
+		server.set_error_channels(websocketpp::log::elevel::all);
+		server.set_access_channels(websocketpp::log::alevel::all ^
+								   websocketpp::log::alevel::frame_payload ^
+								   websocketpp::log::alevel::frame_header);
 
-		server.set_reuse_addr(true);
-		server.set_open_handler(websocketpp::lib::bind(
-				&WSSocket::on_open, this, websocketpp::lib::placeholders::_1));
-		server.set_close_handler(websocketpp::lib::bind(
-				&WSSocket::on_close, this, websocketpp::lib::placeholders::_1));
-		server.set_message_handler(websocketpp::lib::bind(&WSSocket::on_message, this,
-				websocketpp::lib::placeholders::_1, websocketpp::lib::placeholders::_2));
-		// Server.set_message_handler(websocketpp::lib::bind(&Connection::on_message,
-		// this, websocketpp::lib::placeholders::_1, websocketpp::lib::placeholders::_2));
-		server.set_http_handler(websocketpp::lib::bind(
-				&WSSocket::on_http, this, websocketpp::lib::placeholders::_1));
+	} else {
+		server.set_error_channels(websocketpp::log::elevel::none);
+		server.set_access_channels(websocketpp::log::alevel::none);
+	}
+	const auto timeouts = 30; // Config.GetWsTimeoutsMs();
+	server.set_open_handshake_timeout(timeouts);
+	server.set_close_handshake_timeout(timeouts);
+	server.set_pong_timeout(timeouts);
+	server.set_listen_backlog(100);
+	server.init_asio();
+
+	server.set_reuse_addr(true);
+	server.set_open_handler(websocketpp::lib::bind(
+			&WSSocket::on_open, this, websocketpp::lib::placeholders::_1));
+	server.set_close_handler(websocketpp::lib::bind(
+			&WSSocket::on_close, this, websocketpp::lib::placeholders::_1));
+	server.set_message_handler(websocketpp::lib::bind(&WSSocket::on_message, this,
+			websocketpp::lib::placeholders::_1, websocketpp::lib::placeholders::_2));
+	// Server.set_message_handler(websocketpp::lib::bind(&Connection::on_message,
+	// this, websocketpp::lib::placeholders::_1, websocketpp::lib::placeholders::_2));
+	server.set_http_handler(websocketpp::lib::bind(
+			&WSSocket::on_http, this, websocketpp::lib::placeholders::_1));
 #if USE_SSL
-		Server.set_tls_init_handler(bind(&broadcast_server::on_tls_init, this,
-				websocketpp::lib::placeholders::_1));
+	Server.set_tls_init_handler(bind(
+			&broadcast_server::on_tls_init, this, websocketpp::lib::placeholders::_1));
 #endif
-		// Server.set_timer(long duration, timer_handler callback);
-		//}
+	// Server.set_timer(long duration, timer_handler callback);
+	//}
 
 #if USE_SSL
-		context_ptr on_tls_init(websocketpp::connection_hdl /* hdl */)
-		{
-			namespace asio = websocketpp::lib::asio;
-			context_ptr ctx = websocketpp::lib::make_shared<asio::ssl::context>(
-					asio::ssl::context::tlsv12);
-			try {
-				ctx->set_options(asio::ssl::context::default_workarounds |
-								 asio::ssl::context::no_sslv2 |
-								 asio::ssl::context::no_sslv3 |
-								 asio::ssl::context::single_dh_use);
-				ctx->set_password_callback(std::bind([&]() { return GetSSLPassword(); }));
-				ctx->use_certificate_chain_file(GetSSLCertificateChain());
-				ctx->use_private_key_file(GetSSLPrivateKey(), asio::ssl::context::pem);
-				std::string ciphers = GetSSLCiphers();
-				if (ciphers.empty())
-					ciphers = "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:"
-							  "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:"
-							  "DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+"
-							  "AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:"
-							  "ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-"
-							  "AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-"
-							  "SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-"
-							  "AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:"
-							  "DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:!aNULL:!eNULL:!"
-							  "EXPORT:!DES:!RC4:!3DES:!MD5:!PSK";
+	context_ptr on_tls_init(websocketpp::connection_hdl /* hdl */)
+	{
+		namespace asio = websocketpp::lib::asio;
+		context_ptr ctx = websocketpp::lib::make_shared<asio::ssl::context>(
+				asio::ssl::context::tlsv12);
+		try {
+			ctx->set_options(asio::ssl::context::default_workarounds |
+							 asio::ssl::context::no_sslv2 | asio::ssl::context::no_sslv3 |
+							 asio::ssl::context::single_dh_use);
+			ctx->set_password_callback(std::bind([&]() { return GetSSLPassword(); }));
+			ctx->use_certificate_chain_file(GetSSLCertificateChain());
+			ctx->use_private_key_file(GetSSLPrivateKey(), asio::ssl::context::pem);
+			std::string ciphers = GetSSLCiphers();
+			if (ciphers.empty())
+				ciphers = "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:"
+						  "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:"
+						  "DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+"
+						  "AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:"
+						  "ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-"
+						  "AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-"
+						  "SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-"
+						  "AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:"
+						  "DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:!aNULL:!eNULL:!"
+						  "EXPORT:!DES:!RC4:!3DES:!MD5:!PSK";
 
-				if (SSL_CTX_set_cipher_list(ctx->native_handle(), ciphers.c_str()) != 1) {
-					warningstream << "Error setting cipher list";
-				}
-			} catch (const std::exception &e) {
-				errorstream << "Exception: " << e.what();
+			if (SSL_CTX_set_cipher_list(ctx->native_handle(), ciphers.c_str()) != 1) {
+				warningstream << "Error setting cipher list";
 			}
-			return ctx;
+		} catch (const std::exception &e) {
+			errorstream << "Exception: " << e.what();
 		}
+		return ctx;
+	}
 #endif
-	
 
 	return true;
 }
@@ -291,11 +289,19 @@ void WSSocket::Bind(Address addr)
 					<< ")::Bind(): " << addr.serializeString() << ":" << addr.getPort()
 					<< std::endl;
 	}
-	server.listen(addr.getPort());
-
-	// Start the server accept loop
 	websocketpp::lib::error_code ec;
+	server.listen(addr.getPort(), ec);
+	if (ec) {
+		errorstream << "WS listen fail: " << ec.message() << std::endl;
+		return;
+	}
+	// Start the server accept loop
 	server.start_accept(ec);
+	if (ec) {
+		errorstream << "WS listen fail: " << ec.message() << std::endl;
+		return;
+	}
+
 	ws_serve = true;
 }
 

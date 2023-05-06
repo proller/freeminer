@@ -57,7 +57,7 @@ namespace con_multi
 {
 class Connection;
 }
-namespace con_ws
+namespace con_ws_sctp
 {
 using namespace con;
 
