@@ -654,6 +654,9 @@ void Server::start()
 #if USE_WEBSOCKET
 				 << " ws \t"
 #endif
+#if USE_WEBSOCKET_SCTP
+				 << " wssctp \t"
+#endif
 				 << " cpp=" << __cplusplus << " \t"
 
 				 << " cores=";
@@ -2927,7 +2930,7 @@ size_t Server::addMediaFile(const std::string &filename,
 		return false;
 	}
 
-	SHA1 sha1;
+	class SHA1 sha1;
 	sha1.addBytes(filedata.c_str(), filedata.length());
 
 	unsigned char *digest = sha1.getDigest();

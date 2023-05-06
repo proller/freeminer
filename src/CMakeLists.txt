@@ -622,14 +622,28 @@ add_subdirectory(irrlicht_changes)
 add_subdirectory(server)
 
 
+OPTION(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL, not compatible with other)" 0)
 OPTION(USE_MULTI "Enable MT+SCTP networking" 1)
 if(USE_MULTI)
 	set(ENABLE_SCTP 1)
 	set(USE_ENET 1)
+	#set(USE_WEBSOCKET_SCTP 1) # NOT FINISHED
 	set(USE_WEBSOCKET 1)
 endif()
 
-OPTION(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL, not compatible with other)" 0)
+if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp/CMakeLists.txt)
+    set(USE_WEBSOCKET_SCTP 0)
+	set(USE_WEBSOCKET 0)
+endif()
+
+if(USE_WEBSOCKET OR USE_WEBSOCKET_SCTP)
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp)
+    #add_subdirectory(external/websocketpp)
+    #set(WEBSOCKETPP_LIBRARY websocketpp::websocketpp)
+	message(STATUS "Using websocket: ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp")
+	find_package(OpenSSL)
+	set(WEBSOCKETPP_LIBRARY ${WEBSOCKETPP_LIBRARY} OpenSSL::SSL)
+endif()
 
 if(ENABLE_SCTP AND NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp/usrsctplib)
     message(WARNING "Please Clone usrsctp:  git clone --depth 1 https://github.com/sctplab/usrsctp ${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp")
@@ -674,17 +688,6 @@ if(USE_ENET)
 	endif()
 	include_directories(${ENET_INCLUDE_DIR})
 	message(STATUS "Using enet: ${ENET_INCLUDE_DIR} ${ENET_LIBRARY}")
-endif()
-
-if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp/CMakeLists.txt)
-    set(USE_WEBSOCKET 0)
-endif()
-
-if(USE_WEBSOCKET)
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp)
-    #add_subdirectory(external/websocketpp)
-    #set(WEBSOCKETPP_LIBRARY websocketpp::websocketpp)
-	message(STATUS "Using websocket: ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp")
 endif()
 
 set(FMcommon_SRCS ${FMcommon_SRCS}

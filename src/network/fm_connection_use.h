@@ -26,8 +26,8 @@ namespace con_use
 {
 using namespace con_multi;
 }
-#elif USE_WEBSOCKET
-#include "fm_connection_websocket.h"
+#elif USE_WEBSOCKET_SCTP
+#include "fm_connection_websocket_sctp.h"
 namespace con_use
 {
 using namespace con_ws;
