@@ -139,7 +139,22 @@ if(NOT MSVC)
 	find_library(UNWIND_LIBRARY NAMES unwind)
 
 	if(UNWIND_LIBRARY)
-		set(USE_UNWIND 1)
+
+        CHECK_CXX_SOURCE_RUNS("
+       #include <execinfo.h> // for backtrace
+       int main(int argc, char *argv[]) {
+            void *callstack[128];
+            const int nMaxFrames = sizeof(callstack) / sizeof(callstack[0]);
+            char buf[1024];
+            int nFrames = backtrace(callstack, nMaxFrames);
+            return 0;
+       }
+       "
+        USE_UNWIND)
+        if(NOT USE_UNWIND)
+            set(USE_UNWIND 0)
+        endif()
+        # set(USE_UNWIND 1)
 		SET(PLATFORM_LIBS ${PLATFORM_LIBS} ${UNWIND_LIBRARY})
 		message(STATUS "Build with unwind ${UNWIND_LIBRARY}")
 	endif()
