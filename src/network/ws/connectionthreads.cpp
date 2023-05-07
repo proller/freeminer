@@ -474,6 +474,9 @@ void ConnectionSendThread::processNonReliableCommand(ConnectionCommandPtr &c_ptr
 
 void ConnectionSendThread::serve(Address bind_address)
 {
+	infostream << "WS serving at " << bind_address.serializeString() << ":"
+			   << std::to_string(bind_address.getPort()) << std::endl;
+
 	LOG(dout_con << m_connection->getDesc()
 		<< "UDP serving at port " << bind_address.serializeString() << std::endl);
 	try {

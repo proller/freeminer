@@ -245,7 +245,9 @@ DUMP("sitls");
 		DUMP("");
 		namespace asio = websocketpp::lib::asio;
 		context_ptr ctx = websocketpp::lib::make_shared<asio::ssl::context>(
-				asio::ssl::context::tlsv13);
+				//asio::ssl::context::tlsv13
+				asio::ssl::context::tlsv13_server
+				);
 		try {
 			ctx->set_options(asio::ssl::context::default_workarounds |
 							 asio::ssl::context::no_sslv2 | asio::ssl::context::no_sslv3 |
