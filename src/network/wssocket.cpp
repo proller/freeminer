@@ -130,6 +130,8 @@ void WSSocket::on_fail(const websocketpp::connection_hdl &hdl)
 
 	cs << "Fail handler: " << con->get_ec() << " " << con->get_ec().message()
 	   << std::endl;
+	   //auto ec = websocketpp::get_transport_ec();
+	   DUMP("fail");
 }
 
 void WSSocket::on_close(const websocketpp::connection_hdl &hdl)
@@ -228,26 +230,30 @@ bool WSSocket::init(bool ipv6, bool noExceptions)
 	server.set_http_handler(websocketpp::lib::bind(
 			&WSSocket::on_http, this, websocketpp::lib::placeholders::_1));
 #if USE_SSL
-	Server.set_tls_init_handler(bind(
-			&broadcast_server::on_tls_init, this, websocketpp::lib::placeholders::_1));
+DUMP("sitls");
+	server.set_tls_init_handler(bind(
+			&WSSocket::on_tls_init, this, websocketpp::lib::placeholders::_1));
 #endif
 	// Server.set_timer(long duration, timer_handler callback);
 	//}
 
+	return true;
+}
 #if USE_SSL
-	context_ptr on_tls_init(websocketpp::connection_hdl /* hdl */)
+	WSSocket::context_ptr WSSocket::on_tls_init(const websocketpp::connection_hdl& /* hdl */)
 	{
+		DUMP("");
 		namespace asio = websocketpp::lib::asio;
 		context_ptr ctx = websocketpp::lib::make_shared<asio::ssl::context>(
-				asio::ssl::context::tlsv12);
+				asio::ssl::context::tlsv13);
 		try {
 			ctx->set_options(asio::ssl::context::default_workarounds |
 							 asio::ssl::context::no_sslv2 | asio::ssl::context::no_sslv3 |
 							 asio::ssl::context::single_dh_use);
-			ctx->set_password_callback(std::bind([&]() { return GetSSLPassword(); }));
-			ctx->use_certificate_chain_file(GetSSLCertificateChain());
-			ctx->use_private_key_file(GetSSLPrivateKey(), asio::ssl::context::pem);
-			std::string ciphers = GetSSLCiphers();
+			ctx->set_password_callback(std::bind([&]() { return ""; /*GetSSLPassword();*/ }));
+			ctx->use_certificate_chain_file("fullchain.pem" /*GetSSLCertificateChain()*/);
+			ctx->use_private_key_file("privkey.pem" /*GetSSLPrivateKey()*/, asio::ssl::context::pem);
+			std::string ciphers;// = GetSSLCiphers();
 			if (ciphers.empty())
 				ciphers = "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:"
 						  "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:"
@@ -263,15 +269,14 @@ bool WSSocket::init(bool ipv6, bool noExceptions)
 			if (SSL_CTX_set_cipher_list(ctx->native_handle(), ciphers.c_str()) != 1) {
 				warningstream << "Error setting cipher list";
 			}
+			DUMP("set ok");
 		} catch (const std::exception &e) {
 			errorstream << "Exception: " << e.what();
 		}
+		DUMP("ok");
 		return ctx;
 	}
 #endif
-
-	return true;
-}
 
 WSSocket::~WSSocket()
 {

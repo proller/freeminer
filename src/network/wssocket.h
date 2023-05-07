@@ -27,10 +27,12 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <websocketpp/server.hpp>
 
+#define USE_SSL 1
+
 #if USE_SSL
-#include <websocketpp/config/asio_no_tls.hpp>
-#else
 #include <websocketpp/config/asio.hpp>
+#else
+#include <websocketpp/config/asio_no_tls.hpp>
 #endif
 
 extern bool socket_enable_debug_output;
@@ -59,6 +61,9 @@ public:
 
 #if USE_SSL
 	using ws_server_t = websocketpp::server<websocketpp::config::asio_tls>;
+	//typedef websocketpp::config::asio_tls_client::message_type::ptr message_ptr;
+typedef websocketpp::lib::shared_ptr<boost::asio::ssl::context> context_ptr;
+
 #else
 	using ws_server_t = websocketpp::server<websocketpp::config::asio>;
 #endif
@@ -73,6 +78,8 @@ public:
 	void on_close(const websocketpp::connection_hdl &hdl);
 	void on_open(const websocketpp::connection_hdl &hdl);
 	void on_message(const websocketpp::connection_hdl &hdl, const message_ptr &msg);
+	context_ptr on_tls_init(const websocketpp::connection_hdl &hdl);
+
 
 private:
 	struct queue_item
