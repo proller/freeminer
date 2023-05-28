@@ -647,14 +647,14 @@ if(USE_MULTI)
 endif()
 
 if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp/CMakeLists.txt)
-    set(USE_WEBSOCKET_SCTP 0)
+	set(USE_WEBSOCKET_SCTP 0)
 	set(USE_WEBSOCKET 0)
 endif()
 
 if(USE_WEBSOCKET OR USE_WEBSOCKET_SCTP)
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp)
-    #add_subdirectory(external/websocketpp)
-    #set(WEBSOCKETPP_LIBRARY websocketpp::websocketpp)
+	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp)
+	#add_subdirectory(external/websocketpp)
+	#set(WEBSOCKETPP_LIBRARY websocketpp::websocketpp)
 	message(STATUS "Using websocket: ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp")
 	find_package(OpenSSL)
 	set(WEBSOCKETPP_LIBRARY ${WEBSOCKETPP_LIBRARY} OpenSSL::SSL)
@@ -662,10 +662,11 @@ endif()
 
 if(ENABLE_SCTP AND NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp/usrsctplib)
     message(WARNING "Please Clone usrsctp:  git clone --depth 1 https://github.com/sctplab/usrsctp ${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp")
+    set(ENABLE_SCTP 0)
 endif()
 
-if(ENABLE_SCTP AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp/usrsctplib)
-# from external/usrsctp/usrsctplib/CMakeLists.txt :
+if(ENABLE_SCTP)
+        # from external/usrsctp/usrsctplib/CMakeLists.txt :
 	if(SCTP_DEBUG)
 		set(sctp_debug 1 CACHE INTERNAL "")
 		add_definitions(-DSCTP_DEBUG=1)
@@ -948,7 +949,7 @@ if(BUILD_CLIENT)
 		${MSGPACK_LIBRARY}
 		${ENET_LIBRARY}
 		${SCTP_LIBRARY}
-        ${WEBSOCKETPP_LIBRARY}
+		${WEBSOCKETPP_LIBRARY}
 
 		${LUA_BIT_LIBRARY}
 		${FREETYPE_LIBRARY}
@@ -1027,7 +1028,7 @@ if(BUILD_SERVER)
 		${MSGPACK_LIBRARY}
 		${ENET_LIBRARY}
 		${SCTP_LIBRARY}
-        ${WEBSOCKETPP_LIBRARY}
+		${WEBSOCKETPP_LIBRARY}
 
 		${LUA_LIBRARY}
 		${LUA_BIT_LIBRARY}

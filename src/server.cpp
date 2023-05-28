@@ -1700,7 +1700,7 @@ void Server::Send(NetworkPacket *pkt)
 
 void Server::Send(session_t peer_id, NetworkPacket *pkt)
 {
-#if !NDEBUG
+#if !SERVER && !NDEBUG
 	tracestream << "Sever sending packet " << (int)pkt->getCommand() << " ["
 				<< toClientCommandTable[pkt->getCommand()].name
 				<< "] state=" << (int)toClientCommandTable[pkt->getCommand()].state
