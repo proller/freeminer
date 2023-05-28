@@ -230,9 +230,8 @@ bool WSSocket::init(bool ipv6, bool noExceptions)
 	server.set_http_handler(websocketpp::lib::bind(
 			&WSSocket::on_http, this, websocketpp::lib::placeholders::_1));
 #if USE_SSL
-DUMP("sitls");
-	server.set_tls_init_handler(bind(
-			&WSSocket::on_tls_init, this, websocketpp::lib::placeholders::_1));
+	server.set_tls_init_handler(
+			bind(&WSSocket::on_tls_init, this, websocketpp::lib::placeholders::_1));
 #endif
 	// Server.set_timer(long duration, timer_handler callback);
 	//}
@@ -240,44 +239,43 @@ DUMP("sitls");
 	return true;
 }
 #if USE_SSL
-	WSSocket::context_ptr WSSocket::on_tls_init(const websocketpp::connection_hdl& /* hdl */)
-	{
-		DUMP("");
-		namespace asio = websocketpp::lib::asio;
-		context_ptr ctx = websocketpp::lib::make_shared<asio::ssl::context>(
-				//asio::ssl::context::tlsv13
-				asio::ssl::context::tlsv13_server
-				);
-		try {
-			ctx->set_options(asio::ssl::context::default_workarounds |
-							 asio::ssl::context::no_sslv2 | asio::ssl::context::no_sslv3 |
-							 asio::ssl::context::single_dh_use);
-			ctx->set_password_callback(std::bind([&]() { return ""; /*GetSSLPassword();*/ }));
-			ctx->use_certificate_chain_file("fullchain.pem" /*GetSSLCertificateChain()*/);
-			ctx->use_private_key_file("privkey.pem" /*GetSSLPrivateKey()*/, asio::ssl::context::pem);
-			std::string ciphers;// = GetSSLCiphers();
-			if (ciphers.empty())
-				ciphers = "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:"
-						  "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:"
-						  "DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+"
-						  "AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:"
-						  "ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-"
-						  "AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-"
-						  "SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-"
-						  "AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:"
-						  "DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:!aNULL:!eNULL:!"
-						  "EXPORT:!DES:!RC4:!3DES:!MD5:!PSK";
+WSSocket::context_ptr WSSocket::on_tls_init(const websocketpp::connection_hdl & /* hdl */)
+{
+	namespace asio = websocketpp::lib::asio;
+	context_ptr ctx = websocketpp::lib::make_shared<asio::ssl::context>(
+			// asio::ssl::context::tlsv13
+			asio::ssl::context::tlsv13_server);
+	try {
+		ctx->set_options(asio::ssl::context::default_workarounds |
+						 asio::ssl::context::no_sslv2 | asio::ssl::context::no_sslv3 |
+						 asio::ssl::context::single_dh_use);
+		ctx->set_password_callback(std::bind([&]() {
+			return ""; /*GetSSLPassword();*/
+		}));
+		ctx->use_certificate_chain_file("fullchain.pem" /*GetSSLCertificateChain()*/);
+		ctx->use_private_key_file(
+				"privkey.pem" /*GetSSLPrivateKey()*/, asio::ssl::context::pem);
+		std::string ciphers; // = GetSSLCiphers();
+		if (ciphers.empty())
+			ciphers = "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:"
+					  "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:"
+					  "DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+"
+					  "AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:"
+					  "ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-"
+					  "AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-"
+					  "SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-"
+					  "AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:"
+					  "DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:!aNULL:!eNULL:!"
+					  "EXPORT:!DES:!RC4:!3DES:!MD5:!PSK";
 
-			if (SSL_CTX_set_cipher_list(ctx->native_handle(), ciphers.c_str()) != 1) {
-				warningstream << "Error setting cipher list";
-			}
-			DUMP("set ok");
-		} catch (const std::exception &e) {
-			errorstream << "Exception: " << e.what();
+		if (SSL_CTX_set_cipher_list(ctx->native_handle(), ciphers.c_str()) != 1) {
+			warningstream << "Error setting cipher list";
 		}
-		DUMP("ok");
-		return ctx;
+	} catch (const std::exception &e) {
+		errorstream << "Exception: " << e.what();
 	}
+	return ctx;
+}
 #endif
 
 WSSocket::~WSSocket()
@@ -428,7 +426,8 @@ bool WSSocket::WaitData(int timeout_ms)
 	if (!ws_serve)
 		return false;
 	for (int ms = 0; ms < timeout_ms; ++ms) {
-		server.run_one();
+		if (server.poll_one())
+			server.run_one();
 		if (!incoming_queue.empty())
 			return true;
 		// TODO: condvar here

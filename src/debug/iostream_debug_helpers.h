@@ -169,7 +169,7 @@ Out & dump(Out & out, const char * name, T && x)
          }
     }
 
-    out << DUMP_DEMANGLE(typeid(x).name()) << " " << name << " = ";
+    out << DUMP_DEMANGLE(typeid(x).name()) << ' ' << name << " = ";
     dumpValue(out, x) << "; ";
     return out;
 }
@@ -183,9 +183,14 @@ Out & dump(Out & out, const char * name, T && x)
 #endif                                                                      
                                                                             
 #if !defined(DUMP_FILE)                                                     
-    #define DUMP_FILE << __FILE__ << ':' << __LINE__                        
+    #define DUMP_FILE << __FILE__ << ':' << __LINE__ << ' '                        
 #endif                                                                      
                                                                             
+#if !defined(DUMP_FUNCTION)
+    //#define DUMP_FUNCTION <<  __PRETTY_FUNCTION__ << ' '
+    #define DUMP_FUNCTION 
+#endif
+
 #if !defined(DUMP_ENDL)                                                     
     #define DUMP_ENDL << '\n'                                               
 #endif                                                                      
@@ -195,7 +200,7 @@ Out & dump(Out & out, const char * name, T && x)
 #endif                                                                      
                                                                             
 #define DUMPVAR(VAR) ::dump(DUMP_STREAM, #VAR, (VAR));
-#define DUMPHEAD DUMP_STREAM DUMP_FILE DUMP_THREAD;           
+#define DUMPHEAD DUMP_STREAM DUMP_FILE DUMP_THREAD DUMP_FUNCTION;           
                                                               
 #define DUMPTAIL DUMP_STREAM DUMP_ENDL;                       
 
