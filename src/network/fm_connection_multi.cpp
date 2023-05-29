@@ -18,6 +18,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "fm_connection_multi.h"
 
 #include "connection.h"
+#include "settings.h"
+
 #if USE_SCTP
 #include "fm_connection_sctp.h"
 #endif
