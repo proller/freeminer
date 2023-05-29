@@ -794,7 +794,7 @@ private:
 
 	std::atomic_bool m_shutting_down = false;
 
-	session_t m_next_remote_peer_id = 2;
+	session_t m_next_remote_peer_id = PEER_MINETEST_MIN;
 
 //freeminer:
 public:

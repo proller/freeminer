@@ -114,6 +114,7 @@ private:
 	// struct sctp_udpencaps encaps;
 	struct socket *sock = nullptr;
 	session_t m_peer_id;
+	session_t m_next_remote_peer_id = PEER_SCTP_MIN;
 
 protected:
 	concurrent_map<u16, struct socket *> m_peers;

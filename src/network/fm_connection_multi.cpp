@@ -72,28 +72,44 @@ void Connection::Serve(Address bind_address)
 #if USE_SCTP
 	if (m_con_sctp) {
 		auto addr = bind_address;
-		addr.setPort(addr.getPort() + 100);
+		u16 port = 0;
+		if (!g_settings->getU16NoEx("port_sctp", port)) {
+			port = addr.getPort() + 100;
+		}
+		addr.setPort(port);
 		m_con_sctp->Serve(addr);
 	}
 #endif
 #if USE_WEBSOCKET
 	if (m_con_ws) {
 		auto addr = bind_address;
-		addr.setPort(addr.getPort()); // same tcp
+		u16 port = 0;
+		if (!g_settings->getU16NoEx("port_ws", port)) {
+			port = addr.getPort();
+		}
+		addr.setPort(port); // same tcp
 		m_con_ws->Serve(addr);
 	}
 #endif
 #if USE_WEBSOCKET_SCTP
 	if (m_con_ws_sctp) {
 		auto addr = bind_address;
-		addr.setPort(addr.getPort()); // same tcp
+		u16 port = 0;
+		if (!g_settings->getU16NoEx("port_sctp_ws", port)) {
+			port = addr.getPort() + 100;
+		}
+		addr.setPort(port); // same tcp
 		m_con_ws_sctp->Serve(addr);
 	}
 #endif
 #if USE_ENET
 	if (m_con_enet) {
 		auto addr = bind_address;
-		addr.setPort(addr.getPort() + 200);
+		u16 port = 0;
+		if (!g_settings->getU16NoEx("port_enet", port)) {
+			port = addr.getPort() + 200;
+		}
+		addr.setPort(port);
 		m_con_enet->Serve(addr);
 	}
 #endif
@@ -205,11 +221,11 @@ void Connection::Send(session_t peer_id, u8 channelnum, NetworkPacket *pkt, bool
 {
 	// TODO send to one
 #if USE_SCTP
-	if (m_con_sctp && m_con_sctp->getPeer(peer_id))
+	if (m_con_sctp && peer_id >= PEER_SCTP_MIN && peer_id <= PEER_SCTP_MAX)
 		m_con_sctp->Send(peer_id, channelnum, pkt, reliable);
 #endif
 #if USE_WEBSOCKET
-	if (m_con_ws && &m_con_ws->getPeerNoEx(peer_id))
+	if (m_con_ws && peer_id >= PEER_WS_MIN && peer_id <= PEER_WS_MAX)
 		m_con_ws->Send(peer_id, channelnum, pkt, reliable);
 #endif
 #if USE_WEBSOCKET_SCTP
@@ -217,11 +233,11 @@ void Connection::Send(session_t peer_id, u8 channelnum, NetworkPacket *pkt, bool
 		m_con_ws_sctp->Send(peer_id, channelnum, pkt, reliable);
 #endif
 #if USE_ENET
-	if (m_con_enet && m_con_enet->getPeer(peer_id))
+	if (m_con_enet && peer_id >= PEER_ENET_MIN && peer_id <= PEER_ENET_MAX)
 		m_con_enet->Send(peer_id, channelnum, pkt, reliable);
 #endif
 #if MINETEST_TRANSPORT
-	if (m_con && &m_con.get()->getPeerNoEx(peer_id))
+	if (m_con && peer_id >= PEER_MINETEST_MIN && peer_id <= PEER_MINETEST_MAX)
 		m_con->Send(peer_id, channelnum, pkt, reliable);
 #endif
 }
@@ -231,19 +247,20 @@ void Connection::Send(
 {
 	// TODO send to one
 #if USE_SCTP
-	if (m_con_sctp)
+	if (m_con_sctp && peer_id >= PEER_SCTP_MIN && peer_id <= PEER_SCTP_MAX)
 		m_con_sctp->Send(peer_id, channelnum, buffer, reliable);
 #endif
+
 #if USE_WEBSOCKET_SCTP
 	if (m_con_ws_sctp)
 		m_con_ws_sctp->Send(peer_id, channelnum, buffer, reliable);
 #endif
 #if USE_ENET
-	if (m_con_enet)
+	if (m_con_enet && peer_id >= PEER_ENET_MIN && peer_id <= PEER_ENET_MAX)
 		m_con_enet->Send(peer_id, channelnum, buffer, reliable);
 #endif
 #if MINETEST_TRANSPORT
-		//	if (m_con)
+		//	if (m_con && peer_id >= PEER_MINETEST_MIN && peer_id <= PEER_MINETEST_MAX)
 		//		m_con->Send(peer_id, channelnum, buffer, reliable);
 #endif
 }
@@ -251,19 +268,23 @@ void Connection::Send(
 Address Connection::GetPeerAddress(session_t peer_id)
 {
 #if USE_SCTP
-	if (m_con_sctp && m_con_sctp->getPeer(peer_id))
+	if (m_con_sctp && peer_id >= PEER_SCTP_MIN && peer_id <= PEER_SCTP_MAX)
 		return m_con_sctp->GetPeerAddress(peer_id);
 #endif
+#if USE_WEBSOCKET
+	if (m_con_ws && peer_id >= PEER_WS_MIN && peer_id <= PEER_WS_MAX)
+		return m_con_ws->GetPeerAddress(peer_id);
+#endif
 #if USE_WEBSOCKET_SCTP
-	if (m_con_ws_sctp && m_con_ws_sctp_sctp->getPeer(peer_id).lock().get())
-		return m_con_ws_sctp_sctp->GetPeerAddress(peer_id);
+	if (m_con_ws_sctp && m_con_ws_sctp->getPeer(peer_id).lock().get())
+		return m_con_ws_sctp->GetPeerAddress(peer_id);
 #endif
 #if USE_ENET
-	if (m_con_enet && m_con_enet->getPeer(peer_id))
+	if (m_con_enet && peer_id >= PEER_ENET_MIN && peer_id <= PEER_ENET_MAX)
 		return m_con_enet->GetPeerAddress(peer_id);
 #endif
 #if MINETEST_TRANSPORT
-	if (m_con && &m_con.get()->getPeerNoEx(peer_id))
+	if (m_con && peer_id >= PEER_MINETEST_MIN && peer_id <= PEER_MINETEST_MAX)
 		return m_con->GetPeerAddress(peer_id);
 #endif
 	return {};
@@ -272,15 +293,15 @@ Address Connection::GetPeerAddress(session_t peer_id)
 float Connection::getPeerStat(session_t peer_id, con::rtt_stat_type type)
 {
 #if USE_SCTP
-	if (m_con_sctp && m_con_sctp->getPeer(peer_id))
+	if (m_con_sctp && peer_id >= PEER_SCTP_MIN && peer_id <= PEER_SCTP_MAX)
 		return m_con_sctp->getPeerStat(peer_id, type);
 #endif
 #if USE_ENET
-	if (m_con_enet && m_con_enet->getPeer(peer_id))
+	if (m_con_enet && peer_id >= PEER_ENET_MIN && peer_id <= PEER_ENET_MAX)
 		return m_con_enet->getPeerStat(peer_id, type);
 #endif
 #if MINETEST_TRANSPORT
-	if (m_con && &m_con.get()->getPeerNoEx(peer_id))
+	if (m_con && peer_id >= PEER_MINETEST_MIN && peer_id <= PEER_MINETEST_MAX)
 		return m_con->getPeerStat(peer_id, type);
 #endif
 	return {};
@@ -298,19 +319,23 @@ float Connection::getLocalStat(con::rate_stat_type type)
 void Connection::DisconnectPeer(session_t peer_id)
 {
 #if USE_SCTP
-	if (m_con_sctp && m_con_sctp->getPeer(peer_id))
+	if (m_con_sctp && peer_id >= PEER_SCTP_MIN && peer_id <= PEER_SCTP_MAX)
 		return m_con_sctp->DisconnectPeer(peer_id);
+#endif
+#if USE_WEBSOCKET
+	if (m_con_ws && peer_id >= PEER_WS_MIN && peer_id <= PEER_WS_MAX)
+		return m_con_ws->DisconnectPeer(peer_id);
 #endif
 #if USE_WEBSOCKET_SCTP
 	if (m_con_ws_sctp && m_con_ws_sctp->getPeer(peer_id).lock().get())
 		return m_con_ws_sctp->DisconnectPeer(peer_id);
 #endif
 #if USE_ENET
-	if (m_con_enet && m_con_enet->getPeer(peer_id))
+	if (m_con_enet && peer_id >= PEER_ENET_MIN && peer_id <= PEER_ENET_MAX)
 		return m_con_enet->DisconnectPeer(peer_id);
 #endif
 #if MINETEST_TRANSPORT
-	if (m_con && &m_con.get()->getPeerNoEx(peer_id))
+	if (m_con && peer_id >= PEER_MINETEST_MIN && peer_id <= PEER_MINETEST_MAX)
 		return m_con->DisconnectPeer(peer_id);
 #endif
 }
@@ -321,6 +346,10 @@ size_t Connection::events_size()
 #if USE_SCTP
 	if (m_con_sctp)
 		ret += m_con_sctp->events_size();
+#endif
+#if USE_WEBSOCKET
+	if (m_con_ws)
+		ret += m_con_ws->events_size();
 #endif
 #if USE_WEBSOCKET_SCTP
 	if (m_con_ws_sctp)

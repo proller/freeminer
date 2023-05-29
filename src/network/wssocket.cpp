@@ -131,7 +131,6 @@ void WSSocket::on_fail(const websocketpp::connection_hdl &hdl)
 	cs << "Fail handler: " << con->get_ec() << " " << con->get_ec().message()
 	   << std::endl;
 	   //auto ec = websocketpp::get_transport_ec();
-	   DUMP("fail");
 }
 
 void WSSocket::on_close(const websocketpp::connection_hdl &hdl)

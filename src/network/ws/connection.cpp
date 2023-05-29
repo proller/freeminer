@@ -1565,7 +1565,7 @@ u16 Connection::createPeer(Address& sender, MTProtocols protocol, int fd)
 
 	// Get a unique peer id (2 or higher)
 	session_t peer_id_new = m_next_remote_peer_id;
-	u16 overflow =  MAX_UDP_PEERS;
+	u16 overflow = PEER_WS_MAX;
 
 	/*
 		Find an unused peer id
@@ -1597,7 +1597,9 @@ u16 Connection::createPeer(Address& sender, MTProtocols protocol, int fd)
 	m_peers[peer->id] = peer;
 	m_peer_ids.push_back(peer->id);
 
-	m_next_remote_peer_id = (peer_id_new +1 ) % MAX_UDP_PEERS;
+	m_next_remote_peer_id = (peer_id_new + 1);
+
+	if (m_next_remote_peer_id > overflow) m_next_remote_peer_id = PEER_WS_MIN;
 
 	LOG(dout_con << getDesc()
 			<< "createPeer(): giving peer_id=" << peer_id_new << std::endl);
