@@ -218,6 +218,7 @@ void fm_set_default_settings(Settings *settings) {
 #else
 	settings->setDefault("server_proto", "mt");
 #endif
+	settings->setDefault("remote_proto", "");
 	settings->setDefault("timeout_mul", android ? "5" : "1");
 	settings->setDefault("default_game", "default"); // "minetest"
 	settings->setDefault("max_users", "100"); // "15"
