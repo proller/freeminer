@@ -19,6 +19,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 */
 
 #include "config.h"
+#if USE_WEBSOCKET
+
 #if MINETEST_TRANSPORT
 
 #include "connectionthreads.h"
@@ -1368,4 +1370,5 @@ SharedBuffer<u8> ConnectionReceiveThread::handlePacketType_Reliable(Channel *cha
 
 }
 
+#endif
 #endif

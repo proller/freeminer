@@ -494,6 +494,7 @@ private:
 
 class Connection;
 
+/*
 typedef enum {
 	CUR_DL_RATE,
 	AVG_DL_RATE,
@@ -502,7 +503,7 @@ typedef enum {
 	CUR_LOSS_RATE,
 	AVG_LOSS_RATE,
 } rate_stat_type;
-
+*/
 class Peer {
 	public:
 		friend class PeerHelper;

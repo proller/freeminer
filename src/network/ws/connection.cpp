@@ -19,6 +19,9 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "config.h"
+#if USE_WEBSOCKET
+
 
 #include <iomanip>
 #include <cerrno>
@@ -1683,3 +1686,5 @@ ConnectionCommandPtr ConnectionCommand::send(
 #endif
 
 } // namespace
+
+#endif

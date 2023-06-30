@@ -17,6 +17,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 // Todo: pass disconnect to Connection (need to change api)
 
+#include "config.h"
+#if USE_WEBSOCKET || USE_WEBSOCKET_SCTP
+
 #include "wssocket.h"
 #include "constants.h"
 #include "iostream_debug_helpers.h"
@@ -434,3 +437,5 @@ bool WSSocket::WaitData(int timeout_ms)
 	}
 	return !incoming_queue.empty();
 }
+
+#endif

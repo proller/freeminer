@@ -622,7 +622,6 @@ add_custom_target(GenerateVersion
 add_subdirectory(contrib)
 add_subdirectory(debug)
 
-
 add_subdirectory(threading)
 add_subdirectory(content)
 add_subdirectory(database)
@@ -638,26 +637,26 @@ add_subdirectory(server)
 
 
 OPTION(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL, not compatible with other)" 0)
-OPTION(USE_MULTI "Enable MT+SCTP networking" 1)
+OPTION(USE_MULTI "Enable MT+SCTP networking" 0)
 if(USE_MULTI)
 	set(ENABLE_SCTP 1)
-	set(USE_ENET 1)
-	#set(USE_WEBSOCKET_SCTP 1) # NOT FINISHED
-	set(USE_WEBSOCKET 1)
+	set(ENABLE_ENET 1)
+	#set(ENABLE_WEBSOCKET_SCTP 1) # NOT FINISHED
+	set(ENABLE_WEBSOCKET 1)
 endif()
 
-if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp/CMakeLists.txt)
-	set(USE_WEBSOCKET_SCTP 0)
-	set(USE_WEBSOCKET 0)
-endif()
 
-if(USE_WEBSOCKET OR USE_WEBSOCKET_SCTP)
+if(ENABLE_WEBSOCKET OR ENABLE_WEBSOCKET_SCTP)
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp/CMakeLists.txt)
 	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp)
 	#add_subdirectory(external/websocketpp)
 	#set(WEBSOCKETPP_LIBRARY websocketpp::websocketpp)
 	message(STATUS "Using websocket: ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp")
 	find_package(OpenSSL)
 	set(WEBSOCKETPP_LIBRARY ${WEBSOCKETPP_LIBRARY} OpenSSL::SSL)
+        set(USE_WEBSOCKET 1)
+	#TODO: set(USE_WEBSOCKET_SCTP 1)
+    endif()
 endif()
 
 if(ENABLE_SCTP AND NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp/usrsctplib)
@@ -675,7 +674,6 @@ if(ENABLE_SCTP)
 	set(sctp_werror 0 CACHE INTERNAL "")
 	set(WERROR 0 CACHE INTERNAL "") #old
 
-
 	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp)
 
 	#include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp/usrsctplib)
@@ -684,15 +682,11 @@ if(ENABLE_SCTP)
 	set(USE_SCTP 1)
 
 	message(STATUS "Using sctp: ${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp ${SCTP_LIBRARY} SCTP_DEBUG=${SCTP_DEBUG}")
-else()
-	set(USE_SCTP 0)
+#else()
+	#set(USE_SCTP 0)
 endif()
 
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/enet/include/enet/enet.h)
-    set(USE_ENET 1)
-endif()
-
-if(USE_ENET)
+if(ENABLE_ENET)
 	if(NOT ENABLE_SYSTEM_ENET AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/enet/include/enet/enet.h)
 		add_subdirectory(external/enet)
 		set(ENET_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/external/enet/include)
@@ -702,8 +696,11 @@ if(USE_ENET)
 		find_library(ENET_LIBRARY NAMES enet)
 		find_path(ENET_INCLUDE_DIR enet/enet.h)
 	endif()
-	include_directories(${ENET_INCLUDE_DIR})
-	message(STATUS "Using enet: ${ENET_INCLUDE_DIR} ${ENET_LIBRARY}")
+	if(ENET_LIBRARY AND ENET_INCLUDE_DIR)
+		include_directories(${ENET_INCLUDE_DIR})
+		message(STATUS "Using enet: ${ENET_INCLUDE_DIR} ${ENET_LIBRARY}")
+		set(USE_ENET 1)
+	endif()
 endif()
 
 set(FMcommon_SRCS ${FMcommon_SRCS}

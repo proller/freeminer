@@ -272,7 +272,9 @@ local function set_selected_server(tabdata, idx, server)
 	if address and port then
 		core.settings:set("address", address)
 		core.settings:set("remote_port", port)
-		core.settings:set("remote_proto", server.proto)
+		if server.proto then
+			core.settings:set("remote_proto", server.proto)
+		end
 	end
 	tabdata.selected = idx
 end
