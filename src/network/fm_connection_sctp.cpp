@@ -328,23 +328,20 @@ int Connection::receive()
 			}
 		}
 
-		u16 peer_id = 0;
-		static u16 last_try = PEER_ID_SERVER + 1;
+		u16 peer_id = m_next_remote_peer_id;
 		if (m_peers.size() > 0) {
 			for (int i = 0; i < 1000; ++i) {
-				if (last_try > 30000)
-					last_try = PEER_ID_SERVER + 10000;
-				++last_try;
-				if (!m_peers.count(last_try)) {
-					peer_id = last_try;
+				if (peer_id > PEER_SCTP_MAX)
+					peer_id = PEER_SCTP_MIN;
+				++peer_id;
+				if (!m_peers.count(peer_id)) {
 					break;
 				}
 			}
-		} else {
-			peer_id = last_try;
 		}
-		if (!peer_id)
-			last_try = peer_id = m_peers.rbegin()->first + 1;
+		m_next_remote_peer_id = peer_id + 1;
+		if (m_next_remote_peer_id > PEER_SCTP_MAX)
+			m_next_remote_peer_id = PEER_SCTP_MIN;
 
 		cs << "receive() accepted " << conn_sock << " addr_len=" << addr_len
 		   << " id=" << peer_id << std::endl;
@@ -742,12 +739,12 @@ void Connection::sock_setup(/*session_t peer_id,*/ struct socket *sock)
 // host
 void Connection::serve(Address bind_address)
 {
-	infostream << getDesc() << "SCTP serving at " << bind_address.serializeString() << ":" << std::to_string(bind_address.getPort()) << std::endl;
+	infostream << getDesc() << "SCTP serving at " << bind_address.serializeString() << ":"
+			   << std::to_string(bind_address.getPort()) << std::endl;
 
 	sctp_setup(bind_address.getPort());
 
-	if ((sock = usrsctp_socket(
-				 domain, SOCK_STREAM, IPPROTO_SCTP, NULL, server_send_cb, 0, NULL)) == NULL) {
+	if ((sock = usrsctp_socket(domain, SOCK_STREAM, IPPROTO_SCTP, NULL, server_send_cb, 0, NULL)) == NULL) {
 		cs << ("usrsctp_socket is NULL") << std::endl;
 		putEvent(ConnectionEvent::bindFailed());
 		return;
@@ -787,7 +784,8 @@ void Connection::serve(Address bind_address)
 // peer
 void Connection::connect(Address address)
 {
-	infostream << getDesc() << "SCTP connect to " << address.serializeString() << ":" << std::to_string(address.getPort()) << std::endl;
+	infostream << getDesc() << "SCTP connect to " << address.serializeString() << ":"
+			   << std::to_string(address.getPort()) << std::endl;
 
 	sctp_setup(address.getPort() + myrand_range(100, 1000));
 
@@ -800,8 +798,8 @@ void Connection::connect(Address address)
 
 	struct socket *sock;
 
-	if ((sock = usrsctp_socket(
-				 domain, SOCK_STREAM, IPPROTO_SCTP, NULL, client_send_cb, 0, NULL)) == NULL) {
+	if ((sock = usrsctp_socket(domain, SOCK_STREAM, IPPROTO_SCTP, NULL, client_send_cb, 0,
+				 NULL)) == NULL) {
 		cs << ("usrsctp_socket=") << sock << std::endl;
 		putEvent(ConnectionEvent::bindFailed());
 		return;

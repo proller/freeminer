@@ -662,6 +662,9 @@ void Server::start()
 #if USE_WEBSOCKET
 				 << " ws \t"
 #endif
+#if USE_WEBSOCKET_SCTP
+				 << " wssctp \t"
+#endif
 				 << " cpp=" << __cplusplus << " \t"
 
 				 << " cores=";
@@ -1705,7 +1708,7 @@ void Server::Send(NetworkPacket *pkt)
 
 void Server::Send(session_t peer_id, NetworkPacket *pkt)
 {
-#if !NDEBUG
+#if !SERVER && !NDEBUG
 	tracestream << "Sever sending packet " << (int)pkt->getCommand() << " ["
 				<< toClientCommandTable[pkt->getCommand()].name
 				<< "] state=" << (int)toClientCommandTable[pkt->getCommand()].state
@@ -2935,7 +2938,7 @@ size_t Server::addMediaFile(const std::string &filename,
 		return false;
 	}
 
-	SHA1 sha1;
+	class SHA1 sha1;
 	sha1.addBytes(filedata.c_str(), filedata.length());
 
 	unsigned char *digest = sha1.getDigest();
