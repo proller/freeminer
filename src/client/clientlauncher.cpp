@@ -624,12 +624,8 @@ void ClientLauncher::main_menu_after_loop(std::function<void()> resolve) {
 	m_rendering_engine->get_raw_device()->getCursorControl()->setVisible(true);
 
 	// Set absolute mouse mode
-#if IRRLICHT_VERSION_MT_REVISION >= 9
 	m_rendering_engine->get_raw_device()->getCursorControl()->setRelativeMode(false);
 #endif
-
-#endif
-
 
 	/* show main menu */
 	new GUIEngine(&input->joystick, guiroot, m_rendering_engine, &g_menumgr, menudata_addr, *kill, [this, resolve]() {
