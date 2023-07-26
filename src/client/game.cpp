@@ -1262,8 +1262,8 @@ void Game::run(std::function<void(BaseException*)> resolve)
 			&& client->checkPrivilege("fast");
 #endif
 
-	previous_screen_size(g_settings->getU16("screen_w"),
-			g_settings->getU16("screen_h"));
+	previous_screen_size = {g_settings->getU16("screen_w"),
+			g_settings->getU16("screen_h")};
 
 	run_loop(resolve);
 }
