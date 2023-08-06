@@ -29,15 +29,20 @@ on:
       - 'Dockerfile'
       - '.dockerignore'
 
+env:
+  MINETEST_POSTGRESQL_CONNECT_STRING: 'host=localhost user=minetest password=minetest dbname=minetest'
+
 jobs:
   # Older gcc version (should be close to our minimum supported version)
   gcc_5:
     if: ${{ false }}
     runs-on: ubuntu-18.04
+    if: "false" # FIXME
     steps:
       - uses: actions/checkout@v3
         with:
             submodules: recursive
+            fetch-depth: 10
       - name: Install deps
         run: |
           source ./util/ci/common.sh
@@ -61,6 +66,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
             submodules: recursive
+            fetch-depth: 10
       - name: Install deps
         run: |
           source ./util/ci/common.sh
@@ -81,10 +87,12 @@ jobs:
   clang_3_9:
     if: ${{ false }}
     runs-on: ubuntu-18.04
+    if: "false" # FIXME
     steps:
       - uses: actions/checkout@v3
         with:
             submodules: recursive
+            fetch-depth: 10
       - name: Install deps
         run: |
           source ./util/ci/common.sh
@@ -112,6 +120,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
             submodules: recursive
+            fetch-depth: 10
       - name: Install deps
         run: |
           source ./util/ci/common.sh
@@ -140,6 +149,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
             submodules: recursive
+            fetch-depth: 10
       - name: Install deps
         run: |
           source ./util/ci/common.sh
@@ -168,6 +178,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
             submodules: recursive
+            fetch-depth: 10
       - name: Build docker image
         run: |
           docker build . -t minetest:latest
@@ -181,6 +192,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
             submodules: recursive
+            fetch-depth: 10
       - name: Install compiler
         run: |
           sudo apt-get update && sudo apt-get install -y gettext
@@ -202,6 +214,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
             submodules: recursive
+            fetch-depth: 10
       - name: Install compiler
         run: |
           sudo apt-get update && sudo apt-get install -y gettext
@@ -246,7 +259,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
             submodules: recursive
-
+            fetch-depth: 10
 #      - name: Checkout IrrlichtMt
 #        run: |
 #          $ref = @(Get-Content misc\irrlichtmt_tag.txt)

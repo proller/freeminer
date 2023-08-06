@@ -20,7 +20,7 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <IrrCompileConfig.h>
+#include "network/fm_connection_use.h"
 #include "settings.h"
 #include "porting.h"
 #include "filesys.h"
@@ -94,17 +94,7 @@ void fm_set_default_settings(Settings *settings) {
 
 	// Screen
 #if __ANDROID__ || __ARM_ARCH
-	settings->setDefault("enable_shaders", "0");
-#if defined(_IRR_COMPILE_WITH_OGLES1_)
-	settings->setDefault("video_driver", "ogles1");
-#elif defined(_IRR_COMPILE_WITH_OGLES2_)
-	settings->setDefault("video_driver", "ogles2");
-#else
-	settings->setDefault("video_driver", "opengl");
-#endif
-#else
-	settings->setDefault("video_driver", "opengl");
-	settings->setDefault("enable_shaders", "1");
+	//settings->setDefault("enable_shaders", "0");
 #endif
 //	settings->setDefault("chat_buffer_size", "6"); // todo re-enable
 	settings->setDefault("timelapse", "0");
@@ -205,6 +195,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("weather_humidity_season", "30");
 	settings->setDefault("weather_humidity_daily", "-12");
 	settings->setDefault("weather_humidity_width", "300");
+	settings->setDefault("weather_humidity_height", "-250");
 	settings->setDefault("weather_humidity_days", "2");
 
 	settings->setDefault("respawn_auto", "false");
@@ -218,15 +209,11 @@ void fm_set_default_settings(Settings *settings) {
 
 #if !MINETEST_PROTO || !MINETEST_TRANSPORT
 	settings->setDefault("serverlist_url", "servers.freeminer.org");
-#if USE_SCTP
-	settings->setDefault("server_proto", "fm_sctp");
-	settings->setDefault("serverlist_url", "servers2.freeminer.org");
-#elif USE_ENET
-	settings->setDefault("server_proto", "fm_enet");
+//#elif USE_SCTP
+//	settings->setDefault("serverlist_url", "servers2.freeminer.org");
 #endif
-#else
-	settings->setDefault("server_proto", "mt");
-#endif
+	settings->setDefault("server_proto", server_proto);
+	settings->setDefault("remote_proto", "");
 	settings->setDefault("timeout_mul", android ? "5" : "1");
 	settings->setDefault("default_game", "default"); // "minetest"
 	settings->setDefault("max_users", "100"); // "15"
@@ -253,6 +240,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("server_map_save_interval", "300"); // "5.3"
 	settings->setDefault("sqlite_synchronous", "1"); // "2"
 	settings->setDefault("save_generated_block", "true");
+	settings->setDefault("save_changed_block", "true");
 	settings->setDefault("block_delete_time", threads && arm ? "60" : threads ? "30" : "10");
 
 #if (ENET_IPV6 || MINETEST_TRANSPORT || USE_SCTP)
@@ -408,6 +396,7 @@ void set_default_settings()
 	settings->setDefault("mute_sound", "false");
 	settings->setDefault("enable_mesh_cache", "false");
 	settings->setDefault("mesh_generation_interval", "0");
+	settings->setDefault("mesh_generation_threads", "0");
 	settings->setDefault("meshgen_block_cache_size", "20");
 	settings->setDefault("enable_vbo", "true");
 	settings->setDefault("free_move", "false");
@@ -429,6 +418,8 @@ void set_default_settings()
 	settings->setDefault("max_out_chat_queue_size", "20");
 	settings->setDefault("pause_on_lost_focus", "false");
 	settings->setDefault("enable_split_login_register", "true");
+	settings->setDefault("occlusion_culler", "bfs");
+	settings->setDefault("enable_raytraced_culling", "true");
 	settings->setDefault("chat_weblink_color", "#8888FF");
 
 	// Keymap
@@ -451,9 +442,14 @@ void set_default_settings()
 	settings->setDefault("keymap_cmd_local", ".");
 	settings->setDefault("keymap_minimap", "KEY_KEY_V");
 	settings->setDefault("keymap_console", "KEY_F10");
+#if HAVE_TOUCHSCREENGUI
+	// See https://github.com/minetest/minetest/issues/12792
 	settings->setDefault("keymap_rangeselect", "KEY_KEY_R");
+#else
+	settings->setDefault("keymap_rangeselect", "");
+#endif
 	settings->setDefault("keymap_freemove", "KEY_KEY_K");
-	settings->setDefault("keymap_pitchmove", "KEY_KEY_P");
+	settings->setDefault("keymap_pitchmove", "");
 	settings->setDefault("keymap_fastmove", "KEY_KEY_J");
 	settings->setDefault("keymap_noclip", "KEY_KEY_H");
 	settings->setDefault("keymap_hotbar_next", "KEY_KEY_N");
@@ -510,11 +506,18 @@ void set_default_settings()
 	settings->setDefault("keymap_slot31", "");
 	settings->setDefault("keymap_slot32", "");
 
-	// Some (temporary) keys for debugging
+#ifndef NDEBUG
+	// Default keybinds for quicktune in debug builds
 	settings->setDefault("keymap_quicktune_prev", "KEY_HOME");
 	settings->setDefault("keymap_quicktune_next", "KEY_END");
 	settings->setDefault("keymap_quicktune_dec", "KEY_NEXT");
 	settings->setDefault("keymap_quicktune_inc", "KEY_PRIOR");
+#else
+	settings->setDefault("keymap_quicktune_prev", "");
+	settings->setDefault("keymap_quicktune_next", "");
+	settings->setDefault("keymap_quicktune_dec", "");
+	settings->setDefault("keymap_quicktune_inc", "");
+#endif
 
 	// Visuals
 #ifdef NDEBUG
@@ -535,6 +538,7 @@ void set_default_settings()
 	settings->setDefault("fps_max", "60");
 	settings->setDefault("fps_max_unfocused", "20");
 	settings->setDefault("viewing_range", "190");
+	settings->setDefault("client_mesh_chunk", "1");
 #if ENABLE_GLES
 	settings->setDefault("near_plane", "0.1");
 #endif
@@ -557,11 +561,7 @@ void set_default_settings()
 	settings->setDefault("texture_path", "");
 	settings->setDefault("shader_path", "");
 #if ENABLE_GLES
-#ifdef _IRR_COMPILE_WITH_OGLES1_
-	settings->setDefault("video_driver", "ogles1");
-#else
 	settings->setDefault("video_driver", "ogles2");
-#endif
 #else
 	settings->setDefault("video_driver", "opengl");
 #endif
@@ -599,11 +599,7 @@ void set_default_settings()
 	settings->setDefault("texture_clean_transparent", "false");
 	settings->setDefault("texture_min_size", "64");
 	settings->setDefault("ambient_occlusion_gamma", "1.8");
-#if ENABLE_GLES
-	settings->setDefault("enable_shaders", "false");
-#else
 	settings->setDefault("enable_shaders", "true");
-#endif
 	settings->setDefault("enable_particles", "true");
 	settings->setDefault("arm_inertia", "true");
 	settings->setDefault("show_nametag_backgrounds", "true");
@@ -627,6 +623,13 @@ void set_default_settings()
 	settings->setDefault("water_wave_speed", "5.0");
 	settings->setDefault("enable_waving_leaves", "false");
 	settings->setDefault("enable_waving_plants", "false");
+	settings->setDefault("exposure_compensation", "0.0");
+	settings->setDefault("enable_auto_exposure", "false");
+	settings->setDefault("enable_bloom", "false");
+	settings->setDefault("enable_bloom_debug", "false");
+	settings->setDefault("bloom_strength_factor", "1.0");
+	settings->setDefault("bloom_intensity", "0.05");
+	settings->setDefault("bloom_radius", "1");
 
 	// Effects Shadows
 	settings->setDefault("enable_dynamic_shadows", "false");
@@ -829,8 +832,8 @@ void set_default_settings()
 #endif
 
 #ifdef HAVE_TOUCHSCREENGUI
-	settings->setDefault("touchtarget", "true");
 	settings->setDefault("touchscreen_threshold","20");
+	settings->setDefault("touch_use_crosshair", "false");
 	settings->setDefault("fixed_virtual_joystick", "false");
 	settings->setDefault("virtual_joystick_triggers_aux1", "false");
 	settings->setDefault("clickable_chat_weblinks", "false");
