@@ -21,6 +21,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <algorithm>
+#include "irr_v3d.h"
 #include "lua_api/l_env.h"
 #include "lua_api/l_internal.h"
 #include "lua_api/l_nodemeta.h"
@@ -68,10 +69,11 @@ const EnumString ModApiEnvMod::es_BlockStatusType[] =
 
 ///////////////////////////////////////////////////////////////////////////////
 
-v3s16 start_pos;
+//v3pos_t start_pos;
 
 void LuaABM::trigger(ServerEnvironment *env, v3s16 p, MapNode n,
-		u32 active_object_count, u32 active_object_count_wider, MapNode neighbor, bool activate)
+		u32 active_object_count, u32 active_object_count_wider, 
+		v3pos_t neighbor_pos, bool activate)
 {
 	ServerScripting *scriptIface = env->getScriptIface();
 	auto _script_lock = RecursiveMutexAutoLock(scriptIface->m_luastackmutex, std::try_to_lock);
@@ -111,6 +113,7 @@ void LuaABM::trigger(ServerEnvironment *env, v3s16 p, MapNode n,
 	pushnode(L, n);
 	lua_pushnumber(L, active_object_count);
 	lua_pushnumber(L, active_object_count_wider);
+	const auto & neighbor = env->getServerMap().getNodeTry(neighbor_pos);
 	pushnode(L, neighbor);
 	lua_pushboolean(L, activate);
 
@@ -530,7 +533,7 @@ int ModApiEnvMod::l_get_node_max_level(lua_State *L)
 {
 	GET_PLAIN_ENV_PTR;
 
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 	MapNode n = env->getMap().getNode(pos);
 	lua_pushnumber(L, n.getMaxLevel(env->getGameDef()->ndef()));
 	return 1;
@@ -542,7 +545,7 @@ int ModApiEnvMod::l_get_node_level(lua_State *L)
 {
 	GET_PLAIN_ENV_PTR;
 
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 	MapNode n = env->getMap().getNode(pos);
 	lua_pushnumber(L, n.getLevel(env->getGameDef()->ndef()));
 	return 1;
@@ -555,7 +558,7 @@ int ModApiEnvMod::l_set_node_level(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 	s16 level = 1;
 	s16 fast = 0;
 	if(lua_isnumber(L, 2))
@@ -579,7 +582,7 @@ int ModApiEnvMod::l_add_node_level(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 	s16 level = 1, fast = 0;
 	bool compress = 0;
 	if(lua_isnumber(L, 2))
@@ -605,7 +608,7 @@ int ModApiEnvMod::l_freeze_melt(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 	int direction = 1;
 	s16 fast = 0;
 
@@ -1357,7 +1360,7 @@ int ModApiEnvMod::l_get_surface(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 basepos = read_v3s16(L, 1);
+	v3pos_t basepos = read_v3pos(L, 1);
 	int max_y = luaL_checkint(L, 2);
 	bool walkable_only = false;
 

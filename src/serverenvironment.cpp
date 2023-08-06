@@ -18,6 +18,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 */
 
 #include <algorithm>
+#include "irr_v3d.h"
 #include "serverenvironment.h"
 #include "settings.h"
 #include "log.h"
@@ -321,6 +322,11 @@ void LBMManager::applyLBMs(ServerEnvironment *env, MapBlock *block,
 						continue;
 					for (auto lbmdef : *lbm_list) {
 						lbmdef->trigger(env, pos + pos_of_block, n, dtime_s);
+						if (block->isOrphan())
+							return;
+						n = block->getNodeNoCheck(pos);
+						if (n.getContent() != c)
+							break; // The node was changed and the LBMs no longer apply
 					}
 				}
 	}
@@ -798,7 +804,11 @@ void ServerEnvironment::loadMeta()
 		m_game_time = args.getU64("game_time");
 	} catch (SettingNotFoundException &e) {
 		// Getting this is crucial, otherwise timestamps are useless
+
+		errorstream << "Couldn't load env meta game_time" << std::endl;
+/*
 		throw SerializationError("Couldn't load env meta game_time");
+*/
 	}
 
 	setTimeOfDay(args.exists("time_of_day") ?
@@ -1042,6 +1052,9 @@ public:
 				aabm.abm->trigger(m_env, p, n,
 					active_object_count, active_object_count_wider);
 
+				if (block->isOrphan())
+					return;
+
 				// Count surrounding objects again if the abms added any
 				if(m_env->m_added_objects > 0) {
 					active_object_count = countObjects(block, map, active_object_count_wider);
@@ -1094,13 +1107,17 @@ void ServerEnvironment::activateBlock(MapBlock *block, u32 additional_dtime)
 
 	// Activate stored objects
 	activateObjects(block, dtime_s);
+	if (block->isOrphan())
+		return;
 
 	/* Handle LoadingBlockModifiers */
 	m_lbm_mgr.applyLBMs(this, block, stamp, (float)dtime_s);
+	if (block->isOrphan())
+		return;
 
 	// Run node timers
 	block->step((float)dtime_s, [&](v3s16 p, MapNode n, f32 d) -> bool {
-		return m_script->node_on_timer(p, n, d);
+		return !block->isOrphan() && m_script->node_on_timer(p, n, d);
 	});
 }
 
@@ -1114,7 +1131,7 @@ void ServerEnvironment::addLoadingBlockModifierDef(LoadingBlockModifierDef *lbm)
 	m_lbm_mgr.addLBMDef(lbm);
 }
 
-bool ServerEnvironment::setNode(v3s16 p, const MapNode &n, s16 fast, bool important)
+bool ServerEnvironment::setNode(v3pos_t p, const MapNode &n, s16 fast, bool important)
 {
 	const NodeDefManager *ndef = m_server->ndef();
 	MapNode n_old = m_map->getNode(p);
@@ -1163,7 +1180,7 @@ bool ServerEnvironment::setNode(v3s16 p, const MapNode &n, s16 fast, bool import
 	return true;
 }
 
-bool ServerEnvironment::removeNode(v3s16 p, s16 fast, bool important)
+bool ServerEnvironment::removeNode(v3pos_t p, s16 fast, bool important)
 {
 	const NodeDefManager *ndef = m_server->ndef();
 	MapNode n_old = m_map->getNode(p);
@@ -1419,7 +1436,7 @@ void ServerEnvironment::clearObjects(ClearObjectsMode mode)
 		<< " in " << num_blocks_cleared << " blocks" << std::endl;
 }
 
-void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_ms)
+void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_ms)
 {
 	ScopeProfiler sp2(g_profiler, "ServerEnv::step()", SPT_AVG);
 	const auto start_time = porting::getTimeUs();
@@ -1522,7 +1539,7 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 					continue;
 				if(props->force_load){
 					v3f objectpos = obj->getBasePosition();
-					v3s16 blockpos = getNodeBlockPos(
+					v3bpos_t blockpos = getNodeBlockPos(
 					floatToInt(objectpos, BS));
 					players_blockpos.push_back(blockpos);
 				}
@@ -1641,13 +1658,13 @@ void ServerEnvironment::step(float dtime, float uptime, unsigned int max_cycle_m
 					MOD_REASON_BLOCK_EXPIRED);
 
 			// Run node timers
+
 			if (!block->m_node_timers.m_uptime_last) // not very good place, but minimum modifications
 				block->m_node_timers.m_uptime_last = uptime - dtime;
-
-			std::vector<NodeTimer> elapsed_timers = block->m_node_timers.step(uptime - block->m_node_timers.m_uptime_last);
+			const auto dtime_s = uptime - block->m_node_timers.m_uptime_last;
 			block->m_node_timers.m_uptime_last = uptime;
 
-			block->step(dtime, [&](v3s16 p, MapNode n, f32 d) -> bool {
+			block->step(dtime_s, [&](v3pos_t p, MapNode n, f32 d) -> bool {
 				return m_script->node_on_timer(p, n, d);
 			});
 
@@ -2307,6 +2324,8 @@ void ServerEnvironment::activateObjects(MapBlock *block, u32 dtime_s)
 #endif
 		// This will also add the object to the active static list
 		addActiveObjectRaw(obj, false, dtime_s);
+		if (block->isOrphan())
+			return;
 	}
 
 	// Clear stored list

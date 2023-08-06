@@ -105,20 +105,40 @@ public:
 		return NODECONTAINER_ID_MAPBLOCK;
 	}*/
 
-	Map * getParent()
+	Map *getParent()
 	{
 		return m_parent;
+	}
+
+	// Any server-modding code can "delete" arbitrary blocks (i.e. with
+	// core.delete_area), which makes them orphan. Avoid using orphan blocks for
+	// anything.
+	bool isOrphan() const
+	{
+		return !m_parent;
+	}
+
+	void makeOrphan()
+	{
+		m_parent = nullptr;
 	}
 
 	void reallocate()
 	{
 		auto lock = lock_unique_rec();
-#pragma clang diagnostic push
-//#pragma clang diagnostic ignored "-Wclass-memaccess"
-		if constexpr(!CONTENT_IGNORE)
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#if __GNUC__ > 7
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
+#endif
+		if constexpr(!CONTENT_IGNORE) {
 			memset(data, 0, nodecount * sizeof(MapNode));
-#pragma clang diagnostic pop
-		else
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+
+		} else
 		for (u32 i = 0; i < nodecount; i++)
 			data[i] = ignoreNode;
 
@@ -260,7 +280,7 @@ public:
 	//// Position stuff
 	////
 
-	inline v3s16 getPos() const
+	inline v3bpos_t getPos() const
 	{
 		return m_pos;
 	}
@@ -307,12 +327,12 @@ public:
 
 	MapNode getNodeNoEx(v3pos_t p);
 
-	MapNode getNode(v3s16 p)
+	MapNode getNode(v3pos_t p)
 	{
 		return getNodeNoEx(p);
 	}
 
-	MapNode getNodeTry(v3s16 p)
+	MapNode getNodeTry(v3pos_t p)
 	{
 		auto lock = try_lock_shared_rec();
 		if (!lock->owns_lock())
@@ -335,7 +355,7 @@ public:
 	}
 */
 
-	void setNode(v3s16 p, MapNode& n);
+	void setNode(v3pos_t p, MapNode& n);
 
 	MapNode getNodeNoLock(v3pos_t p)
 	{
@@ -562,7 +582,7 @@ public:
 
 	// Last really changed time (need send to client)
 	std::atomic_uint m_changed_timestamp {0};
-	u32 m_next_analyze_timestamp = 0;;
+	u32 m_next_analyze_timestamp = 0;
 	typedef std::list<abm_trigger_one> abm_triggers_type;
 	std::unique_ptr<abm_triggers_type> abm_triggers;
 	std::mutex abm_triggers_mutex;
@@ -722,7 +742,7 @@ inline bool blockpos_over_max_limit(v3s16 p)
 */
 inline v3s16 getNodeBlockPos(v3s16 p)
 {
-	return v3s16(p.X >> MAP_BLOCKP, p.Y >> MAP_BLOCKP, p.Z >> MAP_BLOCKP);
+	return v3bpos_t(p.X >> MAP_BLOCKP, p.Y >> MAP_BLOCKP, p.Z >> MAP_BLOCKP);
 /*
 	return getContainerPos(p, MAP_BLOCKSIZE);
 */

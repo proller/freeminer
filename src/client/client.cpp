@@ -27,6 +27,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <cmath>
 #include <IFileSystem.h>
 #include "client.h"
+#include "irr_v3d.h"
 #include "network/clientopcodes.h"
 #include "network/connection.h"
 #include "network/networkpacket.h"
@@ -45,6 +46,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "filesys.h"
 #include "mapblock_mesh.h"
 #include "mapblock.h"
+#include "mapsector.h"
 #include "minimap.h"
 #include "modchannels.h"
 #include "content/mods.h"
@@ -163,6 +165,7 @@ Client::Client(
 	}
 
 	m_cache_save_interval = g_settings->getU16("server_map_save_interval");
+	m_mesh_grid = { g_settings->getU16("client_mesh_chunk") };
 }
 
 void Client::migrateModStorage()
@@ -612,10 +615,22 @@ void Client::step(float dtime)
 			if (!r.mesh)
 				continue;
 
-			MinimapMapblock *minimap_mapblock = NULL;
+			std::vector<MinimapMapblock*> minimap_mapblocks;
 			bool do_mapper_update = true;
 
+/*
+			MapSector *sector = m_env.getMap().emergeSector(v2s16(r.p.X, r.p.Z));
+			MapBlock *block = sector->getBlockNoCreateNoEx(r.p.Y);
+			// The block in question is not visible (perhaps it is culled at the server),
+			// create a blank block just to hold the chunk's mesh.
+			// If the block becomes visible later it will replace the blank block.
+			if (!block && r.mesh)
+				block = sector->createBlankBlock(r.p.Y);
+*/
+
 			MapBlock *block = m_env.getMap().getBlockNoCreateNoEx(r.p);
+			if (!block && r.mesh)
+				block = m_env.getMap().createBlankBlock(r.p);
 
 			if (block) {
 				// Delete the old mesh
@@ -624,11 +639,11 @@ void Client::step(float dtime)
 				block->mesh = nullptr;
 */
 				block->setMesh(r.mesh);
+				block->solid_sides = r.solid_sides;
 
 				if (r.mesh) {
-					block->solid_sides = r.solid_sides;
-					minimap_mapblock = r.mesh->moveMinimapMapblock();
-					if (minimap_mapblock == NULL)
+					minimap_mapblocks = r.mesh->moveMinimapMapblocks();
+					if (minimap_mapblocks.empty())
 						do_mapper_update = false;
 
 /*
@@ -653,16 +668,26 @@ void Client::step(float dtime)
 */
 			}
 
-			if (m_minimap && do_mapper_update)
-				m_minimap->addBlock(r.p, minimap_mapblock);
+			if (m_minimap && do_mapper_update) {
+				v3s16 ofs;
+
+				// See also mapblock_mesh.cpp for the code that creates the array of minimap blocks.
+				for (ofs.Z = 0; ofs.Z < m_mesh_grid.cell_size; ofs.Z++)
+				for (ofs.Y = 0; ofs.Y < m_mesh_grid.cell_size; ofs.Y++)
+				for (ofs.X = 0; ofs.X < m_mesh_grid.cell_size; ofs.X++) {
+					size_t i = m_mesh_grid.getOffsetIndex(ofs);
+					if (i < minimap_mapblocks.size() && minimap_mapblocks[i])
+						m_minimap->addBlock(r.p + ofs, minimap_mapblocks[i]);
+				}
+			}
 /*
-			if (r.ack_block_to_server) {
+			for (auto p : r.ack_list) {
 				if (blocks_to_ack.size() == 255) {
 					sendGotBlocks(blocks_to_ack);
 					blocks_to_ack.clear();
 				}
 
-				blocks_to_ack.emplace_back(r.p);
+				blocks_to_ack.emplace_back(p);
 			}
 */		
 			if (porting::getTimeMs() > end_ms)
@@ -1018,7 +1043,7 @@ void Client::ReceiveAll()
 {
 	NetworkPacket pkt;
 	u64 start_ms = porting::getTimeMs();
-	const u64 budget = 20 + (overload ? 30 : 0);
+	const u64 budget = 10 + (overload ? 30 : 0);
 	for(;;) {
 		// Limit time even if there would be huge amounts of data to
 		// process
@@ -1160,7 +1185,7 @@ void Client::Send(u16 channelnum, const msgpack::sbuffer &data, bool reliable) {
 
 void Client::Send(NetworkPacket* pkt)
 {
-#if !NDEBUG
+#if !NDEBUG && BUILD_SERVER
 	tracestream << "Client sending packet " << (int)pkt->getCommand() << " ["
 				<< toServerCommandTable[pkt->getCommand()].name
 				<< "] state=" << (int)toServerCommandTable[pkt->getCommand()].state
@@ -1584,12 +1609,21 @@ void Client::sendHaveMedia(const std::vector<u32> &tokens)
 	Send(&pkt);
 }
 
+void Client::sendUpdateClientInfo(const ClientDynamicInfo& info)
+{
+	NetworkPacket pkt(TOSERVER_UPDATE_CLIENT_INFO, 4*2 + 4 + 4 + 4*2);
+	pkt << (u32)info.render_target_size.X << (u32)info.render_target_size.Y;
+	pkt << info.real_gui_scaling;
+	pkt << info.real_hud_scaling;
+	pkt << (f32)info.max_fs_size.X << (f32)info.max_fs_size.Y;
+
+	Send(&pkt);
+}
 
 void Client::sendDrawControl() { }
 #endif
 
-
-void Client::removeNode(v3s16 p, int fast)
+void Client::removeNode(v3pos_t p, int fast)
 {
 	std::map<v3s16, MapBlock*> modified_blocks;
 
@@ -1648,7 +1682,7 @@ v3s16 Client::CSMClampPos(v3s16 pos)
 	);
 }
 
-void Client::addNode(v3s16 p, MapNode n, bool remove_metadata, int fast)
+void Client::addNode(v3pos_t p, MapNode n, bool remove_metadata, int fast)
 {
 	//TimeTaker timer1("Client::addNode()");
 
@@ -1855,7 +1889,7 @@ void Client::typeChatMessage(const std::wstring &message)
 	sendChatMessage(message);
 }
 
-void Client::addUpdateMeshTask(v3s16 p, bool ack_to_server, bool urgent, int step)
+void Client::addUpdateMeshTask(v3bpos_t p, bool ack_to_server, bool urgent, int step)
 {
 	// Check if the block exists to begin with. In the case when a non-existing
 	// neighbor is automatically added, it may not. In that case we don't want
@@ -1931,7 +1965,7 @@ void Client::addUpdateMeshTaskForNode(v3s16 nodepos, bool ack_to_server, bool ur
 		addUpdateMeshTask(blockpos + v3s16(0, 0, -1), false, urgent);
 }
 
-void Client::updateMeshTimestampWithEdge(v3pos_t blockpos) {
+void Client::updateMeshTimestampWithEdge(v3bpos_t blockpos) {
 	for (const auto & dir : g_7dirs) {
 		auto *block = m_env.getMap().getBlockNoCreateNoEx(blockpos + dir);
 		if(!block)

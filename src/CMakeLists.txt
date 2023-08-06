@@ -16,7 +16,7 @@ if(CCACHE_FOUND)
 endif(CCACHE_FOUND)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 set(HAVE_SHARED_MUTEX 1)
 
@@ -720,6 +720,7 @@ set(FMcommon_SRCS ${FMcommon_SRCS}
     fm_abm.cpp
     fm_clientiface.cpp
     content_abm.cpp
+    content_abm_grow_tree.cpp
     fm_serverenvironment.cpp
 )
 #	FMColoredString.cpp
