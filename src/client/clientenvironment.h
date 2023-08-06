@@ -22,6 +22,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "../environment.h"
 #include <ISceneManager.h>
 #include "clientobject.h"
+#include "irrlichttypes.h"
 #include "util/numeric.h"
 #include "activeobjectmgr.h"
 
@@ -126,7 +127,7 @@ public:
 	*/
 
 	// Get all nearby objects
-	void getActiveObjects(const v3f &origin, f32 max_d,
+	void getActiveObjects(const v3opos_t &origin, opos_t max_d,
 		std::vector<DistanceSortedActiveObject> &dest)
 	{
 		return m_ao_manager.getActiveObjects(origin, max_d, dest);
@@ -138,16 +139,16 @@ public:
 	ClientEnvEvent getClientEnvEvent();
 
 	virtual void getSelectedActiveObjects(
-		const core::line3d<f32> &shootline_on_map,
+		const core::line3d<opos_t> &shootline_on_map,
 		std::vector<PointedThing> &objects
 	);
 
 	const std::list<std::string> &getPlayerNames() { return m_player_names; }
 	void addPlayerName(const std::string &name) { if (std::find(m_player_names.begin(), m_player_names.end(), name) == m_player_names.end() ) m_player_names.push_back(name); }
 	void removePlayerName(const std::string &name) { m_player_names.remove(name); }
-	void updateCameraOffset(const v3s16 &camera_offset)
+	void updateCameraOffset(const v3pos_t &camera_offset)
 	{ m_camera_offset = camera_offset; }
-	v3s16 getCameraOffset() const { return m_camera_offset; }
+	v3pos_t getCameraOffset() const { return m_camera_offset; }
 
 	void updateFrameTime(bool is_paused);
 	u64 getFrameTime() const { return m_frame_time; }
@@ -164,7 +165,7 @@ private:
 	std::queue<ClientEnvEvent> m_client_event_queue;
 	IntervalLimiter m_active_object_light_update_interval;
 	std::list<std::string> m_player_names;
-	v3s16 m_camera_offset;
+	v3pos_t m_camera_offset;
 	u64 m_frame_time = 0;
 	u64 m_frame_dtime = 0;
 	u64 m_frame_time_pause_accumulator = 0;

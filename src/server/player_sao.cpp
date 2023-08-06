@@ -20,9 +20,11 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "irr_v3d.h"
 #include "log_types.h"
 
 #include "player_sao.h"
+#include "irrlichttypes.h"
 #include "nodedef.h"
 #include "remoteplayer.h"
 #include "scripting_server.h"
@@ -31,7 +33,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 PlayerSAO::PlayerSAO(ServerEnvironment *env_, RemotePlayer *player_, session_t peer_id_,
 		bool is_singleplayer):
-	UnitSAO(env_, v3f(0,0,0)),
+	UnitSAO(env_, v3opos_t(0,0,0)),
 	m_player(player_),
 	m_peer_id(peer_id_),
 	m_is_singleplayer(is_singleplayer)
@@ -139,7 +141,7 @@ std::string PlayerSAO::getClientInitializationData(u16 protocol_version)
 	os << serializeString16(m_player->getName()); // name
 	writeU8(os, 1); // is_player
 	writeS16(os, getId()); // id
-	writeV3F32(os, getBasePosition());
+	writeV3O(os, getBasePosition(), protocol_version);
 	writeV3F32(os, getRotation());
 	writeU16(os, getHP());
 
@@ -186,7 +188,7 @@ void PlayerSAO::step(float dtime, bool send_recommended)
 
 	if (!isImmortal() && m_drowning_interval.step(dtime, 2.0f)) {
 		// Get nose/mouth position, approximate with eye position
-		v3s16 p = floatToInt(getEyePosition(), BS);
+		v3pos_t p = floatToInt(getEyePosition(), BS);
 		MapNode n = m_env->getMap().getNode(p);
 		const ContentFeatures &c = m_env->getGameDef()->ndef()->get(n);
 		// If node generates drown
@@ -204,7 +206,7 @@ void PlayerSAO::step(float dtime, bool send_recommended)
 
 	if (m_breathing_interval.step(dtime, 0.5f) && !isImmortal()) {
 		// Get nose/mouth position, approximate with eye position
-		v3s16 p = floatToInt(getEyePosition(), BS);
+		v3pos_t p = floatToInt(getEyePosition(), BS);
 		MapNode n = m_env->getMap().getNode(p);
 		const ContentFeatures &c = m_env->getGameDef()->ndef()->get(n);
 		// If player is alive & not drowning & not in ignore & not immortal, breathe
@@ -222,8 +224,8 @@ void PlayerSAO::step(float dtime, bool send_recommended)
 		// Sequence of damage points, starting 0.1 above feet and progressing
 		// upwards in 1 node intervals, stopping below top damage point.
 		for (float dam_height = 0.1f; dam_height < dam_top; dam_height++) {
-			v3s16 p = floatToInt(getBasePosition() +
-				v3f(0.0f, dam_height * BS, 0.0f), BS);
+			v3pos_t p = floatToInt(getBasePosition() +
+				v3opos_t(0.0f, dam_height * BS, 0.0f), BS);
 			MapNode n = m_env->getMap().getNode(p);
 			const ContentFeatures &c = m_env->getGameDef()->ndef()->get(n);
 			if (c.damage_per_second > damage_per_second) {
@@ -233,8 +235,8 @@ void PlayerSAO::step(float dtime, bool send_recommended)
 		}
 
 		// Top damage point
-		v3s16 ptop = floatToInt(getBasePosition() +
-			v3f(0.0f, dam_top * BS, 0.0f), BS);
+		v3pos_t ptop = floatToInt(getBasePosition() +
+			v3opos_t(0.0f, dam_top * BS, 0.0f), BS);
 		MapNode ntop = m_env->getMap().getNode(ptop);
 		const ContentFeatures &c = m_env->getGameDef()->ndef()->get(ntop);
 		if (c.damage_per_second > damage_per_second) {
@@ -300,7 +302,7 @@ void PlayerSAO::step(float dtime, bool send_recommended)
 	// If the object gets detached this comes into effect automatically from
 	// the last known origin.
 	if (auto *parent = getParent()) {
-		v3f pos = parent->getBasePosition();
+		auto pos = parent->getBasePosition();
 		m_last_good_position = pos;
 		setBasePosition(pos);
 
@@ -314,14 +316,14 @@ void PlayerSAO::step(float dtime, bool send_recommended)
 	if (m_position_not_sent) {
 		m_position_not_sent = false;
 		float update_interval = m_env->getSendRecommendedInterval();
-		v3f pos, vel, acc;
+		v3opos_t pos;
+		v3f vel, acc;
 		// When attached, the position is only sent to clients where the
 		// parent isn't known
 		if (isAttached())
 			pos = m_last_good_position;
 		else
-        {
-			
+        {	
 			pos = getBasePosition();
 
 			vel = m_player->getSpeed();
@@ -376,7 +378,7 @@ std::string PlayerSAO::generateUpdatePhysicsOverrideCommand() const
 	return os.str();
 }
 
-void PlayerSAO::setBasePosition(v3f position)
+void PlayerSAO::setBasePosition(v3opos_t position)
 {
 	if (m_player && position != getBasePosition())
 		m_player->setDirty(true);
@@ -390,13 +392,13 @@ void PlayerSAO::setBasePosition(v3f position)
 	}
 }
 
-void PlayerSAO::setPos(const v3f &pos)
+void PlayerSAO::setPos(const v3opos_t &pos)
 {
 	if(isAttached())
 		return;
 
 	// Send mapblock of target location
-	v3s16 blockpos = v3s16(pos.X / MAP_BLOCKSIZE, pos.Y / MAP_BLOCKSIZE, pos.Z / MAP_BLOCKSIZE);
+	v3bpos_t blockpos = v3bpos_t(pos.X / MAP_BLOCKSIZE, pos.Y / MAP_BLOCKSIZE, pos.Z / MAP_BLOCKSIZE);
 	m_env->getGameDef()->SendBlock(m_peer_id, blockpos);
 
 	setBasePosition(pos);
@@ -410,7 +412,7 @@ void PlayerSAO::setPos(const v3f &pos)
 	m_env->getGameDef()->SendMovePlayer(m_peer_id);
 }
 
-void PlayerSAO::moveTo(v3f pos, bool continuous)
+void PlayerSAO::moveTo(v3opos_t pos, bool continuous)
 {
 	if(isAttached())
 		return;
@@ -675,7 +677,7 @@ bool PlayerSAO::checkMovementCheat()
 		too, and much more lightweight.
 	*/
 
-	float override_max_H, override_max_V;
+	opos_t override_max_H, override_max_V;
 	if (m_max_speed_override_time > 0.0f) {
 		override_max_H = MYMAX(fabs(m_max_speed_override.X), fabs(m_max_speed_override.Z));
 		override_max_V = fabs(m_max_speed_override.Y);
@@ -683,8 +685,8 @@ bool PlayerSAO::checkMovementCheat()
 		override_max_H = override_max_V = 0.0f;
 	}
 
-	float player_max_walk = 0; // horizontal movement
-	float player_max_jump = 0; // vertical upwards movement
+	opos_t player_max_walk = 0; // horizontal movement
+	opos_t player_max_jump = 0; // vertical upwards movement
 
 	if (m_privs.count("fast") != 0)
 		player_max_walk = m_player->movement_speed_fast; // Fast speed
@@ -705,17 +707,17 @@ bool PlayerSAO::checkMovementCheat()
 	if (player_max_jump < 0.0001f)
 		player_max_jump = 0.0001f;
 
-	v3f diff = (getBasePosition() - m_last_good_position);
-	float d_vert = diff.Y;
+	v3opos_t diff = (getBasePosition() - m_last_good_position);
+	auto d_vert = diff.Y;
 	diff.Y = 0;
-	float d_horiz = diff.getLength();
-	float required_time = d_horiz / player_max_walk;
+	auto d_horiz = diff.getLength();
+	auto required_time = d_horiz / player_max_walk;
 
 	// FIXME: Checking downwards movement is not easily possible currently,
 	//        the server could calculate speed differences to examine the gravity
 	if (d_vert > 0) {
 		// In certain cases (water, ladders) walking speed is applied vertically
-		float s = MYMAX(player_max_jump, player_max_walk);
+		auto s = MYMAX(player_max_jump, player_max_walk);
 		required_time = MYMAX(required_time, d_vert / s);
 	}
 
@@ -736,11 +738,11 @@ bool PlayerSAO::checkMovementCheat()
 	return cheated;
 }
 
-bool PlayerSAO::getCollisionBox(aabb3f *toset) const
+bool PlayerSAO::getCollisionBox(aabb3o *toset) const
 {
 	//update collision box
-	toset->MinEdge = m_prop.collisionbox.MinEdge * BS;
-	toset->MaxEdge = m_prop.collisionbox.MaxEdge * BS;
+	toset->MinEdge = v3fToOpos(m_prop.collisionbox.MinEdge * BS);
+	toset->MaxEdge = v3fToOpos(m_prop.collisionbox.MaxEdge * BS);
 
 	const auto base_position = getBasePosition();
 	toset->MinEdge += base_position;

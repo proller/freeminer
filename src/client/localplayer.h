@@ -23,6 +23,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include "irr_v3d.h"
+#include "irrlichttypes.h"
 #include "player.h"
 #include "environment.h"
 #include "constants.h"
@@ -70,24 +71,24 @@ public:
 
 	f32 gravity = 0; // total downwards acceleration
 
-	void move(f32 dtime, Environment *env, f32 pos_max_d);
-	void move(f32 dtime, Environment *env, f32 pos_max_d,
+	void move(f32 dtime, Environment *env, opos_t pos_max_d);
+	void move(f32 dtime, Environment *env, opos_t pos_max_d,
 			std::vector<CollisionInfo> *collision_info);
 
 	// fm:
 	bool canPlaceNode(const v3pos_t& p, const MapNode& node);
 
 	// Temporary option for old move code
-	void old_move(f32 dtime, Environment *env, f32 pos_max_d,
+	void old_move(f32 dtime, Environment *env, opos_t pos_max_d,
 			std::vector<CollisionInfo> *collision_info);
 
 	void applyControl(float dtime, Environment *env);
 
-	v3s16 getStandingNodePos();
-	v3s16 getFootstepNodePos();
+	v3pos_t getStandingNodePos();
+	v3pos_t getFootstepNodePos();
 
 	// Used to check if anything changed and prevent sending packets if not
-	v3f last_position;
+	v3opos_t last_position;
 	v3f last_speed;
 	float last_pitch = 0.0f;
 	float last_yaw = 0.0f;
@@ -133,7 +134,7 @@ public:
 	u16 getBreath() { auto lock = lock_shared(); return m_breath; }
 	void setBreath(u16 breath) { auto lock = lock_unique_rec(); m_breath = breath; }
 
-	v3s16 getLightPosition() const;
+	v3pos_t getLightPosition() const;
 
 	void setYaw(f32 yaw) { auto lock = lock_unique_rec(); m_yaw = yaw; }
 	f32 getYaw() const { auto lock = lock_shared(); return m_yaw; }
@@ -141,18 +142,18 @@ public:
 	void setPitch(f32 pitch) { auto lock = lock_unique_rec(); m_pitch = pitch; }
 	f32 getPitch() const { auto lock = lock_shared(); return m_pitch; }
 
-	inline void setPosition(const v3f &position)
+	inline void setPosition(const v3opos_t &position)
 	{
 		auto lock = lock_unique_rec();
 		m_position = position;
 		m_sneak_node_exists = false;
 	}
 
-	v3f getPosition() const { auto lock = lock_shared(); return m_position; }
+	v3opos_t getPosition() const { auto lock = lock_shared(); return m_position; }
 
 	// Non-transformed eye offset getters
 	// For accurate positions, use the Camera functions
-	v3f getEyePosition() const { auto lock = lock_shared(); return m_position + getEyeOffset(); }
+	v3opos_t getEyePosition() const { auto lock = lock_shared(); return m_position + v3fToOpos(getEyeOffset()); }
 	v3f getEyeOffset() const;
 	void setEyeHeight(float eye_height) { m_eye_height = eye_height; }
 
@@ -177,17 +178,17 @@ public:
 private:
 	void accelerate(const v3f &target_speed, const f32 max_increase_H,
 		const f32 max_increase_V, const bool use_pitch);
-	bool updateSneakNode(Map *map, const v3f &position, const v3f &sneak_max);
+	bool updateSneakNode(Map *map, const v3opos_t &position, const v3opos_t &sneak_max);
 	float getSlipFactor(Environment *env, const v3f &speedH);
 	void handleAutojump(f32 dtime, Environment *env,
 		const collisionMoveResult &result,
-		const v3f &position_before_move, const v3f &speed_before_move,
-		f32 pos_max_d);
+		const v3opos_t &position_before_move, const v3f &speed_before_move,
+		opos_t pos_max_d);
 
-	v3f m_position;
-	v3s16 m_standing_node;
+	v3opos_t m_position;
+	v3pos_t m_standing_node;
 
-	v3s16 m_sneak_node = v3s16(32767, 32767, 32767);
+	v3pos_t m_sneak_node = v3pos_t(32767, 32767, 32767);
 	// Stores the top bounding box of m_sneak_node
 	aabb3f m_sneak_node_bb_top = aabb3f(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 	// Whether the player is allowed to sneak
@@ -200,12 +201,12 @@ private:
 
 	// ***** Variables for temporary option of the old move code *****
 	// Stores the max player uplift by m_sneak_node
-	f32 m_sneak_node_bb_ymax = 0.0f;
+	opos_t m_sneak_node_bb_ymax = 0.0f;
 	// Whether recalculation of m_sneak_node and its top bbox is needed
 	bool m_need_to_get_new_sneak_node = true;
 	// Node below player, used to determine whether it has been removed,
 	// and its old type
-	v3s16 m_old_node_below = v3s16(32767, 32767, 32767);
+	v3pos_t m_old_node_below = v3pos_t(32767, 32767, 32767);
 	std::string m_old_node_below_type = "air";
 	// ***** End of variables for temporary option *****
 

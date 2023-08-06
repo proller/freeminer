@@ -19,8 +19,11 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <cmath>
 #include <log.h>
+#include "irr_v3d.h"
+#include "irrlichttypes.h"
 #include "profiler.h"
 #include "activeobjectmgr.h"
+#include "util/numeric.h"
 
 namespace client
 {
@@ -93,14 +96,14 @@ void ActiveObjectMgr::removeObject(u16 id)
 }
 
 // clang-format on
-void ActiveObjectMgr::getActiveObjects(const v3f &origin, f32 max_d,
+void ActiveObjectMgr::getActiveObjects(const v3opos_t &origin, opos_t max_d,
 		std::vector<DistanceSortedActiveObject> &dest)
 {
-	f32 max_d2 = max_d * max_d;
+	opos_t max_d2 = max_d * max_d;
 	for (auto &ao_it : m_active_objects) {
 		const auto obj = ao_it.second;
 
-		f32 d2 = (obj->getPosition() - origin).getLengthSQ();
+		opos_t d2 = (obj->getPosition() - origin).getLengthSQ();
 
 		if (d2 > max_d2)
 			continue;
@@ -109,7 +112,7 @@ void ActiveObjectMgr::getActiveObjects(const v3f &origin, f32 max_d,
 	}
 }
 
-void ActiveObjectMgr::getActiveSelectableObjects(const core::line3d<f32> &shootline,
+void ActiveObjectMgr::getActiveSelectableObjects(const core::line3d<opos_t> &shootline,
 		std::vector<DistanceSortedActiveObject> &dest)
 {
 	// Imagine a not-axis-aligned cuboid oriented into the direction of the shootline,
@@ -118,11 +121,11 @@ void ActiveObjectMgr::getActiveSelectableObjects(const core::line3d<f32> &shootl
 	// the selection box center is inside this cuboid.
 
 	f32 max_d = shootline.getLength();
-	v3f dir = shootline.getVector().normalize();
+	v3opos_t dir = shootline.getVector().normalize();
 	// arbitrary linearly independent vector and orthogonal dirs
-	v3f li2dir = dir + (std::fabs(dir.X) < 0.5f ? v3f(1,0,0) : v3f(0,1,0));
-	v3f dir_ortho1 = dir.crossProduct(li2dir).normalize();
-	v3f dir_ortho2 = dir.crossProduct(dir_ortho1);
+	v3opos_t li2dir = dir + (std::fabs(dir.X) < 0.5f ? v3opos_t(1,0,0) : v3opos_t(0,1,0));
+	v3opos_t dir_ortho1 = dir.crossProduct(li2dir).normalize();
+	v3opos_t dir_ortho2 = dir.crossProduct(dir_ortho1);
 
 	for (auto &ao_it : m_active_objects) {
 		auto obj = ao_it.second;
@@ -134,7 +137,7 @@ void ActiveObjectMgr::getActiveSelectableObjects(const core::line3d<f32> &shootl
 		// possible optimization: get rid of the sqrt here
 		f32 selection_box_radius = selection_box.getRadius();
 
-		v3f pos_diff = obj->getPosition() + selection_box.getCenter() - shootline.start;
+		v3opos_t pos_diff = obj->getPosition() + v3fToOpos(selection_box.getCenter()) - shootline.start;
 
 		f32 d = dir.dotProduct(pos_diff);
 

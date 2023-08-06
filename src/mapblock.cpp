@@ -23,6 +23,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mapblock.h"
 
 #include <sstream>
+#include "irr_v3d.h"
+#include "irrlichttypes.h"
 #include "map.h"
 #include "light.h"
 #include "nodedef.h"
@@ -72,11 +74,11 @@ static const char *modified_reason_strings[] = {
 	MapBlock
 */
 
-MapBlock::MapBlock(Map *parent, v3s16 pos, IGameDef *gamedef):
+MapBlock::MapBlock(Map *parent, v3bpos_t pos, IGameDef *gamedef):
 		m_uptime_timer_last(0),
 		m_parent(parent),
 		m_pos(pos),
-		m_pos_relative(pos * MAP_BLOCKSIZE),
+		m_pos_relative(getBlockPosRelative(pos)),
 		m_gamedef(gamedef)
 {
 	reallocate();
@@ -150,13 +152,13 @@ bool MapBlock::saveStaticObject(u16 id, const StaticObject &obj, u32 reason)
 }
 
 // This method is only for Server, don't call it on client
-void MapBlock::step(float dtime, const std::function<bool(v3s16, MapNode, f32)> &on_timer_cb)
+void MapBlock::step(float dtime, const std::function<bool(v3pos_t, MapNode, f32)> &on_timer_cb)
 {
 	// Run script callbacks for elapsed node_timers
 	std::vector<NodeTimer> elapsed_timers = m_node_timers.step(dtime);
 	if (!elapsed_timers.empty()) {
 		MapNode n;
-		v3s16 p;
+		v3pos_t p;
 		for (const NodeTimer &elapsed_timer : elapsed_timers) {
 			n = getNodeNoEx(elapsed_timer.position);
 			p = elapsed_timer.position + getPosRelative();
@@ -166,7 +168,7 @@ void MapBlock::step(float dtime, const std::function<bool(v3s16, MapNode, f32)> 
 	}
 }
 
-bool MapBlock::isValidPositionParent(v3s16 p)
+bool MapBlock::isValidPositionParent(v3pos_t p)
 {
 	if (isValidPosition(p)) {
 		return true;
@@ -175,7 +177,7 @@ bool MapBlock::isValidPositionParent(v3s16 p)
 	return m_parent->isValidPosition(getPosRelative() + p);
 }
 
-MapNode MapBlock::getNodeParent(v3s16 p, bool *is_valid_position)
+MapNode MapBlock::getNodeParent(v3pos_t p, bool *is_valid_position)
 {
 	if (!isValidPosition(p))
 		return m_parent->getNode(getPosRelative() + p, is_valid_position);
@@ -213,22 +215,22 @@ std::string MapBlock::getModifiedReasonString()
 void MapBlock::copyTo(VoxelManipulator &dst)
 {
 	auto lock = lock_shared_rec();
-	v3s16 data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
-	VoxelArea data_area(v3s16(0,0,0), data_size - v3s16(1,1,1));
+	v3pos_t data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
+	VoxelArea data_area(v3pos_t(0,0,0), data_size - v3pos_t(1,1,1));
 
 	// Copy from data to VoxelManipulator
-	dst.copyFrom(data, data_area, v3s16(0,0,0),
+	dst.copyFrom(data, data_area, v3pos_t(0,0,0),
 			getPosRelative(), data_size);
 }
 
 void MapBlock::copyFrom(VoxelManipulator &dst)
 {
 	auto lock = lock_unique_rec();
-	v3s16 data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
-	VoxelArea data_area(v3s16(0,0,0), data_size - v3s16(1,1,1));
+	v3pos_t data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
+	VoxelArea data_area(v3pos_t(0,0,0), data_size - v3pos_t(1,1,1));
 
 	// Copy from VoxelManipulator to data
-	dst.copyTo(data, data_area, v3s16(0,0,0),
+	dst.copyTo(data, data_area, v3pos_t(0,0,0),
 			getPosRelative(), data_size);
 }
 
@@ -1126,7 +1128,7 @@ std::string analyze_block(MapBlock *block)
 	auto lock = block->lock_shared_rec();
 	std::ostringstream desc;
 
-	v3s16 p = block->getPos();
+	v3bpos_t p = block->getPos();
 	char spos[25];
 	porting::mt_snprintf(spos, sizeof(spos), "(%2d,%2d,%2d), ", p.X, p.Y, p.Z);
 	desc<<spos;
@@ -1162,11 +1164,11 @@ std::string analyze_block(MapBlock *block)
 	bool some_ignore = false;
 	bool full_air = true;
 	bool some_air = false;
-	for(s16 z0=0; z0<MAP_BLOCKSIZE; z0++)
-	for(s16 y0=0; y0<MAP_BLOCKSIZE; y0++)
-	for(s16 x0=0; x0<MAP_BLOCKSIZE; x0++)
+	for(pos_t z0=0; z0<MAP_BLOCKSIZE; z0++)
+	for(pos_t y0=0; y0<MAP_BLOCKSIZE; y0++)
+	for(pos_t x0=0; x0<MAP_BLOCKSIZE; x0++)
 	{
-		v3s16 p(x0,y0,z0);
+		v3pos_t p(x0,y0,z0);
 		MapNode n = block->getNodeNoEx(p);
 		content_t c = n.getContent();
 		if(c == CONTENT_IGNORE)

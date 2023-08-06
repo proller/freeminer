@@ -24,6 +24,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "debug.h"
 #include "client.h"
 #include "config.h"
+#include "irr_v3d.h"
 #include "map.h"
 #include "clientmap.h"     // MapDrawControl
 #include "player.h"
@@ -330,7 +331,7 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 	// Get player position
 	// Smooth the movement when walking up stairs
 	v3f old_player_position = m_playernode->getPosition();
-	v3f player_position = player->getPosition();
+	auto player_position = player->getPosition();
 
 	f32 yaw = player->getYaw();
 	f32 pitch = player->getPitch();
@@ -358,7 +359,7 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 	}
 
 	// Set player node transformation
-	m_playernode->setPosition(player_position);
+	m_playernode->setPosition(oposToV3f(player_position));
 	m_playernode->setRotation(v3f(0, -1 * yaw, 0));
 	m_playernode->updateAbsolutePosition();
 
@@ -425,14 +426,16 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 	}
 
 	// Compute absolute camera position and target
-	m_headnode->getAbsoluteTransformation().transformVect(m_camera_position, rel_cam_pos);
+	auto tmp = oposToV3f(m_camera_position); // TODO use offset?
+	m_headnode->getAbsoluteTransformation().transformVect(tmp, rel_cam_pos);
+	m_camera_position = v3fToOpos(tmp);
 	m_headnode->getAbsoluteTransformation().rotateVect(m_camera_direction, rel_cam_target - rel_cam_pos);
 
 	v3f abs_cam_up;
 	m_headnode->getAbsoluteTransformation().rotateVect(abs_cam_up, rel_cam_up);
 
 	// Separate camera position for calculation
-	v3f my_cp = m_camera_position;
+	v3opos_t my_cp = m_camera_position;
 
 	// Reposition the camera for third person view
 	if (m_camera_mode > CAMERA_MODE_FIRST)
@@ -472,18 +475,18 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 
 	// Update offset if too far away from the center of the map
 	m_camera_offset.X += CAMERA_OFFSET_STEP*
-			(((s16)(my_cp.X/BS) - m_camera_offset.X)/CAMERA_OFFSET_STEP);
+			(((pos_t)(my_cp.X/BS) - m_camera_offset.X)/CAMERA_OFFSET_STEP);
 	m_camera_offset.Y += CAMERA_OFFSET_STEP*
-			(((s16)(my_cp.Y/BS) - m_camera_offset.Y)/CAMERA_OFFSET_STEP);
+			(((pos_t)(my_cp.Y/BS) - m_camera_offset.Y)/CAMERA_OFFSET_STEP);
 	m_camera_offset.Z += CAMERA_OFFSET_STEP*
-			(((s16)(my_cp.Z/BS) - m_camera_offset.Z)/CAMERA_OFFSET_STEP);
+			(((pos_t)(my_cp.Z/BS) - m_camera_offset.Z)/CAMERA_OFFSET_STEP);
 
 	// Set camera node transformation
-	m_cameranode->setPosition(my_cp-intToFloat(m_camera_offset, BS));
+	m_cameranode->setPosition(oposToV3f(my_cp-posToOpos(m_camera_offset, BS)));
 	m_cameranode->updateAbsolutePosition();
 	m_cameranode->setUpVector(abs_cam_up);
 	// *100.0 helps in large map coordinates
-	m_cameranode->setTarget(my_cp-intToFloat(m_camera_offset, BS) + 100 * m_camera_direction);
+	m_cameranode->setTarget(oposToV3f(my_cp-posToOpos(m_camera_offset, BS) + v3fToOpos(100 * m_camera_direction)));
 
 	// update the camera position in third-person mode to render blocks behind player
 	// and correctly apply liquid post FX.
@@ -637,7 +640,7 @@ void Camera::updateViewingRange()
 
 	m_draw_control.wanted_range = std::fmin(adjustDist(viewing_range, getFovMax()), 4000);
 	if (m_draw_control.range_all) {
-		m_cameranode->setFarValue(MAX_MAP_GENERATION_LIMIT * 2 * BS);
+		m_cameranode->setFarValue(MAX_MAP_GENERATION_LIMIT * BS);
 		return;
 	}
 
@@ -652,7 +655,7 @@ void Camera::updateViewingRange()
 	f32 viewing_range_max = g_settings->getFloat("viewing_range_max");
 	viewing_range_max = MYMAX(viewing_range_min, viewing_range_max);
 	// vrange+position must be smaller than 32767
-	viewing_range_max = MYMIN(viewing_range_max, 32760 - MYMAX(MYMAX(std::abs(m_camera_position.X/BS), std::abs(m_camera_position.Y/BS)), std::abs(m_camera_position.Z/BS)));
+	//viewing_range_max = MYMIN(viewing_range_max, 32760 - MYMAX(MYMAX(std::abs(m_camera_position.X/BS), std::abs(m_camera_position.Y/BS)), std::abs(m_camera_position.Z/BS)));
 
 	f32 wanted_fps = m_cache_wanted_fps;
 	wanted_fps = MYMAX(wanted_fps, 1.0);

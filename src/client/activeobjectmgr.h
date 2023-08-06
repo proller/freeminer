@@ -23,6 +23,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <vector>
 #include "../activeobjectmgr.h"
 #include "clientobject.h"
+#include "irrlichttypes.h"
 
 namespace client
 {
@@ -35,14 +36,14 @@ public:
 	bool registerObject(ClientActiveObject *obj) override;
 	void removeObject(u16 id) override;
 
-	void getActiveObjects(const v3f &origin, f32 max_d,
+	void getActiveObjects(const v3opos_t &origin, opos_t max_d,
 			std::vector<DistanceSortedActiveObject> &dest);
 	// Similar to above, but takes selection box sizes, and line direction into
 	// account.
 	// Objects without selectionbox are not returned.
 	// Returned distances are in direction of shootline.
 	// Distance check is coarse.
-	void getActiveSelectableObjects(const core::line3d<f32> &shootline,
+	void getActiveSelectableObjects(const core::line3d<opos_t> &shootline,
 			std::vector<DistanceSortedActiveObject> &dest);
 };
 } // namespace client

@@ -21,6 +21,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "lua_api/l_noise.h"
+#include "irr_v3d.h"
 #include "lua_api/l_internal.h"
 #include "common/c_converter.h"
 #include "common/c_content.h"
@@ -55,7 +56,7 @@ int LuaPerlinNoise::l_get_3d(lua_State *L)
 {
 	NO_MAP_LOCK_REQUIRED;
 	LuaPerlinNoise *o = checkObject<LuaPerlinNoise>(L, 1);
-	v3f p = check_v3f(L, 2);
+	v3opos_t p = check_v3o(L, 2);
 	lua_Number val = NoisePerlin3D(&o->np, p.X, p.Y, p.Z, 0);
 	lua_pushnumber(L, val);
 	return 1;
@@ -139,7 +140,7 @@ luaL_Reg LuaPerlinNoise::methods[] = {
   LuaPerlinNoiseMap
 */
 
-LuaPerlinNoiseMap::LuaPerlinNoiseMap(const NoiseParams *np, s32 seed, v3s16 size)
+LuaPerlinNoiseMap::LuaPerlinNoiseMap(const NoiseParams *np, s32 seed, v3pos_t size)
 {
 	try {
 		noise = new Noise(np, seed, size.X, size.Y, size.Z);
@@ -211,7 +212,7 @@ int LuaPerlinNoiseMap::l_get_3d_map(lua_State *L)
 	size_t i = 0;
 
 	LuaPerlinNoiseMap *o = checkObject<LuaPerlinNoiseMap>(L, 1);
-	v3f p = check_v3f(L, 2);
+	v3opos_t p = check_v3o(L, 2);
 
 	if (!o->is3D())
 		return 0;
@@ -241,7 +242,7 @@ int LuaPerlinNoiseMap::l_get_3d_map_flat(lua_State *L)
 	NO_MAP_LOCK_REQUIRED;
 
 	LuaPerlinNoiseMap *o = checkObject<LuaPerlinNoiseMap>(L, 1);
-	v3f p                = check_v3f(L, 2);
+	v3opos_t p           = check_v3o(L, 2);
 	bool use_buffer      = lua_istable(L, 3);
 
 	if (!o->is3D())
@@ -300,8 +301,8 @@ int LuaPerlinNoiseMap::l_get_map_slice(lua_State *L)
 	NO_MAP_LOCK_REQUIRED;
 
 	LuaPerlinNoiseMap *o = checkObject<LuaPerlinNoiseMap>(L, 1);
-	v3s16 slice_offset   = read_v3s16(L, 2);
-	v3s16 slice_size     = read_v3s16(L, 3);
+	v3pos_t slice_offset = read_v3pos(L, 2);
+	v3pos_t slice_size   = read_v3pos(L, 3);
 	bool use_buffer      = lua_istable(L, 4);
 
 	Noise *n = o->noise;
@@ -325,7 +326,7 @@ int LuaPerlinNoiseMap::create_object(lua_State *L)
 	NoiseParams np;
 	if (!read_noiseparams(L, 1, &np))
 		return 0;
-	v3s16 size = read_v3s16(L, 2);
+	v3pos_t size = read_v3pos(L, 2);
 
 	LuaPerlinNoiseMap *o = new LuaPerlinNoiseMap(&np, 0, size);
 	*(void **)(lua_newuserdata(L, sizeof(void *))) = o;
@@ -346,7 +347,7 @@ int LuaPerlinNoiseMap::gc_object(lua_State *L)
 struct NoiseMapParams {
 	NoiseParams np;
 	s32 seed;
-	v3s16 size;
+	v3pos_t size;
 };
 
 void *LuaPerlinNoiseMap::packIn(lua_State *L, int idx)
@@ -355,7 +356,7 @@ void *LuaPerlinNoiseMap::packIn(lua_State *L, int idx)
 	NoiseMapParams *ret = new NoiseMapParams();
 	ret->np = o->noise->np;
 	ret->seed = o->noise->seed;
-	ret->size = v3s16(o->noise->sx, o->noise->sy, o->noise->sz);
+	ret->size = v3pos_t(o->noise->sx, o->noise->sy, o->noise->sz);
 	return ret;
 }
 

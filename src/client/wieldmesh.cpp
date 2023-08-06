@@ -18,6 +18,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 */
 
 #include "wieldmesh.h"
+#include "irr_v3d.h"
 #include "settings.h"
 #include "shader.h"
 #include "inventory.h"
@@ -321,7 +322,7 @@ static scene::SMesh *createSpecialNodeMesh(Client *client, MapNode n,
 	std::vector<ItemPartColor> *colors, const ContentFeatures &f)
 {
 	MeshMakeData mesh_make_data(client, false);
-	MeshCollector collector(v3f(0.0f * BS), v3f());
+	MeshCollector collector(v3opos_t(0.0f * BS), v3f());
 	mesh_make_data.setSmoothLighting(false);
 	MapblockMeshGenerator gen(&mesh_make_data, &collector,
 		client->getSceneManager()->getMeshManipulator());

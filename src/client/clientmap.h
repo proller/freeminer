@@ -68,7 +68,7 @@ struct MapDrawControl
 struct MeshBufList
 {
 	video::SMaterial m;
-	std::vector<std::pair<v3s16,scene::IMeshBuffer*>> bufs;
+	std::vector<std::pair<v3bpos_t,scene::IMeshBuffer*>> bufs;
 };
 
 struct MeshBufListList
@@ -81,7 +81,7 @@ struct MeshBufListList
 	std::vector<MeshBufList> lists[MAX_TILE_LAYERS];
 
 	void clear();
-	void add(scene::IMeshBuffer *buf, v3s16 position, u8 layer);
+	void add(scene::IMeshBuffer *buf, v3bpos_t position, u8 layer);
 };
 
 class Client;
@@ -116,12 +116,12 @@ public:
 		ISceneNode::drop(); // calls destructor
 	}
 
-	void updateCamera(v3f pos, v3f dir, f32 fov, v3s16 offset);
+	void updateCamera(v3opos_t pos, v3f dir, f32 fov, v3pos_t offset);
 
 	/*
 		Forcefully get a sector from somewhere
 	*/
-	//MapSector * emergeSector(v2s16 p) override;
+	//MapSector * emergeSector(v2bpos_t p) override;
 
 	/*
 		ISceneNode methods
@@ -143,13 +143,13 @@ public:
 		return m_box;
 	}
 
-	void getBlocksInViewRange(v3s16 cam_pos_nodes,
-		v3s16 *p_blocks_min, v3s16 *p_blocks_max, float range=-1.0f);
+	void getBlocksInViewRange(v3pos_t cam_pos_nodes,
+		v3pos_t *p_blocks_min, v3pos_t *p_blocks_max, float range=-1.0f);
 	void updateDrawList(float dtime, unsigned int max_cycle_ms = 0);
 	void updateDrawListFm(float dtime, unsigned int max_cycle_ms = 0);
 	// @brief Calculate statistics about the map and keep the blocks alive
 	void touchMapBlocks();
-	void updateDrawListShadow(v3f shadow_light_pos, v3f shadow_light_dir, float radius, float length);
+	void updateDrawListShadow(v3opos_t shadow_light_pos, v3opos_t shadow_light_dir, float radius, float length);
 	// Returns true if draw list needs updating before drawing the next frame.
 	bool needsUpdateDrawList() { return m_needs_update_drawlist; }
 	void renderMap(video::IVideoDriver* driver, s32 pass);
@@ -177,7 +177,7 @@ public:
 protected:
 	void reportMetrics(u64 save_time_us, u32 saved_blocks, u32 all_blocks) override;
 private:
-	bool isMeshOccluded(MapBlock *mesh_block, u16 mesh_size, v3s16 cam_pos_nodes);
+	bool isMeshOccluded(MapBlock *mesh_block, u16 mesh_size, v3pos_t cam_pos_nodes);
 
 	// update the vertex order in transparent mesh buffers
 	void updateTransparentMeshBuffers();
@@ -187,9 +187,9 @@ private:
 	class MapBlockComparer
 	{
 	public:
-		MapBlockComparer(const v3s16 &camera_block) : m_camera_block(camera_block) {}
+		MapBlockComparer(const v3bpos_t &camera_block) : m_camera_block(camera_block) {}
 
-		bool operator() (const v3s16 &left, const v3s16 &right) const
+		bool operator() (const v3bpos_t &left, const v3bpos_t &right) const
 		{
 			auto distance_left = left.getDistanceFromSQ(m_camera_block);
 			auto distance_right = right.getDistanceFromSQ(m_camera_block);
@@ -197,13 +197,13 @@ private:
 		}
 
 	private:
-		v3s16 m_camera_block;
+		v3bpos_t m_camera_block;
 	};
 
 
 	// reference to a mesh buffer used when rendering the map.
 	struct DrawDescriptor {
-		v3s16 m_pos;
+		v3bpos_t m_pos;
 		union {
 			scene::IMeshBuffer *m_buffer;
 			const PartialMeshBuffer *m_partial_buffer;
@@ -211,11 +211,11 @@ private:
 		bool m_reuse_material:1;
 		bool m_use_partial_buffer:1;
 
-		DrawDescriptor(v3s16 pos, scene::IMeshBuffer *buffer, bool reuse_material) :
+		DrawDescriptor(v3bpos_t pos, scene::IMeshBuffer *buffer, bool reuse_material) :
 			m_pos(pos), m_buffer(buffer), m_reuse_material(reuse_material), m_use_partial_buffer(false)
 		{}
 
-		DrawDescriptor(v3s16 pos, const PartialMeshBuffer *buffer) :
+		DrawDescriptor(v3bpos_t pos, const PartialMeshBuffer *buffer) :
 			m_pos(pos), m_partial_buffer(buffer), m_reuse_material(false), m_use_partial_buffer(true)
 		{}
 
@@ -231,32 +231,32 @@ private:
 
 	MapDrawControl &m_control;
 
-	v3f m_camera_position = v3f(0,0,0);
+	v3opos_t m_camera_position = v3opos_t(0,0,0);
 	v3f m_camera_direction = v3f(0,0,1);
 	f32 m_camera_fov = M_PI;
-	v3s16 m_camera_offset;
+	v3pos_t m_camera_offset;
 	bool m_needs_update_transparent_meshes = true;
 
 
 // fm:
 	v3pos_t m_camera_position_node;
-    using drawlist_map = std::map<v3pos_t, MapBlockP, MapBlockComparer>;
+    using drawlist_map = std::map<v3bpos_t, MapBlockP, MapBlockComparer>;
 	drawlist_map m_drawlist_0, m_drawlist_1;
 	std::atomic<drawlist_map *> m_drawlist {&m_drawlist_0};
 	int m_drawlist_current = 0;
-	std::vector<std::pair<v3pos_t, int>> draw_nearest;
+	std::vector<std::pair<v3bpos_t, int>> draw_nearest;
 public:
 	std::atomic_uint m_drawlist_last {0};
-	std::map<v3pos_t, MapBlock*> m_block_boundary;
+	std::map<v3bpos_t, MapBlock*> m_block_boundary;
 private:
 
 
 	//std::map<v3s16, MapBlock*, MapBlockComparer> m_drawlist;
 	std::vector<MapBlock*> m_keeplist;
-	std::map<v3s16, MapBlock*> m_drawlist_shadow;
+	std::map<v3bpos_t, MapBlock*> m_drawlist_shadow;
 	bool m_needs_update_drawlist;
 
-	std::set<v2s16> m_last_drawn_sectors;
+	std::set<v2bpos_t> m_last_drawn_sectors;
 
 	bool m_cache_trilinear_filter;
 	bool m_cache_bilinear_filter;

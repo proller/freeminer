@@ -21,11 +21,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "database.h"
-#include "irr_v3d.h"
+#include "constants.h"
 #include "irrlichttypes.h"
 #include <sstream>
 #include "util/string.h"
-
 
 /****************
  * Black magic! *
@@ -54,7 +53,7 @@ static inline s64 pythonmodulo(s64 i, s16 mod)
 }
 
 
-s64 MapDatabase::getBlockAsInteger(const v3s16 &pos)
+s64 MapDatabase::getBlockAsInteger(const v3bpos_t &pos)
 {
 	return (u64) pos.Z * 0x1000000 +
 		(u64) pos.Y * 0x1000 +
@@ -62,9 +61,9 @@ s64 MapDatabase::getBlockAsInteger(const v3s16 &pos)
 }
 
 
-v3s16 MapDatabase::getIntegerAsBlock(s64 i)
+v3bpos_t MapDatabase::getIntegerAsBlock(s64 i)
 {
-	v3s16 pos;
+	v3bpos_t pos;
 	pos.X = unsigned_to_signed(pythonmodulo(i, 4096), 2048);
 	i = (i - pos.X) / 4096;
 	pos.Y = unsigned_to_signed(pythonmodulo(i, 4096), 2048);
@@ -74,12 +73,31 @@ v3s16 MapDatabase::getIntegerAsBlock(s64 i)
 }
 
 std::string MapDatabase::getBlockAsString(const v3bpos_t &pos) const {
+    // 'a' is like version marker. In future other letters or words can be used.
 	std::ostringstream os;
 	os << "a" << pos.X << "," << pos.Y << "," << pos.Z;
 	return os.str().c_str();
 }
 
+std::string MapDatabase::getBlockAsStringCompatible(const v3bpos_t &pos) const
+{
+#if USE_POS32	
+	const bpos_t max_limit_bp = 31000 / MAP_BLOCKSIZE;
+	if (pos.X < -max_limit_bp ||
+		pos.X >  max_limit_bp ||
+		pos.Y < -max_limit_bp ||
+		pos.Y >  max_limit_bp ||
+		pos.Z < -max_limit_bp ||
+		pos.Z >  max_limit_bp)
+		return getBlockAsString(pos);
+	return std::to_string(getBlockAsInteger(pos));
+#else
+	return getBlockAsString(pos);
+#endif
+}
+
 v3bpos_t MapDatabase::getStringAsBlock(const std::string &i) const {
+#if USE_POS32	
 	std::istringstream is(i);
 	v3bpos_t pos;
 	char c;
@@ -94,4 +112,7 @@ v3bpos_t MapDatabase::getStringAsBlock(const std::string &i) const {
 		return getIntegerAsBlock(stoi64(i));
 	}
 	return pos;
+#else
+	return getIntegerAsBlock(stoi64(i));
+#endif
 }

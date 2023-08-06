@@ -38,22 +38,22 @@ public:
 	void environment_Step(float dtime);
 
 	// Called after generating a piece of map
-	void environment_OnGenerated(v3s16 minp, v3s16 maxp, u32 blockseed);
+	void environment_OnGenerated(v3pos_t minp, v3pos_t maxp, u32 blockseed);
 
 	// Called on player event
 	void player_event(ServerActiveObject *player, const std::string &type);
 
 	// Called after emerge of a block queued from core.emerge_area()
-	void on_emerge_area_completion(v3s16 blockpos, int action,
+	void on_emerge_area_completion(v3bpos_t blockpos, int action,
 		ScriptCallbackState *state);
 
-	void check_for_falling(v3s16 p);
+	void check_for_falling(v3pos_t p);
 
 	// Called after liquid transform changes
-	void on_liquid_transformed(const std::vector<std::pair<v3s16, MapNode>> &list);
+	void on_liquid_transformed(const std::vector<std::pair<v3pos_t, MapNode>> &list);
 
 	// Called after mapblock changes
-	void on_mapblocks_changed(const std::unordered_set<v3s16> &set);
+	void on_mapblocks_changed(const std::unordered_set<v3bpos_t> &set);
 
 	// Determines whether there are any on_mapblocks_changed callbacks
 	bool has_on_mapblocks_changed();

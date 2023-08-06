@@ -20,6 +20,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "mesh_generator_thread.h"
 #include "client/clientmap.h"
 #include "client/mapblock_mesh.h"
+#include "irr_v3d.h"
 #include "settings.h"
 #include "profiler.h"
 #include "client.h"
@@ -71,7 +72,7 @@ MeshUpdateQueue::~MeshUpdateQueue()
 	}
 }
 
-bool MeshUpdateQueue::addBlock(Map *map, v3s16 p, bool ack_block_to_server, bool urgent)
+bool MeshUpdateQueue::addBlock(Map *map, v3bpos_t p, bool ack_block_to_server, bool urgent)
 {
 	MapBlock *main_block = map->getBlockNoCreateNoEx(p);
 	if (!main_block)
@@ -83,7 +84,7 @@ bool MeshUpdateQueue::addBlock(Map *map, v3s16 p, bool ack_block_to_server, bool
 
 	// Mesh is placed at the corner block of a chunk
 	// (where all coordinate are divisible by the chunk size)
-	v3s16 mesh_position(mesh_grid.getMeshPos(p));
+	v3bpos_t mesh_position(mesh_grid.getMeshPos(p));
 	/*
 		Mark the block as urgent if requested
 	*/
@@ -103,7 +104,7 @@ bool MeshUpdateQueue::addBlock(Map *map, v3s16 p, bool ack_block_to_server, bool
 			q->crack_level = m_client->getCrackLevel();
 			q->crack_pos = m_client->getCrackPos();
 			q->urgent |= urgent;
-			v3s16 pos;
+			v3bpos_t pos;
 			int i = 0;
 			for (pos.X = q->p.X - 1; pos.X <= q->p.X + mesh_grid.cell_size; pos.X++)
 			for (pos.Z = q->p.Z - 1; pos.Z <= q->p.Z + mesh_grid.cell_size; pos.Z++)
@@ -126,7 +127,7 @@ bool MeshUpdateQueue::addBlock(Map *map, v3s16 p, bool ack_block_to_server, bool
 	*/
 	std::vector<MapBlock *> map_blocks;
 	map_blocks.reserve((mesh_grid.cell_size+2)*(mesh_grid.cell_size+2)*(mesh_grid.cell_size+2));
-	v3s16 pos;
+	v3bpos_t pos;
 	for (pos.X = mesh_position.X - 1; pos.X <= mesh_position.X + mesh_grid.cell_size; pos.X++)
 	for (pos.Z = mesh_position.Z - 1; pos.Z <= mesh_position.Z + mesh_grid.cell_size; pos.Z++)
 	for (pos.Y = mesh_position.Y - 1; pos.Y <= mesh_position.Y + mesh_grid.cell_size; pos.Y++) {
@@ -183,7 +184,7 @@ QueuedMeshUpdate *MeshUpdateQueue::pop()
 	return result;
 }
 
-void MeshUpdateQueue::done(v3s16 pos)
+void MeshUpdateQueue::done(v3bpos_t pos)
 {
 	MutexAutoLock lock(m_mutex);
 	m_inflight_blocks.erase(pos);
@@ -200,7 +201,7 @@ void MeshUpdateQueue::fillDataFromMapBlocks(QueuedMeshUpdate *q)
 
 	data->fillBlockDataBegin(q->p);
 
-	v3s16 pos;
+	v3bpos_t pos;
 	int i = 0;
 	for (pos.X = q->p.X - 1; pos.X <= q->p.X + data->m_mesh_grid.cell_size; pos.X++)
 	for (pos.Z = q->p.Z - 1; pos.Z <= q->p.Z + data->m_mesh_grid.cell_size; pos.Z++)
@@ -227,7 +228,7 @@ void MeshUpdateQueue::fillDataFromMapBlocks(QueuedMeshUpdate *q)
 	MeshUpdateWorkerThread
 */
 
-MeshUpdateWorkerThread::MeshUpdateWorkerThread(MeshUpdateQueue *queue_in, MeshUpdateManager *manager, v3s16 *camera_offset) :
+MeshUpdateWorkerThread::MeshUpdateWorkerThread(MeshUpdateQueue *queue_in, MeshUpdateManager *manager, v3pos_t *camera_offset) :
 		UpdateThread("Mesh"), m_queue_in(queue_in), m_manager(manager), m_camera_offset(camera_offset)
 {
 	m_generation_interval = g_settings->getU16("mesh_generation_interval");
@@ -278,7 +279,7 @@ MeshUpdateManager::MeshUpdateManager(Client *client):
 		m_workers.push_back(std::make_unique<MeshUpdateWorkerThread>(&m_queue_in, this, &m_camera_offset));
 }
 
-void MeshUpdateManager::updateBlock(Map *map, v3s16 p, bool ack_block_to_server,
+void MeshUpdateManager::updateBlock(Map *map, v3bpos_t p, bool ack_block_to_server,
 		bool urgent, bool update_neighbors)
 {
 	static thread_local const bool many_neighbors =
@@ -291,10 +292,10 @@ void MeshUpdateManager::updateBlock(Map *map, v3s16 p, bool ack_block_to_server,
 	}
 	if (update_neighbors) {
 		if (many_neighbors) {
-			for (v3s16 dp : g_26dirs)
-				m_queue_in.addBlock(map, p + dp, false, urgent);
+			for (auto dp : g_26dirs)
+				m_queue_in.addBlock(map, p + v3bpos_t(dp.X, dp.Y, dp.Z), false, urgent);
 		} else {
-			for (v3s16 dp : g_6dirs)
+			for (v3bpos_t dp : g_6dirs_b)
 				m_queue_in.addBlock(map, p + dp, false, urgent);
 		}
 	}

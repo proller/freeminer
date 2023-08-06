@@ -20,6 +20,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #pragma once
 
 #include "util/string.h"
+#include "config.h"
 
 /*
 	changes by PROTOCOL_VERSION:
@@ -215,9 +216,20 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 		new fields for TOCLIENT_SET_LIGHTING and TOCLIENT_SET_SKY
 		Send forgotten TweenedParameter properties
 		[scheduled bump for 5.7.0]
+	PROTOCOL VERSION 43:
+		Convert coordinates to s16->s32 and float->double
 */
 
+// First version with 32bit support
+#define PROTOCOL_VERSION_32BIT 43
+
+#if USE_POS32
+#define LATEST_PROTOCOL_VERSION 43
+#else
 #define LATEST_PROTOCOL_VERSION 42
+#endif
+
+
 #define LATEST_PROTOCOL_VERSION_STRING TOSTRING(LATEST_PROTOCOL_VERSION)
 
 // Server's supported network protocol range
@@ -262,7 +274,7 @@ enum ToClientCommand
 	/*
 		Message from server to accept auth.
 
-		v3s16 player's position + v3f(0,BS/2,0) floatToInt'd
+		v3pos_t player's position + v3f(0,BS/2,0) floatToInt'd
 		u64 map seed
 		f1000 recommended send interval
 		u32 : supported auth methods for sudo mode
@@ -291,7 +303,7 @@ enum ToClientCommand
 	TOCLIENT_BLOCKDATA = 0x20, //TODO: Multiple blocks
 	TOCLIENT_ADDNODE = 0x21,
 	/*
-		v3s16 position
+		v3pos_t position
 		serialized mapnode
 		u8 keep_metadata // Added in protocol version 22
 	*/
@@ -933,8 +945,8 @@ enum ToServerCommand
 	/*
 		[0] u16 command
 		[2] u8 count
-		[3] v3s16 pos_0
-		[3+6] v3s16 pos_1
+		[3] v3pos_t pos_0
+		[3+6] v3pos_t pos_1
 		...
 	*/
 
@@ -942,8 +954,8 @@ enum ToServerCommand
 	/*
 		[0] u16 command
 		[2] u8 count
-		[3] v3s16 pos_0
-		[3+6] v3s16 pos_1
+		[3] v3pos_t pos_0
+		[3+6] v3pos_t pos_1
 		...
 	*/
 
@@ -1010,7 +1022,7 @@ enum ToServerCommand
 
 	TOSERVER_NODEMETA_FIELDS = 0x3b,
 	/*
-		v3s16 p
+		v3pos_t p
 		u16 len
 		u8[len] form name (reserved for future use)
 		u16 number of fields
