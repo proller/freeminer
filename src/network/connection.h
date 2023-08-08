@@ -20,16 +20,6 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "config.h"
-
-#if USE_SCTP
-#include "network/fm_connection_sctp.h"
-#elif USE_ENET
-#include "network/fm_connection.h"
-#else
-//Not used, keep for reduce MT merge conflicts
-
-
 #pragma once
 
 #include "irrlichttypes.h"
@@ -45,8 +35,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <vector>
 #include <map>
 
+namespace con_ws { class Connection; }
 
-#define MAX_UDP_PEERS 65535
+#define MAX_UDP_PEERS 0x3fff
 
 /*
 === NOTES ===
@@ -346,6 +337,9 @@ struct ConnectionCommand
 
 	DISABLE_CLASS_COPY(ConnectionCommand);
 
+	//fm:
+	static ConnectionCommandPtr send(session_t peer_id, u8 channelnum, SharedBuffer<u8> data, bool reliable);
+
 	static ConnectionCommandPtr serve(Address address);
 	static ConnectionCommandPtr connect(Address address);
 	static ConnectionCommandPtr disconnect();
@@ -378,7 +372,7 @@ public:
 	u16 readNextIncomingSeqNum();
 	u16 incNextIncomingSeqNum();
 
-	u16 getOutgoingSequenceNumber(bool& successfull);
+	u16 getOutgoingSequenceNumber(bool& successful);
 	u16 readOutgoingSequenceNumber();
 	bool putBackSequenceNumber(u16);
 
@@ -621,6 +615,7 @@ public:
 	friend class ConnectionReceiveThread;
 	friend class ConnectionSendThread;
 	friend class Connection;
+	friend class con_ws::Connection;
 
 	UDPPeer(u16 a_id, Address a_address, Connection* connection);
 	virtual ~UDPPeer() = default;
@@ -672,6 +667,7 @@ private:
 
 enum ConnectionEventType {
 	CONNEVENT_NONE,
+	CONNEVENT_CONNECT_FAILED,
 	CONNEVENT_DATA_RECEIVED,
 	CONNEVENT_PEER_ADDED,
 	CONNEVENT_PEER_REMOVED,
@@ -692,6 +688,9 @@ struct ConnectionEvent
 
 	// We don't want to copy "data"
 	DISABLE_CLASS_COPY(ConnectionEvent);
+
+	// fm:
+	static ConnectionEventPtr connectFailed();
 
 	static ConnectionEventPtr create(ConnectionEventType type);
 	static ConnectionEventPtr dataReceived(session_t peer_id, const Buffer<u8> &data);
@@ -739,8 +738,8 @@ public:
 	const std::string getDesc();
 	void DisconnectPeer(session_t peer_id);
 
-protected:
 	PeerHelper getPeerNoEx(session_t peer_id);
+protected:
 	u16   lookupPeer(Address& sender);
 
 	u16 createPeer(Address& sender, MTProtocols protocol, int fd);
@@ -795,7 +794,7 @@ private:
 
 	std::atomic_bool m_shutting_down = false;
 
-	session_t m_next_remote_peer_id = 2;
+	session_t m_next_remote_peer_id = PEER_MINETEST_MIN;
 
 //freeminer:
 public:
@@ -804,5 +803,3 @@ public:
 };
 
 } // namespace
-
-#endif
