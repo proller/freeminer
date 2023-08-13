@@ -345,34 +345,30 @@ public:
 			bool up_all_leaves = true;
 			//DUMP("gr", i, nb.top, nb.bottom, allow_grow_by_light, nb.water_level, nb.is_leaves, nb.is_tree, nb.is_liquid, nb.is_soil);
 
-			{
-				//DUMP("absorb?", nb.pos.Y, self_water_level, params.tree_water_max, (int)near_soils, (int)near_liquid, allow_grow_up_by_rotation, (int)near_liquid, nb.is_liquid);
-				if (self_water_level < params.tree_water_max && near_soil &&
-						allow_grow_up_by_rotation && nb.is_liquid) {
+			// Absorb water from near water blocks, leave one level
+			//DUMP("absorb?", nb.pos.Y, self_water_level, params.tree_water_max, (int)near_soils, (int)near_liquid, allow_grow_up_by_rotation, (int)near_liquid, nb.is_liquid);
+			if (self_water_level < params.tree_water_max && near_soil &&
+					allow_grow_up_by_rotation && nb.is_liquid) {
+				// TODO: cached and random
+				auto level = nb.node.getLevel(ndef);
 
-					{
-						// TODO: cached and random
-						auto level = nb.node.getLevel(ndef);
+				// TODO: allow get all water if bottom of water != water
+				if (level <= 1)
+					return;
+				//auto amount = grow_debug_fast ? level - 1 : 1;
+				auto amount = level - 1;
+				if (self_water_level + amount > params.tree_water_max)
+					amount = params.tree_water_max - self_water_level;
+				level -= amount;
 
-						// TODO: allow get all water if bottom of water !=
-						// water
-						if (level <= 1)
-							return;
-						auto amount = grow_debug_fast ? level - 1 : 1;
-						if (self_water_level + amount > params.tree_water_max)
-							amount = params.tree_water_max - self_water_level;
-						level -= amount;
+				nb.node.setLevel(ndef, level);
 
-						nb.node.setLevel(ndef, level);
-
-						if (!grow_debug_fast)
-							map->setNode(nb.pos, nb.node);
-						self_water_level += amount;
-						//set_tree_water_level(n, self_water_level);
-						//map->setNode(p, n);
-						//if (grow_debug) DUMP("absorbwater", self_water_level, level, amount);
-					}
-				}
+				if (!grow_debug_fast)
+					map->setNode(nb.pos, nb.node);
+				self_water_level += amount;
+				//set_tree_water_level(n, self_water_level);
+				//map->setNode(p, n);
+				//if (grow_debug) DUMP("absorbwater", self_water_level, level, amount);
 			}
 
 			// light recalc sometimes too rare
@@ -413,11 +409,12 @@ public:
 									&& cf.groups.contains("soil"))
 #endif
 									) &&
-					(grow_debug_fast || !myrand_range(0, params.tree_grow_chance))) {
+					(grow_debug_fast || activate ||
+							!myrand_range(0, params.tree_grow_chance))) {
 				// dont grow too deep in liquid
 				if (nb.bottom && nb.is_liquid && nb.light_dir <= 0)
 					continue;
-				if (nb.bottom && near_tree)
+				if (nb.bottom && near_tree >= 3)
 					continue;
 				if (!decrease(self_water_level))
 					break;
@@ -642,7 +639,7 @@ public:
 		int n_water_level = get_leaves_water_level(n);
 		const auto n_water_level_orig = n_water_level;
 
-		const auto l = getLight(ndef, n);
+		const auto light = getLight(ndef, n);
 
 		uint8_t i = 0;
 
@@ -713,7 +710,8 @@ public:
 				const auto l_dir = getLight(ndef, n_dir);
 
 				auto wl_dir = get_leaves_water_level(n_dir);
-				if (n_water_level > 1 && wl_dir < params.leaves_water_max && l_dir >= l &&
+				if (n_water_level > 1 && wl_dir < params.leaves_water_max &&
+						l_dir >= light &&
 						// todo: all up by type?
 						wl_dir < n_water_level - 1 //(top ? -1 :
 												   // bottom ? 1 : -2)
@@ -743,21 +741,22 @@ public:
 		// leaves_to_fruit_heat_min);
 		if (allow_grow_fruit && n_water_level >= params.leaves_to_fruit_water_min &&
 				heat >= params.leaves_to_fruit_heat_min &&
-				l >= params.leaves_to_fruit_light_min &&
+				light >= params.leaves_to_fruit_light_min &&
 				(grow_debug_fast || !myrand_range(0, params.leaves_to_fruit_chance))) {
 			map->setNode(p, {c_fruit});
 		} else if (
 				(n_water_level >= 1 && // dont touch old static trees
 						have_air &&
-						((l < params.leaves_die_light_max &&
-								 (l > 0 || !myrand_range(0, params.leaves_die_chance))) ||
+						((light < params.leaves_die_light_max &&
+								 (light > 0 || activate ||
+										 !myrand_range(0, params.leaves_die_chance))) ||
 								((params.leaves_die_heat_max &&
 										 heat < params.leaves_die_heat_max) ||
 										(params.leaves_die_heat_min &&
 												heat > params.leaves_die_heat_min)))) ||
 				((!have_tree_or_soil ||
 						 (params.leaves_die_from_liquid && top_is_full_liquid)) &&
-						!myrand_range(0, 10))) {
+						(activate || !myrand_range(0, 10)))) {
 			//if (grow_debug) DUMP("lv die", p.X, p.Y, p.Z, have_tree_or_soil, n_water_level, l, heat);
 			//if (!grow_debug_no_die)
 			map->removeNodeWithEvent(p, false);
