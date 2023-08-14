@@ -19,12 +19,14 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <cmath>
+#include <cstdint>
 #include "mapnode.h"
 #include "nodedef.h"
 #include "server.h"
 #include "serverenvironment.h"
 
-constexpr auto grow_debug = true;
+constexpr auto grow_debug = false;
 //constexpr auto grow_debug_no_die = false;
 
 // Trees use param2 for rotation, level1 is free
@@ -166,7 +168,7 @@ struct GrowParams
 
 class GrowTree : public ActiveBlockModifier
 {
-	std::unordered_map<content_t, content_t> tree_to_leaves;
+	std::unordered_map<content_t, content_t> tree_to_leaves, tree_to_fruit;
 	std::unordered_map<content_t, GrowParams> type_params;
 
 	bool grow_debug_fast = false;
@@ -179,11 +181,19 @@ public:
 
 		std::vector<content_t> ids;
 		ndef->getIds("group:grow_tree", ids);
-		for (const auto &id : ids) {
-			const auto &cf = ndef->get(id);
-			type_params.emplace(id, GrowParams(cf, grow_debug_fast));
-			if (!cf.liquid_alternative_source.empty())
-				tree_to_leaves[id] = ndef->getId(cf.liquid_alternative_source);
+		for (const auto &id_tree : ids) {
+			const auto &cf_tree = ndef->get(id_tree);
+			type_params.emplace(id_tree, GrowParams(cf_tree, grow_debug_fast));
+			if (!cf_tree.liquid_alternative_source.empty()) {
+				const auto id_leaves = ndef->getId(cf_tree.liquid_alternative_source);
+				tree_to_leaves[id_tree] = id_leaves;
+
+				const auto &cf_leaves = ndef->get(id_leaves);
+				type_params.emplace(id_leaves, GrowParams(cf_leaves));
+				if (!cf_leaves.liquid_alternative_source.empty())
+					tree_to_fruit[id_tree] =
+							ndef->getId(cf_leaves.liquid_alternative_source);
+			}
 		}
 	}
 	virtual const std::vector<std::string> getTriggerContents() const override
@@ -216,6 +226,7 @@ public:
 		int8_t near_soil{0};
 		int8_t near_liquid{0};
 		content_t leaves_content{CONTENT_IGNORE};
+		content_t fruit_content{CONTENT_IGNORE};
 
 		struct Neighbor
 		{
@@ -223,13 +234,15 @@ public:
 			content_t content{CONTENT_IGNORE};
 			bool is_liquid{false};
 			bool is_leaves{false};
+			bool is_fruit{false};
 			bool is_tree{false};
 			bool is_soil{false};
+			bool side{false};
 			bool top{false};
 			bool bottom{false};
 			bool self{false};
 			uint8_t light_dir{0};
-			bool dir_allow_grow_up_by_rotation{false};
+			bool allow_grow_up_by_rotation{false};
 			uint8_t facedir{0};
 			ContentFeatures *cf{nullptr};
 			int16_t water_level{0};
@@ -254,13 +267,19 @@ public:
 				nb.light_dir = getLight(ndef, nb.node);
 				nb.top = i == D_TOP;
 				nb.bottom = i == D_BOTTOM;
+				nb.side = !nb.bottom && !nb.top;
 				nb.self = i == D_SELF;
-				nb.is_tree = is_self || nb.cf->groups.contains("tree");
+				nb.is_tree = is_self || nbh[D_SELF].content == nb.content ||
+							 nb.cf->groups.contains("tree");
 
-				if (is_self)
+				if (is_self) {
 					leaves_content = tree_to_leaves.contains(nb.content)
 											 ? tree_to_leaves.at(nb.content)
 											 : CONTENT_IGNORE;
+					fruit_content = tree_to_fruit.contains(nb.content)
+											? tree_to_fruit.at(nb.content)
+											: CONTENT_IGNORE;
+				}
 				//DUMP(is_self, leaves_content);
 
 				if (!is_self) {
@@ -268,6 +287,7 @@ public:
 						around_all_is_tree = false;
 
 					nb.is_leaves = nb.content == leaves_content;
+					nb.is_fruit = nb.content == fruit_content;
 					// DUMP(is_self, nb.is_leaves, "=", nb.content, "==", (int)leaves_content);
 					nb.is_liquid = nb.cf->groups.contains("liquid");
 					near_liquid += nb.is_liquid;
@@ -289,9 +309,8 @@ public:
 											  : 0;
 
 				nb.facedir = nb.node.getFaceDir(ndef);
-				nb.dir_allow_grow_up_by_rotation =
-						((nb.facedir >= 0) && (nb.facedir <= 3)) ||
-						((nb.facedir >= 20) && (nb.facedir <= 23));
+				nb.allow_grow_up_by_rotation = ((nb.facedir >= 0) && (nb.facedir <= 3)) ||
+											   ((nb.facedir >= 20) && (nb.facedir <= 23));
 
 				++i;
 			}
@@ -301,7 +320,7 @@ public:
 		const auto &content = nbh[D_SELF].content;
 		//const auto &leaves_content = leaves_content;
 
-		const auto &allow_grow_up_by_rotation = nbh[D_SELF].dir_allow_grow_up_by_rotation;
+		const auto &allow_grow_up_by_rotation = nbh[D_SELF].allow_grow_up_by_rotation;
 		bool allow_grow_tree = allow_grow_up_by_rotation;
 		bool allow_grow_leaves =
 				allow_grow_up_by_rotation && nbh[D_TOP].content != content;
@@ -335,7 +354,7 @@ public:
 					// TODO: depend on   += ceil( max_from_air * (params.tree_get_water_from_humidity)/(100-humidity))
 					++self_water_level;
 				}
-				//if (grow_debug)DUMP("absorbair", self_water_level,params.tree_get_water_max_from_humidity, humidity,grow_debug_fast);
+				// if (grow_debug)DUMP("absorbair", self_water_level,self_water_level_orig, params.tree_get_water_max_from_humidity, humidity,grow_debug_fast);
 			}
 		}
 
@@ -346,7 +365,7 @@ public:
 			//DUMP("gr", i, nb.top, nb.bottom, allow_grow_by_light, nb.water_level, nb.is_leaves, nb.is_tree, nb.is_liquid, nb.is_soil);
 
 			// Absorb water from near water blocks, leave one level
-			//DUMP("absorb?", nb.pos.Y, self_water_level, params.tree_water_max, (int)near_soils, (int)near_liquid, allow_grow_up_by_rotation, (int)near_liquid, nb.is_liquid);
+			// DUMP("absorb?", nb.pos.Y, self_water_level, params.tree_water_max, (int)near_soil, (int)near_liquid, allow_grow_up_by_rotation, nb.is_liquid);
 			if (self_water_level < params.tree_water_max && near_soil &&
 					allow_grow_up_by_rotation && nb.is_liquid) {
 				// TODO: cached and random
@@ -393,7 +412,7 @@ public:
 					(!params.tree_grow_heat_min || heat > params.tree_grow_heat_min) &&
 					(!params.tree_grow_heat_max || heat < params.tree_grow_heat_max) &&
 					self_water_level >= params.tree_grow_water_min &&
-					(((allow_grow_tree && ((nb.content == leaves_content &&
+					(((allow_grow_tree && (((nb.is_leaves || nb.is_fruit) &&
 												   can_grow_replace_leaves) ||
 												  ((
 														   /*nb.top ||*/ nb.bottom) &&
@@ -414,7 +433,7 @@ public:
 				// dont grow too deep in liquid
 				if (nb.bottom && nb.is_liquid && nb.light_dir <= 0)
 					continue;
-				if (nb.bottom && near_tree >= 3)
+				if (nb.bottom && near_tree >= 1)
 					continue;
 				if (!decrease(self_water_level))
 					break;
@@ -441,18 +460,21 @@ public:
 						   + (top ? -1 :bottom ? 1 : 0)
 						*/
 					) {
+						if (nb.side && nb.is_tree && allow_grow_up_by_rotation) {
+							// DUMP("skip tr side pump", water_level, nb.is_tree, allow_grow_up_by_rotation);
+							continue;
+						}
 						// DUMP(nb.node, self_water_level, water_level);
 						//??if (is_tree && dir_allow_grow_up_by_rotation && n_water_level >= params.tree_water_max) continue;
-						{
-							if (!decrease(self_water_level)) {
-								// if (grow_debug) DUMP("pumpfail", n_water_level, n_water_level_orig, wl_dir, top, bottom, c_dir, c);
-								break;
-							}
-							//if (grow_debug)DUMP("tr pump", pos.Y, self_water_level,self_water_level_orig, water_level, nb.top,nb.bottom, nb.content, content);
-							++water_level;
-							nb.is_leaves ? set_leaves_water_level(nb.node, water_level)
-										 : set_tree_water_level(nb.node, water_level);
+
+						if (!decrease(self_water_level)) {
+							// if (grow_debug) DUMP("pumpfail", n_water_level, n_water_level_orig, wl_dir, top, bottom, c_dir, c);
+							break;
 						}
+						//if (grow_debug)DUMP("tr pump", pos.Y, self_water_level,self_water_level_orig, water_level, nb.top,nb.bottom, nb.content, content);
+						++water_level;
+						nb.is_leaves ? set_leaves_water_level(nb.node, water_level)
+									 : set_tree_water_level(nb.node, water_level);
 
 						map->setNode(nb.pos, nb.node);
 					}
@@ -504,76 +526,112 @@ public:
 				//if (grow_debug)DUMP("get top", nbh[D_TOP].water_level, total_level,(int)have_liquid);
 			}
 
-			const auto fill_bottom = [&]() {
+			/*
+tot
+   avg/3
+         b s t
+3  1   = 2 1 0
+4  1.3 = 2 1 1
+5  1.6 = 2 2 1
+6  2   = 3 2 1
+7  2.3 = 3 2 2
+8  2.6 = 3 3 2
+9  3   = 4 3 2
+10 3.3 = 4 3 3
+
+bottom = floor(avg + 1)
+self   = round(avg) 
+top    = ceil(avg - 1)
+
+*/
+			const auto fill_bottom = [&](bool prefer = false) {
 				if (nbh[D_BOTTOM].content == content) {
-					const auto avg_level_for_bottom =
-							ceil((float)total_level / have_liquid);
+
+					/*
+					const auto float_avg_level = (float)total_level / have_liquid;
 					//if (grow_debug)DUMP(avg_level_for_bottom, (int)have_liquid, total_level);
-					const auto bottom_level =
-							avg_level_for_bottom < params.tree_water_max
-									? avg_level_for_bottom +
-											  (avg_level_for_bottom >= total_level ? 0
-																				   : 1)
+					const auto avg_level = prefer ? ceil(float_avg_level + 0.1)
+												  : floor(float_avg_level); // -1
+					const auto want_level =
+							avg_level < params.tree_water_max
+									? avg_level + (avg_level >= (total_level ? 0 : 1))
 									: params.tree_water_max;
-					total_level -= bottom_level;
+*/
+					const auto float_avg_level = (float)total_level / have_liquid;
+					const auto avg_level = prefer ? floor(float_avg_level + 1)
+												  : ceil(float_avg_level - 1);
+					const auto want_level =
+							std::min<uint8_t>(avg_level, params.tree_water_max);
+
+					total_level -= want_level;
 					--have_liquid;
-					if (nbh[D_BOTTOM].water_level != bottom_level) {
+					if (nbh[D_BOTTOM].water_level != want_level) {
 						//if (grow_debug)DUMP("setbot", bottom_level, total_level,avg_level_for_bottom);
-						set_tree_water_level(n_bottom, bottom_level);
+						set_tree_water_level(n_bottom, want_level);
 						map->setNode(nbh[D_BOTTOM].pos, n_bottom);
 					}
 				}
 			};
 
-			const auto fill_top = [&]() {
+			const auto fill_top = [&](bool prefer = false) {
 				if (nbh[D_TOP].content == content) {
-					auto float_avg_level_for_top = (float)total_level / have_liquid;
-					const int16_t avg_level_for_top =
-							around_all_is_tree ? int(float_avg_level_for_top)
-											   : floor(float_avg_level_for_top);
-					const auto top_level = avg_level_for_top; //- 1;
-					total_level -= top_level;
+					/*
+					const auto float_avg_level = (float)total_level / have_liquid;
+					//const int16_t avg_level_for_top =
+					const auto avg_level = prefer ? ceil(float_avg_level + 0.1)
+												  : floor(float_avg_level); // -1
+					const auto want_level =
+							avg_level < params.tree_water_max
+									? avg_level + (avg_level >= (total_level ? 0 : 1))
+									: params.tree_water_max;
+*/
+					const auto float_avg_level = (float)total_level / have_liquid;
+					const auto avg_level = prefer ? floor(float_avg_level + 1)
+												  : ceil(float_avg_level - 1);
+					const auto want_level =
+							std::min<uint8_t>(avg_level, params.tree_water_max);
+
+					total_level -= want_level;
 					--have_liquid;
-					if (nbh[D_TOP].water_level != top_level) {
-						if (grow_debug)
-							//DUMP("settop", top_level, total_level, avg_level_for_top,around_all_is_tree);
-							// if (all_is_tree && n_water_level>= params.tree_water_max) DUMP(top_level, total_level, float_avg_level_for_top, avg_level_for_top);
-							set_tree_water_level(n_top, top_level);
+					if (nbh[D_TOP].water_level != want_level) {
+						//if (grow_debug) DUMP("settop", top_level, total_level, avg_level_for_top,around_all_is_tree);
+						// if (all_is_tree && n_water_level>= params.tree_water_max) DUMP(top_level, total_level, float_avg_level_for_top, avg_level_for_top);
+						set_tree_water_level(n_top, want_level);
 						map->setNode(nbh[D_TOP].pos, n_top);
 					}
 				}
 			};
+
+			/*       
+		                           1	
+                               1   2
+    			1  1   1   1   2   3
+			  1 2  2   2   2   3   4
+            1 2 3  3   3   3   4   5
+          1 2 3 4  4   4   4   5   6
+        1 2 3 4 5  5   5   5   6   71
+      1 2 3 4 5 6  6   6   6   71  82
+    1 2 3 4 5 6 7  7   7   71 182 193
+  1 2 3 4 5 6 7 8  8   81 182 293 284
+1 2 3 4 5 6 7 8 9  91 192 293 384 395
+S S S S S S S S S SSS SSS SSS SSS SSS
+
+*/
 			// Yggdrasil mode
-			if (around_all_is_tree &&
-					(nbh[D_BOTTOM].water_level >=
-									params.tree_get_water_from_humidity || // params.tree_water_max
-							nbh[D_SELF].water_level ==
-									params.tree_get_water_from_humidity)) {
-				//DUMP("prefer top", pos.Y, around_all_is_tree, total_level);
-				fill_top();
+			if (near_tree >= 4
+					//&&((nbh[D_BOTTOM].water_level >= params.tree_get_water_from_humidity / 2) || // params.tree_water_max
+					//(nbh[D_SELF].water_level >= params.tree_get_water_from_humidity / 2))
+			) {
+				//DUMP("prefer top", pos.Y, around_all_is_tree, total_level, nbh[D_BOTTOM].water_level, nbh[D_SELF].water_level,nbh[D_TOP].water_level);
+				fill_top(true);
 				fill_bottom();
 			} else {
 				//DUMP("prefer bot", pos.Y, around_all_is_tree, total_level);
-				fill_bottom();
+				fill_bottom(true);
 				fill_top();
 			}
-			//if (grow_debug)DUMP("total res self:", total_level, (int)have_liquid);
+			// if (grow_debug) DUMP("total res self:", total_level, (int)have_liquid, (int)near_tree, nbh[D_BOTTOM].water_level, nbh[D_SELF].water_level, nbh[D_TOP].water_level);
 			self_water_level = total_level;
-
-			/*
-
-    			1  1
-			  1 2  2
-            1 2 3  3
-          1 2 3 4  4
-        1 2 3 4 5  5
-      1 2 3 4 5 6  6   6   7   8
-    1 2 3 4 5 6 7  7   7  181 191
-  1 2 3 4 5 6 7 8  8  181 292 282
-1 2 3 4 5 6 7 8 9 191 292 383 393
-S S S S S S S S S SSS SSS SSS SSS
-
-*/
 		}
 
 		save();
@@ -730,15 +788,10 @@ public:
 				}
 			}
 
-			if (n_water_level != n_water_level_orig) {
-				set_leaves_water_level(n, n_water_level);
-				map->setNode(p, n);
-			}
 			++i;
 		}
 
-		// DUMP(allow_grow_fruit, n_water_level, leaves_to_fruit_water_min, heat ,
-		// leaves_to_fruit_heat_min);
+		// DUMP(allow_grow_fruit, n_water_level, leaves_to_fruit_water_min, heat, leaves_to_fruit_heat_min);
 		if (allow_grow_fruit && n_water_level >= params.leaves_to_fruit_water_min &&
 				heat >= params.leaves_to_fruit_heat_min &&
 				light >= params.leaves_to_fruit_light_min &&
@@ -760,6 +813,10 @@ public:
 			//if (grow_debug) DUMP("lv die", p.X, p.Y, p.Z, have_tree_or_soil, n_water_level, l, heat);
 			//if (!grow_debug_no_die)
 			map->removeNodeWithEvent(p, false);
+		} else if (n_water_level != n_water_level_orig) {
+			// save if self level changed
+			set_leaves_water_level(n, n_water_level);
+			map->setNode(p, n);
 		}
 	}
 };
