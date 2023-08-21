@@ -109,9 +109,9 @@ struct GrowParams
 	int leaves_die_heat_min = 55;
 	int leaves_die_chance = 5;
 	int leaves_die_from_liquid = 1;
-	int leaves_to_fruit_water_min = 8;
+	int leaves_to_fruit_water_min = 9;
 	int leaves_to_fruit_heat_min = 15;
-	int leaves_to_fruit_light_min = 9;
+	int leaves_to_fruit_light_min = 10;
 	int leaves_to_fruit_chance = 10;
 
 	GrowParams(const ContentFeatures &cf, bool grow_debug_fast = false)
@@ -246,7 +246,7 @@ public:
 			bool top{false};
 			bool bottom{false};
 			bool self{false};
-			uint8_t light_dir{0};
+			uint8_t light{0};
 			bool allow_grow_by_rotation{false};
 			uint8_t facedir{0};
 			ContentFeatures *cf{nullptr};
@@ -269,7 +269,7 @@ public:
 
 				nb.content = nb.node.getContent();
 				nb.cf = (ContentFeatures *)&ndef->get(nb.content);
-				nb.light_dir = getLight(ndef, nb.node);
+				nb.light = getLight(ndef, nb.node);
 				nb.top = i == D_TOP;
 				nb.bottom = i == D_BOTTOM;
 				nb.side = !nb.bottom && !nb.top;
@@ -377,7 +377,7 @@ public:
 		for (int i = D_SELF + 1; i <= D_BOTTOM; ++i) {
 			auto &nb = nbh[i];
 			const bool allow_grow_by_light =
-					!nb.top || nb.light_dir <= params.tree_grow_light_max;
+					!nb.top || nb.light <= params.tree_grow_light_max;
 			bool up_all_leaves = true;
 			//DUMP("gr", i, nb.top, nb.bottom, allow_grow_by_light, nb.water_level, nb.is_leaves, nb.is_tree, nb.is_liquid, nb.is_soil);
 
@@ -421,41 +421,56 @@ public:
 				}
 			}
 
-			// DUMP(i, pos.Y, nb.top, nb.water_level, allow_grow_by_light, up_all_leaves, nb.is_leaves, can_grow_replace_leaves, up_all_leaves, allow_grow_tree, nb.light_dir, params.leaves_die_light_max);
-			// Grow tree
-			if (content != nb.content &&
-					(!params.tree_grow_heat_min || heat > params.tree_grow_heat_min) &&
-					(!params.tree_grow_heat_max || heat < params.tree_grow_heat_max) &&
-					self_water_level >= params.tree_grow_water_min &&
-					nb.allow_grow_by_rotation &&
-					(((((((nb.is_any_leaves &&
-								(allow_grow_by_light || up_all_leaves)))) ||
-							  ((nb.top || nb.bottom) && nb.is_liquid))) ||
-							(nb.top && nb.light_dir < params.leaves_grow_light_min))) &&
-					(grow_debug_fast || activate ||
-							!myrand_range(0, params.tree_grow_chance))) {
-				// DUMP("chk1", nb.bottom, nb.is_liquid, nb.light_dir);
-				// dont grow too deep in liquid
-				if (nb.bottom && nb.is_liquid && nb.light_dir <= 0)
-					continue;
-				// DUMP(nb.bottom, near_tree);
-				if (nb.bottom && near_tree >= 1)
-					continue;
+			//  DUMP(i, pos.Y, self_water_level, nb.top, nb.water_level, allow_grow_by_light, up_all_leaves, nb.is_my_leaves, nb.is_any_leaves, up_all_leaves, nb.light, params.leaves_die_light_max, nb.allow_grow_by_rotation, nb.is_liquid, nb.cf->name);
+			auto tree_grow = [&]() {
+				if (content == nb.content)
+					return false;
 
-				// DUMP(nb.is_fruit, nb.is_any_leaves, nb.cf->buildable_to, nb.bottom, nb.is_liquid, nb.is_soil, nb.cf->groups.contains("sand"));
+				if (!((!params.tree_grow_heat_min || heat > params.tree_grow_heat_min) &&
+							(!params.tree_grow_heat_max ||
+									heat < params.tree_grow_heat_max)))
+					return false;
+
+				if (!(self_water_level >= params.tree_grow_water_min))
+					return false;
+
+				if (!(nb.allow_grow_by_rotation))
+					return false;
+
+				if (!(((nb.is_any_leaves && (allow_grow_by_light || up_all_leaves)) ||
+							  ((nb.top || nb.bottom) && nb.is_liquid)) ||
+							((nb.top || nb.side) &&
+									nb.light < params.leaves_grow_light_min)))
+					return false;
+
+				if (!(grow_debug_fast || activate ||
+							!myrand_range(0, params.tree_grow_chance)))
+					return false;
+
+				// dont grow too deep in liquid
+				if (nb.bottom && nb.is_liquid && nb.light <= 0)
+					return false;
+
+				if (nb.bottom && near_tree >= 1)
+					return false;
 
 				if (!((nb.is_fruit || nb.is_any_leaves || nb.cf->buildable_to) ||
 							(nb.bottom && (nb.is_liquid || nb.is_soil ||
 												  nb.cf->groups.contains("sand")))))
-					continue;
-				if (!decrease(self_water_level))
-					break;
+					return false;
 
-				// if (grow_debug) DUMP("tr->tr", i, nb.pos.Y, nb.top, nb.bottom, nb.content, content, self_water_level, self_water_level_orig, nb.light_dir);
+				if (!decrease(self_water_level))
+					return true;
+
+				//if (grow_debug) DUMP("tr->tr", i, nb.pos.Y, nb.top, nb.bottom, nb.content, content, self_water_level, self_water_level_orig, nb.light);
 
 				map->setNode(nb.pos, {content, 1, nbh[D_SELF].node.getParam2()});
+				return true;
+			};
+
+			if (tree_grow())
 				break;
-			} //else
+
 			if (((!nb.top && !nb.bottom && nb.content == content &&
 						 !around_all_is_tree) ||
 						nb.is_my_leaves)) {
@@ -510,7 +525,7 @@ public:
 					(self_water_level >= (nb.top ? params.leaves_grow_water_min_top
 												 : params.leaves_grow_water_min_side)) &&
 					// can_grow_leaves(n_water_level, top, bottom) &&
-					nb.light_dir >= params.leaves_grow_light_min) {
+					nb.light >= params.leaves_grow_light_min) {
 				if (nb.cf->buildable_to && !nb.is_liquid) {
 					if (!decrease(self_water_level))
 						break;
@@ -527,7 +542,8 @@ public:
 		}
 
 		// up-down distribute of rest
-		{
+
+		if (self_allow_grow_by_rotation) {
 			int16_t total_level = self_water_level;
 			int8_t have_liquid = 1;
 			auto &n_bottom = nbh[D_BOTTOM].node;
