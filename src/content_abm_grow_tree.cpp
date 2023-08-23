@@ -431,32 +431,39 @@ public:
 									heat < params.tree_grow_heat_max)))
 					return false;
 
-				if (!(self_water_level >= params.tree_grow_water_min))
+				if (self_water_level < params.tree_grow_water_min)
 					return false;
 
-				if (!(nb.allow_grow_by_rotation))
+				if (!nb.allow_grow_by_rotation)
 					return false;
 
-				if (!(((nb.is_any_leaves && (allow_grow_by_light || up_all_leaves)) ||
-							  ((nb.top || nb.bottom) && nb.is_liquid)) ||
-							((nb.top || nb.side) &&
-									nb.light < params.leaves_grow_light_min)))
+				if (!(nb.is_any_leaves || nb.is_fruit || nb.cf->buildable_to ||
+							nb.is_liquid || nb.is_soil || nb.cf->groups.contains("sand")))
 					return false;
 
-				if (!(grow_debug_fast || activate ||
-							!myrand_range(0, params.tree_grow_chance)))
+				if (nb.top && nb.content == CONTENT_AIR)
 					return false;
+
+				if (nb.top && nb.is_any_leaves) {
+					if (nb.light < params.leaves_grow_light_min)
+						return false;
+
+					if (!(allow_grow_by_light || up_all_leaves))
+						return false;
+				}
 
 				// dont grow too deep in liquid
-				if (nb.bottom && nb.is_liquid && nb.light <= 0)
-					return false;
+				if (nb.bottom) {
+					if (nb.is_liquid && nb.light <= 0)
+						return false;
 
-				if (nb.bottom && near_tree >= 1)
-					return false;
+					if (near_tree >= 1)
+						return false;
+				}
 
-				if (!((nb.is_fruit || nb.is_any_leaves || nb.cf->buildable_to) ||
-							(nb.bottom && (nb.is_liquid || nb.is_soil ||
-												  nb.cf->groups.contains("sand")))))
+				if (!(grow_debug_fast || activate ||
+							!myrand_range(
+									0, params.tree_grow_chance * (nb.bottom ? 3 : 1))))
 					return false;
 
 				if (!decrease(self_water_level))
