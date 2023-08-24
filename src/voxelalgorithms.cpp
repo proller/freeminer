@@ -867,6 +867,18 @@ void is_sunlight_above_block(Map *map, mapblock_v3 pos,
 			MapNode above = source_block->getNodeNoCheck(x, 0, z);
 			ContentLightingFlags above_f = ndef->getLightingFlags(above);
 			light[z][x] = above.getLight(LIGHTBANK_DAY, above_f) == LIGHT_SUN;
+
+			if (light[z][x]) {
+				if (z > 0)
+				light[z - 1][x] = true;
+				if (x > 0)
+				light[z][x - 1] = true;
+				if (z < MAP_BLOCKSIZE - 1)
+				light[z + 1][x] = true;
+				if (x < MAP_BLOCKSIZE - 1)
+				light[z][x + 1] = true;
+			}
+
 		}
 	}
 }
