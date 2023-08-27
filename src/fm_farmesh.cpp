@@ -79,7 +79,7 @@ FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
 	for (size_t i = 0; i < process_order.size(); ++i)
 		process_order[i] = i;
 	auto rng = std::default_random_engine{};
-	// std::shuffle(std::begin(process_order), std::end(process_order), rng);
+	std::shuffle(std::begin(process_order), std::end(process_order), rng);
 }
 
 FarMesh::~FarMesh()
@@ -106,19 +106,18 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 {
 	// errorstream << "update    " << (long)mesh << std::endl;
 
-if (!mg) return;
+	if (!mg)
+		return;
 
 #if cache0
-		auto camera_pos_aligned =
-				floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16),
-						BS); // todo optimize
-// reset on significant move
-		if (m_camera_pos_aligned != camera_pos_aligned) {
-			m_cycle_stop_i	= 0 ;
-		}
+	auto camera_pos_aligned = floatToInt(
+			intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
+			// reset on significant move
+	if (m_camera_pos_aligned != camera_pos_aligned) {
+		m_cycle_stop_i = 0;
+	}
 
 #endif
-
 
 	if (!m_cycle_stop_i) {
 
@@ -128,7 +127,7 @@ if (!mg) return;
 #endif
 #if cache0
 		m_camera_pos_aligned = camera_pos_aligned;
-				//floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
+		//floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
 #endif
 
 		const auto camera_pos_aligned = intToFloat(m_camera_pos_aligned, BS);
@@ -246,10 +245,8 @@ if (!mg) return;
 				return;
 			}
 
-			(*grid_result_fill)[x][y].depth =
-					0; // clean cache
-					   // errorstream << "grid clean" << " x=" << x << " y=" << y <<
-					   // "depth=" << (*grid_result_fill)[x][y].depth << "\n";
+			(*grid_result_fill)[x][y].depth = 0; // clean cache
+					// errorstream << "grid clean" << " x=" << x << " y=" << y << "depth=" << (*grid_result_fill)[x][y].depth << "\n";
 
 			int depth = m_render_range /** BS*/; // 255;
 
@@ -635,8 +632,8 @@ if (!mg) return;
 		  */
 				} else
 
-						//if (mg) 
-						{
+				//if (mg)
+				{
 					/*
 			   if (x == grid_size / 2 && y == grid_size / 2) // if (!x && !y)
 							   errorstream << "have mg"
