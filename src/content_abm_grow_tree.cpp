@@ -563,7 +563,7 @@ public:
 				map->setNode(nb.pos, {leaves_content, nb.node.param1, 1});
 
 				if (const auto block = map->getBlock(getNodeBlockPos(nb.pos)); block) {
-					block->setLightingExpired(true);
+					block->setLightingComplete(0);
 				}
 				return true;
 			};
@@ -828,7 +828,7 @@ public:
 
 				if (!myrand_range(0, 10))
 					if (const auto block = map->getBlock(getNodeBlockPos(p_dir)); block) {
-						block->setLightingExpired(true);
+						block->setLightingComplete(0);
 					}
 
 			} else if (c_dir == c) {
