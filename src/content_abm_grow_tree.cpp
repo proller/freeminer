@@ -893,8 +893,9 @@ public:
 			++i;
 		}
 
-		const auto can_decrease = nbh[D_SELF].light < LIGHT_SUN - 1;
-		if (n_water_level > 1 && can_decrease &&
+		// Slowly evaporate water and kill leaves with water_level==1
+		const auto can_decay = have_air && nbh[D_SELF].light < LIGHT_SUN - 1;
+		if (n_water_level > 1 && can_decay &&
 				(!myrand_range(0, 10 * (grow_debug_fast ? 1 : 10)))) {
 			float humidity = map->updateBlockHumidity(env, pos);
 			if (humidity < params.tree_get_water_from_humidity)
@@ -908,7 +909,7 @@ public:
 				(grow_debug_fast || !myrand_range(0, params.leaves_to_fruit_chance))) {
 			map->setNode(pos, {c_fruit});
 		} else if (
-				(n_water_level == 1 && can_decrease &&
+				(n_water_level == 1 && can_decay &&
 						(!myrand_range(0, 30 * (grow_debug_fast ? 1 : 10)))) ||
 				(n_water_level >= 1 && // dont touch old static trees
 						have_air &&
