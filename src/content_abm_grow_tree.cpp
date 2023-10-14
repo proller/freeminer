@@ -614,8 +614,12 @@ top    = ceil(avg - 1)
 					const auto float_avg_level = (float)total_level / have_liquid;
 					const auto avg_level = prefer ? floor(float_avg_level + 1)
 												  : ceil(float_avg_level - 1);
-					const auto want_level =
-							std::min<uint8_t>(avg_level, params.tree_water_max);
+					auto want_level = std::min<uint8_t>(avg_level, params.tree_water_max);
+
+					// dont grow down
+					if (want_level > nbh[D_BOTTOM].water_level) {
+						want_level = nbh[D_BOTTOM].water_level;
+					}
 
 					total_level -= want_level;
 					--have_liquid;
