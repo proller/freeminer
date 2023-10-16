@@ -430,6 +430,7 @@ public:
 
 				if (!(nb.is_any_leaves || nb.cf->buildable_to || nb.is_liquid ||
 							nb.is_soil || nb.cf->groups.contains("sand") ||
+							nb.cf->groups.contains("sapling") ||
 							nb.cf->groups.contains("fruit")))
 					// || nb.is_fruit
 					return false;
