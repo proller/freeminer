@@ -864,9 +864,22 @@ public:
 					can_grow_leaves(params, n_water_level, nb.top, nb.bottom) &&
 					nb.light >= params.leaves_grow_light_min && nb.cf->buildable_to &&
 					!nb.is_liquid) {
-				//if (grow_debug)DUMP("lv->lv  ", p.X, p.Y, p.Z, nb.content, c, l, n_water_level,n_water_level_orig, l, ndef->get(nb.content).name);
-				map->setNode(nb.pos, {nbh[D_SELF].content, nb.node.getParam1(), 2});
-				n_water_level -= 2;
+				uint8_t water_transfer = 0;
+				// Leaves grow should cost 2 wates, nobody knows why
+				if (n_water_level > 1) {
+					++water_transfer;
+					--n_water_level;
+				}
+				if (n_water_level > 1) {
+					++water_transfer;
+					--n_water_level;
+				}
+				if (water_transfer <= 0) {
+					break;
+				}
+				//if (grow_debug)DUMP("lv->lv  ", p.X, p.Y, p.Z, nb.content, c, l, n_water_level,n_water_level_orig, water_transfer, ndef->get(nb.content).name);
+				map->setNode(nb.pos,
+						{nbh[D_SELF].content, nb.node.getParam1(), water_transfer});
 
 				if (!myrand_range(0, 10))
 					if (const auto block = map->getBlock(getNodeBlockPos(nb.pos));
