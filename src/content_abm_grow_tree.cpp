@@ -739,16 +739,13 @@ S S S S S S S S S SSS SSS SSS SSS SSS
 					//&&((nbh[D_BOTTOM].water_level >= params.tree_get_water_from_humidity / 2) || // params.tree_water_max
 					//(nbh[D_SELF].water_level >= params.tree_get_water_from_humidity / 2))
 			) {
-						nbh[D_BOTTOM].water_level, nbh[D_SELF].water_level,
-						nbh[D_TOP].water_level);
 				fill_top(true);
 				fill_bottom();
 			} else {
 				fill_bottom(true);
 				fill_top();
 			}
-						nbh[D_BOTTOM].water_level, nbh[D_SELF].water_level,
-						nbh[D_TOP].water_level);
+
 			self_water_level = total_level;
 		}
 
