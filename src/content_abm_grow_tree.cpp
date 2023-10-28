@@ -813,7 +813,7 @@ public:
 		content_t c_fruit{};
 		bool top_is_full_liquid = false;
 		bool have_tree_or_soil = false;
-		bool have_air = false;
+		uint8_t have_not_leaves = 0;
 		bool allow_grow_fruit = false;
 
 		struct Neighbor
@@ -846,7 +846,7 @@ public:
 				if (!nb.node) {
 					have_tree_or_soil = true; // dont remove when map busy
 					allow_grow_fruit = false;
-					have_air = false;
+					++have_not_leaves;
 					goto NEXT;
 				}
 				{
@@ -888,8 +888,8 @@ public:
 												nb.cf->groups.contains("soil") ||
 												nb.is_liquid;
 						}
-						if (!have_air) {
-							have_air = nb.content == CONTENT_AIR;
+						if (!have_not_leaves && !nb.is_any_leaves) {
+							++have_not_leaves;
 						}
 					}
 				}
@@ -980,7 +980,7 @@ public:
 		}
 
 		// Slowly evaporate water and kill leaves with water_level==1
-		const auto can_decay = have_air && nbh[D_SELF].light < LIGHT_SUN - 1;
+		const auto can_decay = !have_not_leaves && nbh[D_SELF].light < LIGHT_SUN - 1;
 		if (n_water_level > 1 && can_decay &&
 				(!myrand_range(0, 10 * (grow_debug_fast ? 1 : 10)))) {
 			float humidity = map->updateBlockHumidity(env, pos);
@@ -999,7 +999,7 @@ public:
 				(n_water_level == 1 && can_decay &&
 						(!myrand_range(0, 30 * (grow_debug_fast ? 1 : 10)))) ||
 				(n_water_level >= 1 && // dont touch old static trees
-						have_air &&
+						!have_not_leaves &&
 						((nbh[D_SELF].light < params.leaves_die_light_max &&
 								 (nbh[D_SELF].light > 0 || activate ||
 										 !myrand_range(0, params.leaves_die_chance))) ||
