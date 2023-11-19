@@ -39,8 +39,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 int getFarmeshStep(MapDrawControl &draw_control, const v3bpos_t &playerblockpos,
 		const v3bpos_t &blockpos)
 {
+	if (!draw_control.farmesh) 
+		return 1;
+
 	int range = radius_box(playerblockpos, blockpos);
-	if (draw_control.farmesh) {
+#if FARMESH_OLD
 
 		const pos_t nearest = std::max(draw_control.cell_size * 2, 256 / MAP_BLOCKSIZE);
 		// DUMP(draw_control.farmesh, range, nearest, draw_control.cell_size, draw_control.farmesh + draw_control.farmesh_step * 4, draw_control.farmesh + draw_control.farmesh_step * 2, draw_control.farmesh + draw_control.farmesh_step, draw_control.farmesh);
@@ -57,17 +60,78 @@ int getFarmeshStep(MapDrawControl &draw_control, const v3bpos_t &playerblockpos,
 			return 4;
 		else if (range >= std::min<pos_t>(nearest, farmesh_cells))
 			return 2;
-	}
+#else
+	range -= draw_control.farmesh;
+	range >>= 1;
+//range>>=1;
+//range<<=1;
+	if (range <= 1)
 	return 1;
+	int skip = log(range)/log(2);
+//	range>>=s;
+	//range<<=s;
+	//if (range <= 1)return 1;
+	skip = log(range)/log(2);
+//DUMP(range, s, (range>>s)<<s, playerblockpos, blockpos);
+	//++s;
+	//if (s>1 && (playerblockpos.X > blockpos.X || playerblockpos.Y > blockpos.Y || playerblockpos.Z > blockpos.Z))
+	//	--s;
+	//else 	    ++s;
+// /*
+//range = radius_box(playerblockpos, v3pos_t((blockpos.X >> skip) << skip , (blockpos.Y>> skip) << skip , (blockpos.Z >> skip) << skip));
+range = radius_box(v3pos_t((playerblockpos.X>> skip) << skip,(playerblockpos.Y>> skip) << skip,(playerblockpos.Z>> skip) << skip), v3pos_t((blockpos.X >> skip) << skip , (blockpos.Y>> skip) << skip , (blockpos.Z >> skip) << skip));
+	if (range <= 1)
+		return skip;
+	range >>= 1;
+skip = log(range)/log(2);
+// */
+	if (skip > FARMESH_STEP_MAX)
+		skip = FARMESH_STEP_MAX;
+	const auto r = (range + draw_control.farmesh)*MAP_BLOCKSIZE;
+	//DUMP(range, 	r,s, playerblockpos, blockpos, inFarmeshGrid(blockpos, s));
+	return skip;
+#endif	
 };
+
+bool inFarmeshGrid(const v3bpos_t & blockpos, int step) {
+#if !FARMESH_OLD
+	//int skip = pow(2, step - 1);
+	int skip = pow(2, step - 1);
+//if (skip > 1) --skip;
+	return !(blockpos.X % skip || blockpos.Y % skip || blockpos.Z % skip);
+#else
+	return true;
+#endif
+}
+
+v3bpos_t getFarmeshActual(v3bpos_t blockpos, int step) {
+#if !FARMESH_OLD
+	//infostream<<" getFarmeshActual "<<blockpos << " step="<< step << " => ";
+	--step;
+	blockpos.X >>= step;
+	blockpos.X <<= step;
+	blockpos.Y >>= step;
+	blockpos.Y <<= step;
+	blockpos.Z >>= step;
+	blockpos.Z <<= step;
+	//infostream<<"  "<<blockpos<<" grid="<<getFarmeshGrid(blockpos, step) << std::endl;
+#endif
+	return blockpos;
+}
+
 
 /*
 	MeshMakeData
 */
 
-MeshMakeData::MeshMakeData(Client *client, bool use_shaders, int step):
+MeshMakeData::MeshMakeData(Client *client, bool use_shaders, int step, NodeContainer * nodecontainer):
 	m_mesh_grid(client->getMeshGrid()),
+	m_vmanip(nodecontainer ? *nodecontainer : step > 1 ? static_cast<NodeContainer&>(client->getEnv().getClientMap()) :  m_vmanip_store),
+#if FARMESH_OLD
 	side_length((MAP_BLOCKSIZE * m_mesh_grid.cell_size) / step),
+#else
+	side_length((MAP_BLOCKSIZE * m_mesh_grid.cell_size)),
+#endif
 	m_client(client),
 	m_use_shaders(use_shaders)
 
@@ -99,7 +163,7 @@ bool MeshMakeData::fill_data()
 #if !defined(MESH_ZEROCOPY)
 	ScopeProfiler sp(g_profiler, "Client: Mesh data fill");
 
-	m_client->m_env.getClientMap().copy_27_blocks_to_vm(block, m_vmanip);
+	//m_client->m_env.getClientMap().copy_27_blocks_to_vm(block, m_vmanip);
 
 #if 0
 	v3POS blockpos_nodes = m_blockpos*MAP_BLOCKSIZE;
@@ -534,7 +598,7 @@ struct FastFace
 };
 
 static void makeFastFace(const TileSpec &tile, u16 li0, u16 li1, u16 li2, u16 li3,
-	const v3f &tp, const v3f &p, const v3s16 &dir, const v3f &scale, std::vector<FastFace> &dest, int step)
+	const v3f &tp, const v3f &p, const v3s16 &dir, const v3f &scale, std::vector<FastFace> &dest, int fscale)
 {
 	// Position is at the center of the cube.
 	v3f pos = p * BS;
@@ -681,7 +745,7 @@ static void makeFastFace(const TileSpec &tile, u16 li0, u16 li1, u16 li2, u16 li
 	else if (scale.Y < 0.999f || scale.Y > 1.001f) abs_scale = scale.Y;
 	else if (scale.Z < 0.999f || scale.Z > 1.001f) abs_scale = scale.Z;
 
-	abs_scale *= step;
+	abs_scale *= fscale;
 
 	v3f normal(dir.X, dir.Y, dir.Z);
 
@@ -884,7 +948,7 @@ static void getTileInfo(
 		u16 *lights,
 		u8 &waving,
 		TileSpec &tile
-		, int step
+		, int fscale
 	)
 {
 	auto &vmanip = data->m_vmanip;
@@ -893,27 +957,27 @@ static void getTileInfo(
 
 	//const MapNode &n0 = vmanip.getNodeRefUnsafe(blockpos_nodes + p);
 	MapNode n0;
-	for(int find = step - 1; find >= 0; --find) {
-		n0 = vmanip.getNodeRefUnsafe(blockpos_nodes + p*step + find);
-		if (step <= 1 || (n0.getContent() != CONTENT_IGNORE && n0.getContent() != CONTENT_AIR))
+	for(int find = fscale - 1; find >= 0; --find) {
+		n0 = vmanip.getNodeRefUnsafe(blockpos_nodes + p*fscale + find);
+		if (fscale <= 1 || (n0.getContent() != CONTENT_IGNORE && n0.getContent() != CONTENT_AIR))
 			break;
 	}
 
 	// Don't even try to get n1 if n0 is already CONTENT_IGNORE
-	if (step <= 1 && n0.getContent() == CONTENT_IGNORE) {
+	if (fscale <= 1 && n0.getContent() == CONTENT_IGNORE) {
 		makes_face = false;
 		return;
 	}
 
 	MapNode n1;
-	for(int find = step - 1; find >= 0; --find) {
-		n1 = vmanip.getNodeRefUnsafeCheckFlags(blockpos_nodes + p*step + face_dir*step + find);
-		if (step <= 1 || (n1.getContent() != CONTENT_IGNORE && n1.getContent() != CONTENT_AIR))
+	for(int find = fscale - 1; find >= 0; --find) {
+		n1 = vmanip.getNodeRefUnsafeCheckFlags(blockpos_nodes + p*fscale + face_dir*fscale + find);
+		if (fscale <= 1 || (n1.getContent() != CONTENT_IGNORE && n1.getContent() != CONTENT_AIR))
 			break;
 	}
 	// if(data->debug) infostream<<" GN "<<n0<< n1<< blockpos_nodes<<blockpos_nodes + p*step<<blockpos_nodes + p*step + face_dir*step<<std::endl;
 
-	if (step <= 1 && n1.getContent() == CONTENT_IGNORE) {
+	if (fscale <= 1 && n1.getContent() == CONTENT_IGNORE) {
 		makes_face = false;
 		return;
 	}
@@ -921,7 +985,7 @@ static void getTileInfo(
 	// This is hackish
 	bool equivalent = false;
 	u8 mf = face_contents(n0.getContent(), n1.getContent(),
-			&equivalent, ndef, step);
+			&equivalent, ndef, fscale);
 
 	if (mf == 0) {
 		makes_face = false;
@@ -952,8 +1016,8 @@ static void getTileInfo(
 			layer.material_flags |= MATERIAL_FLAG_BACKFACE_CULLING;
 	}
 
-	if (!data->m_smooth_lighting || step > 1) {
-		if (step > 1 && (!n0.getContent() || !n1.getContent()))
+	if (!data->m_smooth_lighting || fscale > 1) {
+		if (fscale > 1 && (!n0.getContent() || !n1.getContent()))
 			lights[0] = lights[1] = lights[2] = lights[3] = decode_light(LIGHT_MAX-2);
 		else
 		lights[0] = lights[1] = lights[2] = lights[3] =
@@ -980,7 +1044,7 @@ static void updateFastFaceRow(
 		const v3f &&translate_dir_f,
 		const v3s16 &&face_dir,
 		std::vector<FastFace> &dest,
-		int step)
+		int fscale)
 {
 	static thread_local const bool waving_liquids =
 		g_settings->getBool("enable_shaders") &&
@@ -1003,7 +1067,7 @@ static void updateFastFaceRow(
 	// Get info of first tile
 	getTileInfo(data, p, face_dir,
 			makes_face, p_corrected, face_dir_corrected,
-			lights, waving, tile, step);
+			lights, waving, tile, fscale);
 
 	// Unroll this variable which has a significant build cost
 	TileSpec next_tile;
@@ -1027,7 +1091,7 @@ static void updateFastFaceRow(
 					next_makes_face, next_p_corrected,
 					next_face_dir_corrected, next_lights,
 					waving,
-					next_tile, step);
+					next_tile, fscale);
 
 			if (!force_not_tiling
 					&& next_makes_face == makes_face
@@ -1063,7 +1127,7 @@ static void updateFastFaceRow(
 					scale.Z = continuous_tiles_count;
 
 				makeFastFace(tile, lights[0], lights[1], lights[2], lights[3],
-						pf, sp, face_dir_corrected, scale, dest, step);
+						pf, sp, face_dir_corrected, scale, dest, fscale);
 #if !defined(NDEBUG)
 				g_profiler->avg("Meshgen: Tiles per face [#]", continuous_tiles_count);
 #endif
@@ -1083,7 +1147,7 @@ static void updateFastFaceRow(
 }
 
 static void updateAllFastFaceRows(MeshMakeData *data,
-		std::vector<FastFace> &dest, int step)
+		std::vector<FastFace> &dest, int fscale)
 {
 	/*
 		Go through every y,z and get top(y+) faces in rows of x+
@@ -1095,7 +1159,7 @@ static void updateAllFastFaceRows(MeshMakeData *data,
 				v3s16(1, 0, 0), //dir
 				v3f  (1, 0, 0),
 				v3s16(0, 1, 0), //face dir
-				dest, step);
+				dest, fscale);
 
 	/*
 		Go through every x,y and get right(x+) faces in rows of z+
@@ -1107,7 +1171,7 @@ static void updateAllFastFaceRows(MeshMakeData *data,
 				v3s16(0, 0, 1), //dir
 				v3f  (0, 0, 1),
 				v3s16(1, 0, 0), //face dir
-				dest, step);
+				dest, fscale);
 
 	/*
 		Go through every y,z and get back(z+) faces in rows of x+
@@ -1119,7 +1183,7 @@ static void updateAllFastFaceRows(MeshMakeData *data,
 				v3s16(1, 0, 0), //dir
 				v3f  (1, 0, 0),
 				v3s16(0, 0, 1), //face dir
-				dest, step);
+				dest, fscale);
 }
 
 static void applyTileColor(PreMeshBuffer &pmb)
@@ -1314,11 +1378,17 @@ void PartialMeshBuffer::afterDraw() const
 */
 
 MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
-	step(data->step),
+	step{data->step},
+#if FARMESH_OLD
+       scale {step},
+#else
+       fscale(pow(2, step - 1)),
+#endif
+
 	//no_draw(data->no_draw),
 	m_tsrc(data->m_client->getTextureSource()),
 	m_shdrsrc(data->m_client->getShaderSource()),
-	m_bounding_sphere_center((data->side_length_data * 0.5f - 0.5f) * BS),
+	m_bounding_sphere_center((fscale * data->side_length_data * 0.5f - 0.5f) * BS), // TODO: why _data? 
 	m_animation_force_timer(0), // force initial animation
 	m_last_crack(-1),
 	m_last_daynight_ratio((u32) -1)
@@ -1328,8 +1398,9 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	m_enable_shaders = data->m_use_shaders;
 	m_enable_vbo = g_settings->getBool("enable_vbo");
 
-	if (!data->fill_data())
+	if (!data->fill_data()) {
 		return;
+	}
 
 	v3s16 bp = data->m_blockpos;
 	// Only generate minimap mapblocks at even coordinates.
@@ -1359,7 +1430,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	timestamp = data->timestamp;
 
 	std::vector<FastFace> fastfaces_new;
-	fastfaces_new.reserve(512/step);
+	fastfaces_new.reserve(512 /*/step*/);
 
 	/*
 		We are including the faces of the trailing edges of the block.
@@ -1371,7 +1442,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	{
 		// 4-23ms for MAP_BLOCKSIZE=16  (NOTE: probably outdated)
 		//TimeTaker timer2("updateAllFastFaceRows()");
-		updateAllFastFaceRows(data, fastfaces_new, step);
+		updateAllFastFaceRows(data, fastfaces_new, fscale);
 	}
 	// End of slow part
 
@@ -1537,10 +1608,10 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 		}
 
-		if (step > 1) {
+		if (fscale > 1) {
 			translateMesh(m_mesh[layer], v3f(HBS, 0, HBS));
-			scaleMesh(m_mesh[layer], v3f(step, step, step));
-			translateMesh(m_mesh[layer], v3f(-HBS, -HBS*step + HBS + BS, -HBS));
+			scaleMesh(m_mesh[layer], v3f(fscale, fscale, fscale));
+			translateMesh(m_mesh[layer], v3f(-HBS, -HBS*fscale + HBS + BS, -HBS));
 		}
 
 		if (m_mesh[layer]) {
@@ -1563,7 +1634,9 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 MapBlockMesh::~MapBlockMesh()
 {
 	for (scene::IMesh *m : m_mesh) {
+		if (m)
 		m->drop();
+		m = nullptr;
 	}
 	for (MinimapMapblock *block : m_minimap_mapblocks)
 		delete block;
@@ -1583,7 +1656,7 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack,
 	m_animation_force_timer = myrand_range(5, 100);
 #endif
 
-	m_animation_force_timer *= step;
+	m_animation_force_timer *= fscale;
 
 	// Cracks
    if (step <= 1)

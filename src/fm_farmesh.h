@@ -16,6 +16,20 @@ class Client;
 class Mapgen;
 constexpr size_t FARMESH_MATERIAL_COUNT = 2;
 
+class FarContainer : public NodeContainer
+{
+
+public:
+	FarContainer();
+	MapNode &getNodeRefUnsafe(const v3pos_t &p) override;
+	MapNode getNodeNoExNoEmerge(const v3pos_t &p) override;
+	MapNode getNodeNoEx(const v3pos_t &p) override;
+	Mapgen *m_mg = nullptr;
+	MapNode visible_node;
+	MapNode water_node;
+	pos_t m_water_level = 0;
+};
+
 class FarMesh : public scene::ISceneNode
 {
 public:
@@ -32,7 +46,7 @@ public:
 
 	virtual const core::aabbox3d<f32> &getBoundingBox() const override { return m_box; }
 
-    void CreateMesh();
+	void CreateMesh();
 
 private:
 	video::SMaterial m_materials[FARMESH_MATERIAL_COUNT];
@@ -43,23 +57,23 @@ private:
 #if cache0
 // v3pos_t m_camera_pos_aligned;
 #endif
-	#if cache_step
+#if cache_step
 	std::vector<v3pos_t> m_camera_pos_aligned_by_step;
-	#endif
-	#if cache0
+#endif
+#if cache0
 	v3pos_t m_camera_pos_aligned;
-	#endif
+#endif
 	v3f m_camera_dir;
 	f32 m_camera_fov;
 	f32 m_camera_pitch;
 	f32 m_camera_yaw;
 	float m_time;
 	Client *m_client;
-	s16 m_render_range  = 16*16;
+	s16 m_render_range = 16 * 16;
 	uint32_t m_render_range_max;
 	pos_t m_water_level = 0;
 	v3pos_t m_camera_offset;
-	constexpr static uint16_t grid_size_min = 16;
+	//constexpr static uint16_t grid_size_min = 16;
 	//constexpr static uint16_t grid_size_max = 256;
 	//constexpr static uint16_t grid_size_max = 64;
 	constexpr static uint16_t grid_size_max_y = 64;
@@ -68,13 +82,13 @@ private:
 	//constexpr static uint16_t grid_size_max_y = 16;
 	constexpr static uint16_t grid_size_max_x = grid_size_max_y * 4;
 	//constexpr static uint16_t grid_size_max = 16;
-	std::array<uint16_t, grid_size_max_x*grid_size_max_y> process_order;
+	std::array<uint16_t, grid_size_max_x * grid_size_max_y> process_order;
 	// uint16_t grid_size = grid_size_min;
 	//uint16_t grid_size = 64;
 	//uint16_t grid_size = 256;
 	//uint16_t grid_size = 	grid_size_max;
-	uint16_t grid_size_x = 	grid_size_max_x;
-	uint16_t grid_size_y = 	grid_size_max_y;
+	uint16_t grid_size_x = grid_size_max_x;
+	uint16_t grid_size_y = grid_size_max_y;
 	//constexpr static uint16_t skip_x_num = 7;
 	//constexpr static uint16_t skip_y_num = 7;
 	//uint16_t m_skip_x_current = 0;
@@ -90,7 +104,7 @@ private:
 		unordered_map_v3pos<int> depth;
 		unordered_map_v3pos<v3pos_t> pos;
 		unordered_map_v3pos<pos_t> step_width; // debug only
-		unordered_map_v3pos<pos_t> step;		 // debug only
+		unordered_map_v3pos<pos_t> step;	   // debug only
 	};
 	unordered_map_v3pos<ls_cache> plane_cache;
 
@@ -110,5 +124,7 @@ private:
 	uint16_t m_cycle_stop_x = 0, m_cycle_stop_y = 0, m_cycle_stop_i = 0;
 
 	//irr::scene::IMesh* mesh = nullptr;
-	irr::scene::SMesh* mesh = nullptr;
+	irr::scene::SMesh *mesh = nullptr;
+
+	FarContainer farcontainer;
 };

@@ -49,6 +49,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mapblock.h"
 #include <sys/types.h>
 #include <unordered_set>
+#include "fm_nodecontainer.h"
 #include "config.h"
 
 class Settings;
@@ -140,7 +141,7 @@ public:
 	virtual void onMapEditEvent(const MapEditEvent &event) = 0;
 };
 
-class Map /*: public NodeContainer*/
+class Map : public NodeContainer
 {
 public:
 	Map(IGameDef *gamedef);
@@ -277,7 +278,7 @@ public:
 
 
 //freeminer:
-	MapNode getNodeTry(const v3pos_t & p);
+	MapNode& getNodeTry(const v3pos_t & p);
 	//MapNode getNodeNoLock(v3s16 p); // dont use
 
 	std::atomic_uint m_liquid_step_flow {0};
@@ -289,6 +290,10 @@ public:
 	typedef concurrent_unordered_map<v3pos_t, MapBlockP, v3posHash, v3posEqual>
 			m_blocks_type;
 	m_blocks_type m_blocks;
+	typedef concurrent_unordered_map<v3pos_t, std::shared_ptr<MapBlock>, v3posHash,
+			v3posEqual>
+			m_far_blocks_type;
+	m_far_blocks_type m_far_blocks;
 	// MapBlock * getBlockNoCreateNoEx(v3pos_t & p);
 	MapBlock *createBlankBlockNoInsert(const v3bpos_t &p);
 	MapBlock *createBlankBlock(const v3bpos_t &p);
@@ -319,7 +324,14 @@ protected:
 public:
 	std::atomic_uint time_life {0};
 
-//end of freeminer
+	inline MapNode getNodeNoEx(const v3pos_t &p) override { return getNodeTry(p); };
+	inline MapNode getNodeNoExNoEmerge(const v3pos_t &p) override
+	{
+		return getNodeTry(p);
+	};
+	inline MapNode &getNodeRefUnsafe(const v3pos_t &p) override { return getNodeTry(p); }
+
+	//end of freeminer
 
 
 

@@ -90,7 +90,7 @@ void Mapgen_features::layers_prepare(const v3pos_t & node_min, const v3pos_t & n
 }
 
 MapNode Mapgen_features::layers_get(unsigned int index) {
-	auto layer_index = rangelim((unsigned int)myround((noise_layers->result[index] / noise_layers_width) * layers_node_size), 0, layers_node_size-1);
+	const auto layer_index = rangelim((unsigned int)myround((noise_layers->result[index] / noise_layers_width) * layers_node_size), 0, layers_node_size-1);
 	//errorstream<<"ls: index="<<index<< " layer_index="<<layer_index<<" off="<<noise_layers->np.offset<<" sc="<<noise_layers->np.scale<<" noise_layers_width="<<noise_layers_width<<" layers_node_size="<<layers_node_size<<std::endl;
 	return layers_node[layer_index];
 }
@@ -177,7 +177,7 @@ MapgenIndev::MapgenIndev(MapgenIndevParams *params, EmergeParams *emerge)
 
 		// 3D noise, 1 up, 1 down overgeneration
 		noise_floatland =
-			new Noise(&params->np_floatland,    seed, csize.X, csize.Y + 2, csize.Z);
+			new Noise(&params->np_floatland,    seed, csize.X, csize.Y + y_offset * 2 + 2, csize.Z);
 	}
 
 }

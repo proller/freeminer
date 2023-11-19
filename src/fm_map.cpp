@@ -173,7 +173,9 @@ void Map::eraseBlock(const MapBlockP block)
 	m_block_cache = nullptr;
 }
 
-MapNode Map::getNodeTry(const v3pos_t &p)
+MapNode dummy {CONTENT_IGNORE};
+
+MapNode& Map::getNodeTry(const v3pos_t &p)
 {
 #ifndef NDEBUG
 	ScopeProfiler sp(g_profiler, "Map: getNodeTry");
@@ -181,7 +183,7 @@ MapNode Map::getNodeTry(const v3pos_t &p)
 	auto blockpos = getNodeBlockPos(p);
 	auto block = getBlockNoCreateNoEx(blockpos, true);
 	if (!block)
-		return MapNode(CONTENT_IGNORE);
+		return dummy; // MapNode(CONTENT_IGNORE);
 	auto relpos = p - blockpos * MAP_BLOCKSIZE;
 	return block->getNodeTry(relpos);
 }

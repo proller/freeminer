@@ -682,6 +682,7 @@ void Camera::updateViewingRange()
 
 	static int framecnt = 0;
 	m_draw_control.fps_wanted = wanted_fps;
+#if FARMESH_OLD
 	if (farmesh) {
 			//infostream<<" m_draw_control.fps="<<m_draw_control.fps<< " wanted_fps="<< wanted_fps << " m_draw_control.fps_avg="<< m_draw_control.fps_avg <<" wanted_fps*1.4="<< wanted_fps*1.4 /*<<" block_draw_ratio="<<block_draw_ratio */<< " wanted_frametime="<< wanted_frametime <<" .blocks_would_have_drawn=" <<m_draw_control.blocks_would_have_drawn <<" .blocks_drawn=" <<m_draw_control.blocks_drawn <<std::endl;
 			if (m_draw_control.fps > wanted_fps && m_draw_control.fps_avg >= wanted_fps*1.3) {
@@ -713,6 +714,7 @@ void Camera::updateViewingRange()
 					return;
 			}
 	}
+#endif
 
 	} // static_viewing_range
 

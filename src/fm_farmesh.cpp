@@ -7,8 +7,10 @@
 #include "client/clientmap.h"
 #include "constants.h"
 #include "emerge.h"
+#include "fm_nodecontainer.h"
 #include "irr_v3d.h"
 #include "irrlichttypes.h"
+#include "light.h"
 #include "log.h"
 #include "log_types.h"
 #include "map.h"
@@ -24,12 +26,30 @@
 #include <random>
 #include <utility>
 
+FarContainer::FarContainer(){};
+MapNode air_node{CONTENT_AIR, LIGHT_SUN};
+MapNode &FarContainer::getNodeRefUnsafe(const v3pos_t &p)
+{
+	if (m_mg->visible(p.X, p.Y, p.Z))
+		return visible_node;
+	if (p.Y < m_water_level)
+		return water_node;
+	return air_node;
+};
+MapNode FarContainer::getNodeNoExNoEmerge(const v3pos_t &p){
+    return getNodeRefUnsafe(p);
+};
+MapNode FarContainer::getNodeNoEx(const v3pos_t &p)
+{
+	return getNodeRefUnsafe(p);
+};
+
 FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
 		// u64 seed,
 		Client *client, Server *server) :
 		scene::ISceneNode(parent, mgr, id),
 		// m_seed(seed),
-		m_camera_pos(0, 0, 0),
+		m_camera_pos(-1337, -1337, -1337),
 		// m_time(0),
 		m_client(client) //,
 						 // m_render_range(20*MAP_BLOCKSIZE)
@@ -37,7 +57,7 @@ FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
 	// dstream<<__FUNCTION_NAME<<std::endl;
 
 	// video::IVideoDriver* driver = mgr->getVideoDriver();
-
+/*
 	m_materials[0].setFlag(video::EMF_LIGHTING, false);
 	m_materials[0].setFlag(video::EMF_BACK_FACE_CULLING, true);
 	// m_materials[0].setFlag(video::EMF_BACK_FACE_CULLING, false);
@@ -54,6 +74,7 @@ FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
 	// m_materials[1].setTexture(0, client->tsrc()->getTexture("treeprop.png"));
 	m_materials[1].MaterialType = video::EMT_TRANSPARENT_ALPHA_CHANNEL_REF;
 	m_materials[1].setFlag(video::EMF_FOG_ENABLE, true);
+*/
 
 	m_render_range_max = g_settings->getS32("farmesh5");
 
@@ -74,12 +95,17 @@ FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
 					<< " render_range_max=" << m_render_range_max << "\n";
 		mg = emerge_use->getFirstMapgen();
 		m_water_level = emerge_use->mgparams->water_level;
+
+		farcontainer.m_mg = mg;
+		farcontainer.visible_node = {client->ndef()->getId("default:stone")};
+		farcontainer.water_node = {client->ndef()->getId("default:water_source")};
+		farcontainer.m_water_level = m_water_level;
 	}
 
 	for (size_t i = 0; i < process_order.size(); ++i)
 		process_order[i] = i;
 	auto rng = std::default_random_engine{};
-	std::shuffle(std::begin(process_order), std::end(process_order), rng);
+	//std::shuffle(std::begin(process_order), std::end(process_order), rng);
 }
 
 FarMesh::~FarMesh()
@@ -134,8 +160,9 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		// errorstream << " camera_pos_aligned=" << camera_pos_aligned	<< "
 		// m_camera_pos="
 		// << m_camera_pos << "\n";
-		if (m_camera_pos == camera_pos_aligned)
+		if (m_camera_pos == camera_pos_aligned){
 			return;
+		}
 		m_camera_pos = camera_pos_aligned;
 		// errorstream << " camera_pos_aligned=" << camera_pos_aligned << "\n";
 		//  v1:
@@ -213,7 +240,8 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 	unordered_map_v3pos<bool> occlude_cache;
 	const auto cache_time = m_client->getEnv().getTimeOfDay();
 
-	const int max_cycle_ms = 20;
+	//const int max_cycle_ms = 20;
+	const int max_cycle_ms = 500;
 	u32 end_ms = porting::getTimeMs() + max_cycle_ms;
 
 	/*
@@ -785,6 +813,27 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 																irr::video::SColor(255
 				   * (pos_int.Y < 0), 255 - step_num, 255 * !pos_int.Y, 0));
 				*/
+
+				auto &far_blocks = m_client->getEnv().getClientMap().m_far_blocks;
+				const auto blockpos = getNodeBlockPos(pos_int);
+				const auto step =
+						getFarmeshStep(m_client->getEnv().getClientMap().getControl(),
+								getNodeBlockPos(camera_pos_aligned), blockpos);
+				//const auto g = inFarmeshGrid(bp, step);
+				const auto blockpos_actual = getFarmeshActual(blockpos, step);
+//errorstream << " step="<<step << " blockpos="<<blockpos << " blockposa=" << blockpos_actual << std::endl;
+
+				if (!far_blocks.contains(blockpos_actual)) {
+					far_blocks.emplace(blockpos_actual, std::make_shared<MapBlock>(&m_client->getEnv().getClientMap(), blockpos, m_client));
+				}
+				const auto& block = far_blocks.at(blockpos_actual);
+				if (!block->getMesh(step)) {
+					MeshMakeData mdat(m_client, false, step, &farcontainer);
+					mdat.block = block.get();
+					mdat.m_blockpos = blockpos_actual;
+					auto mbmsh = std::make_shared<MapBlockMesh>(&mdat, camera_offset);
+					block->setMesh(mbmsh);
+				}
 				break;
 			}
 		}
@@ -836,7 +885,7 @@ void FarMesh::CreateMesh()
 
 	core::dimension2d<u32> tc = {grid_result_use->size(), grid_result_use->size()};
 	core::dimension2d<f32> textureRepeatCount{1, 1};
-	f32 hillHeight = 1;
+	//f32 hillHeight = 1;
 	const core::dimension2d<f32> &ch{1, 1};
 
 	core::dimension2d<u32> tileCount = tc;
@@ -878,7 +927,7 @@ void FarMesh::CreateMesh()
 		// size_t x = 0;
 		for (auto &point : ya) {
 			const auto &pos_int = point.pos;
-			const auto step_width = point.step_width;
+			//const auto step_width = point.step_width;
 			const auto depth_cached = point.depth;
 			// if (!depth_cached)
 			//	continue;
@@ -1119,7 +1168,7 @@ void FarMesh::render()
 				video::S3DVertex m_vertices[4];
 
 				{
-					f32 tx0, tx1, ty0, ty1;
+					f32 tx0=0, tx1 = 0.0, ty0 = 0.0, ty1=0;
 					v2f scale;
 					float m_size = 10;
 					video::SColor m_color;

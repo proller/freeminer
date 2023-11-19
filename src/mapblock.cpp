@@ -99,7 +99,7 @@ MapBlock::~MapBlock()
 	if (0)
 	{
 		//delete mesh;
-		mesh = nullptr;
+		// mesh = nullptr;
 	}
 #endif
 }
@@ -779,7 +779,7 @@ void MapBlock::pushElementsToCircuit(Circuit* circuit)
 
 #if BUILD_CLIENT
 MapBlock::mesh_type MapBlock::getMesh(int step) {
-	if (step >= 16 && mesh16) return mesh16;
+/*	if (step >= 16 && mesh16) return mesh16;
 	if (step >= 8  && mesh8)  return mesh8;
 	if (step >= 4  && mesh4)  return mesh4;
 	if (step >= 2  && mesh2)  return mesh2;
@@ -788,11 +788,25 @@ MapBlock::mesh_type MapBlock::getMesh(int step) {
 	if (mesh4)  return mesh4;
 	if (mesh8)  return mesh8;
 	if (mesh16) return mesh16;
-	return mesh;
+	return mesh;*/
+	--step;
+#if FARMESH_OLD
+	if (mesh[step])
+		return mesh[step];
+	int stry = step > 0 ? step - 1 : step + 1;
+	return mesh[stry];
+
+#else
+//DUMP("gmesh", step);
+	return mesh[step];
+#endif
+
 }
 
+#if OLD
 int32_t MapBlock::getMeshSize(int step)
 {
+	return mesh_size[step-1];/*
 	if (step >= 16 && m_mesh_size_16)
 		return m_mesh_size_16;
 	if (step >= 8 && m_mesh_size_8)
@@ -802,10 +816,12 @@ int32_t MapBlock::getMeshSize(int step)
 	if (step >= 2 && m_mesh_size_2)
 		return m_mesh_size_2;
 	return m_mesh_size;
+	*/
 }
 
 void MapBlock::setMeshSize(int step, int32_t size)
 {
+	 mesh_size[step-1] = size;/*
 	if (step >= 16)
 		m_mesh_size_16 = size;
 	else if (step >= 8)
@@ -815,16 +831,20 @@ void MapBlock::setMeshSize(int step, int32_t size)
 	else if (step >= 2)
 		m_mesh_size_2 = size;
 	else
-		m_mesh_size = size;
+		m_mesh_size = size;*/
 }
+#endif
+
 
 void MapBlock::setMesh(MapBlock::mesh_type &rmesh)
 {
-	int32_t mesh_size = -1;
-	if (rmesh /*&& !mesh_size*/)
-		mesh_size = rmesh->getMesh()->getMeshBufferCount();
-	setMeshSize(rmesh->step, mesh_size);
-
+//	int32_t mesh_size = -1;
+//	if (rmesh /*&& !mesh_size*/)
+//		mesh_size = rmesh->getMesh()->getMeshBufferCount();
+//	setMeshSize(rmesh->step, mesh_size);
+//DUMP("smesh", rmesh->step-1);
+	mesh[rmesh->step-1] = rmesh;
+/*
 	if (rmesh->step == 16) {
 		mesh_old = mesh16;
 		mesh16 = rmesh;
@@ -841,6 +861,7 @@ void MapBlock::setMesh(MapBlock::mesh_type &rmesh)
 		mesh_old = mesh;
 		mesh = rmesh;
 	}
+	*/
 }
 
 /*

@@ -44,18 +44,25 @@ class IShaderSource;
 	Mesh making stuff
 */
 
+bool inFarmeshGrid(const v3pos_t & blockpos, int step);
 int getFarmeshStep(MapDrawControl& draw_control, const v3bpos_t & playerblockpos, const v3bpos_t & block_pos);
+v3pos_t getFarmeshActual(v3pos_t blockpos, int step);
 
 class MapBlock;
 struct MinimapMapblock;
 
 struct MeshMakeData
 {
-#if defined(MESH_ZEROCOPY)
-	Map & m_vmanip;
+#if !FARMESH_OLD
+	VoxelManipulator m_vmanip_store;
+	NodeContainer & m_vmanip;
+
+//#if defined(MESH_ZEROCOPY)
+//	Map & m_vmanip;
 #else
 	VoxelManipulator m_vmanip;
 #endif
+
 	v3s16 m_blockpos = v3s16(-1337,-1337,-1337);
 	v3s16 m_crack_pos_relative = v3s16(-1337,-1337,-1337);
 	bool m_smooth_lighting = false;
@@ -80,8 +87,7 @@ struct MeshMakeData
 
 	MeshMakeData(Client *client, bool use_shaders
 			, int step = 1
-			//Map & map_ = {nullptr},
-			 //MapDrawControl& draw_control_ = {}
+			, NodeContainer * nodecontainer = nullptr
 			 );
 
 	/*
@@ -261,6 +267,7 @@ public:
 	}
 
 	int step = 1;
+	float fscale = 1;
 	//bool no_draw = 0;
 	unsigned int timestamp = 0;
 	u32 m_usage_timer = 0;

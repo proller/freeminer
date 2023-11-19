@@ -64,7 +64,7 @@ void MeshBufListList::add(scene::IMeshBuffer *buf, v3s16 position, u8 layer)
 
 void MapDrawControl::fm_init() {
 	farmesh = g_settings->getS32("farmesh");
-	farmesh_step = g_settings->getS32("farmesh_step");
+	//farmesh_step = g_settings->getS32("farmesh_step");
 	fov_want = fov = g_settings->getFloat("fov");
 }
 
@@ -734,6 +734,10 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 
 	if (!m_drawlist_last) {
 		drawlist.clear();
+
+		for (const auto &b : m_far_blocks) {
+			drawlist.emplace(b.first, b.second.get());
+		}
 	}
 
 	if (!max_cycle_ms)
@@ -750,7 +754,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 	//camera_fov *= 1.2;
 
 	//v3s16 cam_pos_nodes = floatToInt(camera_position, BS);
-	v3pos_t cam_pos_nodes = m_camera_position_node;
+	//v3pos_t cam_pos_nodes = m_camera_position_node;
 /*
 	v3pos_t p_blocks_min;
 	v3pos_t p_blocks_max;
@@ -813,7 +817,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 			);
 */
 
-			f32 d = radius_box(bp*MAP_BLOCKSIZE, cam_pos_nodes); //blockpos_relative.getLength();
+			f32 d = radius_box(bp*MAP_BLOCKSIZE, m_camera_position_node); //blockpos_relative.getLength();
 			if (d > range_max) {
 				if (d > range_max * 4 && ir.second) {
 					int mul = d / range_max;
@@ -839,7 +843,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 	bool occlusion_culling_enabled = mesh_grid.cell_size < 4;
 
 	if (m_control.allow_noclip) {
-		MapNode n = getNode(cam_pos_nodes);
+		MapNode n = getNode(m_camera_position_node);
 		if (n.getContent() == CONTENT_IGNORE || m_nodedef->get(n).solidness == 2)
 			occlusion_culling_enabled = false;
 	}
@@ -863,17 +867,28 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 		if (!block)
 			continue;
 
-			int mesh_step = getFarmeshStep(m_control, getNodeBlockPos(cam_pos_nodes), bp);
+		int mesh_step =
+				getFarmeshStep(m_control, getNodeBlockPos(m_camera_position_node), bp);
+		if (!inFarmeshGrid(bp, mesh_step)) {
+			verbosestream << "meshskip "
+						  << " s=" << mesh_step << " p=" << bp
+						  << " player=" << getNodeBlockPos(m_camera_position_node)
+						  << std::endl;
+			//DUMP("meshskip", mesh_step, bp, cam_pos_nodes);
+			continue;
+		}
 			/*
 				Compare block position to camera position, skip
 				if not seen on display
 			*/
 
-			auto mesh = block->getMesh(mesh_step);
+		auto mesh = block->getMesh(mesh_step);
 			{
 			blocks_in_range++;
 
-			const int smesh_size = block->getMeshSize(mesh_step);
+			//const int smesh_size = block->getMeshSize(mesh_step);
+			const int smesh_size = !mesh ? -1 : mesh->getMesh()->getMeshBufferCount();
+
 			/*
 				Ignore if mesh doesn't exist
 			*/
@@ -983,7 +998,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 				// Raytraced occlusion culling - send rays from the camera to the block's corners
 				if (!m_control.range_all && occlusion_culling_enabled && m_enable_raytraced_culling &&
 						mesh &&
-						isMeshOccluded(block, mesh_grid.cell_size, cam_pos_nodes)) {
+						isMeshOccluded(block, mesh_grid.cell_size, m_camera_position_node)) {
 					blocks_occlusion_culled++;
 					continue;
 				}
@@ -1139,6 +1154,14 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 		MapBlock *block = i.second;
 		//int mesh_step = getFarmeshStep(m_control, getNodeBlockPos(cam_pos_nodes), block->getPos());
 		int mesh_step = getFarmeshStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos());
+
+		if (!inFarmeshGrid(block_pos, mesh_step)) {
+		verbosestream << "Rmeshskip "
+					  << " s=" << mesh_step << " p=" << block_pos
+					  << " player=" << getNodeBlockPos(m_camera_position_node)
+					  << std::endl;
+			continue;
+		}
 		
 		// If the mesh of the block happened to get deleted, ignore it
 		const auto block_mesh = block->getMesh(mesh_step);
