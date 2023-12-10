@@ -882,7 +882,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 				if not seen on display
 			*/
 
-		auto mesh = block->getMesh(mesh_step);
+		    auto mesh = block->getMesh(mesh_step);
 			{
 			blocks_in_range++;
 
