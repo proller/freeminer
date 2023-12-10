@@ -1,10 +1,11 @@
 
 #include "fm_farmesh.h"
-#include "EMaterialFlags.h"
+//#include "EMaterialFlags.h"
 #include "EPrimitiveTypes.h"
 #include "IMeshBuffer.h"
 #include "client/client.h"
 #include "client/clientmap.h"
+#include "client/mapblock_mesh.h"
 #include "constants.h"
 #include "emerge.h"
 #include "fm_nodecontainer.h"
@@ -1119,7 +1120,7 @@ void FarMesh::CreateMesh()
 	buffer->drop();
 	// errorstream << "mesh filleed  " << (long)mesh << std::endl;
 
-	mesh->setMaterialFlag(irr::video::EMF_FOG_ENABLE, 1);
+	//mesh->setMaterialFlag(irr::video::EMF_FOG_ENABLE, 1);
 	// mesh->setMaterialFlag(irr::video::EMF_NORMALIZE_NORMALS, 1);
 	//   material_.ZBuffer = irr::video::ECFN_ALWAYS;
 	//  material_.setFlag(irr::video::EMF_ZBUFFER, irr::video::ECFN_ALWAYS);
