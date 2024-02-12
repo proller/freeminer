@@ -5,8 +5,10 @@
 #include "IMeshBuffer.h"
 #include "client/client.h"
 #include "client/clientmap.h"
+//#include "client/mapblock_mesh.h"
 #include "client/mapblock_mesh.h"
 #include "constants.h"
+#include "debug/iostream_debug_helpers.h"
 #include "emerge.h"
 #include "fm_nodecontainer.h"
 #include "irr_v3d.h"
@@ -15,6 +17,7 @@
 #include "log.h"
 #include "log_types.h"
 #include "map.h"
+//#include "mapblock.h"
 #include "mapgen/mapgen.h"
 #include "mapnode.h"
 #include "nodedef.h"
@@ -24,6 +27,9 @@
 #include "util/unordered_map_hash.h"
 #include <cmath>
 #include <cstdint>
+//#include <memory>
+//#include <ostream>
+#include <memory>
 #include <random>
 #include <utility>
 
@@ -37,13 +43,95 @@ MapNode &FarContainer::getNodeRefUnsafe(const v3pos_t &p)
 		return water_node;
 	return air_node;
 };
-MapNode FarContainer::getNodeNoExNoEmerge(const v3pos_t &p){
-    return getNodeRefUnsafe(p);
+MapNode FarContainer::getNodeNoExNoEmerge(const v3pos_t &p)
+{
+	return getNodeRefUnsafe(p);
 };
 MapNode FarContainer::getNodeNoEx(const v3pos_t &p)
 {
 	return getNodeRefUnsafe(p);
 };
+
+void FarMesh::makeFarBlock(const v3bpos_t &blockpos)
+{
+	//const auto blockpos = getNodeBlockPos(pos_int);
+	const auto step = getFarmeshStep(m_client->getEnv().getClientMap().getControl(),
+			getNodeBlockPos(m_camera_pos_aligned), blockpos);
+
+	const auto blockpos_actual = getFarmeshActual(blockpos, step);
+	//errorstream << " step="<<step << " blockpos="<<blockpos << " blockposa=" << blockpos_actual << std::endl;
+
+	auto &far_blocks = m_client->getEnv().getClientMap().m_far_blocks;
+	if (!far_blocks.contains(blockpos_actual)) {
+		far_blocks.emplace(blockpos_actual,
+				std::make_shared<MapBlock>(
+						&m_client->getEnv().getClientMap(), blockpos, m_client));
+	}
+	const auto &block = far_blocks.at(blockpos_actual);
+	if (!block->getFarMesh(step)) {
+		MeshMakeData mdat(m_client, false, 0, step, &farcontainer);
+		mdat.block = block.get();
+		mdat.m_blockpos = blockpos_actual;
+		auto mbmsh = std::make_shared<MapBlockMesh>(&mdat, m_camera_offset);
+		block->setFarMesh(mbmsh);
+	}
+}
+
+void FarMesh::makeFarBlocks(const v3bpos_t &blockpos)
+{
+	int radius = 20;
+	int &dr = m_make_far_blocks_last;
+	//int end_ms = os.clock() + tnt.time_max
+	bool last = false;
+
+	const int max_cycle_ms = 500;
+	u32 end_ms = porting::getTimeMs() + max_cycle_ms;
+
+	while (dr < radius) {
+		if (porting::getTimeMs() > end_ms) {
+			return;
+			//last = 1;
+		}
+
+		if (m_make_far_blocks_list.empty()) {
+			++dr;
+			//if os.clock() > end_ms or dr>=radius then last=1 end
+			for (pos_t dx = -dr; dx <= dr; dx += dr * 2) {
+				for (pos_t dy = -dr; dy <= dr; ++dy) {
+					for (pos_t dz = -dr; dz <= dr; ++dz) {
+						m_make_far_blocks_list.emplace_back(dx, dy, dz);
+					}
+				}
+			}
+			for (int dy = -dr; dy <= dr; dy += dr * 2) {
+				for (int dx = -dr + 1; dx <= dr - 1; ++dx) {
+					for (int dz = -dr; dz <= dr; ++dz) {
+						m_make_far_blocks_list.emplace_back(dx, dy, dz);
+					}
+				}
+			}
+			for (int dz = -dr; dz <= dr; dz += dr * 2) {
+				for (int dx = -dr + 1; dx <= dr - 1; ++dx) {
+					for (int dy = -dr + 1; dy <= dr - 1; ++dy) {
+						m_make_far_blocks_list.emplace_back(dx, dy, dz);
+					}
+				}
+			}
+		}
+		for (const auto p : m_make_far_blocks_list) {
+			//DUMP(dr, p, blockpos);
+			makeFarBlock(blockpos + p);
+		}
+		m_make_far_blocks_list.clear();
+
+		if (last) {
+			break;
+		}
+	}
+	if (m_make_far_blocks_last >= radius) {
+		m_make_far_blocks_last = 0;
+	}
+}
 
 FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
 		// u64 seed,
@@ -58,7 +146,7 @@ FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
 	// dstream<<__FUNCTION_NAME<<std::endl;
 
 	// video::IVideoDriver* driver = mgr->getVideoDriver();
-/*
+	/*
 	m_materials[0].setFlag(video::EMF_LIGHTING, false);
 	m_materials[0].setFlag(video::EMF_BACK_FACE_CULLING, true);
 	// m_materials[0].setFlag(video::EMF_BACK_FACE_CULLING, false);
@@ -99,8 +187,20 @@ FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
 
 		farcontainer.m_mg = mg;
 		farcontainer.visible_node = {client->ndef()->getId("default:stone")};
-		farcontainer.water_node = {client->ndef()->getId("default:water_source")};
+		//farcontainer.visible_node = {client->ndef()->getId("mapgen_stone")};
+		//farcontainer.visible_node =
+		//farcontainer.water_node = {client->ndef()->getId("mapgen_water_source")};
+		//farcontainer.water_node = {client->ndef()->getId("mapgen_stone")};
+		//farcontainer.water_node = farcontainer.visible_node;
+		//farcontainer.water_node = {client->ndef()->getId("default:water_source")};
+		//farcontainer.water_node = {client->ndef()->getId("default:tree")};
+		//farcontainer.water_node = {client->ndef()->getId("default:water_flowing")};
+		farcontainer.water_node = {client->ndef()->getId("default:diamondblock")};
+
+		DUMP(farcontainer.water_node, farcontainer.visible_node);
+
 		farcontainer.m_water_level = m_water_level;
+		//DUMP(farcontainer.visible_node, farcontainer.water_node);
 	}
 
 	for (size_t i = 0; i < process_order.size(); ++i)
@@ -136,16 +236,27 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 	if (!mg)
 		return;
 
+	if (0) {
+		auto camera_block = floatToInt(camera_pos, BS * 16);
+		//auto camera_pos_aligned = floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
+		//makeFarBlocks(camera_pos_aligned);
+		//DUMP(camera_pos, camera_block);
+		makeFarBlocks(camera_block);
+		return;
+	}
+
 #if cache0
 	auto camera_pos_aligned = floatToInt(
 			intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
-			// reset on significant move
+	// reset on significant move
 	if (m_camera_pos_aligned != camera_pos_aligned) {
+		//errorstream << " m_camera_pos_aligned=" << m_camera_pos_aligned << "!=" << " camera_pos_aligned=" <<  camera_pos_aligned << " m_cycle_stop_i=" << m_cycle_stop_i << std::endl;
 		m_cycle_stop_i = 0;
 	}
 
 #endif
 
+	//DUMP(m_cycle_stop_i);
 	if (!m_cycle_stop_i) {
 
 #if cache_step
@@ -161,7 +272,9 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		// errorstream << " camera_pos_aligned=" << camera_pos_aligned	<< "
 		// m_camera_pos="
 		// << m_camera_pos << "\n";
-		if (m_camera_pos == camera_pos_aligned){
+		if (m_camera_pos == camera_pos_aligned) {
+			//DUMP(m_cycle_stop_i, m_camera_pos, camera_pos_aligned);
+
 			return;
 		}
 		m_camera_pos = camera_pos_aligned;
@@ -261,6 +374,8 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 			// v="<<process_order[i] << "\n";
 
 			if (porting::getTimeMs() > end_ms) {
+				DUMP("stop", m_cycle_stop_i, i, porting::getTimeMs(), end_ms,
+						max_cycle_ms);
 				m_cycle_stop_i = i;
 				// m_cycle_stop_x = x;
 				/// m_cycle_stop_y = y;
@@ -661,7 +776,6 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		  */
 				} else
 
-				//if (mg)
 				{
 					/*
 			   if (x == grid_size / 2 && y == grid_size / 2) // if (!x && !y)
@@ -814,26 +928,17 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 																irr::video::SColor(255
 				   * (pos_int.Y < 0), 255 - step_num, 255 * !pos_int.Y, 0));
 				*/
-
-				auto &far_blocks = m_client->getEnv().getClientMap().m_far_blocks;
-				const auto blockpos = getNodeBlockPos(pos_int);
-				const auto step =
-						getFarmeshStep(m_client->getEnv().getClientMap().getControl(),
-								getNodeBlockPos(camera_pos_aligned), blockpos);
-				//const auto g = inFarmeshGrid(bp, step);
-				const auto blockpos_actual = getFarmeshActual(blockpos, step);
-//errorstream << " step="<<step << " blockpos="<<blockpos << " blockposa=" << blockpos_actual << std::endl;
-
-				if (!far_blocks.contains(blockpos_actual)) {
-					far_blocks.emplace(blockpos_actual, std::make_shared<MapBlock>(&m_client->getEnv().getClientMap(), blockpos, m_client));
-				}
-				const auto& block = far_blocks.at(blockpos_actual);
-				if (!block->getMesh(step)) {
-					MeshMakeData mdat(m_client, false, step, &farcontainer);
-					mdat.block = block.get();
-					mdat.m_blockpos = blockpos_actual;
-					auto mbmsh = std::make_shared<MapBlockMesh>(&mdat, camera_offset);
-					block->setMesh(mbmsh);
+				//if(0)
+				{
+					const auto blockpos = getNodeBlockPos(pos_int);
+					/*
+					const auto step =
+							getFarmeshStep(m_client->getEnv().getClientMap().getControl(),
+									getNodeBlockPos(camera_pos_aligned), blockpos);
+					//const auto g = inFarmeshGrid(bp, step);
+*/
+					//makeFarBlock(blockpos, step);
+					makeFarBlock(blockpos);
 				}
 				break;
 			}
@@ -1169,7 +1274,7 @@ void FarMesh::render()
 				video::S3DVertex m_vertices[4];
 
 				{
-					f32 tx0=0, tx1 = 0.0, ty0 = 0.0, ty1=0;
+					f32 tx0 = 0, tx1 = 0.0, ty0 = 0.0, ty1 = 0;
 					v2f scale;
 					float m_size = 10;
 					video::SColor m_color;

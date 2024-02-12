@@ -4490,10 +4490,10 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 			farmesh_range = 512;
 		if (farmesh_range > 1024)
 			farmesh_range = 1024;
-		farmesh_async.step(std::function<void()>{[&, farmesh_range]() {
+		farmesh_async.step(std::function<void()>{[&, farmesh_range, yaw = player->getYaw(), pitch = player->getPitch()]() {
 			farmesh->update(camera->getPosition(), camera->getDirection(),
-					camera->getFovMax(), camera->getCameraMode(), player->getYaw(),
-					player->getPitch(), camera->getOffset(), sky->getBrightness(),
+					camera->getFovMax(), camera->getCameraMode(), pitch, yaw,
+					camera->getOffset(), sky->getBrightness(),
 					farmesh_range);
 		}});
 	}

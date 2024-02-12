@@ -44,6 +44,8 @@ class IShaderSource;
 	Mesh making stuff
 */
 
+int getLodStep(MapDrawControl& draw_control, const v3bpos_t & playerblockpos, const v3bpos_t & block_pos);
+
 bool inFarmeshGrid(const v3pos_t & blockpos, int step);
 int getFarmeshStep(MapDrawControl& draw_control, const v3bpos_t & playerblockpos, const v3bpos_t & block_pos);
 v3pos_t getFarmeshActual(v3pos_t blockpos, int step);
@@ -74,7 +76,10 @@ struct MeshMakeData
 
     // fm:
 	u16 side_length_data;
-	int step = 1;
+	int lod_step;
+	int far_step;
+	const int fscale;
+
 	int range = 1;
 	bool no_draw = false;
 	unsigned int timestamp = 0;
@@ -85,8 +90,9 @@ struct MeshMakeData
 	bool filled = false;
 	bool fill_data();
 
-	MeshMakeData(Client *client, bool use_shaders
-			, int step = 1
+	explicit MeshMakeData(Client *client, bool use_shaders
+			, int lod_step = 0
+			, int far_step = 0
 			, NodeContainer * nodecontainer = nullptr
 			 );
 
@@ -266,8 +272,9 @@ public:
 		m_usage_timer += dtime;
 	}
 
-	int step = 1;
-	float fscale = 1;
+	int far_step;
+	int lod_step;
+	int fscale = 1;
 	//bool no_draw = 0;
 	unsigned int timestamp = 0;
 	u32 m_usage_timer = 0;

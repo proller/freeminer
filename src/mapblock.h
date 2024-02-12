@@ -52,7 +52,7 @@ struct ActiveABM;
 
 // fm:
 static MapNode ignoreNode{CONTENT_IGNORE};
-constexpr auto FARMESH_STEP_MAX {15};
+constexpr auto FARMESH_STEP_MAX {16};
 
 
 struct abm_trigger_one {
@@ -533,8 +533,10 @@ public:
 	typedef std::shared_ptr<MapBlockMesh> mesh_type;
 
 #if BUILD_CLIENT // Only on client
-	MapBlock::mesh_type getMesh(int step);
-	void setMesh(MapBlock::mesh_type & rmesh);
+	MapBlock::mesh_type getLodMesh(int step, bool allow_other = false);
+	void setLodMesh(const MapBlock::mesh_type & rmesh);
+	MapBlock::mesh_type getFarMesh(int step);
+	void setFarMesh(const MapBlock::mesh_type & rmesh);
 #endif
 //===
 
@@ -557,14 +559,16 @@ public:
 
 #if BUILD_CLIENT // Only on client
 private:
-	std::array<MapBlock::mesh_type, FARMESH_STEP_MAX> mesh;
+	std::array<MapBlock::mesh_type, 5> m_lod_mesh;
+	std::array<MapBlock::mesh_type, FARMESH_STEP_MAX> m_far_mesh;
+	MapBlock::mesh_type delete_mesh;
 	//std::array<uint32_t, FARMESH_STEP_MAX> mesh_size;
 
 	//mesh_type mesh = nullptr;
 	//mesh_type mesh2 = nullptr, mesh4 = nullptr, mesh8 = nullptr, mesh16 = nullptr;
 	//int16_t m_mesh_size_16 = -1, m_mesh_size_8 = -1, m_mesh_size_4 = -1, m_mesh_size_2 = -1, m_mesh_size = -1;
 public:	
-	mesh_type mesh_old = nullptr;
+	//mesh_type mesh_old = nullptr;
 	//std::atomic_int mesh_size {-1};
 #endif
 

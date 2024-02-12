@@ -48,7 +48,14 @@ public:
 
 	void CreateMesh();
 
+	void makeFarBlock(const v3bpos_t &blockpos);
+
+	void makeFarBlocks(const v3bpos_t &blockpos);
+
 private:
+	int m_make_far_blocks_last = 0;
+	std::vector<v3bpos_t> m_make_far_blocks_list;
+
 	video::SMaterial m_materials[FARMESH_MATERIAL_COUNT];
 	core::aabbox3d<f32> m_box;
 	float m_cloud_y;

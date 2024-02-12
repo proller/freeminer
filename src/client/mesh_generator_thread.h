@@ -34,7 +34,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 struct QueuedMeshUpdate
 {
 	//fm:
-	int step = 0;
+	//int step = 0;
 	//int range = 1;
 
 

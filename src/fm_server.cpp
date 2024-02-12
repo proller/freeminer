@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <unistd.h>
 #include "database/database.h"
+#include "debug/iostream_debug_helpers.h"
 #include "emerge.h"
 #include "irrTypes.h"
 #include "irr_v3d.h"
@@ -128,6 +129,7 @@ public:
 		auto time = porting::getTimeMs();
 		while (!stopRequested()) {
 			auto time_now = porting::getTimeMs();
+			//DUMP(time_now);
 			try {
 				m_server->getEnv().getMap().getBlockCacheFlush();
 				if (!m_server->AsyncRunMapStep((time_now - time) / 1000.0f, 1))
@@ -475,6 +477,7 @@ public:
 
 int Server::AsyncRunMapStep(float dtime, float dedicated_server_step, bool async)
 {
+	//DUMP("??");
 	TimeTaker timer_step("Server map step");
 	g_profiler->add("Server::AsyncRunMapStep (num)", 1);
 
@@ -548,6 +551,7 @@ int Server::AsyncRunMapStep(float dtime, float dedicated_server_step, bool async
 		// concurrent_map<v3POS, MapBlock*> modified_blocks; //not used
 		// if (m_env->getMap().updateLighting(m_env->getMap().lighting_modified_blocks,
 		// modified_blocks, max_cycle_ms)) {
+//DUMP("liq?", m_liquid_send_timer, m_liquid_send_interval);			
 		if (m_env->getServerMap().updateLightingQueue(max_cycle_ms, ret)) {
 			m_liquid_send_timer = m_liquid_send_interval;
 			goto no_send;

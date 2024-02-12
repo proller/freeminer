@@ -38,14 +38,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <algorithm>
 #include <cmath>
 
-int getFarmeshStep(MapDrawControl &draw_control, const v3bpos_t &playerblockpos,
+int getLodStep(MapDrawControl &draw_control, const v3bpos_t &playerblockpos,
 		const v3bpos_t &blockpos)
 {
-	if (!draw_control.farmesh) 
-		return 1;
-
 	int range = radius_box(playerblockpos, blockpos);
-#if FARMESH_OLD
+	if (draw_control.farmesh) {
 
 		const pos_t nearest = std::max(draw_control.cell_size * 2, 256 / MAP_BLOCKSIZE);
 		// DUMP(draw_control.farmesh, range, nearest, draw_control.cell_size, draw_control.farmesh + draw_control.farmesh_step * 4, draw_control.farmesh + draw_control.farmesh_step * 2, draw_control.farmesh + draw_control.farmesh_step, draw_control.farmesh);
@@ -53,60 +50,145 @@ int getFarmeshStep(MapDrawControl &draw_control, const v3bpos_t &playerblockpos,
 				draw_control.farmesh / draw_control.cell_size);
 		if (range >= std::min<pos_t>(
 							 nearest * 8, farmesh_cells + draw_control.farmesh_step * 4))
-			return 16;
+			return 4;
 		else if (range >= std::min<pos_t>(nearest * 4,
 								  farmesh_cells + draw_control.farmesh_step * 2))
-			return 8;
+			return 3;
 		else if (range >=
 				 std::min<pos_t>(nearest * 2, farmesh_cells + draw_control.farmesh_step))
-			return 4;
-		else if (range >= std::min<pos_t>(nearest, farmesh_cells))
 			return 2;
+		else if (range >= std::min<pos_t>(nearest, farmesh_cells))
+			return 1;
+	}
+	return 0;
+};
+
+int getFarmeshStep(MapDrawControl &draw_control, const v3bpos_t &playerblockpos,
+		const v3bpos_t &blockpos)
+{
+	/*
+                                       |
+                                       0
+                                    1111111  
+
+
+*/
+
+	if (!draw_control.farmesh)
+		return 1;
+
+	int range = radius_box(playerblockpos, blockpos);
+
+	const auto next_step = 1; //2;
+	range >>= next_step;	  // TODO: configurable
+
+#if FARMESH_OLD
+
+	const pos_t nearest = std::max(draw_control.cell_size * 2, 256 / MAP_BLOCKSIZE);
+	// DUMP(draw_control.farmesh, range, nearest, draw_control.cell_size, draw_control.farmesh + draw_control.farmesh_step * 4, draw_control.farmesh + draw_control.farmesh_step * 2, draw_control.farmesh + draw_control.farmesh_step, draw_control.farmesh);
+	const auto farmesh_cells = std::max<int>(
+			draw_control.cell_size * 2, draw_control.farmesh / draw_control.cell_size);
+	if (range >=
+			std::min<pos_t>(nearest * 8, farmesh_cells + draw_control.farmesh_step * 4))
+		return 16;
+	else if (range >=
+			 std::min<pos_t>(nearest * 4, farmesh_cells + draw_control.farmesh_step * 2))
+		return 8;
+	else if (range >=
+			 std::min<pos_t>(nearest * 2, farmesh_cells + draw_control.farmesh_step))
+		return 4;
+	else if (range >= std::min<pos_t>(nearest, farmesh_cells))
+		return 2;
 #else
-	range -= draw_control.farmesh;
-	range >>= 1;
-//range>>=1;
-//range<<=1;
+	//!range -= draw_control.farmesh;
+	//?range >>= 1;
+	//?range>>=1;
+	//range>>=1;
+	//range<<=1;
 	if (range <= 1)
-	return 1;
-	int skip = log(range)/log(2);
-//	range>>=s;
+		return 1;
+
+	//range <<= 1;
+
+	int skip = log(range) / log(2);
+	/*
+int skip = 0;
+for (short i = 32; i > 0; --i){
+	if (range & 1<<i) {
+		//return i;
+		skip = i;
+		break;
+	}
+}
+*/
+	/*
+	 const auto block_end = MAP_BLOCKSIZE * pow(2, skip) - 1;
+	 range = radius_box(playerblockpos, v3pos_t(blockpos.X + block_end, blockpos.Y + block_end, blockpos.Z + block_end));
+	range >>= next_step;// TODO: configurable
+	if (range <= 1)
+		return 1;
+const auto skip_end = log(range)/log(2);
+return std::min<int>(skip, skip_end);
+*/
+	//return skip;
+
+	//	range>>=s;
 	//range<<=s;
 	//if (range <= 1)return 1;
-	skip = log(range)/log(2);
-//DUMP(range, s, (range>>s)<<s, playerblockpos, blockpos);
+	//skip = log(range)/log(2);
+	//DUMP(range, s, (range>>s)<<s, playerblockpos, blockpos);
 	//++s;
 	//if (s>1 && (playerblockpos.X > blockpos.X || playerblockpos.Y > blockpos.Y || playerblockpos.Z > blockpos.Z))
 	//	--s;
 	//else 	    ++s;
-// /*
-//range = radius_box(playerblockpos, v3pos_t((blockpos.X >> skip) << skip , (blockpos.Y>> skip) << skip , (blockpos.Z >> skip) << skip));
-range = radius_box(v3pos_t((playerblockpos.X>> skip) << skip,(playerblockpos.Y>> skip) << skip,(playerblockpos.Z>> skip) << skip), v3pos_t((blockpos.X >> skip) << skip , (blockpos.Y>> skip) << skip , (blockpos.Z >> skip) << skip));
+	// /*
+	//range = radius_box(playerblockpos, v3pos_t((blockpos.X >> skip) << skip , (blockpos.Y>> skip) << skip , (blockpos.Z >> skip) << skip));
+	range = radius_box(v3pos_t((playerblockpos.X >> skip) << skip,
+							   (playerblockpos.Y >> skip) << skip,
+							   (playerblockpos.Z >> skip) << skip),
+			v3pos_t((blockpos.X >> skip) << skip, (blockpos.Y >> skip) << skip,
+					(blockpos.Z >> skip) << skip));
+	range >>= next_step; // TODO: configurable
+	range >>= 1;
 	if (range <= 1)
 		return skip;
-	range >>= 1;
-skip = log(range)/log(2);
-// */
+
+	skip = log(range) / log(2);
+	/*
+for (short i = 32; i > 0; --i){
+	if (range & 1<<i) {
+		//return i;
+		skip = i;
+		break;
+	}
+}
+*/
+
+	// */
 	if (skip > FARMESH_STEP_MAX)
 		skip = FARMESH_STEP_MAX;
-	const auto r = (range + draw_control.farmesh)*MAP_BLOCKSIZE;
+	const auto r = (range + draw_control.farmesh) * MAP_BLOCKSIZE;
 	//DUMP(range, 	r,s, playerblockpos, blockpos, inFarmeshGrid(blockpos, s));
 	return skip;
-#endif	
+#endif
 };
 
-bool inFarmeshGrid(const v3bpos_t & blockpos, int step) {
+bool inFarmeshGrid(const v3bpos_t &blockpos, int step)
+{
 #if !FARMESH_OLD
 	//int skip = pow(2, step - 1);
+	//int skip = pow(2, step - 2);
+	//int skip = pow(2, step + 1);
 	int skip = pow(2, step - 1);
-//if (skip > 1) --skip;
+	//if (skip > 1) --skip;
 	return !(blockpos.X % skip || blockpos.Y % skip || blockpos.Z % skip);
 #else
 	return true;
 #endif
 }
 
-v3bpos_t getFarmeshActual(v3bpos_t blockpos, int step) {
+v3bpos_t getFarmeshActual(v3bpos_t blockpos, int step)
+{
 #if !FARMESH_OLD
 	//infostream<<" getFarmeshActual "<<blockpos << " step="<< step << " => ";
 	--step;
@@ -126,23 +208,31 @@ v3bpos_t getFarmeshActual(v3bpos_t blockpos, int step) {
 	MeshMakeData
 */
 
-MeshMakeData::MeshMakeData(Client *client, bool use_shaders, int step, NodeContainer * nodecontainer):
+MeshMakeData::MeshMakeData(Client *client, bool use_shaders,
+	int lod_step, int far_step, 
+	NodeContainer *nodecontainer) :
 	m_mesh_grid(client->getMeshGrid()),
-	m_vmanip(nodecontainer ? *nodecontainer : step > 1 ? static_cast<NodeContainer&>(client->getEnv().getClientMap()) :  m_vmanip_store),
+
+	m_vmanip{nodecontainer ? *nodecontainer : m_vmanip_store},
+	//m_vmanip(nodecontainer ? *nodecontainer : step > 1 ? static_cast<NodeContainer&>(client->getEnv().getClientMap()) :  m_vmanip_store),
+	//m_vmanip( static_cast<NodeContainer&>(client->getEnv().getClientMap())),
+
 #if FARMESH_OLD
-	side_length((MAP_BLOCKSIZE * m_mesh_grid.cell_size) / step),
+		side_length((MAP_BLOCKSIZE * m_mesh_grid.cell_size) / step),
 #else
-	side_length((MAP_BLOCKSIZE * m_mesh_grid.cell_size)),
+		//side_length((MAP_BLOCKSIZE * m_mesh_grid.cell_size) / (lod_step+1)),
+		side_length((MAP_BLOCKSIZE * m_mesh_grid.cell_size) / (pow(2, lod_step))),
 #endif
+
 	m_client(client),
 	m_use_shaders(use_shaders)
 
-	, side_length_data(MAP_BLOCKSIZE * m_mesh_grid.cell_size)
-	, step{step}
-//, map{map_}, draw_control{draw_control_}
-/*#if defined(MESH_ZEROCOPY)
-	m_vmanip(map_),
-#endif*/
+	,
+	side_length_data(MAP_BLOCKSIZE * m_mesh_grid.cell_size),
+	lod_step{lod_step},
+	far_step{far_step},
+	fscale(pow(2,  far_step + lod_step))
+
 {}
 
 bool MeshMakeData::fill_data()
@@ -426,7 +516,7 @@ static u16 getSmoothLightCombined(const v3s16 &p,
 */
 u16 getSmoothLightSolid(const v3s16 &p, const v3s16 &face_dir, const v3s16 &corner, MeshMakeData *data)
 {
-	return getSmoothLightTransparent(p + face_dir * data->step, corner - 2 * face_dir, data);
+	return getSmoothLightTransparent(p + face_dir * data->fscale, corner - 2 * face_dir, data);
 }
 
 /*
@@ -808,11 +898,15 @@ void PartialMeshBuffer::afterDraw() const
 */
 
 MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
-	step{data->step},
+	far_step{data->far_step},
+	lod_step{data->lod_step},
 #if FARMESH_OLD
        scale {step},
 #else
-       fscale(pow(2, step - 1)),
+       //fscale(pow(2, far_step - 1 + lod_step - 1)),
+       //fscale(pow(2, far_step + lod_step )),
+	   fscale{data->fscale},
+	   //fscale{1},
 #endif
 
 	//no_draw(data->no_draw),
@@ -834,7 +928,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 	v3s16 bp = data->m_blockpos;
 	// Only generate minimap mapblocks at even coordinates.
-	if (step == 1) // || !data->block->getMesh())
+	if (fscale<=1) // || !data->block->getMesh())
 	if (data->m_mesh_grid.isMeshPos(bp) && data->m_client->getMinimap()) {
 		m_minimap_mapblocks.resize(data->m_mesh_grid.getCellVolume(), nullptr);
 		v3s16 ofs;
@@ -974,6 +1068,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 			scene::SMeshBuffer *buf = new scene::SMeshBuffer();
 			buf->Material = material;
+		  if (data->fscale <= 1)
 			if (p.layer.isTransparent()) {
 				buf->append(&p.vertices[0], p.vertices.size(), nullptr, 0);
 
@@ -1049,7 +1144,7 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack,
 	m_animation_force_timer *= fscale;
 
 	// Cracks
-   if (step <= 1)
+   if (fscale <= 1)
 	if (crack != m_last_crack) {
 		for (auto &crack_material : m_crack_materials) {
 			scene::IMeshBuffer *buf = m_mesh[crack_material.first.first]->
@@ -1077,7 +1172,7 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack,
 	}
 
 	// Texture animation
-   if (step <= 1)
+   if (fscale <= 1)
 	for (auto &it : m_animation_info) {
 		const TileLayer &tile = it.second.tile;
 		// Figure out current frame
@@ -1114,6 +1209,7 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack,
 				getMeshBuffer(daynight_diff.first.second);
 			buf->setDirty(irr::scene::EBT_VERTEX);
 			video::S3DVertex *vertices = (video::S3DVertex *)buf->getVertices();
+		   if(vertices)
 			for (const auto &j : daynight_diff.second)
 				final_color_blend(&(vertices[j.first].Color), j.second,
 						day_color);

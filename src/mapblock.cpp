@@ -754,19 +754,21 @@ void MapBlock::deSerializeNetworkSpecific(std::istream &is)
 		}
 	}
 
-void MapBlock::pushElementsToCircuit(Circuit* circuit)
-{
-}
+	void MapBlock::pushElementsToCircuit(Circuit *circuit)
+	{
+	}
 
-	bool MapBlock::analyzeContent() {
+	bool MapBlock::analyzeContent()
+	{
 		auto lock = try_lock_shared_rec();
 		if (!lock->owns_lock())
 			return false;
 		content_only = data[0].param0;
 		content_only_param1 = data[0].param1;
 		content_only_param2 = data[0].param2;
-		for (int i = 1; i<MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; ++i) {
-			if (data[i].param0 != content_only || data[i].param1 != content_only_param1 || data[i].param2 != content_only_param2) {
+		for (int i = 1; i < MAP_BLOCKSIZE * MAP_BLOCKSIZE * MAP_BLOCKSIZE; ++i) {
+			if (data[i].param0 != content_only || data[i].param1 != content_only_param1 ||
+					data[i].param2 != content_only_param2) {
 				content_only = CONTENT_IGNORE;
 				break;
 			}
@@ -776,8 +778,9 @@ void MapBlock::pushElementsToCircuit(Circuit* circuit)
 
 
 #if BUILD_CLIENT
-MapBlock::mesh_type MapBlock::getMesh(int step) {
-/*	if (step >= 16 && mesh16) return mesh16;
+	MapBlock::mesh_type MapBlock::getLodMesh(int step, bool allow_other)
+	{
+	/*	if (step >= 16 && mesh16) return mesh16;
 	if (step >= 8  && mesh8)  return mesh8;
 	if (step >= 4  && mesh4)  return mesh4;
 	if (step >= 2  && mesh2)  return mesh2;
@@ -787,24 +790,38 @@ MapBlock::mesh_type MapBlock::getMesh(int step) {
 	if (mesh8)  return mesh8;
 	if (mesh16) return mesh16;
 	return mesh;*/
-	--step;
+	//!!	--step;
 #if FARMESH_OLD
-	if (mesh[step])
-		return mesh[step];
-	int stry = step > 0 ? step - 1 : step + 1;
-	return mesh[stry];
+		if (mesh[step])
+			return mesh[step];
+		int stry = step > 0 ? step - 1 : step + 1;
+		return mesh[stry];
 
 #else
-//DUMP("gmesh", step);
-	return mesh[step];
-#endif
+		//DUMP("gmesh", step, (long)mesh[step].get(), allow_other);
+		if (m_lod_mesh[step] || !allow_other)
+			return m_lod_mesh[step];
 
-}
+		// Todo: cycle find
+		for (int inc = 1; inc < 4; ++inc) {
+			if (step + inc < m_lod_mesh.size() && m_lod_mesh[step + inc])
+				return m_lod_mesh[step + inc];
+			if (step - inc >= 0 && m_lod_mesh[step - inc])
+				return m_lod_mesh[step - inc];
+		}
+		return {};
+#endif
+	}
+
+	MapBlock::mesh_type MapBlock::getFarMesh(int step)
+	{
+		return m_far_mesh[step];
+	}
 
 #if OLD
-int32_t MapBlock::getMeshSize(int step)
-{
-	return mesh_size[step-1];/*
+	int32_t MapBlock::getMeshSize(int step)
+	{
+		return mesh_size[step - 1]; /*
 	if (step >= 16 && m_mesh_size_16)
 		return m_mesh_size_16;
 	if (step >= 8 && m_mesh_size_8)
@@ -815,11 +832,11 @@ int32_t MapBlock::getMeshSize(int step)
 		return m_mesh_size_2;
 	return m_mesh_size;
 	*/
-}
+	}
 
-void MapBlock::setMeshSize(int step, int32_t size)
-{
-	 mesh_size[step-1] = size;/*
+	void MapBlock::setMeshSize(int step, int32_t size)
+	{
+		mesh_size[step - 1] = size; /*
 	if (step >= 16)
 		m_mesh_size_16 = size;
 	else if (step >= 8)
@@ -830,19 +847,24 @@ void MapBlock::setMeshSize(int step, int32_t size)
 		m_mesh_size_2 = size;
 	else
 		m_mesh_size = size;*/
-}
+	}
 #endif
 
-
-void MapBlock::setMesh(MapBlock::mesh_type &rmesh)
-{
-//	int32_t mesh_size = -1;
-//	if (rmesh /*&& !mesh_size*/)
-//		mesh_size = rmesh->getMesh()->getMeshBufferCount();
-//	setMeshSize(rmesh->step, mesh_size);
-//DUMP("smesh", rmesh->step-1);
-	mesh[rmesh->step-1] = rmesh;
-/*
+	void MapBlock::setLodMesh(const MapBlock::mesh_type &rmesh)
+	{
+		//	int32_t mesh_size = -1;
+		//	if (rmesh /*&& !mesh_size*/)
+		//		mesh_size = rmesh->getMesh()->getMeshBufferCount();
+		//	setMeshSize(rmesh->step, mesh_size);
+		//DUMP("smesh", rmesh->step-1);
+		//mesh[rmesh->step-1] = rmesh;
+		//const auto ms = rmesh->lod_step ? rmesh->lod_step : rmesh->far_step;
+		const auto ms = rmesh->lod_step;
+		//DUMP("ssmesh", rmesh->lod_step, rmesh->far_step, ms);
+		//mesh[rmesh->far_step] = rmesh;
+		delete_mesh = std::move(m_lod_mesh[ms]);
+		m_lod_mesh[ms] = rmesh;
+		/*
 	if (rmesh->step == 16) {
 		mesh_old = mesh16;
 		mesh16 = rmesh;
@@ -860,7 +882,16 @@ void MapBlock::setMesh(MapBlock::mesh_type &rmesh)
 		mesh = rmesh;
 	}
 	*/
-}
+	}
+
+	void MapBlock::setFarMesh(const MapBlock::mesh_type &rmesh)
+	{
+		//const auto ms = rmesh->lod_step ? rmesh->lod_step : rmesh->far_step;
+		const auto ms = rmesh->far_step;
+		//DUMP("sfmesh", rmesh->lod_step, rmesh->far_step, ms);
+		delete_mesh = std::move(m_far_mesh[ms]);
+		m_far_mesh[ms] = rmesh;
+	}
 
 /*
 void MapBlock::delMesh() {
