@@ -23,11 +23,13 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "environment.h"
 #include "irr_v3d.h"
 #include "map.h"
+#include "server/fm_key_value_cached.h"
 #include "settings.h"
 #include "server/activeobjectmgr.h"
 #include "threading/concurrent_set.h"
 #include "util/numeric.h"
 #include <atomic>
+#include <cstddef>
 #include <mutex>
 #include "util/metricsbackend.h"
 #include <set>
@@ -447,8 +449,8 @@ public:
 	bool m_more_threads = true;
 public:
 	ABMHandler m_abmhandler;
+	bool analyzeBlock(MapBlock * block);
 private:
-	void analyzeBlock(MapBlock * block);
 	IntervalLimiter m_analyze_blocks_interval;
 	IntervalLimiter m_abm_random_interval;
 	std::list<v3pos_t> m_abm_random_blocks;
@@ -491,6 +493,9 @@ private:
 	u32 m_blocks_added_last = 0;
 	u32 m_active_block_analyzed_last = 0;
 	std::mutex m_max_lag_estimate_mutex;
+public:
+	KeyValueCached blocks_with_abm;
+	size_t abm_world_last = 0;
 //end of freeminer
 
 
