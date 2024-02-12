@@ -457,10 +457,12 @@ u32 Map::timerUpdate(float uptime, float unload_timeout, s32 max_loaded_blocks,
 					deleted_blocks_count++;
 				} else {
 
+/*
 #if BUILD_CLIENT
 					if (block->mesh_old)
 						block->mesh_old = nullptr;
 #endif
+*/
 
 					if (!block->m_uptime_timer_last) // not very good place, but minimum
 													 // modifications
