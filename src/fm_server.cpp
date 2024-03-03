@@ -1,18 +1,22 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <unistd.h>
+#include <unordered_map>
 #include "database/database.h"
 #include "debug/iostream_debug_helpers.h"
 #include "emerge.h"
 #include "irrTypes.h"
 #include "irr_v3d.h"
+#include "irrlichttypes.h"
 #include "log.h"
 #include "mapblock.h"
 #include "mapnode.h"
 #include "profiler.h"
 #include "server.h"
 #include "debug/stacktrace.h"
+#include "util/directiontables.h"
 #include "util/timetaker.h"
 
 class ServerThread : public thread_vector
@@ -160,7 +164,9 @@ class SendBlocksThread : public thread_vector
 	Server *m_server;
 
 public:
-	SendBlocksThread(Server *server) : thread_vector("SendBlocks", 30), m_server(server) {}
+	SendBlocksThread(Server *server) : thread_vector("SendBlocks", 30), m_server(server)
+	{
+	}
 
 	void *run()
 	{
@@ -337,7 +343,7 @@ public:
 		g_settings->getU64NoEx("abm_world_throttle", abm_world_throttle);
 		u64 abm_world_max_clients = m_server->isSingleplayer() ? 1 : 0;
 		g_settings->getU64NoEx("abm_world_max_clients", abm_world_max_clients);
-		u64 abm_world_max_blocks = 20000;
+		u64 abm_world_max_blocks = m_server->isSingleplayer() ? 2000 : 10000;
 		g_settings->getU64NoEx("abm_world_max_blocks", abm_world_max_blocks);
 
 		auto &abm_world_last = m_server->getEnv().abm_world_last;
@@ -347,7 +353,11 @@ public:
 					m_server->getMap().m_blocks.size() <= abm_world_max_blocks);
 		};
 
+		int32_t run = 0;
+		size_t pos_dir; // random start
+
 		while (!stopRequested()) {
+			++run;
 
 			if (!can_work()) {
 				tracestream << "Abm world wait" << '\n';
@@ -360,12 +370,13 @@ public:
 			auto time_start = porting::getTimeMs();
 
 			if (abm_world_load_all <= 0) {
+// Yes, very bad
 #if USE_LEVELDB
 				if (const auto it = m_server->getEnv()
 											.blocks_with_abm.database.new_iterator();
 						it) {
 					for (it->SeekToFirst(); it->Valid(); it->Next()) {
-						const auto key = it->key().ToString();
+						const auto &key = it->key().ToString();
 						if (key.starts_with("a")) {
 							const v3bpos_t pos = MapDatabase::getStringAsBlock(key);
 							loadable_blocks.emplace_back(pos);
@@ -381,25 +392,96 @@ public:
 				m_server->getEnv().getServerMap().listAllLoadableBlocks(loadable_blocks);
 			}
 
+			std::map<bpos_t, std::map<bpos_t, std::set<bpos_t>>> volume;
+
+			size_t cur_n = 0;
+
 			const auto loadable_blocks_size = loadable_blocks.size();
-			infostream << "Abm world blocks " << loadable_blocks_size << " per "
-					   << (porting::getTimeMs() - time_start) / 1000 << " from "
-					   << abm_world_last << " max_clients " << abm_world_max_clients
-					   << " throttle " << abm_world_throttle << '\n';
-			size_t cur_n = 0, processed = 0, triggers_total = 0;
+			infostream << "Abm world run " << run << " blocks " << loadable_blocks_size
+					   << " per " << (porting::getTimeMs() - time_start) / 1000
+					   << "s from " << abm_world_last << " max_clients "
+					   << abm_world_max_clients << " throttle " << abm_world_throttle
+					   << " vxs " << volume.size() << '\n';
+			size_t processed = 0, triggers_total = 0;
 
 			time_start = porting::getTimeMs();
 
 			const auto printstat = [&]() {
 				auto time = porting::getTimeMs();
 
-				infostream << "Abm world " << cur_n << "/" << loadable_blocks_size
-						   << " blocks loaded " << m_server->getMap().m_blocks.size()
-						   << " processed " << processed << " triggers " << triggers_total
-						   << " per " << (time - time_start) / 1000 << " speed "
-						   << processed / (((time - time_start) / 1000) ?: 1) << '\n';
+				infostream << "Abm world run " << run << " " << cur_n << "/"
+						   << loadable_blocks_size << " blocks loaded "
+						   << m_server->getMap().m_blocks.size() << " processed "
+						   << processed << " triggers " << triggers_total << " per "
+						   << (time - time_start) / 1000 << " speed "
+						   << processed / (((time - time_start) / 1000) ?: 1) << " vxs "
+						   << volume.size() << '\n';
 			};
 
+#if 1
+			for (const auto &pos : loadable_blocks) {
+				volume[pos.X][pos.Y].emplace(pos.Z);
+			}
+
+			const auto contains = [&](const v3bpos_t &pos) -> bool {
+				if (!volume.contains(pos.X))
+					return false;
+				if (!volume[pos.X].contains(pos.Y))
+					return false;
+				return volume[pos.X][pos.Y].contains(pos.Z);
+			};
+
+			const auto erase = [&](const v3bpos_t &pos) {
+				if (!volume.contains(pos.X))
+					return;
+				if (!volume[pos.X].contains(pos.Y))
+					return;
+				if (!volume[pos.X][pos.Y].contains(pos.Z))
+					return;
+				volume[pos.X][pos.Y].erase(pos.Z);
+				if (volume[pos.X][pos.Y].empty())
+					volume[pos.X].erase(pos.Y);
+				if (volume[pos.X].empty())
+					volume.erase(pos.X);
+			};
+
+			std::optional<v3bpos_t> pos_opt;
+			while (!volume.empty()) {
+				if (pos_opt.has_value()) {
+					const auto pos_old = pos_opt.value();
+					pos_opt.reset();
+					// Random better
+					for (size_t dirs = 0; dirs < 6; ++dirs, ++pos_dir) {
+						const auto pos_new = pos_old + g_6dirs[pos_dir % sizeof(g_6dirs)];
+						//DUMP(dirs, pos_new, pos_dir);
+						if (contains(pos_new)) {
+							//DUMP("ok", dirs, pos_opt, "->", pos_new);
+							pos_opt = pos_new;
+							break;
+						}
+					}
+				}
+
+				if (!pos_opt.has_value()) {
+					// always first: pos_opt = {volume.begin()->first,volume.begin()->second.begin()->first,*volume.begin()->second.begin()->second.begin()};
+
+					auto xend = volume.end();
+					--xend;
+					const auto xi = pos_dir & 1 ? volume.begin() : xend;
+					auto yend = xi->second.end();
+					--yend;
+					const auto yi = pos_dir & 2 ? xi->second.begin() : yend;
+					auto zend = yi->second.end();
+					--zend;
+					const auto zi = pos_dir & 4 ? yi->second.begin() : zend;
+					pos_opt = {xi->first, yi->first, *zi};
+				}
+				const auto pos = pos_opt.value();
+				erase(pos);
+				++cur_n;
+
+#else
+			cur_n = 0;
 			for (const auto &pos : loadable_blocks) {
 				++cur_n;
 
@@ -407,37 +489,52 @@ public:
 					continue;
 				}
 				abm_world_last = cur_n;
+#endif
 
 				if (stopRequested()) {
 					return nullptr;
 				}
 				try {
-					auto *block =
-							m_server->getEnv().getServerMap().getBlockNoCreateNoEx(pos);
-					if (block) {
-						continue;
-					}
-					block = m_server->getEnv().getServerMap().emergeBlock(pos);
+					const auto load_block = [&](const v3bpos_t &pos) -> MapBlock * {
+						auto *block =
+								m_server->getEnv().getServerMap().getBlockNoCreateNoEx(
+										pos);
+						if (block) {
+							return block;
+						}
+						block = m_server->getEnv().getServerMap().emergeBlock(pos);
+						if (!block) {
+							return nullptr;
+						}
+						if (!block->isGenerated()) {
+							return nullptr;
+						}
+						return block;
+					};
+
+					auto *block = load_block(pos);
 					if (!block) {
 						continue;
 					}
-					if (!block->isGenerated()) {
-						continue;
+
+					// Load neighbours for better liquids flows
+					for (const auto &dir : g_6dirs) {
+						load_block(pos + dir);
 					}
 
 					g_profiler->add("Server: Abm world blocks", 1);
 
 					++processed;
 
-					const auto activate = m_server->getEnv().analyzeBlock(block);
+					//m_server->getEnv().activateBlock(block);
 
-					//const auto wasats = block->getActualTimestamp();
-					//const auto wasts = block->getTimestamp();
-					const auto triggers = block->abmTriggersRun(&m_server->getEnv(),
-							m_server->getEnv().getGameTime(), activate);
+					const auto activate =
+							(1 << 2) | m_server->getEnv().analyzeBlock(block);
+					const auto triggers =
+							m_server->getEnv().blockStep(block, 0, activate);
 					triggers_total += triggers;
 
-					//DUMP("ok", pos, cur_n, m_server->getMap().m_blocks.size(), wasts, block->getTimestamp(), wasats, block->getActualTimestamp(), m_server->getEnv().getGameTime(), triggers);
+					//DUMP("ok", pos, cur_n, m_server->getMap().m_blocks.size(), block->getTimestamp(), block->getActualTimestamp(), m_server->getEnv().getGameTime(), triggers);
 
 					if (!(cur_n % 10000)) {
 						printstat();

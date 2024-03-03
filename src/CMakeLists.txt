@@ -60,28 +60,6 @@ else()
 	set(STATIC_BUILD 0)
 endif()
 
-
-if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND ${CMAKE_VERSION} VERSION_GREATER "3.11.0")
-    set(USE_DEBUG_HELPERS ON)
-endif()
-
-if (USE_DEBUG_HELPERS)
-    #get_target_property(MAGIC_ENUM_INCLUDE_DIR ch_contrib::magic_enum INTERFACE_INCLUDE_DIRECTORIES)
-    # CMake generator expression will do insane quoting when it encounters special character like quotes, spaces, etc.
-    # Prefixing "SHELL:" will force it to use the original text.
-    #set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${MAGIC_ENUM_INCLUDE_DIR}\" -include \"${ClickHouse_SOURCE_DIR}/base/base/iostream_debug_helpers.h\"")
-    set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${CMAKE_CURRENT_SOURCE_DIR}/debug/\" -include \"${CMAKE_CURRENT_SOURCE_DIR}/debug/iostream_debug_helpers.h\"")
-    #set (INCLUDE_DEBUG_HELPERS "SHELL:-include \"${CMAKE_CURRENT_SOURCE_DIR}/util/iostream_debug_helpers.h\"")
-    # Use generator expression as we don't want to pollute CMAKE_CXX_FLAGS, which will interfere with CMake check system.
-    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:${INCLUDE_DEBUG_HELPERS}>)
-	if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-		add_definitions(-DDUMP_STREAM=actionstream)
-	else()
-		add_definitions(-DDUMP_STREAM=verbosestream)
-	endif()
-endif ()
-
-
 if(NOT MSVC)
         # FM: TODO: REMOVE:
 	set(WARNING_FLAGS "${WARNING_FLAGS} -Wno-inconsistent-missing-override")
@@ -363,10 +341,17 @@ if(ENABLE_LEVELDB)
 		list(REVERSE CMAKE_FIND_LIBRARY_SUFFIXES)
 	endif()
 
+	if (LIBCXX_LIBRARY)
+		set(SYSTEM_LEVELDB 0 CACHE BOOL "")
+	endif()
+
+   if (SYSTEM_LEVELDB)
 	find_library(LEVELDB_LIBRARY NAMES leveldb libleveldb)
 	find_path(LEVELDB_INCLUDE_DIR db.h PATH_SUFFIXES leveldb)
 	find_library(SNAPPY_LIBRARY snappy)
 	find_path(SNAPPY_INCLUDE_DIR snappy.h PATH_SUFFIXES snappy)
+   endif()
+
 	message (STATUS "Snappy library: ${SNAPPY_LIBRARY} : ${SNAPPY_INCLUDE_DIR}")
 	message (STATUS "Leveldb library: ${LEVELDB_LIBRARY} : ${LEVELDB_INCLUDE_DIR}")
 
@@ -374,20 +359,25 @@ if(ENABLE_LEVELDB)
 		list(REVERSE CMAKE_FIND_LIBRARY_SUFFIXES)
 	endif()
 
-	if (NOT SNAPPY_INCLUDE_DIR)
-		find_path(SNAPPY_INCLUDE_DIR leveldb/db.h ${PROJECT_SOURCE_DIR}/external/leveldb/include NO_DEFAULT_PATH)
+	if (NOT SNAPPY_INCLUDE_DIR OR NOT SNAPPY_LIBRARY)
+		find_path(SNAPPY_INCLUDE_DIR snappy.h ${PROJECT_SOURCE_DIR}/external/snappy NO_DEFAULT_PATH)
 	  if (SNAPPY_INCLUDE_DIR)
 		# Snappy have no cmake by default,
 		# git clone --recursive --depth 1 https://github.com/google/snappy src/external/snappy
 		# But we can collect something from pulls
 		# wget -O src/external/snappy/CMakeLists.txt https://raw.githubusercontent.com/adasworks/snappy-cmake/master/CMakeLists.txt
+		set(SNAPPY_BUILD_TESTS 0 CACHE INTERNAL "")
+		set(SNAPPY_BUILD_BENCHMARKS 0 CACHE INTERNAL "")
+		set(SNAPPY_INSTALL 0 CACHE INTERNAL "")
+
 		add_subdirectory(${PROJECT_SOURCE_DIR}/external/snappy)
 		set(SNAPPY_LIBRARY snappy)
+		set(HAVE_SNAPPY 1 CACHE INTERNAL "")
 		message(STATUS "Using bundled snappy ${SNAPPY_LIBRARY} : ${SNAPPY_INCLUDE_DIR}")
 	  endif()
 	endif()
 
-	if (NOT LEVELDB_INCLUDE_DIR)
+	if (NOT LEVELDB_INCLUDE_DIR OR NOT LEVELDB_LIBRARY)
 		find_path(LEVELDB_INCLUDE_DIR leveldb/db.h ${PROJECT_SOURCE_DIR}/external/leveldb/include NO_DEFAULT_PATH)
 	  if (LEVELDB_INCLUDE_DIR)
 		# bad try direct make build 
@@ -406,6 +396,7 @@ if(ENABLE_LEVELDB)
 		set(LEVELDB_BUILD_TESTS 0 CACHE INTERNAL "")
 		set(LEVELDB_BUILD_BENCHMARKS 0 CACHE INTERNAL "")
 		set(LEVELDB_INSTALL 0 CACHE INTERNAL "")
+		set(HAVE_CLANG_THREAD_SAFETY 0 CACHE INTERNAL "") # -Werror remove
 		add_subdirectory(${PROJECT_SOURCE_DIR}/external/leveldb)
 		set(LEVELDB_LIBRARY leveldb)
 		message(STATUS "Using bundled leveldb ${LEVELDB_INCLUDE_DIR} ${LEVELDB_LIBRARY}")
@@ -413,13 +404,13 @@ if(ENABLE_LEVELDB)
 	endif()
 
 	if(SNAPPY_LIBRARY AND SNAPPY_INCLUDE_DIR)
-		include_directories(${SNAPPY_INCLUDE_DIR})
+		include_directories(SYSTEM ${SNAPPY_INCLUDE_DIR})
 	endif()
 
 	if(LEVELDB_LIBRARY AND LEVELDB_INCLUDE_DIR)
 		set(USE_LEVELDB TRUE)
 		message(STATUS "LevelDB backend enabled. ${LEVELDB_LIBRARY} : ${LEVELDB_INCLUDE_DIR}")
-		include_directories(${LEVELDB_INCLUDE_DIR})
+		include_directories(SYSTEM ${LEVELDB_INCLUDE_DIR})
 	elseif (NOT FORCE_LEVELDB)
 		message(WARNING "LevelDB not found! Player data cannot be saved in singleplayer or server")
 	endif()
@@ -700,6 +691,26 @@ if(ENABLE_ENET)
 	endif()
 endif()
 
+if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND ${CMAKE_VERSION} VERSION_GREATER "3.11.0")
+    set(USE_DEBUG_HELPERS ON CACHE BOOL "")
+endif()
+
+if (USE_DEBUG_HELPERS)
+    #get_target_property(MAGIC_ENUM_INCLUDE_DIR ch_contrib::magic_enum INTERFACE_INCLUDE_DIRECTORIES)
+    # CMake generator expression will do insane quoting when it encounters special character like quotes, spaces, etc.
+    # Prefixing "SHELL:" will force it to use the original text.
+    #set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${MAGIC_ENUM_INCLUDE_DIR}\" -include \"${ClickHouse_SOURCE_DIR}/base/base/iostream_debug_helpers.h\"")
+    set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${CMAKE_CURRENT_SOURCE_DIR}/debug/\" -include \"${CMAKE_CURRENT_SOURCE_DIR}/debug/iostream_debug_helpers.h\"")
+    #set (INCLUDE_DEBUG_HELPERS "SHELL:-include \"${CMAKE_CURRENT_SOURCE_DIR}/util/iostream_debug_helpers.h\"")
+    # Use generator expression as we don't want to pollute CMAKE_CXX_FLAGS, which will interfere with CMake check system.
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:${INCLUDE_DEBUG_HELPERS}>)
+	if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+		add_definitions(-DDUMP_STREAM=actionstream)
+	else()
+		add_definitions(-DDUMP_STREAM=verbosestream)
+	endif()
+endif ()
+
 set(FMcommon_SRCS ${FMcommon_SRCS}
 	circuit.cpp
 	circuit_element.cpp
@@ -717,7 +728,6 @@ set(FMcommon_SRCS ${FMcommon_SRCS}
     content_abm_grow_tree.cpp
     fm_serverenvironment.cpp
 )
-#	FMColoredString.cpp
 
 
 set(common_SRCS
