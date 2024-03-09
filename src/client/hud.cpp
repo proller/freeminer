@@ -906,6 +906,40 @@ void Hud::drawBlockBounds()
 
 	v3s16 pos = player->getStandingNodePos();
 
+	if (m_block_bounds_mode == BLOCK_BOUNDS_FAR) {
+		v3f offset = intToFloat(client->getCamera()->getOffset(), BS);
+
+		s8 radius = m_block_bounds_mode == BLOCK_BOUNDS_NEAR ? 2 : 0;
+
+		v3f halfNode = v3f(BS, BS, BS) / 2.0f;
+
+		for (const auto &block : client->getEnv().getClientMap().m_far_blocks) {
+			const auto &blockPos = block.first;
+			const auto mesh_step = getFarmeshStep(
+					client->getEnv().getClientMap().getControl(),
+					getNodeBlockPos(floatToInt(
+							client->getEnv().getLocalPlayer()->getPosition(), BS)),
+					blockPos);
+
+			if (!block.second)
+				continue;
+			const auto &mesh = block.second->getFarMesh(mesh_step);
+			//const auto &mesh = block.second->getLodMesh(mesh_step);
+			if (!mesh)
+				continue;
+			if (!mesh->getMesh()->getMeshBufferCount())
+				continue;
+			const auto &fscale = mesh->fscale;
+			if (fscale <= 1)
+				continue;
+			aabb3f box(intToFloat((blockPos)*MAP_BLOCKSIZE, BS) - offset - halfNode + 1,
+					intToFloat(((blockPos)*MAP_BLOCKSIZE) + (MAP_BLOCKSIZE * fscale - 1),
+							BS) -
+							offset + halfNode - 1);
+			driver->draw3DBox(box, video::SColor(255, 255, fscale * 10, 0));
+		}
+	} else {
+
 	v3s16 blockPos(
 		floorf((float) pos.X / MAP_BLOCKSIZE),
 		floorf((float) pos.Y / MAP_BLOCKSIZE),
@@ -930,6 +964,8 @@ void Hud::drawBlockBounds()
 
 		driver->draw3DBox(box, video::SColor(255, 255, 0, 0));
 	}
+
+  }
 
 	driver->setMaterial(old_material);
 }
