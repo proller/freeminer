@@ -429,10 +429,8 @@ void MapblockMeshGenerator::drawSolidNode()
 			continue;
 		if (n2 == CONTENT_IGNORE)
 			continue;
-if (0)
 		if (n2 != CONTENT_AIR) {
 			const ContentFeatures &f2 = nodedef->get(n2);
-if(0)			
 			if (data->fscale > 1 ? f2.solidness_far == 2 : f2.solidness == 2)
 				continue;
 		   if (data->fscale <= 1)

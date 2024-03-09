@@ -1068,8 +1068,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 			scene::SMeshBuffer *buf = new scene::SMeshBuffer();
 			buf->Material = material;
-		  if (data->fscale <= 1)
-			if (p.layer.isTransparent()) {
+			if (p.layer.isTransparent() && data->fscale <= 1) {
 				buf->append(&p.vertices[0], p.vertices.size(), nullptr, 0);
 
 				MeshTriangle t;
