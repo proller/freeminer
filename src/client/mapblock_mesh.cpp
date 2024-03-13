@@ -38,7 +38,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <algorithm>
 #include <cmath>
 
-int getLodStep(MapDrawControl &draw_control, const v3bpos_t &playerblockpos,
+int getLodStep(const MapDrawControl &draw_control, const v3bpos_t &playerblockpos,
 		const v3bpos_t &blockpos)
 {
 	int range = radius_box(playerblockpos, blockpos);
@@ -63,7 +63,7 @@ int getLodStep(MapDrawControl &draw_control, const v3bpos_t &playerblockpos,
 	return 0;
 };
 
-int getFarmeshStep(MapDrawControl &draw_control, const v3bpos_t &playerblockpos,
+int getFarmeshStep(const MapDrawControl &draw_control, const v3bpos_t &playerblockpos,
 		const v3bpos_t &blockpos)
 {
 	/*

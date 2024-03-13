@@ -30,7 +30,10 @@ public:
 	pos_t m_water_level = 0;
 };
 
-class FarMesh : public scene::ISceneNode
+class FarMesh 
+#if 0
+: public scene::ISceneNode
+#endif
 {
 public:
 	FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id, Client *client,
@@ -38,17 +41,20 @@ public:
 
 	~FarMesh();
 
-	virtual void render() override;
 	void update(v3f camera_pos, v3f camera_dir, f32 camera_fov, CameraMode camera_mode,
 			f32 camera_pitch, f32 camera_yaw, v3pos_t m_camera_offset, float brightness,
 			s16 render_range);
+#if 0 
+	virtual void render() override;
 	virtual void OnRegisterSceneNode() override;
 
 	virtual const core::aabbox3d<f32> &getBoundingBox() const override { return m_box; }
 
 	void CreateMesh();
+#endif
 
 	void makeFarBlock(const v3bpos_t &blockpos);
+	void makeFarBlock6(const v3bpos_t &blockpos);
 
 	void makeFarBlocks(const v3bpos_t &blockpos);
 
@@ -76,7 +82,7 @@ private:
 	f32 m_camera_yaw;
 	float m_time;
 	Client *m_client;
-	s16 m_render_range = 16 * 16;
+	pos_t m_render_range = 16 * MAP_BLOCKSIZE;
 	uint32_t m_render_range_max;
 	pos_t m_water_level = 0;
 	v3pos_t m_camera_offset;
@@ -87,15 +93,17 @@ private:
 	//constexpr static uint16_t grid_size_max_y = 128;
 	//constexpr static uint16_t grid_size_max_y = 256;
 	//constexpr static uint16_t grid_size_max_y = 16;
-	constexpr static uint16_t grid_size_max_x = grid_size_max_y * 4;
+	//cylinder: constexpr static uint16_t grid_size_max_x = grid_size_max_y * 4;
+	constexpr static uint16_t grid_size_max_x = grid_size_max_y;
 	//constexpr static uint16_t grid_size_max = 16;
 	std::array<uint16_t, grid_size_max_x * grid_size_max_y> process_order;
 	// uint16_t grid_size = grid_size_min;
 	//uint16_t grid_size = 64;
 	//uint16_t grid_size = 256;
 	//uint16_t grid_size = 	grid_size_max;
-	uint16_t grid_size_x = grid_size_max_x;
-	uint16_t grid_size_y = grid_size_max_y;
+	static constexpr uint16_t grid_size_x = grid_size_max_x;
+	static constexpr uint16_t grid_size_y = grid_size_max_y;
+	static constexpr uint16_t grid_size_xy = grid_size_x * grid_size_y;
 	//constexpr static uint16_t skip_x_num = 7;
 	//constexpr static uint16_t skip_y_num = 7;
 	//uint16_t m_skip_x_current = 0;
@@ -105,6 +113,7 @@ private:
 	Mapgen *mg = nullptr;
 	unordered_map_v3pos<bool> mg_cache;
 
+#if 0
 	struct ls_cache
 	{
 		uint32_t time = 0;
@@ -128,10 +137,23 @@ private:
 	// result_array * grid_result_fill = &grid_result_2;
 	result_array *grid_result_fill = &grid_result_1;
 
-	uint16_t m_cycle_stop_x = 0, m_cycle_stop_y = 0, m_cycle_stop_i = 0;
-
 	//irr::scene::IMesh* mesh = nullptr;
 	irr::scene::SMesh *mesh = nullptr;
+#endif
+
+	uint16_t m_cycle_stop_x = 0, m_cycle_stop_y = 0, m_cycle_stop_i = 0;
 
 	FarContainer farcontainer;
+
+	struct ray_cache
+	{
+		bool filled = false;
+		bool visible = false;
+	};
+	using direction_cache = std::array<ray_cache, grid_size_xy>;
+	//std::array<direction_cache, 6> direction_caches;
+	std::array<direction_cache, 6> direction_caches;
+	v3pos_t direction_caches_pos;
+
+	void go_direction(const size_t dir_n, direction_cache &cache);
 };

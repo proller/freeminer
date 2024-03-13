@@ -170,7 +170,8 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("farmesh", android ? "2" : "4");
 	//settings->setDefault("farmesh_step", android ? "2" : "4");
 	settings->setDefault("farmesh_wanted", android ? "100" :"500");
-	settings->setDefault("farmesh5", android ? "5000" : "15000");
+	//settings->setDefault("farmesh5", android ? "5000" : "15000");
+	settings->setDefault("farmesh5", android ? "5000" : itos(MAX_MAP_GENERATION_LIMIT*2));
 	settings->setDefault("headless_optimize", "false");
 	//settings->setDefault("node_highlighting", "halo");
 	//settings->setDefault("enable_vbo", win ? "false" : "true");

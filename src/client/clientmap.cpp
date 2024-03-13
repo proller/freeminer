@@ -1176,13 +1176,15 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 		// If the mesh of the block happened to get deleted, ignore it
 
 		if (!block_mesh) {
-			int fmesh_step = getFarmeshStep(
+			int &fmesh_step = mesh_step;
+
+			fmesh_step = getFarmeshStep(
 					m_control, getNodeBlockPos(m_camera_position_node), block->getPos());
-			if (fmesh_step > 1 && !inFarmeshGrid(block_pos, mesh_step)) {
+			if (fmesh_step > 1 && !inFarmeshGrid(block_pos, fmesh_step)) {
 				verbosestream << "Rfmeshskip "
 							  << " s=" << mesh_step << " p=" << block_pos
 							  << " player=" << getNodeBlockPos(m_camera_position_node)
-							  << std::endl;
+							  << '\n';
 				//DUMP("meshskip", mesh_step, bp, cam_pos_nodes);
 				continue;
 			}

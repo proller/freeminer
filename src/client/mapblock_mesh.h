@@ -44,10 +44,10 @@ class IShaderSource;
 	Mesh making stuff
 */
 
-int getLodStep(MapDrawControl& draw_control, const v3bpos_t & playerblockpos, const v3bpos_t & block_pos);
+int getLodStep(const MapDrawControl& draw_control, const v3bpos_t & playerblockpos, const v3bpos_t & block_pos);
 
 bool inFarmeshGrid(const v3pos_t & blockpos, int step);
-int getFarmeshStep(MapDrawControl& draw_control, const v3bpos_t & playerblockpos, const v3bpos_t & block_pos);
+int getFarmeshStep(const MapDrawControl& draw_control, const v3bpos_t & playerblockpos, const v3bpos_t & block_pos);
 v3pos_t getFarmeshActual(v3pos_t blockpos, int step);
 
 class MapBlock;

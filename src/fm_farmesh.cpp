@@ -22,6 +22,7 @@
 #include "mapnode.h"
 #include "nodedef.h"
 #include "server.h"
+#include "util/directiontables.h"
 #include "util/numeric.h"
 #include "util/timetaker.h"
 #include "util/unordered_map_hash.h"
@@ -32,6 +33,18 @@
 #include <memory>
 #include <random>
 #include <utility>
+
+const v3f g_6dirsf[6] =
+{
+	// +right, +top, +back
+	v3f( 0, 0, 1), // back
+	v3f( 0, 1, 0), // top
+	v3f( 1, 0, 0), // right
+	v3f( 0, 0,-1), // front
+	v3f( 0,-1, 0), // bottom
+	v3f(-1, 0, 0), // left
+};
+
 
 FarContainer::FarContainer(){};
 MapNode air_node{CONTENT_AIR, LIGHT_SUN};
@@ -69,11 +82,25 @@ void FarMesh::makeFarBlock(const v3bpos_t &blockpos)
 	}
 	const auto &block = far_blocks.at(blockpos_actual);
 	if (!block->getFarMesh(step)) {
+		//DUMP("mkfr", blockpos_actual, step, (long)&farcontainer);
 		MeshMakeData mdat(m_client, false, 0, step, &farcontainer);
 		mdat.block = block.get();
 		mdat.m_blockpos = blockpos_actual;
 		auto mbmsh = std::make_shared<MapBlockMesh>(&mdat, m_camera_offset);
+		//mbmsh->getMesh();
+		//DUMP(mbmsh->getMesh(0)->getMeshBufferCount(), mbmsh->getMesh()->getMeshBuffer(0)->getVertexCount(), mbmsh->getMesh(0)->getReferenceCount());
+
+		//DUMP(block->getPos(), mbmsh->far_step, mbmsh->lod_step);
 		block->setFarMesh(mbmsh);
+	} else {
+		//DUMP("already farmesh", step, blockpos_actual, block->getPos());
+	}
+}
+
+void FarMesh::makeFarBlock6(const v3bpos_t &blockpos)
+{
+	for (const auto &dir : g_6dirs) {
+		makeFarBlock(blockpos + dir);
 	}
 }
 
@@ -136,7 +163,9 @@ void FarMesh::makeFarBlocks(const v3bpos_t &blockpos)
 FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
 		// u64 seed,
 		Client *client, Server *server) :
+#if 0
 		scene::ISceneNode(parent, mgr, id),
+#endif
 		// m_seed(seed),
 		m_camera_pos(-1337, -1337, -1337),
 		// m_time(0),
@@ -213,9 +242,12 @@ FarMesh::~FarMesh()
 {
 	// dstream<<__FUNCTION_NAME<<std::endl;
 	// removeAll();
+#if 0
 	remove();
+#endif
 }
 
+#if 0
 void FarMesh::OnRegisterSceneNode()
 {
 	if (IsVisible) {
@@ -225,6 +257,128 @@ void FarMesh::OnRegisterSceneNode()
 	}
 
 	ISceneNode::OnRegisterSceneNode();
+}
+#endif
+
+void FarMesh::go_direction(const size_t dir_n, direction_cache &cache)
+{
+
+	//auto &plane_cache_item = plane_cache[m_camera_pos_aligned];
+	//auto &plane_cache_item = plane_cache_dir[dir_n];
+	const auto dir = g_6dirsf[dir_n];
+
+	const auto grid_size_xy = grid_size_x * grid_size_y;
+	for (uint16_t i = m_cycle_stop_i; i < grid_size_xy; ++i) {
+		//const auto p = i/grid_size_xy;
+		{
+			uint16_t y = uint16_t(process_order[i] / grid_size_x);
+			uint16_t x = process_order[i] % grid_size_x;
+			auto ray_cache = cache[i];
+			if (ray_cache.filled)
+				return;
+			ray_cache.filled = true;
+
+			//(*grid_result_fill)[x][y].depth = 0; // clean cache
+
+			//const auto first_square_r = MAP_BLOCKSIZE * grid_size_x;
+			v3f dir_first = dir * m_render_range/2; //first_square_r;
+			//dir_l.X += x * MAP_BLOCKSIZE - MAP_BLOCKSIZE * grid_size_x/2;
+			//dir_l.Y += y * MAP_BLOCKSIZE - MAP_BLOCKSIZE * grid_size_y/2;
+			auto pos_center = dir_first + m_camera_pos;
+			if (!dir.X)
+				dir_first.X += MAP_BLOCKSIZE * (x - grid_size_x / 2);
+			if (!dir.Y)
+				dir_first.Y += MAP_BLOCKSIZE * (y - grid_size_y / 2);
+			if (!dir.Z)
+				dir_first.Z += MAP_BLOCKSIZE * (x - grid_size_x / 2);
+
+			//DUMP(dir_l, x, y);
+			v3f dir_l = dir_first.normalize();
+
+			const int depth_steps = 512 + 100; // TODO CALC  256+128+64+32+16+8+4+2+1+?
+			// const int grid_size = 64;		   // 255;
+			const int depth_max = m_render_range_max;
+
+			int depth = m_render_range /** BS*/; // 255;
+			//DUMP(pos_center, depth);
+			for (short step_num = 0; step_num < depth_steps; ++step_num) {
+				const auto dstep = (step_num + 1);
+				auto draw_control = m_client->getEnv().getClientMap().getControl();
+				const auto block_step =
+						getFarmeshStep(draw_control, m_camera_pos_aligned / MAP_BLOCKSIZE,
+								floatToInt(pos_center, BS) / MAP_BLOCKSIZE);
+				const auto step_width = MAP_BLOCKSIZE * pow(2, block_step);
+				//const auto step_width =	std::min(std::max<int>(1, step_r.getLength() / BS), 1024);
+//DUMP(dstep, m_camera_pos_aligned, block_step, step_width);
+				depth += step_width * dstep; // TODO: TUNE ME
+				// errorstream << depth << "\n";
+				if (depth > depth_max) {
+					//DUMP("b1", depth, depth_max, step_width, dstep);
+					break;
+				}
+
+				// v1 auto pos_l = pos_ld + (step_u * y);
+
+				// auto pos_l = pos_ld + (step_u * y);
+				const auto pos = dir_l * depth * BS + m_camera_pos;
+
+				//++stat_probes;
+				// auto pos = pos_l + (step_r * x);
+				if (pos.X > MAX_MAP_GENERATION_LIMIT * BS ||
+						pos.X < -MAX_MAP_GENERATION_LIMIT * BS ||
+						pos.Y > MAX_MAP_GENERATION_LIMIT * BS ||
+						pos.Y < -MAX_MAP_GENERATION_LIMIT * BS ||
+						pos.Z > MAX_MAP_GENERATION_LIMIT * BS ||
+						pos.Z < -MAX_MAP_GENERATION_LIMIT * BS) {
+					//DUMP("b2", pos);
+					break;
+				}
+				const int step_aligned = pow(2, ceil(log(step_width) / log(2)));
+
+				v3pos_t pos_int_raw = floatToInt(pos, BS);
+				v3pos_t pos_int((pos_int_raw.X / step_aligned) * step_aligned,
+						(pos_int_raw.Y / step_aligned) * step_aligned,
+						(pos_int_raw.Z / step_aligned) * step_aligned);
+
+				//bool visible = false;
+				auto &visible =  ray_cache.visible;
+
+				if (pos_int.Y <= m_water_level && m_camera_pos.Y > m_water_level) {
+					visible = true;
+
+				} else
+
+				{
+					if (const auto &it = mg_cache.find(pos_int); it != mg_cache.end()) {
+						visible = it->second;
+						//++stat_cached;
+					} else {
+
+						//++stat_mg;
+						visible = mg->visible(pos_int.X, pos_int.Y, pos_int.Z);
+						// if (visible) {
+						//  cache.first = true;
+						//  cache.second = pos_int;
+						//}
+						mg_cache[pos_int] = visible;
+					}
+				}
+//DUMP(visible, step_num, pos, pos_int);
+//plane_cache_item.depth[p]
+				if (!visible) {
+					continue;
+				}
+				{
+					const auto blockpos = getNodeBlockPos(pos_int);
+					//DUMP("mfb", pos_int, blockpos);
+					makeFarBlock6(blockpos);
+				ray_cache.visible = visible;
+				}
+				break;
+			}
+		}
+	}
+	m_cycle_stop_i = 0 ;
 }
 
 void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
@@ -294,6 +448,21 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 					<< " yaw=" << m_camera_yaw << " render_range=" << m_render_range
 					<< std::endl;
 	}
+
+	if (direction_caches_pos != m_camera_pos_aligned) {
+		DUMP("cache clear", direction_caches_pos);
+		direction_caches_pos = m_camera_pos_aligned;
+		direction_caches.fill({});
+	}
+	//for (const auto dir & :  g_6dirsf) {
+	for (int i = 0; i < sizeof(g_6dirsf) / sizeof(g_6dirsf[0]); ++i) {
+		//const auto dir = g_6dirsf[i];
+		DUMP("godir", i);
+		go_direction(i, direction_caches[i]);
+	}
+	return;
+
+#if 0
 
 	// const auto start = 2 << 7;
 
@@ -366,7 +535,9 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 					for (short x = m_cycle_stop_x; x < grid_size; x += skip_x_num)
 	   {
 	*/
-	for (uint16_t i = m_cycle_stop_i; i < grid_size_x * grid_size_y; ++i) {
+const auto grid_size_xy = grid_size_x * grid_size_y;
+	for (uint16_t i = m_cycle_stop_i; i < grid_size_xy; ++i) {
+//const auto p = i/grid_size_xy;
 		{
 			uint16_t y = uint16_t(process_order[i] / grid_size_x);
 			uint16_t x = process_order[i] % grid_size_x;
@@ -400,6 +571,9 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 			  continue;
 			}*/
 
+
+/*
+//cylinder:
 			v3f dir_l = v3f(0, 0, 1);
 
 			auto stpy = (((float)y) / grid_size_y);
@@ -409,7 +583,27 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 			float movx = (((float)x / grid_size_x));
 			dir_l.rotateXZBy(360.0 * movx); //    -> right 1 step
 			// todo fov y
+*/
 
+/*
+			v3f dir_l (g_6dirs[0].X, g_6dirs[0].Y, g_6dirs[0].Z);
+
+auto dir_lu = dir_l;
+	dir_lu.rotateXZBy(45); //    <- left
+	dir_lu.rotateYZBy(-45); // ^ up
+*/
+//const auto first_square_r = MAP_BLOCKSIZE * 10;
+const auto first_square_r = MAP_BLOCKSIZE * grid_size_x;
+v3f dir_l =  g_6dirsf[0]*first_square_r;
+//dir_l.X += x * MAP_BLOCKSIZE - MAP_BLOCKSIZE * grid_size_x/2;
+//dir_l.Y += y * MAP_BLOCKSIZE - MAP_BLOCKSIZE * grid_size_y/2;
+dir_l.X += MAP_BLOCKSIZE * (x - grid_size_x/2);
+dir_l.Y += MAP_BLOCKSIZE * (y - grid_size_y/2);
+DUMP(dir_l, x,y);
+dir_l = dir_l.normalize();
+
+
+/*
 			auto rotateSquareXZBy = [](auto &dir, auto angle) {
 				//        0    45
 				// 315  ___.___
@@ -430,12 +624,15 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 				}
 			};
 			rotateSquareXZBy(dir_l, 360.0 * movx);
-
+*/
 			if (0)
 				errorstream << "deg "
 							<< " x=" << x << "/" << grid_size_x << " y=" << y << "/"
-							<< grid_size_y << " movx=" << movx << " stpy=" << stpy
-							<< " degy=" << degy << " dir_l=" << dir_l << "\n";
+							<< grid_size_y 
+							//<< " movx=" << movx 
+							//<< " stpy=" << stpy
+							//<< " degy=" << degy 
+							<< " dir_l=" << dir_l << "\n";
 
 #if cache0
 			v3pos_t pos_int_0;
@@ -666,24 +863,7 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 						const auto depth_cached = it2->second;
 						const auto &pos_cached = plane_cache_item.pos[pos_int_0];
 						/*
-																		errorstream
-																						<<
-						   " planecache "
-																						<<
-						   " x=" << x << " y=" << y << " i=" << i
-																						<<
-						   " v=" << process_order[i]
-																						<<
-						   " cpa=" << m_camera_pos_aligned
-																						<<
-						   " pos_int_0=" << pos_int_0 << "
-						   => " << depth_cached
-																						<<
-						   " t=" << plane_cache[m_camera_pos_aligned].time
-																						<<
-						   " s1=" << plane_cache.size() << " s2="
-																						<<
-						   plane_cache[m_camera_pos_aligned].depth.size() << "\n";
+																		errorstream<<" planecache "<<" x=" << x << " y=" << y << " i=" << i<<" v=" << process_order[i]<<" cpa=" << m_camera_pos_aligned<<" pos_int_0=" << pos_int_0 << "=> " << depth_cached<<" t=" << plane_cache[m_camera_pos_aligned].time<<" s1=" << plane_cache.size() << " s2="<<plane_cache[m_camera_pos_aligned].depth.size() << "\n";
 						*/
 
 						if (!depth_cached)
@@ -938,6 +1118,7 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 					//const auto g = inFarmeshGrid(bp, step);
 */
 					//makeFarBlock(blockpos, step);
+DUMP("mfb", pos_int, blockpos);
 					makeFarBlock(blockpos);
 				}
 				break;
@@ -976,7 +1157,10 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 	std::swap(grid_result_use, grid_result_fill);
 
 	//!! CreateMesh();
+#endif
 }
+
+#if 0 
 
 // creates a hill plane
 void FarMesh::CreateMesh()
@@ -1402,3 +1586,4 @@ void FarMesh::render()
 
 	//
 }
+#endif
