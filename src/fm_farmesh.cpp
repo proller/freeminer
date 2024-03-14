@@ -27,6 +27,7 @@
 #include "util/timetaker.h"
 #include "util/unordered_map_hash.h"
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 //#include <memory>
 //#include <ostream>
@@ -34,17 +35,15 @@
 #include <random>
 #include <utility>
 
-const v3f g_6dirsf[6] =
-{
-	// +right, +top, +back
-	v3f( 0, 0, 1), // back
-	v3f( 0, 1, 0), // top
-	v3f( 1, 0, 0), // right
-	v3f( 0, 0,-1), // front
-	v3f( 0,-1, 0), // bottom
-	v3f(-1, 0, 0), // left
+const v3f g_6dirsf[6] = {
+		// +right, +top, +back
+		v3f(0, 0, 1),  // back
+		v3f(0, 1, 0),  // top
+		v3f(1, 0, 0),  // right
+		v3f(0, 0, -1), // front
+		v3f(0, -1, 0), // bottom
+		v3f(-1, 0, 0), // left
 };
-
 
 FarContainer::FarContainer(){};
 MapNode air_node{CONTENT_AIR, LIGHT_SUN};
@@ -260,28 +259,33 @@ void FarMesh::OnRegisterSceneNode()
 }
 #endif
 
-void FarMesh::go_direction(const size_t dir_n, direction_cache &cache)
+int FarMesh::go_direction(const size_t dir_n, direction_cache &cache)
 {
+	DUMP(mg_cache.size(), dir_n);
+
+	auto &draw_control = m_client->getEnv().getClientMap().getControl();
 
 	//auto &plane_cache_item = plane_cache[m_camera_pos_aligned];
 	//auto &plane_cache_item = plane_cache_dir[dir_n];
 	const auto dir = g_6dirsf[dir_n];
 
 	const auto grid_size_xy = grid_size_x * grid_size_y;
+	int processed = 0;
+	m_cycle_stop_i = 0;
 	for (uint16_t i = m_cycle_stop_i; i < grid_size_xy; ++i) {
 		//const auto p = i/grid_size_xy;
 		{
 			uint16_t y = uint16_t(process_order[i] / grid_size_x);
 			uint16_t x = process_order[i] % grid_size_x;
-			auto ray_cache = cache[i];
-			if (ray_cache.filled)
-				return;
-			ray_cache.filled = true;
+			auto &ray_cache = cache[i];
+			if (ray_cache.finished)
+				continue;
+			//ray_cache.filled = true;
 
 			//(*grid_result_fill)[x][y].depth = 0; // clean cache
 
 			//const auto first_square_r = MAP_BLOCKSIZE * grid_size_x;
-			v3f dir_first = dir * m_render_range/2; //first_square_r;
+			v3f dir_first = dir * m_render_range / 2; //first_square_r;
 			//dir_l.X += x * MAP_BLOCKSIZE - MAP_BLOCKSIZE * grid_size_x/2;
 			//dir_l.Y += y * MAP_BLOCKSIZE - MAP_BLOCKSIZE * grid_size_y/2;
 			auto pos_center = dir_first + m_camera_pos;
@@ -295,25 +299,30 @@ void FarMesh::go_direction(const size_t dir_n, direction_cache &cache)
 			//DUMP(dir_l, x, y);
 			v3f dir_l = dir_first.normalize();
 
-			const int depth_steps = 512 + 100; // TODO CALC  256+128+64+32+16+8+4+2+1+?
+			//const int depth_steps = 512 + 100; // TODO CALC  256+128+64+32+16+8+4+2+1+?
 			// const int grid_size = 64;		   // 255;
 			const int depth_max = m_render_range_max;
-
 			int depth = m_render_range /** BS*/; // 255;
 			//DUMP(pos_center, depth);
-			for (short step_num = 0; step_num < depth_steps; ++step_num) {
-				const auto dstep = (step_num + 1);
-				auto draw_control = m_client->getEnv().getClientMap().getControl();
+			for (size_t steps = 0;
+					//ray_cache.step_num < depth_steps &&
+					steps < 10; ++ray_cache.step_num, ++steps) {
+
+				const auto dstep = (ray_cache.step_num + 1);
 				const auto block_step =
 						getFarmeshStep(draw_control, m_camera_pos_aligned / MAP_BLOCKSIZE,
 								floatToInt(pos_center, BS) / MAP_BLOCKSIZE);
 				const auto step_width = MAP_BLOCKSIZE * pow(2, block_step);
 				//const auto step_width =	std::min(std::max<int>(1, step_r.getLength() / BS), 1024);
-//DUMP(dstep, m_camera_pos_aligned, block_step, step_width);
+				//DUMP(dstep, m_camera_pos_aligned, block_step, step_width);
 				depth += step_width * dstep; // TODO: TUNE ME
 				// errorstream << depth << "\n";
+				if (!i)
+					DUMP(steps, ray_cache.step_num, processed, depth, step_width);
+
 				if (depth > depth_max) {
 					//DUMP("b1", depth, depth_max, step_width, dstep);
+					ray_cache.finished = true;
 					break;
 				}
 
@@ -331,8 +340,12 @@ void FarMesh::go_direction(const size_t dir_n, direction_cache &cache)
 						pos.Z > MAX_MAP_GENERATION_LIMIT * BS ||
 						pos.Z < -MAX_MAP_GENERATION_LIMIT * BS) {
 					//DUMP("b2", pos);
+					ray_cache.finished = true;
 					break;
 				}
+				++processed;
+
+				//DUMP(processed, steps, ray_cache.step_num, depth);
 				const int step_aligned = pow(2, ceil(log(step_width) / log(2)));
 
 				v3pos_t pos_int_raw = floatToInt(pos, BS);
@@ -341,11 +354,11 @@ void FarMesh::go_direction(const size_t dir_n, direction_cache &cache)
 						(pos_int_raw.Z / step_aligned) * step_aligned);
 
 				//bool visible = false;
-				auto &visible =  ray_cache.visible;
+				auto &visible = ray_cache.visible;
 
 				if (pos_int.Y <= m_water_level && m_camera_pos.Y > m_water_level) {
 					visible = true;
-
+					ray_cache.finished = true;
 				} else
 
 				{
@@ -363,22 +376,26 @@ void FarMesh::go_direction(const size_t dir_n, direction_cache &cache)
 						mg_cache[pos_int] = visible;
 					}
 				}
-//DUMP(visible, step_num, pos, pos_int);
-//plane_cache_item.depth[p]
+				//DUMP(visible, step_num, pos, pos_int);
+				//plane_cache_item.depth[p]
 				if (!visible) {
 					continue;
 				}
+				ray_cache.finished = true;
 				{
 					const auto blockpos = getNodeBlockPos(pos_int);
 					//DUMP("mfb", pos_int, blockpos);
 					makeFarBlock6(blockpos);
-				ray_cache.visible = visible;
+					ray_cache.visible = visible;
 				}
 				break;
 			}
 		}
 	}
-	m_cycle_stop_i = 0 ;
+
+	m_cycle_stop_i = 0;
+	DUMP(processed);
+	return processed;
 }
 
 void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
@@ -429,7 +446,7 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		if (m_camera_pos == camera_pos_aligned) {
 			//DUMP(m_cycle_stop_i, m_camera_pos, camera_pos_aligned);
 
-			return;
+			//return;
 		}
 		m_camera_pos = camera_pos_aligned;
 		// errorstream << " camera_pos_aligned=" << camera_pos_aligned << "\n";
@@ -454,12 +471,24 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		direction_caches_pos = m_camera_pos_aligned;
 		direction_caches.fill({});
 	}
+
+	const int max_cycle_ms = 1000;
+	u32 end_ms = porting::getTimeMs() + max_cycle_ms;
+
 	//for (const auto dir & :  g_6dirsf) {
-	for (int i = 0; i < sizeof(g_6dirsf) / sizeof(g_6dirsf[0]); ++i) {
-		//const auto dir = g_6dirsf[i];
-		DUMP("godir", i);
-		go_direction(i, direction_caches[i]);
+	for (int depth = 0; depth < 100; ++depth) {
+		int processed = 0;
+		for (auto i = 0; i < sizeof(g_6dirsf) / sizeof(g_6dirsf[0]); ++i) {
+			//const auto dir = g_6dirsf[i];
+			processed += go_direction(i, direction_caches[i]);
+			DUMP("godir", depth, i, processed, direction_caches[i][0].step_num);
+		}
+		if (!processed)
+			break;
+		if (porting::getTimeMs() > end_ms)
+			break;
 	}
+	DUMP("up finifhed", direction_caches[0][0].step_num);
 	return;
 
 #if 0

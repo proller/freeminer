@@ -30,7 +30,7 @@ public:
 	pos_t m_water_level = 0;
 };
 
-class FarMesh 
+class FarMesh
 #if 0
 : public scene::ISceneNode
 #endif
@@ -139,21 +139,22 @@ private:
 
 	//irr::scene::IMesh* mesh = nullptr;
 	irr::scene::SMesh *mesh = nullptr;
-#endif
 
 	uint16_t m_cycle_stop_x = 0, m_cycle_stop_y = 0, m_cycle_stop_i = 0;
+#endif
+	uint16_t m_cycle_stop_i = 0;
 
 	FarContainer farcontainer;
 
 	struct ray_cache
 	{
-		bool filled = false;
+		bool finished = false;
 		bool visible = false;
+		size_t step_num = 0;
 	};
 	using direction_cache = std::array<ray_cache, grid_size_xy>;
-	//std::array<direction_cache, 6> direction_caches;
 	std::array<direction_cache, 6> direction_caches;
 	v3pos_t direction_caches_pos;
 
-	void go_direction(const size_t dir_n, direction_cache &cache);
+	int go_direction(const size_t dir_n, direction_cache &cache);
 };
