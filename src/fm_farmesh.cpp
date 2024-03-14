@@ -64,6 +64,8 @@ MapNode FarContainer::getNodeNoEx(const v3pos_t &p)
 	return getNodeRefUnsafe(p);
 };
 
+	thread_local unordered_map_v3pos<bool> FarMesh::mg_cache;
+
 void FarMesh::makeFarBlock(const v3bpos_t &blockpos)
 {
 	//const auto blockpos = getNodeBlockPos(pos_int);
@@ -261,7 +263,7 @@ void FarMesh::OnRegisterSceneNode()
 
 int FarMesh::go_direction(const size_t dir_n, direction_cache &cache)
 {
-	DUMP(mg_cache.size(), dir_n);
+	//DUMP(mg_cache.size(), dir_n);
 
 	auto &draw_control = m_client->getEnv().getClientMap().getControl();
 
@@ -394,7 +396,7 @@ int FarMesh::go_direction(const size_t dir_n, direction_cache &cache)
 	}
 
 	m_cycle_stop_i = 0;
-	DUMP(processed);
+	//DUMP(processed);
 	return processed;
 }
 
@@ -475,18 +477,35 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 	const int max_cycle_ms = 1000;
 	u32 end_ms = porting::getTimeMs() + max_cycle_ms;
 
-	//for (const auto dir & :  g_6dirsf) {
-	for (int depth = 0; depth < 100; ++depth) {
-		int processed = 0;
+	if (1) {
 		for (auto i = 0; i < sizeof(g_6dirsf) / sizeof(g_6dirsf[0]); ++i) {
-			//const auto dir = g_6dirsf[i];
-			processed += go_direction(i, direction_caches[i]);
-			DUMP("godir", depth, i, processed, direction_caches[i][0].step_num);
+			async[i].step(std::function<void()>{[&, i = i, end_ms = end_ms]() {
+		DUMP("steps goooo", i, async[i].valid());
+				for (int depth = 0; depth < 100; ++depth) {
+					int processed = 0;
+					processed += go_direction(i, direction_caches[i]);
+					DUMP("apr", i, processed);
+					if (!processed)
+						break;
+					if (porting::getTimeMs() > end_ms)
+						break;
+				}
+			}});
 		}
-		if (!processed)
-			break;
-		if (porting::getTimeMs() > end_ms)
-			break;
+	} else {
+		//for (const auto dir & :  g_6dirsf) {
+		for (int depth = 0; depth < 100; ++depth) {
+			int processed = 0;
+			for (auto i = 0; i < sizeof(g_6dirsf) / sizeof(g_6dirsf[0]); ++i) {
+				//const auto dir = g_6dirsf[i];
+				processed += go_direction(i, direction_caches[i]);
+				DUMP("godir", depth, i, processed, direction_caches[i][0].step_num);
+			}
+			if (!processed)
+				break;
+			if (porting::getTimeMs() > end_ms)
+				break;
+		}
 	}
 	DUMP("up finifhed", direction_caches[0][0].step_num);
 	return;

@@ -6,6 +6,7 @@
 #include "irr_v3d.h"
 #include "irrlichttypes.h"
 #include "server.h"
+#include "threading/async.h"
 #include "util/unordered_map_hash.h"
 #include <ISceneNode.h>
 #include <cstdint>
@@ -111,7 +112,7 @@ private:
 	// uint16_t grid_size = 32;
 	// uint16_t grid_size = 8;
 	Mapgen *mg = nullptr;
-	unordered_map_v3pos<bool> mg_cache;
+	static thread_local unordered_map_v3pos<bool> mg_cache;
 
 #if 0
 	struct ls_cache
@@ -157,4 +158,5 @@ private:
 	v3pos_t direction_caches_pos;
 
 	int go_direction(const size_t dir_n, direction_cache &cache);
+	std::array<async_step_runner, 6> async;
 };
