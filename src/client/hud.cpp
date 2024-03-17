@@ -936,7 +936,8 @@ void Hud::drawBlockBounds()
 					intToFloat(((blockPos)*MAP_BLOCKSIZE) + (MAP_BLOCKSIZE * fscale - 1),
 							BS) -
 							offset + halfNode - 1);
-			driver->draw3DBox(box, video::SColor(255, 255, fscale * 10, 0));
+			driver->draw3DBox(box, video::SColor(255 - mesh->lod_step * 5,
+										   255 - mesh->far_step * 5, fscale * 10, 0));
 		}
 	} else {
 

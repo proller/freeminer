@@ -106,6 +106,7 @@ void FarMesh::makeFarBlock6(const v3bpos_t &blockpos)
 	}
 }
 
+#if 0
 void FarMesh::makeFarBlocks(const v3bpos_t &blockpos)
 {
 	int radius = 20;
@@ -160,6 +161,7 @@ void FarMesh::makeFarBlocks(const v3bpos_t &blockpos)
 	if (m_make_far_blocks_last >= radius) {
 		m_make_far_blocks_last = 0;
 	}
+#endif
 }
 
 FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
@@ -411,7 +413,44 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 
 	if (!mg)
 		return;
+	//if(0)
+	{
+		const int max_cycle_ms = 100;
+		u32 end_ms = porting::getTimeMs() + max_cycle_ms;
+		//const auto lock = m_client->farmesh_remake.try_lock_shared_rec();
+		//if (lock->owns_lock())
+		{
+			//DUMP(m_client->farmesh_remake.size());
+			size_t processed = 0;
+			size_t skipped = 0;
+			for (auto &bp : m_client->farmesh_remake) {
+				if (
+						//processed > 100 ||
+						porting::getTimeMs() > end_ms)
+					return;
+				if (bp.second) {
+					++skipped;
+					continue;
+				}
+				bp.second = true;
+				++processed;
 
+				//DUMP(bp.first, bp.second, processed);
+
+				//DUMP(bp);
+				makeFarBlock(bp.first);
+			}
+			//m_client->farmesh_remake.clear();
+
+			if (m_client->farmesh_remake.size() || processed)
+				DUMP("mfin", m_client->farmesh_remake.size(), processed, skipped);
+			if (!processed)
+				m_client->farmesh_remake.clear();
+		}
+		// else { DUMP("locked");}
+	}
+
+#if 0
 	if (0) {
 		auto camera_block = floatToInt(camera_pos, BS * 16);
 		//auto camera_pos_aligned = floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
@@ -420,6 +459,7 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		makeFarBlocks(camera_block);
 		return;
 	}
+#endif
 
 #if cache0
 	auto camera_pos_aligned = floatToInt(

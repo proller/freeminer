@@ -57,7 +57,7 @@ public:
 	void makeFarBlock(const v3bpos_t &blockpos);
 	void makeFarBlock6(const v3bpos_t &blockpos);
 
-	void makeFarBlocks(const v3bpos_t &blockpos);
+	//void makeFarBlocks(const v3bpos_t &blockpos);
 
 private:
 	int m_make_far_blocks_last = 0;
@@ -90,8 +90,8 @@ private:
 	//constexpr static uint16_t grid_size_min = 16;
 	//constexpr static uint16_t grid_size_max = 256;
 	//constexpr static uint16_t grid_size_max = 64;
-	constexpr static uint16_t grid_size_max_y = 64;
-	//constexpr static uint16_t grid_size_max_y = 128;
+	//constexpr static uint16_t grid_size_max_y = 64;
+	constexpr static uint16_t grid_size_max_y = 128;
 	//constexpr static uint16_t grid_size_max_y = 256;
 	//constexpr static uint16_t grid_size_max_y = 16;
 	//cylinder: constexpr static uint16_t grid_size_max_x = grid_size_max_y * 4;

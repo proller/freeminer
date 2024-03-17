@@ -345,6 +345,8 @@ void ClientMap::updateDrawList(float dtime, unsigned int max_cycle_ms)
 							m_control, getNodeBlockPos(cam_pos_nodes), block_coord);
 					mesh = block->getFarMesh(fmesh_step);
 				}
+				if (!mesh)
+					continue;
 
 /*
 		MapBlockVect sectorblocks;
@@ -478,8 +480,16 @@ void ClientMap::updateDrawList(float dtime, unsigned int max_cycle_ms)
 			MapBlockMesh *mesh = block ? block->mesh : nullptr;
 */
 			MapBlock *block = getBlockNoCreateNoEx(block_coord);
-			int mesh_step = getLodStep(m_control, getNodeBlockPos(cam_pos_nodes), block_coord);
-			const auto mesh = block ? block->getLodMesh(mesh_step, true) : nullptr;
+			int mesh_step =
+					getLodStep(m_control, getNodeBlockPos(cam_pos_nodes), block_coord);
+			auto mesh = block ? block->getLodMesh(mesh_step, true) : nullptr;
+			if (!mesh && block) {
+				int fmesh_step = getFarmeshStep(
+						m_control, getNodeBlockPos(cam_pos_nodes), block_coord);
+				mesh = block->getFarMesh(fmesh_step);
+			}
+			if (!mesh)
+				continue;
 
 			// Calculate the coordinates for range and frustum culling
 			v3f mesh_sphere_center;
@@ -753,7 +763,14 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 				m_far_blocks_delete.emplace_back(it->second);
 				it = m_far_blocks.erase(it);
 			} else {
-				drawlist.emplace(it->first, it->second.get());
+				int mesh_step = getFarmeshStep(
+						m_control, getNodeBlockPos(m_camera_position_node), it->first);
+				auto mesh = it->second->getFarMesh(mesh_step);
+				if (!mesh) {
+					m_client->farmesh_remake.insert_or_assign(it->first , false);
+				} else {
+					drawlist.emplace(it->first, it->second.get());
+				}
 				++it;
 			}
 		}
@@ -1580,7 +1597,10 @@ void ClientMap::renderMapShadows(video::IVideoDriver *driver,
 		MapBlock *block = i.second;
 
 		// If the mesh of the block happened to get deleted, ignore it
-		const auto mapBlockMesh = block->getLodMesh(getLodStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos()), false);
+		auto mapBlockMesh = block->getLodMesh(getLodStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos()), false);
+
+		if (mapBlockMesh)
+			mapBlockMesh = block->getFarMesh(getFarmeshStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos()));
 
 		if (!mapBlockMesh)
 			continue;

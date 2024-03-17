@@ -1139,6 +1139,9 @@ Game::Game() :
 Game::~Game()
 {
 	farmesh.reset();
+	farmesh_async.wait();
+	updateDrawList_async.wait();
+	
 	delete client;
 	delete soundmaker;
 	sound_manager.reset();
