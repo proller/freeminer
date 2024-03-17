@@ -23,6 +23,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <string>
 #include <iostream>
 #include <cmath>
+#include "client/mapblock_mesh.h"
 #include "settings.h"
 #include "util/numeric.h"
 #include "log.h"

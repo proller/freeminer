@@ -162,7 +162,6 @@ void FarMesh::makeFarBlocks(const v3bpos_t &blockpos)
 		m_make_far_blocks_last = 0;
 	}
 #endif
-}
 
 FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
 		// u64 seed,
@@ -529,12 +528,12 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 				continue;
 			++planes_processed;
 			async[i].step([&, i = i, end_ms = end_ms]() {
-		DUMP("steps goooo", i, async[i].valid());
+				DUMP("steps goooo", i, async[i].valid());
 				for (int depth = 0; depth < 100; ++depth) {
 					plane_caches[i].processed = go_direction(i);
 					if (!plane_caches[i].processed)
 						break;
-						break;
+					break;
 				}
 			});
 		}
