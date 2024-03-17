@@ -83,7 +83,7 @@ private:
 	f32 m_camera_yaw;
 	float m_time;
 	Client *m_client;
-	pos_t m_render_range = 16 * MAP_BLOCKSIZE;
+	pos_t distance_min = 16 * MAP_BLOCKSIZE;
 	uint32_t m_render_range_max;
 	pos_t m_water_level = 0;
 	v3pos_t m_camera_offset;

@@ -798,7 +798,6 @@ void MapBlock::deSerializeNetworkSpecific(std::istream &is)
 		return mesh[stry];
 
 #else
-		//DUMP("gmesh", step, (long)mesh[step].get(), allow_other);
 		if (m_lod_mesh[step] || !allow_other)
 			return m_lod_mesh[step];
 

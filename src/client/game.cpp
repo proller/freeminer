@@ -1138,6 +1138,7 @@ Game::Game() :
 
 Game::~Game()
 {
+	farmesh.reset();
 	delete client;
 	delete soundmaker;
 	sound_manager.reset();
@@ -4490,12 +4491,12 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 			farmesh_range = 512;
 		if (farmesh_range > 1024)
 			farmesh_range = 1024;
-		farmesh_async.step(std::function<void()>{[&, farmesh_range, yaw = player->getYaw(), pitch = player->getPitch()]() {
+		farmesh_async.step([&, farmesh_range, yaw = player->getYaw(), pitch = player->getPitch()]() {
 			farmesh->update(camera->getPosition(), camera->getDirection(),
 					camera->getFovMax(), camera->getCameraMode(), pitch, yaw,
 					camera->getOffset(), sky->getBrightness(),
 					farmesh_range);
-		}});
+		});
 	}
 
 	/*
@@ -4612,9 +4613,9 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 			bool allow = true;
 #if ENABLE_THREADS && HAVE_FUTURE
 			if (g_settings->getBool("more_threads")) {
-			updateDrawList_async.step(std::function{[&](const float dtime) {
+			updateDrawList_async.step([&](const float dtime) {
 				client->getEnv().getClientMap().updateDrawListFm(dtime, 10000);
-			}},
+			},
 					runData.update_draw_list_timer);
 			} else
 #endif

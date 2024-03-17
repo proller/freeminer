@@ -64,7 +64,7 @@ MapNode FarContainer::getNodeNoEx(const v3pos_t &p)
 	return getNodeRefUnsafe(p);
 };
 
-	thread_local unordered_map_v3pos<bool> FarMesh::mg_cache;
+thread_local unordered_map_v3pos<bool> FarMesh::mg_cache;
 
 void FarMesh::makeFarBlock(const v3bpos_t &blockpos)
 {
@@ -290,7 +290,7 @@ int FarMesh::go_direction(const size_t dir_n)
 			//(*grid_result_fill)[x][y].depth = 0; // clean cache
 
 			//const auto first_square_r = MAP_BLOCKSIZE * grid_size_x;
-			v3f dir_first = dir * m_render_range / 2; //first_square_r;
+			v3f dir_first = dir * distance_min / 2; //first_square_r;
 			//dir_l.X += x * MAP_BLOCKSIZE - MAP_BLOCKSIZE * grid_size_x/2;
 			//dir_l.Y += y * MAP_BLOCKSIZE - MAP_BLOCKSIZE * grid_size_y/2;
 			auto pos_center = dir_first + m_camera_pos;
@@ -307,7 +307,7 @@ int FarMesh::go_direction(const size_t dir_n)
 			//const int depth_steps = 512 + 100; // TODO CALC  256+128+64+32+16+8+4+2+1+?
 			// const int grid_size = 64;		   // 255;
 			const int depth_max = m_render_range_max;
-			int depth = m_render_range /** BS*/; // 255;
+			int depth = distance_min /** BS*/; // 255;
 			//DUMP(pos_center, depth);
 			for (size_t steps = 0;
 					//ray_cache.step_num < depth_steps &&
@@ -463,7 +463,7 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		m_camera_pitch = camera_pitch;
 		m_camera_yaw = camera_yaw;
 		m_camera_offset = camera_offset;
-		m_render_range = std::min<pos_t>(render_range, 255);
+		distance_min = std::min<pos_t>(render_range, MAP_BLOCKSIZE * 8);
 
 		/*errorstream << "update pos=" << m_camera_pos << " dir=" << m_camera_dir
 					<< " fov=" << m_camera_fov << " pitch=" << m_camera_pitch
@@ -525,7 +525,7 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 				break;
 		}
 	}
-	DUMP("up finifhed", direction_caches[0][0].step_num);
+	//DUMP("up finifhed", direction_caches[0][0].step_num);
 	return;
 
 #if 0
