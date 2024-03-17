@@ -1,18 +1,25 @@
 #pragma once
 #include <future>
 #include <chrono>
-#include "log.h"
 
 class async_step_runner
 {
 	std::future<void> future;
 
 public:
-	~async_step_runner()
+	~async_step_runner() { wait(); }
+	int wait(const int ms = 10000, const int step_ms = 100)
 	{
-		if (future.valid())
-			future.wait_for(std::chrono::seconds(10));
+		int i = 0;
+		for (; i < ms / step_ms; ++i) { // 10s max
+			if (!valid())
+				return i;
+			future.wait_for(std::chrono::milliseconds(step_ms));
+		}
+		return i;
 	}
+
+	inline bool valid() { return future.valid(); }
 
 	template <class Func, typename... Args>
 	void step(Func func, Args &&...args)

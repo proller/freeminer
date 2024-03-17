@@ -100,6 +100,13 @@ public:
 		return full_type::count(k);
 	}
 
+	template <typename... Args>
+	decltype(auto) contains(Args &&...args)
+	{
+		auto lock = LOCKER::lock_shared_rec();
+		return full_type::contains(std::forward<Args>(args)...);
+	}
+
 	iterator find(const key_type& k) {
 		auto lock = LOCKER::lock_shared_rec();
 		return full_type::find(k);
