@@ -156,7 +156,15 @@ private:
 	using direction_cache = std::array<ray_cache, grid_size_xy>;
 	std::array<direction_cache, 6> direction_caches;
 	v3pos_t direction_caches_pos;
-
-	int go_direction(const size_t dir_n, direction_cache &cache);
+	struct plane_cache
+	{
+		int processed = -1;
+	};
+	std::array<plane_cache, 6> plane_caches;
+	int go_direction(const size_t dir_n);
 	std::array<async_step_runner, 6> async;
+	int timestamp_complete = 0;
+	int timestamp_clean = 0;
+	bool complete_set = false;
+	int planes_processed_last = 0;
 };

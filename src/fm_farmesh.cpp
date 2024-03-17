@@ -82,6 +82,7 @@ void FarMesh::makeFarBlock(const v3bpos_t &blockpos)
 						&m_client->getEnv().getClientMap(), blockpos, m_client));
 	}
 	const auto &block = far_blocks.at(blockpos_actual);
+	block->setTimestamp(m_client->m_uptime);
 	if (!block->getFarMesh(step)) {
 		//DUMP("mkfr", blockpos_actual, step, (long)&farcontainer);
 		MeshMakeData mdat(m_client, false, 0, step, &farcontainer);
@@ -261,9 +262,10 @@ void FarMesh::OnRegisterSceneNode()
 }
 #endif
 
-int FarMesh::go_direction(const size_t dir_n, direction_cache &cache)
+int FarMesh::go_direction(const size_t dir_n)
 {
 	//DUMP(mg_cache.size(), dir_n);
+	auto &cache = direction_caches[dir_n];
 
 	auto &draw_control = m_client->getEnv().getClientMap().getControl();
 
@@ -277,12 +279,13 @@ int FarMesh::go_direction(const size_t dir_n, direction_cache &cache)
 	for (uint16_t i = m_cycle_stop_i; i < grid_size_xy; ++i) {
 		//const auto p = i/grid_size_xy;
 		{
-			uint16_t y = uint16_t(process_order[i] / grid_size_x);
-			uint16_t x = process_order[i] % grid_size_x;
 			auto &ray_cache = cache[i];
 			if (ray_cache.finished)
 				continue;
 			//ray_cache.filled = true;
+
+			uint16_t y = uint16_t(process_order[i] / grid_size_x);
+			uint16_t x = process_order[i] % grid_size_x;
 
 			//(*grid_result_fill)[x][y].depth = 0; // clean cache
 
@@ -462,35 +465,50 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		m_camera_offset = camera_offset;
 		m_render_range = std::min<pos_t>(render_range, 255);
 
-		errorstream << "update pos=" << m_camera_pos << " dir=" << m_camera_dir
+		/*errorstream << "update pos=" << m_camera_pos << " dir=" << m_camera_dir
 					<< " fov=" << m_camera_fov << " pitch=" << m_camera_pitch
 					<< " yaw=" << m_camera_yaw << " render_range=" << m_render_range
-					<< std::endl;
+					<< std::endl;*/
 	}
 
-	if (direction_caches_pos != m_camera_pos_aligned) {
+	if (direction_caches_pos != m_camera_pos_aligned && !planes_processed_last) {
+		timestamp_clean = m_client->m_uptime;
 		DUMP("cache clear", direction_caches_pos);
 		direction_caches_pos = m_camera_pos_aligned;
 		direction_caches.fill({});
+		plane_caches.fill({});
 	}
 
 	const int max_cycle_ms = 1000;
 	u32 end_ms = porting::getTimeMs() + max_cycle_ms;
 
 	if (1) {
+		size_t planes_processed = 0;
 		for (auto i = 0; i < sizeof(g_6dirsf) / sizeof(g_6dirsf[0]); ++i) {
-			async[i].step(std::function<void()>{[&, i = i, end_ms = end_ms]() {
+			if (!plane_caches[i].processed)
+				continue;
+			++planes_processed;
+			async[i].step([&, i = i, end_ms = end_ms]() {
 		DUMP("steps goooo", i, async[i].valid());
 				for (int depth = 0; depth < 100; ++depth) {
-					int processed = 0;
-					processed += go_direction(i, direction_caches[i]);
-					DUMP("apr", i, processed);
-					if (!processed)
+					plane_caches[i].processed = go_direction(i);
+					if (!plane_caches[i].processed)
 						break;
-					if (porting::getTimeMs() > end_ms)
 						break;
 				}
-			}});
+			});
+		}
+		planes_processed_last = planes_processed;
+
+		if (planes_processed) {
+			complete_set = false;
+		}
+
+		if (!planes_processed && !complete_set) {
+			m_client->getEnv().getClientMap().m_far_blocks_clean_timestamp =
+					timestamp_complete;
+			timestamp_complete = m_client->m_uptime;
+			complete_set = true;
 		}
 	} else {
 		//for (const auto dir & :  g_6dirsf) {
@@ -498,7 +516,7 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 			int processed = 0;
 			for (auto i = 0; i < sizeof(g_6dirsf) / sizeof(g_6dirsf[0]); ++i) {
 				//const auto dir = g_6dirsf[i];
-				processed += go_direction(i, direction_caches[i]);
+				processed += go_direction(i);
 				DUMP("godir", depth, i, processed, direction_caches[i][0].step_num);
 			}
 			if (!processed)

@@ -516,6 +516,14 @@ static u16 getSmoothLightCombined(const v3s16 &p,
 */
 u16 getSmoothLightSolid(const v3s16 &p, const v3s16 &face_dir, const v3s16 &corner, MeshMakeData *data)
 {
+	if (data->fscale > 1) {
+		const auto r = getSmoothLightTransparent(
+				p + face_dir * data->fscale, corner - 2 * face_dir, data);
+		if (r)
+			return r;
+		return  getSmoothLightTransparent(p + face_dir, corner - 2 * face_dir, data);
+	}
+	
 	return getSmoothLightTransparent(p + face_dir * data->fscale, corner - 2 * face_dir, data);
 }
 

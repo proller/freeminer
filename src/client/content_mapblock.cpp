@@ -471,7 +471,7 @@ void MapblockMeshGenerator::drawSolidNode()
 	box.MinEdge += cur_node.origin;
 	box.MaxEdge += cur_node.origin;
 	generateCuboidTextureCoords(box, texture_coord_buf);
-	if (data->m_smooth_lighting && data->fscale <= 1) {
+	if (data->m_smooth_lighting) {
 		LightPair lights[6][4];
 		for (int face = 0; face < 6; ++face) {
 			for (int k = 0; k < 4; k++) {

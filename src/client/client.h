@@ -611,10 +611,10 @@ private:
 
 
 //fm:
-	double m_uptime = 0;
 	bool is_simple_singleplayer_game = 0;
 	float m_timelapse_timer = -1;
 public:
+	double m_uptime = 0;
 	bool use_weather = false;
 	unsigned int overload = 0;
 

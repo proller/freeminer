@@ -36,7 +36,7 @@ struct MapDrawControl
 
 // freeminer:
 	pos_t farmesh = 0;
-	int farmesh_step = 1;
+	int farmesh_step = 4;
 	int cell_size = 1;
 
 	float fps = 30;

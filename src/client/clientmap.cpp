@@ -747,9 +747,17 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 	if (!m_drawlist_last) {
 		drawlist.clear();
 
-		for (const auto &b : m_far_blocks) {
-			drawlist.emplace(b.first, b.second.get());
+		m_far_blocks_delete.clear();
+		for (auto it = m_far_blocks.begin(); it != m_far_blocks.end();) {
+			if (it->second->getTimestamp() < m_far_blocks_clean_timestamp) {
+				m_far_blocks_delete.emplace_back(it->second);
+				it = m_far_blocks.erase(it);
+			} else {
+				drawlist.emplace(it->first, it->second.get());
+				++it;
+			}
 		}
+
 	}
 
 	if (!max_cycle_ms)

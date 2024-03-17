@@ -294,6 +294,8 @@ public:
 			v3posEqual>
 			m_far_blocks_type;
 	m_far_blocks_type m_far_blocks;
+	std::vector<std::shared_ptr<MapBlock>> m_far_blocks_delete;
+	uint32_t m_far_blocks_clean_timestamp = 0;
 	// MapBlock * getBlockNoCreateNoEx(v3pos_t & p);
 	MapBlock *createBlankBlockNoInsert(const v3bpos_t &p);
 	MapBlock *createBlankBlock(const v3bpos_t &p);
