@@ -4494,7 +4494,7 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 			farmesh_range = 512;
 		if (farmesh_range > 1024)
 			farmesh_range = 1024;
-		farmesh_async.step([&, farmesh_range, yaw = player->getYaw(), pitch = player->getPitch()]() {
+		farmesh_async.step([&, farmesh_range, yaw = player->getYaw(), pitch = player->getPitch(), speed = player->getSpeed().getLength()]() {
 			farmesh->update(camera->getPosition(), camera->getDirection(),
 					camera->getFovMax(), camera->getCameraMode(), pitch, yaw,
 					camera->getOffset(), sky->getBrightness(),
