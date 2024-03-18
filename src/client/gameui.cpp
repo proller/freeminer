@@ -299,7 +299,9 @@ void GameUI::updateProfiler()
 
 		g_profiler->print(os, m_profiler_current_page, m_profiler_max_page);
 
-		EnrichedString str(utf8_to_wide(os.str()));
+		auto & str = str_profiler;
+
+		str = (utf8_to_wide(os.str()));
 		str.setBackground(video::SColor(120, 0, 0, 0));
 		setStaticText(m_guitext_profiler, str);
 

@@ -1883,7 +1883,7 @@ void Client::handleCommand_FreeminerInit(NetworkPacket* pkt) {
 					new MapSettingsManager(m_world_path + DIR_DELIM + "map_meta");
 			m_settings_mgr->mapgen_params = params;
 			m_settings_mgr->saveMapMeta();
-		} else {
+		} else if (!m_emerge) {
 			delete params;
 		}
 	}

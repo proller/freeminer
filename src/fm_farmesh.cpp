@@ -211,8 +211,7 @@ FarMesh::FarMesh( //scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id
 								: client->m_emerge ? client->m_emerge
 												   : nullptr;
 
-	if (emerge_use) {
-		verbosestream << "Farmesh: mgtype=" << emerge_use->mgparams->mgtype
+	if (emerge_use && emerge_use->mgparams) {
 					  << " water_level=" << emerge_use->mgparams->water_level
 					  << " render_range_max=" << m_render_range_max << "\n";
 		mg = emerge_use->getFirstMapgen();
@@ -324,8 +323,8 @@ int FarMesh::go_direction(const size_t dir_n)
 				//DUMP(dstep, m_camera_pos_aligned, block_step, step_width);
 				depth += step_width * dstep; // TODO: TUNE ME
 				// errorstream << depth << "\n";
-				if (!i)
-					DUMP(steps, ray_cache.step_num, processed, depth, step_width);
+				//if (!i)
+				//	DUMP(steps, ray_cache.step_num, processed, depth, step_width);
 
 				if (depth > depth_max) {
 					//DUMP("b1", depth, depth_max, step_width, dstep);
@@ -442,8 +441,8 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 			}
 			//m_client->farmesh_remake.clear();
 
-			if (m_client->farmesh_remake.size() || processed)
-				DUMP("mfin", m_client->farmesh_remake.size(), processed, skipped);
+			//if (m_client->farmesh_remake.size() || processed)
+			//	DUMP("mfin", m_client->farmesh_remake.size(), processed, skipped);
 			if (!processed)
 				m_client->farmesh_remake.clear();
 		}
