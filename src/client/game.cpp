@@ -1681,7 +1681,7 @@ bool Game::createClient(const GameStartData &start_data)
 
 
 	if (g_settings->getS32("farmesh5")) {
-		farmesh.reset(new FarMesh(smgr->getRootSceneNode(), smgr, -1, client, server));
+		farmesh.reset(new FarMesh(/*smgr->getRootSceneNode(), smgr, -1,*/ client, server));
 	}
 
 	//freeminer:
@@ -4498,7 +4498,7 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 			farmesh->update(camera->getPosition(), camera->getDirection(),
 					camera->getFovMax(), camera->getCameraMode(), pitch, yaw,
 					camera->getOffset(), sky->getBrightness(),
-					farmesh_range);
+					farmesh_range, speed);
 		});
 	}
 
