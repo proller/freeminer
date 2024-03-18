@@ -161,18 +161,19 @@ void FarMesh::makeFarBlocks(const v3bpos_t &blockpos)
 	if (m_make_far_blocks_last >= radius) {
 		m_make_far_blocks_last = 0;
 	}
+}
 #endif
 
-FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
+FarMesh::FarMesh( //scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
 		// u64 seed,
 		Client *client, Server *server) :
 #if 0
 		scene::ISceneNode(parent, mgr, id),
 #endif
 		// m_seed(seed),
-		m_camera_pos(-1337, -1337, -1337),
+		m_camera_pos{-1337, -1337, -1337},
 		// m_time(0),
-		m_client(client) //,
+		m_client{client} //,
 						 // m_render_range(20*MAP_BLOCKSIZE)
 {
 	// dstream<<__FUNCTION_NAME<<std::endl;
@@ -211,9 +212,9 @@ FarMesh::FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
 												   : nullptr;
 
 	if (emerge_use) {
-		errorstream << "Farmesh: mgtype=" << emerge_use->mgparams->mgtype
-					<< " water_level=" << emerge_use->mgparams->water_level
-					<< " render_range_max=" << m_render_range_max << "\n";
+		verbosestream << "Farmesh: mgtype=" << emerge_use->mgparams->mgtype
+					  << " water_level=" << emerge_use->mgparams->water_level
+					  << " render_range_max=" << m_render_range_max << "\n";
 		mg = emerge_use->getFirstMapgen();
 		m_water_level = emerge_use->mgparams->water_level;
 
@@ -406,7 +407,7 @@ int FarMesh::go_direction(const size_t dir_n)
 
 void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		CameraMode camera_mode, f32 camera_pitch, f32 camera_yaw, v3pos_t camera_offset,
-		float brightness, s16 render_range)
+		float brightness, s16 render_range, float speed)
 {
 	// errorstream << "update    " << (long)mesh << std::endl;
 
@@ -502,6 +503,7 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		m_camera_pitch = camera_pitch;
 		m_camera_yaw = camera_yaw;
 		m_camera_offset = camera_offset;
+		m_speed = speed;
 		distance_min = std::min<pos_t>(render_range, MAP_BLOCKSIZE * 8);
 
 		/*errorstream << "update pos=" << m_camera_pos << " dir=" << m_camera_dir
@@ -533,7 +535,6 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 					plane_caches[i].processed = go_direction(i);
 					if (!plane_caches[i].processed)
 						break;
-					break;
 				}
 			});
 		}

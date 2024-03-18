@@ -167,7 +167,7 @@ for (short i = 32; i > 0; --i){
 	// */
 	if (skip > FARMESH_STEP_MAX)
 		skip = FARMESH_STEP_MAX;
-	const auto r = (range + draw_control.farmesh) * MAP_BLOCKSIZE;
+	//const auto r = (range + draw_control.farmesh) * MAP_BLOCKSIZE;
 	//DUMP(range, 	r,s, playerblockpos, blockpos, inFarmeshGrid(blockpos, s));
 	return skip;
 #endif

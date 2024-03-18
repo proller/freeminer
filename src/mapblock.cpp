@@ -801,7 +801,6 @@ void MapBlock::deSerializeNetworkSpecific(std::istream &is)
 		if (m_lod_mesh[step] || !allow_other)
 			return m_lod_mesh[step];
 
-		// Todo: cycle find
 		for (int inc = 1; inc < 4; ++inc) {
 			if (step + inc < m_lod_mesh.size() && m_lod_mesh[step + inc])
 				return m_lod_mesh[step + inc];

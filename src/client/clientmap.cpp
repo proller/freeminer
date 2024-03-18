@@ -757,7 +757,8 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 	if (!m_drawlist_last) {
 		drawlist.clear();
 
-		m_far_blocks_delete.clear();
+		if (m_client->farmesh_remake.empty())
+			m_far_blocks_delete.clear();
 		for (auto it = m_far_blocks.begin(); it != m_far_blocks.end();) {
 			if (it->second->getTimestamp() < m_far_blocks_clean_timestamp) {
 				m_far_blocks_delete.emplace_back(it->second);
@@ -767,7 +768,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 						m_control, getNodeBlockPos(m_camera_position_node), it->first);
 				auto mesh = it->second->getFarMesh(mesh_step);
 				if (!mesh) {
-					m_client->farmesh_remake.insert_or_assign(it->first , false);
+					m_client->farmesh_remake.insert_or_assign(it->first, false);
 				} else {
 					drawlist.emplace(it->first, it->second.get());
 				}

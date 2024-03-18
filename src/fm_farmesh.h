@@ -37,14 +37,14 @@ class FarMesh
 #endif
 {
 public:
-	FarMesh(scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id, Client *client,
-			Server *server);
+	FarMesh( //scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id,
+			Client *client, Server *server);
 
 	~FarMesh();
 
 	void update(v3f camera_pos, v3f camera_dir, f32 camera_fov, CameraMode camera_mode,
 			f32 camera_pitch, f32 camera_yaw, v3pos_t m_camera_offset, float brightness,
-			s16 render_range);
+			s16 render_range, float speed);
 #if 0 
 	virtual void render() override;
 	virtual void OnRegisterSceneNode() override;
@@ -87,6 +87,7 @@ private:
 	uint32_t m_render_range_max;
 	pos_t m_water_level = 0;
 	v3pos_t m_camera_offset;
+	float m_speed;
 	//constexpr static uint16_t grid_size_min = 16;
 	//constexpr static uint16_t grid_size_max = 256;
 	//constexpr static uint16_t grid_size_max = 64;
