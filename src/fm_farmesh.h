@@ -22,13 +22,14 @@ class FarContainer : public NodeContainer
 
 public:
 	FarContainer();
-	MapNode &getNodeRefUnsafe(const v3pos_t &p) override;
+	const MapNode &getNodeRefUnsafe(const v3pos_t &p) override;
 	MapNode getNodeNoExNoEmerge(const v3pos_t &p) override;
 	MapNode getNodeNoEx(const v3pos_t &p) override;
 	Mapgen *m_mg = nullptr;
-	MapNode visible_node;
-	MapNode water_node;
-	pos_t m_water_level = 0;
+	//MapNode visible_node;
+	//MapNode water_node;
+	//MapNode air_node;
+	//pos_t m_water_level = 0;
 };
 
 class FarMesh
@@ -151,7 +152,7 @@ private:
 	struct ray_cache
 	{
 		bool finished = false;
-		bool visible = false;
+		content_t visible = false;
 		size_t step_num = 0;
 	};
 	using direction_cache = std::array<ray_cache, grid_size_xy>;

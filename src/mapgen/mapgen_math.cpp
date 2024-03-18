@@ -653,10 +653,10 @@ std::pair<bool, double> MapgenMath::calc_point(pos_t x, pos_t y, pos_t z)
 	return {(!invert && d > 0) || (invert && d == 0), d};
 }
 
-bool MapgenMath::visible(pos_t x, pos_t y, pos_t z)
+const MapNode& MapgenMath::visible(pos_t x, pos_t y, pos_t z)
 {
 	auto [have, d] = calc_point(x, y, z);
-	return have;
+	return have ? visible_surface : y < water_level ? visible_water : visible_transparent;
 }
 
 int MapgenMath::generateTerrain()

@@ -126,6 +126,8 @@ Mapgen::Mapgen(int mapgenid, MapgenParams *params, EmergeParams *emerge) :
 	mapgen_limit = params->mapgen_limit;
 	flags        = params->flags;
 	csize        = v3s16(1, 1, 1) * (params->chunksize * MAP_BLOCKSIZE);
+
+	// freeminer:
 	env          = emerge->env;
 	liquid_pressure = params->liquid_pressure;
 
@@ -178,7 +180,7 @@ const char *Mapgen::getMapgenName(MapgenType mgtype)
 Mapgen *Mapgen::createMapgen(MapgenType mgtype, MapgenParams *params,
 	EmergeParams *emerge)
 {
-errorstream  << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id()) << " creating MG=" << mgtype << " params=" << (long)params<<"\n";
+	//errorstream  << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id()) << " creating MG=" << mgtype << " params=" << (long)params<<"\n";
 	switch (mgtype) {
 
 	case MAPGEN_INDEV:
@@ -1153,7 +1155,7 @@ void MapgenParams::readParams(const Settings *settings)
 		bparams->readParams(settings);
 		bparams->seed = seed;
 	}
-errorstream  << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id()) << " created bparams=" <<	(long)bparams << "\n";
+	//errorstream  << __FILE__ << ":" << __LINE__ << " " << std::hash<std::thread::id>{}(std::this_thread::get_id()) << " created bparams=" <<	(long)bparams << "\n";
 }
 
 

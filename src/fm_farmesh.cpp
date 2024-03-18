@@ -46,14 +46,13 @@ const v3f g_6dirsf[6] = {
 };
 
 FarContainer::FarContainer(){};
-MapNode air_node{CONTENT_AIR, LIGHT_SUN};
-MapNode &FarContainer::getNodeRefUnsafe(const v3pos_t &p)
+//MapNode air_node{CONTENT_AIR, LIGHT_SUN};
+const MapNode &FarContainer::getNodeRefUnsafe(const v3pos_t &p)
 {
-	if (m_mg->visible(p.X, p.Y, p.Z))
-		return visible_node;
-	if (p.Y < m_water_level)
-		return water_node;
-	return air_node;
+	const auto &v = m_mg->visible(p.X, p.Y, p.Z);
+	if (v.getContent())
+		return v;
+	return m_mg->visible_transparent;
 };
 MapNode FarContainer::getNodeNoExNoEmerge(const v3pos_t &p)
 {
@@ -211,15 +210,13 @@ FarMesh::FarMesh( //scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id
 								: client->m_emerge ? client->m_emerge
 												   : nullptr;
 
-	if (emerge_use && emerge_use->mgparams) {
-		verbosestream << "Farmesh: mgtype=" << emerge_use->mgparams->mgtype
-					  << " water_level=" << emerge_use->mgparams->water_level
-					  << " render_range_max=" << m_render_range_max << "\n";
+	if (emerge_use) {
+		if (emerge_use->mgparams)
 		mg = emerge_use->getFirstMapgen();
-		m_water_level = emerge_use->mgparams->water_level;
+		//m_water_level = emerge_use->mgparams->water_level;
 
 		farcontainer.m_mg = mg;
-		farcontainer.visible_node = {client->ndef()->getId("default:stone")};
+		//farcontainer.visible_node = {client->ndef()->getId("default:stone")};
 		//farcontainer.visible_node = {client->ndef()->getId("mapgen_stone")};
 		//farcontainer.visible_node =
 		//farcontainer.water_node = {client->ndef()->getId("mapgen_water_source")};
@@ -228,12 +225,13 @@ FarMesh::FarMesh( //scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id
 		//farcontainer.water_node = {client->ndef()->getId("default:water_source")};
 		//farcontainer.water_node = {client->ndef()->getId("default:tree")};
 		//farcontainer.water_node = {client->ndef()->getId("default:water_flowing")};
-		farcontainer.water_node = {client->ndef()->getId("default:diamondblock")};
+		//farcontainer.water_node = {client->ndef()->getId("default:diamondblock")};
 
-		DUMP(farcontainer.water_node, farcontainer.visible_node);
-
-		farcontainer.m_water_level = m_water_level;
+		//farcontainer.m_water_level = m_water_level;
 		//DUMP(farcontainer.visible_node, farcontainer.water_node);
+		const auto &ndef = m_client->getNodeDefManager();
+		mg->visible_surface = ndef->getId("default:stone");
+		mg->visible_water = ndef->getId("default:diamondblock"); // "default:water_source" "default:water_flowing" "mapgen_water_source"
 	}
 
 	for (size_t i = 0; i < process_order.size(); ++i)
@@ -375,7 +373,9 @@ int FarMesh::go_direction(const size_t dir_n)
 					} else {
 
 						//++stat_mg;
-						visible = mg->visible(pos_int.X, pos_int.Y, pos_int.Z);
+						const auto &c =
+								mg->visible(pos_int.X, pos_int.Y, pos_int.Z).getContent();
+						visible = c && c != CONTENT_AIR;
 						// if (visible) {
 						//  cache.first = true;
 						//  cache.second = pos_int;
@@ -393,7 +393,7 @@ int FarMesh::go_direction(const size_t dir_n)
 					const auto blockpos = getNodeBlockPos(pos_int);
 					//DUMP("mfb", pos_int, blockpos);
 					makeFarBlock6(blockpos);
-					ray_cache.visible = visible;
+					//ray_cache.visible = visible;
 				}
 				break;
 			}

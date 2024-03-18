@@ -94,7 +94,7 @@ public:
 
 private:
 	//freeminer:
-	bool visible(pos_t x, pos_t y, pos_t z) override { return getSpawnLevelAtPoint({x, z}) >= y; }
+	const MapNode& visible(pos_t x, pos_t y, pos_t z) override { return getSpawnLevelAtPoint({x, z}) >= y ? visible_surface : y < water_level ? visible_water : visible_transparent; }
 
 
 	BiomeGenOriginal *m_bgen;

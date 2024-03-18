@@ -26,7 +26,7 @@ class NodeContainer
 {
 public:
 	//	virtual const MapNode &getNodeRefUnsafeCheckFlags(const v3pos_t &p) = 0;
-	virtual MapNode &getNodeRefUnsafe(const v3pos_t &p) = 0;
+	virtual const MapNode &getNodeRefUnsafe(const v3pos_t &p) = 0;
 	virtual MapNode getNodeNoExNoEmerge(const v3pos_t &p) = 0;
 	virtual MapNode getNodeNoEx(const v3pos_t &p) = 0;
 	virtual const MapNode &getNodeRefUnsafeCheckFlags(const v3pos_t &p)
