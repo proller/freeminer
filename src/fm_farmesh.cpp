@@ -75,12 +75,16 @@ void FarMesh::makeFarBlock(const v3bpos_t &blockpos)
 	//errorstream << " step="<<step << " blockpos="<<blockpos << " blockposa=" << blockpos_actual << std::endl;
 
 	auto &far_blocks = m_client->getEnv().getClientMap().m_far_blocks;
-	if (!far_blocks.contains(blockpos_actual)) {
-		far_blocks.emplace(blockpos_actual,
-				std::make_shared<MapBlock>(
-						&m_client->getEnv().getClientMap(), blockpos, m_client));
+	{
+		const auto lock = far_blocks.lock_unique_rec();
+		if (!far_blocks.contains(blockpos_actual)) {
+			far_blocks.emplace(blockpos_actual,
+					std::make_shared<MapBlock>(
+							&m_client->getEnv().getClientMap(), blockpos, m_client));
+		}
 	}
 	const auto &block = far_blocks.at(blockpos_actual);
+	const auto lock = block->lock_unique();
 	block->setTimestamp(m_client->m_uptime);
 	if (!block->getFarMesh(step)) {
 		//DUMP("mkfr", blockpos_actual, step, (long)&farcontainer);
