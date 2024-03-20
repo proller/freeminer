@@ -964,7 +964,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 		- whatever
 	*/
 
-	//if(step <= 1)
+	//if(fscale <= 1)
 	{
 		MapblockMeshGenerator(data, &collector,
 			data->m_client->getSceneManager()->getMeshManipulator()).generate();
@@ -1061,6 +1061,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 				tex.MagFilter = video::ETMAGF_NEAREST;
 			});
 
+		  if (data->far_step <= 0)
 			if (m_enable_shaders) {
 				material.MaterialType = m_shdrsrc->getShaderInfo(
 						p.layer.shader_id).material;
@@ -1076,7 +1077,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 
 			scene::SMeshBuffer *buf = new scene::SMeshBuffer();
 			buf->Material = material;
-			if (p.layer.isTransparent() && data->fscale <= 1) {
+			if (p.layer.isTransparent() && data->far_step <= 0) {
 				buf->append(&p.vertices[0], p.vertices.size(), nullptr, 0);
 
 				MeshTriangle t;

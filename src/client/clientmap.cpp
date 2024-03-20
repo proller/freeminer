@@ -756,26 +756,6 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 
 	if (!m_drawlist_last) {
 		drawlist.clear();
-
-		if (m_client->farmesh_remake.empty())
-			m_far_blocks_delete.clear();
-		for (auto it = m_far_blocks.begin(); it != m_far_blocks.end();) {
-			if (it->second->getTimestamp() < m_far_blocks_clean_timestamp) {
-				m_far_blocks_delete.emplace_back(it->second);
-				it = m_far_blocks.erase(it);
-			} else {
-				int mesh_step = getFarmeshStep(
-						m_control, getNodeBlockPos(m_camera_position_node), it->first);
-				auto mesh = it->second->getFarMesh(mesh_step);
-				if (!mesh) {
-					m_client->farmesh_remake.insert_or_assign(it->first, false);
-				} else {
-					drawlist.emplace(it->first, it->second.get());
-				}
-				++it;
-			}
-		}
-
 	}
 
 	if (!max_cycle_ms)
@@ -888,6 +868,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 
 	u32 calls = 0;
 	const auto end_ms = porting::getTimeMs() + u32(max_cycle_ms);
+	std::unordered_set<v3bpos_t> blocks_skip_farmesh;
 
 	unordered_map_v3pos<bool> occlude_cache;
 
@@ -904,6 +885,8 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 		auto block = m_blocks.get(bp);
 		if (!block)
 			continue;
+
+		blocks_skip_farmesh.insert(bp);
 
 		int mesh_step =
 				getLodStep(m_control, getNodeBlockPos(m_camera_position_node), bp);
@@ -1095,6 +1078,31 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 
 	if (m_drawlist_last)
 		return;
+
+	{
+		if (m_client->farmesh_remake.empty())
+			m_far_blocks_delete.clear();
+		for (auto it = m_far_blocks.begin(); it != m_far_blocks.end();) {
+			if (it->second->getTimestamp() < m_far_blocks_clean_timestamp) {
+				m_far_blocks_delete.emplace_back(it->second);
+				it = m_far_blocks.erase(it);
+			} else {
+				if (!blocks_skip_farmesh.contains(it->first)) {
+					int mesh_step = getFarmeshStep(m_control,
+							getNodeBlockPos(m_camera_position_node), it->first);
+					auto mesh = it->second->getFarMesh(mesh_step);
+					if (!mesh) {
+						m_client->farmesh_remake.insert_or_assign(it->first, false);
+					} else {
+						drawlist.emplace(it->first, it->second.get());
+					}
+				}
+				++it;
+			}
+		}
+
+		//DUMP(m_far_blocks.size(), m_far_blocks_delete.size(), m_far_blocks_clean_timestamp, m_client->m_uptime, m_client->farmesh_remake.size());
+	}
 
 	//for (auto & ir : *m_drawlist)
 	//	ir.second->refDrop();
