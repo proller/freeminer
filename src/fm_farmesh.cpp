@@ -235,7 +235,7 @@ FarMesh::FarMesh( //scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id
 		//DUMP(farcontainer.visible_node, farcontainer.water_node);
 		const auto &ndef = m_client->getNodeDefManager();
 		mg->visible_surface = ndef->getId("default:stone");
-		mg->visible_water = ndef->getId("default:diamondblock"); // "default:water_source" "default:water_flowing" "mapgen_water_source"
+		mg->visible_water = ndef->getId("default:water_source");
 	}
 
 	for (size_t i = 0; i < process_order.size(); ++i)
@@ -379,7 +379,8 @@ int FarMesh::go_direction(const size_t dir_n)
 						//++stat_mg;
 						const auto &c =
 								mg->visible(pos_int.X, pos_int.Y, pos_int.Z).getContent();
-						visible = c && c != CONTENT_AIR;
+						visible = c != CONTENT_IGNORE &&
+								  c != mg->visible_transparent.getContent();
 						// if (visible) {
 						//  cache.first = true;
 						//  cache.second = pos_int;
