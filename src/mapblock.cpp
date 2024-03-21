@@ -887,7 +887,9 @@ void MapBlock::deSerializeNetworkSpecific(std::istream &is)
 		//const auto ms = rmesh->lod_step ? rmesh->lod_step : rmesh->far_step;
 		const auto ms = rmesh->far_step;
 		//DUMP("sfmesh", rmesh->lod_step, rmesh->far_step, ms);
-		delete_mesh = std::move(m_far_mesh[ms]);
+		if (m_far_mesh[ms]) {
+			delete_mesh = m_far_mesh[ms];
+		}
 		m_far_mesh[ms] = rmesh;
 	}
 

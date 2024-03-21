@@ -1214,3 +1214,16 @@ std::pair<s16, s16> get_mapgen_edges(s16 mapgen_limit, s16 chunksize)
 	// Mapgen edges, in nodes
 	return std::pair<s16, s16>(ccmin - numcmin * csize_n, ccmax + numcmax * csize_n);
 }
+
+const MapNode &Mapgen::visible(pos_t x, pos_t y, pos_t z)
+{
+	return getGroundLevelAtPoint({x, z}) >= y ? visible_surface
+		   : y < water_level
+				   ? (
+					// TODO:
+					//m_emerge->biomemgr->calcBlockHeat({x, y, z}, seed, 0, 0, false) < 0
+					//				 ? visible_ice
+					//				 :
+									  visible_water)
+				   : visible_transparent;
+}

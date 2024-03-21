@@ -245,10 +245,13 @@ public:
 	unordered_map_v3pos<s16> humidity_cache;
 
 	MapNode visible_surface;
+	MapNode visible_surface_green;
+	MapNode visible_surface_snow;
 	MapNode visible_water;
+	MapNode visible_ice;
 	MapNode visible_transparent = {CONTENT_AIR, LIGHT_SUN};
 
-	virtual const MapNode& visible(pos_t x, pos_t y, pos_t z) { return getGroundLevelAtPoint({x,z}) >= y ? visible_surface : y < water_level ? visible_water : visible_transparent; }
+	virtual const MapNode &visible(pos_t x, pos_t y, pos_t z);
 
 	// getSpawnLevelAtPoint() is a function within each mapgen that returns a
 	// suitable y co-ordinate for player spawn ('suitable' usually meaning

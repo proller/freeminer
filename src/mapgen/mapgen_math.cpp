@@ -24,6 +24,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <cstdint>
 
 #include "mapgen_math.h"
+#include "mapgen/mapgen.h"
+#include "server.h"
 #include "voxel.h"
 #include "mapblock.h"
 #include "mapnode.h"
@@ -653,10 +655,15 @@ std::pair<bool, double> MapgenMath::calc_point(pos_t x, pos_t y, pos_t z)
 	return {(!invert && d > 0) || (invert && d == 0), d};
 }
 
-const MapNode& MapgenMath::visible(pos_t x, pos_t y, pos_t z)
+const MapNode &MapgenMath::visible(pos_t x, pos_t y, pos_t z)
 {
 	auto [have, d] = calc_point(x, y, z);
-	return have ? visible_surface : y < water_level ? visible_water : visible_transparent;
+	return have				 ? visible_surface
+		   : y < water_level ? (m_emerge->biomemgr->calcBlockHeat(
+										{x, y, z}, mg_params->seed, 0, 0, false) < 0
+											   ? visible_ice
+											   : visible_water)
+							 : visible_transparent;
 }
 
 int MapgenMath::generateTerrain()
