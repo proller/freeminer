@@ -280,7 +280,7 @@ int FarMesh::go_direction(const size_t dir_n)
 	//auto &plane_cache_item = plane_cache[m_camera_pos_aligned];
 	//auto &plane_cache_item = plane_cache_dir[dir_n];
 	const auto dir = g_6dirsf[dir_n];
-
+	const int depth_max = std::min<uint32_t>(m_render_range_max, 1.3*m_client->fog_range/BS);
 	const auto grid_size_xy = grid_size_x * grid_size_y;
 	int processed = 0;
 	m_cycle_stop_i = 0;
@@ -314,7 +314,6 @@ int FarMesh::go_direction(const size_t dir_n)
 
 			//const int depth_steps = 512 + 100; // TODO CALC  256+128+64+32+16+8+4+2+1+?
 			// const int grid_size = 64;		   // 255;
-			const int depth_max = m_render_range_max;
 			int depth = distance_min /** BS*/; // 255;
 			//DUMP(pos_center, depth);
 			for (size_t steps = 0;

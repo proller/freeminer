@@ -627,6 +627,7 @@ public:
 	EmergeManager *m_emerge = nullptr;
 	MapSettingsManager *m_settings_mgr = nullptr;
 	concurrent_unordered_map<v3bpos_t, bool> farmesh_remake;
+	f32 fog_range = 0;
 
 private:	
 

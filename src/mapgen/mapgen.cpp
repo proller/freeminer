@@ -1217,12 +1217,12 @@ std::pair<s16, s16> get_mapgen_edges(s16 mapgen_limit, s16 chunksize)
 
 const MapNode &Mapgen::visible(pos_t x, pos_t y, pos_t z)
 {
-	if (y > 0 && getGroundLevelAtPoint({x, z}) < y)
+	if (y > water_level && getGroundLevelAtPoint({x, z}) < y)
 		return visible_transparent;
 	const auto heat = m_emerge->biomemgr->calcBlockHeat({x, y, z}, seed,
 			env ? env->getTimeOfDay() * env->m_time_of_day_speed : 0,
 			env ? env->getGameTime() : 0, !!env);
-	if (y < water_level)
+	if (y <= water_level)
 		return heat < 0 ? visible_ice : visible_water;
 	return heat < 0	   ? visible_surface_cold
 		   : heat < 10 ? visible_surface

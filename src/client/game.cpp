@@ -4435,6 +4435,8 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 */
 	}
 
+	client->fog_range = runData.fog_range;
+
 	/*
 		Calculate general brightness
 	*/
