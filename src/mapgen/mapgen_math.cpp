@@ -658,11 +658,13 @@ std::pair<bool, double> MapgenMath::calc_point(pos_t x, pos_t y, pos_t z)
 const MapNode &MapgenMath::visible(pos_t x, pos_t y, pos_t z)
 {
 	auto [have, d] = calc_point(x, y, z);
-	return have				 ? visible_surface
-		   : y < water_level ? (m_emerge->biomemgr->calcBlockHeat(
-										{x, y, z}, mg_params->seed, 0, 0, false) < 0
-											   ? visible_ice
-											   : visible_water)
+	const auto heat =
+			m_emerge->biomemgr->calcBlockHeat({x, y, z}, mg_params->seed, 0, 0, false);
+	return have				 ? (heat < 0		   ? visible_surface_cold
+									   : heat < 10 ? visible_surface
+									   : heat < 40 ? visible_surface_green
+												   : visible_surface_hot)
+		   : y < water_level ? (heat < 0 ? visible_ice : visible_water)
 							 : visible_transparent;
 }
 

@@ -246,7 +246,8 @@ public:
 
 	MapNode visible_surface;
 	MapNode visible_surface_green;
-	MapNode visible_surface_snow;
+	MapNode visible_surface_cold;
+	MapNode visible_surface_hot;
 	MapNode visible_water;
 	MapNode visible_ice;
 	MapNode visible_transparent = {CONTENT_AIR, LIGHT_SUN};

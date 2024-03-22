@@ -238,7 +238,8 @@ FarMesh::FarMesh( //scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id
 		mg->visible_water = ndef->getId("default:water_source");
 		mg->visible_ice = ndef->getId("default:ice");
 		mg->visible_surface_green = ndef->getId("default:dirt_with_grass");
-		mg->visible_surface_snow = ndef->getId("default:dirt_with_snow");
+		mg->visible_surface_cold = ndef->getId("default:dirt_with_snow");
+		mg->visible_surface_hot = ndef->getId("default:sand");
 	}
 
 	for (size_t i = 0; i < process_order.size(); ++i)
