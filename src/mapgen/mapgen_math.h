@@ -22,6 +22,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include "config.h"
+#include "irr_v3d.h"
 #include "mapgen/mapgen.h"
 #include "mapgen/mapgen_v7.h"
 #include "json/json.h"
@@ -32,7 +33,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mandelbulber/fractal.h"
 #endif
 
-struct MapgenMathParams : public MapgenV7Params {
+struct MapgenMathParams : public MapgenV7Params
+{
 
 	MapgenMathParams() {}
 	~MapgenMathParams() {}
@@ -49,9 +51,10 @@ struct MapgenMathParams : public MapgenV7Params {
 	void setDefaultSettings(Settings *settings) override;
 };
 
-class MapgenMath : public MapgenV7 {
+class MapgenMath : public MapgenV7
+{
 public:
-	MapgenMathParams * mg_params;
+	MapgenMathParams *mg_params;
 
 	virtual MapgenType getType() const { return MAPGEN_MATH; }
 	MapgenMath(MapgenMathParams *mg_params, EmergeParams *emerge);
@@ -78,6 +81,6 @@ public:
 
 	double (*func)(double, double, double, double, int, int);
 	MapNode layers_get(float value, float max);
-    std::pair<bool, double> calc_point(pos_t x, pos_t y, pos_t z);
-	const MapNode& visible(pos_t x, pos_t y, pos_t z) override;
+	std::pair<bool, double> calc_point(pos_t x, pos_t y, pos_t z);
+	bool visible(const v3pos_t &p) override;
 };

@@ -92,10 +92,13 @@ public:
 	virtual void makeChunk(BlockMakeData *data);
 	int getSpawnLevelAtPoint(v2s16 p);
 
-private:
 	//freeminer:
-	const MapNode& visible(pos_t x, pos_t y, pos_t z) override { return getSpawnLevelAtPoint({x, z}) >= y ? visible_surface : y < water_level ? visible_water : visible_transparent; }
+	bool visible(const v3pos_t &p) override
+	{
+		return p.Y < water_level || getSpawnLevelAtPoint({p.X, p.Z}) > p.Y;
+	}
 
+private:
 
 	BiomeGenOriginal *m_bgen;
 

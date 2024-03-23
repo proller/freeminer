@@ -49,7 +49,7 @@ FarContainer::FarContainer(){};
 //MapNode air_node{CONTENT_AIR, LIGHT_SUN};
 const MapNode &FarContainer::getNodeRefUnsafe(const v3pos_t &p)
 {
-	const auto &v = m_mg->visible(p.X, p.Y, p.Z);
+	const auto &v = m_mg->visible_content(p);
 	if (v.getContent())
 		return v;
 	return m_mg->visible_transparent;
@@ -216,7 +216,7 @@ FarMesh::FarMesh( //scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id
 
 	if (emerge_use) {
 		if (emerge_use->mgparams)
-		mg = emerge_use->getFirstMapgen();
+			mg = emerge_use->getFirstMapgen();
 		//m_water_level = emerge_use->mgparams->water_level;
 
 		farcontainer.m_mg = mg;
@@ -381,10 +381,7 @@ int FarMesh::go_direction(const size_t dir_n)
 					} else {
 
 						//++stat_mg;
-						const auto &c =
-								mg->visible(pos_int.X, pos_int.Y, pos_int.Z).getContent();
-						visible = c != CONTENT_IGNORE &&
-								  c != mg->visible_transparent.getContent();
+						visible = mg->visible(pos_int);
 						// if (visible) {
 						//  cache.first = true;
 						//  cache.second = pos_int;
@@ -422,7 +419,7 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 
 	if (!mg)
 		return;
-	//if(0)
+		//if(0)
 #if 0 
 		const int max_cycle_ms = 100;
 		const auto end_ms = porting::getTimeMs() + max_cycle_ms;

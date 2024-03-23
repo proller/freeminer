@@ -24,6 +24,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <cstdint>
 
 #include "mapgen_math.h"
+#include "irr_v3d.h"
 #include "mapgen/mapgen.h"
 #include "server.h"
 #include "voxel.h"
@@ -655,23 +656,12 @@ std::pair<bool, double> MapgenMath::calc_point(pos_t x, pos_t y, pos_t z)
 	return {(!invert && d > 0) || (invert && d == 0), d};
 }
 
-const MapNode &MapgenMath::visible(pos_t x, pos_t y, pos_t z)
+bool MapgenMath::visible(const v3pos_t &p)
 {
-	auto [have, d] = calc_point(x, y, z);
-	if (y > water_level && !have)
-		return visible_transparent;
-
-	const auto heat = m_emerge->biomemgr->calcBlockHeat({x, y, z}, seed,
-			env ? env->getTimeOfDay() * env->m_time_of_day_speed : 0,
-			env ? env->getGameTime() : 0, !!env);
-
-	if (y <= water_level)
-		return heat < 0 ? visible_ice : visible_water;
-
-	return heat < 0	   ? visible_surface_cold
-		   : heat < 10 ? visible_surface
-		   : heat < 40 ? visible_surface_green
-					   : visible_surface_hot;
+	if (p.Y < water_level)
+		return true;
+	auto [have, d] = calc_point(p.X, p.Y, p.Z);
+	return have;
 }
 
 int MapgenMath::generateTerrain()

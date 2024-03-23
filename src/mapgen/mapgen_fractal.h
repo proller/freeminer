@@ -23,6 +23,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #pragma once
 
+#include "irr_v3d.h"
 #include "mapgen.h"
 
 ///////////// Mapgen Fractal flags
@@ -83,7 +84,10 @@ public:
 	s16 generateTerrain();
 
 	//freeminer:
-	const MapNode& visible(pos_t x, pos_t y, pos_t z) override { return getFractalAtPoint(x, y, z) ? visible_surface : y < water_level ? visible_water : visible_transparent; }
+	bool visible(const v3pos_t &p) override
+	{
+		return p.Y < water_level || getFractalAtPoint(p.X, p.Y, p.Z);
+	}
 
 private:
 	u16 formula;

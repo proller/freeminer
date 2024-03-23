@@ -252,7 +252,8 @@ public:
 	MapNode visible_ice;
 	MapNode visible_transparent = {CONTENT_AIR, LIGHT_SUN};
 
-	virtual const MapNode &visible(pos_t x, pos_t y, pos_t z);
+	virtual bool visible(const v3pos_t &p);
+	const MapNode &visible_content(const v3pos_t &p);
 
 	// getSpawnLevelAtPoint() is a function within each mapgen that returns a
 	// suitable y co-ordinate for player spawn ('suitable' usually meaning
