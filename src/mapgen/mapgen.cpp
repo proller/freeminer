@@ -1217,7 +1217,7 @@ std::pair<s16, s16> get_mapgen_edges(s16 mapgen_limit, s16 chunksize)
 
 bool Mapgen::visible(const v3pos_t &p)
 {
-	return p.Y < water_level || getGroundLevelAtPoint({p.X, p.Z}) > p.Y;
+	return p.Y <= water_level || getGroundLevelAtPoint({p.X, p.Z}) > p.Y;
 }
 
 const MapNode &Mapgen::visible_content(const v3pos_t &p)

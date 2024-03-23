@@ -86,7 +86,7 @@ public:
 	//freeminer:
 	bool visible(const v3pos_t &p) override
 	{
-		return p.Y < water_level || getFractalAtPoint(p.X, p.Y, p.Z);
+		return p.Y <= water_level || getFractalAtPoint(p.X, p.Y, p.Z);
 	}
 
 private:

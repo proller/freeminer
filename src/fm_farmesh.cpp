@@ -487,8 +487,9 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		m_camera_pos_aligned_by_step.reserve(256); // todo calc from grid_size?
 #endif
 #if cache0
-		//m_camera_pos_aligned = camera_pos_aligned;
-		//floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
+		if (!m_client->getEnv().getClientMap().m_far_blocks_clean_timestamp)
+			m_camera_pos_aligned = camera_pos_aligned;
+			//floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
 #endif
 
 		const auto camera_pos_aligned = intToFloat(m_camera_pos_aligned, BS);
