@@ -90,7 +90,12 @@ public:
 	//freeminer:
 	bool visible(const v3pos_t &p)
 	{
-		return p.Y <= water_level || getSpawnLevelAtPoint({p.X, p.Z}) > p.Y;
+		//return p.Y <= water_level || getSpawnLevelAtPoint({p.X, p.Z}) > p.Y;
+		if (visible_only_water(p))
+			return true;
+		// TODO: Make faster and more features
+		const auto sl = getSpawnLevelAtPoint({p.X, p.Z});
+		return (sl >= p.Y && sl < MAX_MAP_GENERATION_LIMIT);
 	}
 
 private:

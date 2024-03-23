@@ -1215,9 +1215,14 @@ std::pair<s16, s16> get_mapgen_edges(s16 mapgen_limit, s16 chunksize)
 	return std::pair<s16, s16>(ccmin - numcmin * csize_n, ccmax + numcmax * csize_n);
 }
 
+bool Mapgen::visible_only_water(const v3pos_t &p)
+{
+	return p.Y <= water_level;
+}
+
 bool Mapgen::visible(const v3pos_t &p)
 {
-	return p.Y <= water_level || getGroundLevelAtPoint({p.X, p.Z}) > p.Y;
+	return visible_only_water(p) || getGroundLevelAtPoint({p.X, p.Z}) > p.Y;
 }
 
 const MapNode &Mapgen::visible_content(const v3pos_t &p)

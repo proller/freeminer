@@ -111,7 +111,8 @@ public:
 	//freeminer:
 	bool visible(const v3pos_t &p)
 	{
-		return p.Y <= water_level || baseTerrainLevelAtPoint(p.X, p.Z) > p.Y;
+		// TODO: add more height features
+		return visible_only_water(p) || baseTerrainLevelAtPoint(p.X, p.Z) >= p.Y;
 	}
 
 

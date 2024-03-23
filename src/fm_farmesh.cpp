@@ -289,10 +289,10 @@ int FarMesh::go_direction(const size_t dir_n)
 		//const auto p = i/grid_size_xy;
 		{
 			auto &ray_cache = cache[i];
-			if (ray_cache.finished)
+			if (ray_cache.finished > depth_max)
 				continue;
 			//ray_cache.filled = true;
-
+			++processed;
 			uint16_t y = uint16_t(process_order[i] / grid_size_x);
 			uint16_t x = process_order[i] % grid_size_x;
 
@@ -335,7 +335,7 @@ int FarMesh::go_direction(const size_t dir_n)
 
 				if (depth > depth_max) {
 					//DUMP("b1", depth, depth_max, step_width, dstep);
-					ray_cache.finished = true;
+					ray_cache.finished = depth; //depth_last;
 					break;
 				}
 
@@ -353,10 +353,10 @@ int FarMesh::go_direction(const size_t dir_n)
 						pos.Z > MAX_MAP_GENERATION_LIMIT * BS ||
 						pos.Z < -MAX_MAP_GENERATION_LIMIT * BS) {
 					//DUMP("b2", pos);
-					ray_cache.finished = true;
+					ray_cache.finished = depth;
 					break;
 				}
-				++processed;
+				//++processed;
 
 				//DUMP(processed, steps, ray_cache.step_num, depth);
 				const int step_aligned = pow(2, ceil(log(step_width) / log(2)));
@@ -371,7 +371,7 @@ int FarMesh::go_direction(const size_t dir_n)
 
 				if (pos_int.Y <= m_water_level && m_camera_pos.Y > m_water_level) {
 					visible = true;
-					ray_cache.finished = true;
+					ray_cache.finished = SIZE_MAX;
 				} else
 
 				{
@@ -391,17 +391,14 @@ int FarMesh::go_direction(const size_t dir_n)
 				}
 				//DUMP(visible, step_num, pos, pos_int);
 				//plane_cache_item.depth[p]
-				if (!visible) {
-					continue;
-				}
-				ray_cache.finished = true;
-				{
+				if (visible) {
+					ray_cache.finished = SIZE_MAX;
 					const auto blockpos = getNodeBlockPos(pos_int);
 					//DUMP("mfb", pos_int, blockpos);
 					makeFarBlock6(blockpos);
 					//ray_cache.visible = visible;
+					break;
 				}
-				break;
 			}
 		}
 	}
@@ -468,29 +465,28 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 	}
 #endif
 
-#if cache0
-	auto camera_pos_aligned = floatToInt(
+	//#if cache0
+	auto camera_pos_aligned_int = floatToInt(
 			intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
 	// reset on significant move
-	if (m_camera_pos_aligned != camera_pos_aligned) {
+	if (m_camera_pos_aligned != camera_pos_aligned_int) {
 		//errorstream << " m_camera_pos_aligned=" << m_camera_pos_aligned << "!=" << " camera_pos_aligned=" <<  camera_pos_aligned << " m_cycle_stop_i=" << m_cycle_stop_i << std::endl;
-		m_cycle_stop_i = 0;
+		//m_cycle_stop_i = 0;
 	}
-
-#endif
+	//#endif
 
 	//DUMP(m_cycle_stop_i);
-	if (!m_cycle_stop_i) {
+	//if (!m_cycle_stop_i)
+	{
 
-#if cache_step
+		/*#if cache_step
 		m_camera_pos_aligned_by_step.clear();
 		m_camera_pos_aligned_by_step.reserve(256); // todo calc from grid_size?
-#endif
-#if cache0
-		if (!m_client->getEnv().getClientMap().m_far_blocks_clean_timestamp)
-			m_camera_pos_aligned = camera_pos_aligned;
-			//floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
-#endif
+		if (!timestamp_complete) {
+			m_client->getEnv().getClientMap().m_far_blocks_last_cam_pos =
+					m_camera_pos_aligned = camera_pos_aligned_int;
+		}
+		//#endif
 
 		const auto camera_pos_aligned = intToFloat(m_camera_pos_aligned, BS);
 		// errorstream << " camera_pos_aligned=" << camera_pos_aligned	<< "
@@ -522,10 +518,14 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 
 	if (direction_caches_pos != m_camera_pos_aligned && !planes_processed_last) {
 		timestamp_clean = m_client->m_uptime;
-		DUMP("cache clear", direction_caches_pos);
+		//DUMP("cache clear", direction_caches_pos, m_camera_pos_aligned);
 		direction_caches_pos = m_camera_pos_aligned;
 		direction_caches.fill({});
 		plane_caches.fill({});
+	} else if (last_fog < m_client->fog_range) {
+		plane_caches.fill({});
+		//last_fog = m_client->fog_range + MAP_BLOCKSIZE * BS * 3;
+		last_fog = m_client->fog_range * 1.1;
 	}
 
 	const int max_cycle_ms = 1000;
@@ -537,7 +537,7 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 			if (!plane_caches[i].processed)
 				continue;
 			++planes_processed;
-			async[i].step([&, i = i, end_ms = end_ms]() {
+			async[i].step([this, i = i]() {
 				//DUMP("steps goooo", i, async[i].valid());
 				for (int depth = 0; depth < 100; ++depth) {
 					plane_caches[i].processed = go_direction(i);
@@ -552,10 +552,9 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 			complete_set = false;
 		} else {
 			m_client->getEnv().getClientMap().m_far_blocks_last_cam_pos =
-					m_camera_pos_aligned;
-			m_camera_pos_aligned = camera_pos_aligned;
-		}
+					m_camera_pos_aligned = camera_pos_aligned_int;
 
+		}
 		if (!planes_processed && !complete_set) {
 			m_client->getEnv().getClientMap().m_far_blocks_clean_timestamp =
 					timestamp_complete;
