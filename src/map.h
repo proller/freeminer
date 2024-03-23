@@ -294,6 +294,7 @@ public:
 			v3posEqual>
 			m_far_blocks_type;
 	m_far_blocks_type m_far_blocks;
+	v3pos_t m_far_blocks_last_cam_pos;
 	std::vector<std::shared_ptr<MapBlock>> m_far_blocks_delete;
 	uint32_t m_far_blocks_clean_timestamp = 0;
 	// MapBlock * getBlockNoCreateNoEx(v3pos_t & p);
