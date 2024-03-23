@@ -280,7 +280,8 @@ int FarMesh::go_direction(const size_t dir_n)
 	//auto &plane_cache_item = plane_cache[m_camera_pos_aligned];
 	//auto &plane_cache_item = plane_cache_dir[dir_n];
 	const auto dir = g_6dirsf[dir_n];
-	const int depth_max = std::min<uint32_t>(m_render_range_max, 1.3*m_client->fog_range/BS);
+	const int depth_max =
+			std::min<uint32_t>(m_render_range_max, 1.3 * m_client->fog_range / BS);
 	const auto grid_size_xy = grid_size_x * grid_size_y;
 	int processed = 0;
 	m_cycle_stop_i = 0;
@@ -422,20 +423,16 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 	if (!mg)
 		return;
 	//if(0)
-	{
+#if 0 
 		const int max_cycle_ms = 100;
-		u32 end_ms = porting::getTimeMs() + max_cycle_ms;
+		const auto end_ms = porting::getTimeMs() + max_cycle_ms;
 		//const auto lock = m_client->farmesh_remake.try_lock_shared_rec();
 		//if (lock->owns_lock())
-		{
+		/*{
 			//DUMP(m_client->farmesh_remake.size());
 			size_t processed = 0;
 			size_t skipped = 0;
 			for (auto &bp : m_client->farmesh_remake) {
-				if (
-						//processed > 100 ||
-						porting::getTimeMs() > end_ms)
-					return;
 				if (bp.second) {
 					++skipped;
 					continue;
@@ -447,6 +444,10 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 
 				//DUMP(bp);
 				makeFarBlock(bp.first);
+				if (
+						//processed > 100 ||
+						porting::getTimeMs() > end_ms)
+					return;
 			}
 			//m_client->farmesh_remake.clear();
 
@@ -456,7 +457,8 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 				m_client->farmesh_remake.clear();
 		}
 		// else { DUMP("locked");}
-	}
+	}*/
+#endif
 
 #if 0
 	if (0) {
@@ -488,7 +490,7 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		m_camera_pos_aligned_by_step.reserve(256); // todo calc from grid_size?
 #endif
 #if cache0
-		m_camera_pos_aligned = camera_pos_aligned;
+		//m_camera_pos_aligned = camera_pos_aligned;
 		//floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
 #endif
 
@@ -531,7 +533,7 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 	const int max_cycle_ms = 1000;
 	u32 end_ms = porting::getTimeMs() + max_cycle_ms;
 
-	if (1) {
+	{
 		size_t planes_processed = 0;
 		for (auto i = 0; i < sizeof(g_6dirsf) / sizeof(g_6dirsf[0]); ++i) {
 			if (!plane_caches[i].processed)
@@ -550,6 +552,10 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 
 		if (planes_processed) {
 			complete_set = false;
+		} else {
+			m_client->getEnv().getClientMap().m_far_blocks_last_cam_pos =
+					m_camera_pos_aligned;
+			m_camera_pos_aligned = camera_pos_aligned;
 		}
 
 		if (!planes_processed && !complete_set) {
@@ -558,21 +564,22 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 			timestamp_complete = m_client->m_uptime;
 			complete_set = true;
 		}
-	} else {
-		//for (const auto dir & :  g_6dirsf) {
-		for (int depth = 0; depth < 100; ++depth) {
-			int processed = 0;
-			for (auto i = 0; i < sizeof(g_6dirsf) / sizeof(g_6dirsf[0]); ++i) {
-				//const auto dir = g_6dirsf[i];
-				processed += go_direction(i);
-				DUMP("godir", depth, i, processed, direction_caches[i][0].step_num);
-			}
-			if (!processed)
-				break;
-			if (porting::getTimeMs() > end_ms)
-				break;
-		}
 	}
+	// else {
+	//	//for (const auto dir & :  g_6dirsf) {
+	//	for (int depth = 0; depth < 100; ++depth) {
+	//		int processed = 0;
+	//		for (auto i = 0; i < sizeof(g_6dirsf) / sizeof(g_6dirsf[0]); ++i) {
+	//			//const auto dir = g_6dirsf[i];
+	//			processed += go_direction(i);
+	//			DUMP("godir", depth, i, processed, direction_caches[i][0].step_num);
+	//		}
+	//		if (!processed)
+	//			break;
+	//		if (porting::getTimeMs() > end_ms)
+	//			break;
+	//	}
+	//}
 	//DUMP("up finifhed", direction_caches[0][0].step_num);
 	return;
 

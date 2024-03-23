@@ -535,10 +535,10 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 		auto fov_was = m_draw_control.fov_add;
 		m_draw_control.fov_add = speed.dotProduct(m_camera_direction)/(BS*4);
 		if (m_draw_control.fov_add > fov_was + 1)
-			m_draw_control.fov_add = std::max<float>(10.0,fov_was + ( m_draw_control.fov_add - fov_was) / 3);
+			m_draw_control.fov_add = fov_was + ( m_draw_control.fov_add - fov_was) / 3;
 		else if (m_draw_control.fov_add < fov_was - 1)
 			m_draw_control.fov_add = fov_was - (fov_was - m_draw_control.fov_add) / 3;
-		m_curr_fov_degrees -= m_draw_control.fov_add;
+		m_curr_fov_degrees -= std::max<float>(10.0, m_draw_control.fov_add);
 	}
 
 	m_curr_fov_degrees = rangelim(m_curr_fov_degrees, 1.0f, 160.0f);

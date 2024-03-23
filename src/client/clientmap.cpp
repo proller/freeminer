@@ -342,7 +342,7 @@ void ClientMap::updateDrawList(float dtime, unsigned int max_cycle_ms)
 				auto mesh = block ? block->getLodMesh(mesh_step, true) : nullptr;
 				if (!mesh && block) {
 					int fmesh_step = getFarmeshStep(
-							m_control, getNodeBlockPos(cam_pos_nodes), block_coord);
+							m_control, getNodeBlockPos(m_far_blocks_last_cam_pos), block_coord);
 					mesh = block->getFarMesh(fmesh_step);
 				}
 				if (!mesh)
@@ -485,11 +485,11 @@ void ClientMap::updateDrawList(float dtime, unsigned int max_cycle_ms)
 			auto mesh = block ? block->getLodMesh(mesh_step, true) : nullptr;
 			if (!mesh && block) {
 				int fmesh_step = getFarmeshStep(
-						m_control, getNodeBlockPos(cam_pos_nodes), block_coord);
+						m_control, getNodeBlockPos(m_far_blocks_last_cam_pos), block_coord);
 				mesh = block->getFarMesh(fmesh_step);
 			}
-			if (!mesh)
-				continue;
+			//if (!mesh)
+			//	continue;
 
 			// Calculate the coordinates for range and frustum culling
 			v3f mesh_sphere_center;
@@ -1080,8 +1080,9 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 		return;
 
 	{
-		if (m_client->farmesh_remake.empty())
+		//if (m_client->farmesh_remake.empty())
 			m_far_blocks_delete.clear();
+
 		for (auto it = m_far_blocks.begin(); it != m_far_blocks.end();) {
 			if (it->second->getTimestamp() < m_far_blocks_clean_timestamp) {
 				m_far_blocks_delete.emplace_back(it->second);
@@ -1089,10 +1090,10 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 			} else {
 				if (!blocks_skip_farmesh.contains(it->first)) {
 					int mesh_step = getFarmeshStep(m_control,
-							getNodeBlockPos(m_camera_position_node), it->first);
-					auto mesh = it->second->getFarMesh(mesh_step);
+							getNodeBlockPos(m_far_blocks_last_cam_pos), it->first); // m_camera_position_node
+					const auto mesh = it->second->getFarMesh(mesh_step);
 					if (!mesh) {
-						m_client->farmesh_remake.insert_or_assign(it->first, false);
+						//m_client->farmesh_remake.insert_or_assign(it->first, false);
 					} else {
 						drawlist.emplace(it->first, it->second.get());
 					}
@@ -1213,7 +1214,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 			int &fmesh_step = mesh_step;
 
 			fmesh_step = getFarmeshStep(
-					m_control, getNodeBlockPos(m_camera_position_node), block->getPos());
+					m_control, getNodeBlockPos(m_far_blocks_last_cam_pos), block->getPos());
 			if (fmesh_step > 1 && !inFarmeshGrid(block_pos, fmesh_step)) {
 				verbosestream << "Rfmeshskip "
 							  << " s=" << mesh_step << " p=" << block_pos
@@ -1609,7 +1610,7 @@ void ClientMap::renderMapShadows(video::IVideoDriver *driver,
 		auto mapBlockMesh = block->getLodMesh(getLodStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos()), false);
 
 		if (mapBlockMesh)
-			mapBlockMesh = block->getFarMesh(getFarmeshStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos()));
+			mapBlockMesh = block->getFarMesh(getFarmeshStep(m_control, getNodeBlockPos(m_far_blocks_last_cam_pos), block->getPos()));
 
 		if (!mapBlockMesh)
 			continue;
