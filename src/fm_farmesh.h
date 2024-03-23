@@ -9,6 +9,7 @@
 #include "threading/async.h"
 #include "util/unordered_map_hash.h"
 #include <ISceneNode.h>
+#include <cstddef>
 #include <cstdint>
 
 #define cache0 1
@@ -151,9 +152,9 @@ private:
 
 	struct ray_cache
 	{
-		bool finished = false;
-		content_t visible = false;
-		size_t step_num = 0;
+		size_t finished = {}; // last depth, SIZE_MAX if visible
+		content_t visible = {};
+		size_t step_num = {};
 	};
 	using direction_cache = std::array<ray_cache, grid_size_xy>;
 	std::array<direction_cache, 6> direction_caches;
@@ -163,6 +164,7 @@ private:
 		int processed = -1;
 	};
 	std::array<plane_cache, 6> plane_caches;
+	int last_fog = 0;
 	int go_direction(const size_t dir_n);
 	std::array<async_step_runner, 6> async;
 	int timestamp_complete = 0;

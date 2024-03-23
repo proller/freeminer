@@ -93,7 +93,6 @@ BiomeManager::BiomeManager(Server *server) :
 	weather_humidity_days = g_settings->getS16("weather_humidity_days");
 	weather_humidity_height = g_settings->getS16("weather_humidity_height");
 	weather_hot_core = g_settings->getS16("weather_hot_core");
-DUMP(weather_heat_height, weather_hot_core);
 	if (add(b) == OBJDEF_INVALID_HANDLE)
 		delete b;
 }
