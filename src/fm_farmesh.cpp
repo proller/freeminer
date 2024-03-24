@@ -272,6 +272,7 @@ int FarMesh::go_direction(const size_t dir_n)
 {
 	constexpr auto block_step_reduce = 1;
 	constexpr auto align_reduce = 1;
+
 	//DUMP(mg_cache.size(), dir_n);
 	auto &cache = direction_caches[dir_n];
 	auto &mg_cache = mg_caches[dir_n];
@@ -307,12 +308,13 @@ int FarMesh::go_direction(const size_t dir_n)
 		//dir_l.X += x * MAP_BLOCKSIZE - MAP_BLOCKSIZE * grid_size_x/2;
 		//dir_l.Y += y * MAP_BLOCKSIZE - MAP_BLOCKSIZE * grid_size_y/2;
 		auto pos_center = dir_first + m_camera_pos;
+
 		if (!dir.X)
-			dir_first.X += MAP_BLOCKSIZE * (x - grid_size_x / 2);
+			dir_first.X += distance_min/grid_size_x *  (x - grid_size_x / 2);
 		if (!dir.Y)
-			dir_first.Y += MAP_BLOCKSIZE * (y - grid_size_y / 2);
+			dir_first.Y += distance_min/grid_size_x *  (y - grid_size_x / 2);
 		if (!dir.Z)
-			dir_first.Z += MAP_BLOCKSIZE * (x - grid_size_x / 2);
+			dir_first.Z += distance_min/grid_size_x *  ((!dir.Y ? x : y) - grid_size_x / 2);
 
 		//DUMP(dir_l, x, y);
 		v3f dir_l = dir_first.normalize();
