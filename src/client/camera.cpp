@@ -643,12 +643,10 @@ void Camera::updateViewingRange()
 		return;
 	}
 
-	/*if (thread_local static const auto farmesh5 = g_settings->getS32("farmesh5");
-			farmesh5) {
-		if (m_draw_control.wanted_range < farmesh5) {
-			m_draw_control.wanted_range = farmesh5;
-		}
-	}*/
+	thread_local static const auto farmesh5 = g_settings->getS32("farmesh5");
+	if (viewing_range < farmesh5) {
+		viewing_range = farmesh5;
+	}
 
 	m_cameranode->setFarValue((viewing_range < 2000) ? 2000 * BS : viewing_range * BS);
 }

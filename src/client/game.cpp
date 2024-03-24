@@ -4419,13 +4419,19 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 		runData.fog_range = draw_control->wanted_range * BS
 				+ 0.0 * MAP_BLOCKSIZE * BS;
 
+		thread_local static const auto farmesh5 = g_settings->getS32("farmesh5");
+		if (runData.fog_range < farmesh5) {
+			runData.fog_range = farmesh5;
+		}
+
 		if (client->use_weather) {
 			auto humidity = client->getEnv().getClientMap().getHumidity(pos_i, 1);
 			runData.fog_range *= (1.55 - 1.4*(float)humidity/100);
 		}
+
 		if (!runData.enable_fog)
 			runData.fog_range = FARSCALE_LIMIT * 2 * BS;
-
+		else
 		runData.fog_range = MYMIN(
 				runData.fog_range,
 				//(draw_control->farthest_drawn + 20)
@@ -4496,9 +4502,11 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 		updateClouds(dtime);
 
 	if (!runData.headless_optimize && farmesh) {
-		auto farmesh_range = draw_control->wanted_range; // * 10;
+		thread_local static const auto farmesh5 = g_settings->getS32("farmesh5");
+		auto farmesh_range = farmesh5; //draw_control->wanted_range; // * 10;
 		if (draw_control->range_all && farmesh_range < 512)
 			farmesh_range = 512;
+
 		//if (farmesh_range > 1024)
 		//	farmesh_range = 1024;
 		farmesh_async.step([&, farmesh_range, yaw = player->getYaw(), pitch = player->getPitch(), speed = player->getSpeed().getLength()]() {
