@@ -43,22 +43,16 @@ int getLodStep(const MapDrawControl &draw_control, const v3bpos_t &playerblockpo
 {
 	int range = radius_box(playerblockpos, blockpos);
 	if (draw_control.lodmesh) {
-		const pos_t nearest = std::max(draw_control.cell_size * 2, 256 / MAP_BLOCKSIZE);
-		// DUMP(draw_control.farmesh, range, nearest, draw_control.cell_size, draw_control.farmesh + draw_control.farmesh_step * 4, draw_control.farmesh + draw_control.farmesh_step * 2, draw_control.farmesh + draw_control.farmesh_step, draw_control.farmesh);
 		const auto farmesh_cells = std::max<int>(draw_control.cell_size * 2,
 				draw_control.lodmesh / draw_control.cell_size);
-		if (range >=
-				std::min<pos_t>(nearest * 8, farmesh_cells + draw_control.lodmesh * 4)) {
+		if      (range >= farmesh_cells + draw_control.lodmesh * 4)
 			return 4;
-		} else if (range >= std::min<pos_t>(nearest * 4,
-									farmesh_cells + draw_control.lodmesh * 2)) {
+		else if (range >=  farmesh_cells + draw_control.lodmesh * 2)
 			return 3;
-		} else if (range >=
-				   std::min<pos_t>(nearest * 2, farmesh_cells + draw_control.lodmesh)) {
+		else if (range >=  farmesh_cells + draw_control.lodmesh)
 			return 2;
-		} else if (range >= std::min<pos_t>(nearest, farmesh_cells)) {
+		else if (range >= farmesh_cells)
 			return 1;
-		}
 	}
 	return 0;
 };
