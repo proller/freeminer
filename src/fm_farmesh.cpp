@@ -174,7 +174,7 @@ FarMesh::FarMesh( //scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id
 		scene::ISceneNode(parent, mgr, id),
 #endif
 		m_camera_pos{-1337, -1337, -1337},
-		m_client{client} 
+		m_client{client}
 		//m_render_range_max{g_settings->getU32("farmesh5")}
 
 {
@@ -272,6 +272,7 @@ int FarMesh::go_direction(const size_t dir_n)
 {
 	//DUMP(mg_cache.size(), dir_n);
 	auto &cache = direction_caches[dir_n];
+	auto &mg_cache = mg_caches[dir_n];
 
 	auto &draw_control = m_client->getEnv().getClientMap().getControl();
 
@@ -284,6 +285,7 @@ int FarMesh::go_direction(const size_t dir_n)
 	const auto grid_size_xy = grid_size_x * grid_size_y;
 	int processed = 0;
 	//m_cycle_stop_i = 0;
+	bool report = false;
 	for (uint16_t i = 0 /*m_cycle_stop_i*/; i < grid_size_xy; ++i) {
 		//const auto p = i/grid_size_xy;
 
@@ -318,7 +320,7 @@ int FarMesh::go_direction(const size_t dir_n)
 		//DUMP(pos_center, depth);
 		for (size_t steps = 0;
 				//ray_cache.step_num < depth_steps &&
-				steps < 10; ++ray_cache.step_num, ++steps) {
+				steps < 20; ++ray_cache.step_num, ++steps) {
 
 			const auto dstep = ray_cache.step_num + 1;
 			const auto block_step =
@@ -354,7 +356,7 @@ int FarMesh::go_direction(const size_t dir_n)
 					pos.Z > MAX_MAP_GENERATION_LIMIT * BS ||
 					pos.Z < -MAX_MAP_GENERATION_LIMIT * BS) {
 				//DUMP("b2", pos);
-				ray_cache.finished = depth;
+				ray_cache.finished = -1;
 				break;
 			}
 			++processed;
@@ -523,7 +525,9 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 	m_speed = speed;
 	//distance_min = std::min<pos_t>(render_range, MAP_BLOCKSIZE * 8);
 	//const auto distance_max = (std::min<int>(std::min<int>(render_range, m_render_range_max), 1.2 * m_client->fog_range / BS) >> 7) << 7;
-	const auto distance_max = (std::min<unsigned int>(render_range, 1.2 * m_client->fog_range / BS) >> 7) << 7;
+	const auto distance_max =
+			(std::min<unsigned int>(render_range, 1.2 * m_client->fog_range / BS) >> 7)
+			<< 7;
 	/*errorstream << "update pos=" << m_camera_pos << " dir=" << m_camera_dir
 					<< " fov=" << m_camera_fov << " pitch=" << m_camera_pitch
 					<< " yaw=" << m_camera_yaw << " render_range=" << m_render_range
@@ -535,11 +539,11 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		//DUMP("cache clear", direction_caches_pos, m_camera_pos_aligned);
 		direction_caches_pos = m_camera_pos_aligned;
 		direction_caches.fill({});
-		plane_caches.fill({});
+		plane_processed.fill({});
 		//} else if (last_fog / MAP_BLOCKSIZE < m_client->fog_range / MAP_BLOCKSIZE) {
 	} else if (last_distance_max < distance_max) {
 		//DUMP("fog reset", last_distance_max, distance_max, m_client->fog_range);
-		plane_caches.fill({});
+		plane_processed.fill({});
 		//last_fog = m_client->fog_range + MAP_BLOCKSIZE * BS * 3;
 		last_distance_max = distance_max; // * 1.1;
 	}
@@ -550,16 +554,16 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 	{
 		size_t planes_processed = 0;
 		for (size_t i = 0; i < sizeof(g_6dirsf) / sizeof(g_6dirsf[0]); ++i) {
-			if (!plane_caches[i].processed)
+			if (!plane_processed[i].processed)
 				continue;
 			++planes_processed;
 			//DUMP("i?", i, planes_processed, direction_caches_pos, m_camera_pos_aligned);
 			async[i].step([this, i = i]() {
 				//DUMP("steps goooo", i, async[i].valid());
 				for (int depth = 0; depth < 100; ++depth) {
-					plane_caches[i].processed = go_direction(i);
+					plane_processed[i].processed = go_direction(i);
 					//DUMP("onedir", i, depth, plane_caches[i].processed,m_camera_pos_aligned, direction_caches[i][0].step_num,direction_caches[i][0].finished);
-					if (!plane_caches[i].processed)
+					if (!plane_processed[i].processed)
 						break;
 				}
 			});
@@ -570,7 +574,8 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 			complete_set = false;
 		} else if (m_camera_pos_aligned != camera_pos_aligned_int) {
 			m_client->getEnv().getClientMap().m_far_blocks_last_cam_pos =
-					m_camera_pos_aligned = camera_pos_aligned_int;
+					m_camera_pos_aligned;
+			m_camera_pos_aligned = camera_pos_aligned_int;
 
 			//DUMP("movefcam", planes_processed, m_camera_pos_aligned, complete_set);
 		}
