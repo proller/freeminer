@@ -1083,16 +1083,21 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 
 	{
 		//if (m_client->farmesh_remake.empty())
-			m_far_blocks_delete.clear();
+		m_far_blocks_delete_current = !m_far_blocks_delete_current;
+		auto &m_far_blocks_delete = m_far_blocks_delete_current ? m_far_blocks_delete_1
+																: m_far_blocks_delete_2;
+		m_far_blocks_delete.clear();
 
 		for (auto it = m_far_blocks.begin(); it != m_far_blocks.end();) {
-			if (m_far_blocks_clean_timestamp && it->second->getTimestamp() < m_far_blocks_clean_timestamp) {
+			if (m_far_blocks_clean_timestamp &&
+					it->second->getTimestamp() < m_far_blocks_clean_timestamp) {
 				m_far_blocks_delete.emplace_back(it->second);
 				it = m_far_blocks.erase(it);
 			} else {
 				if (!blocks_skip_farmesh.contains(it->first)) {
 					int mesh_step = getFarmeshStep(m_control,
-							getNodeBlockPos(m_far_blocks_last_cam_pos), it->first); // m_camera_position_node
+							getNodeBlockPos(m_far_blocks_last_cam_pos),
+							it->first); // m_camera_position_node
 					const auto mesh = it->second->getFarMesh(mesh_step);
 					if (!mesh) {
 						//m_client->farmesh_remake.insert_or_assign(it->first, false);
