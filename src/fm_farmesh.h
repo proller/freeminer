@@ -46,7 +46,7 @@ public:
 
 	void update(v3f camera_pos, v3f camera_dir, f32 camera_fov, CameraMode camera_mode,
 			f32 camera_pitch, f32 camera_yaw, v3pos_t m_camera_offset, float brightness,
-			pos_t render_range, float speed);
+			int render_range, float speed);
 #if 0 
 	virtual void render() override;
 	virtual void OnRegisterSceneNode() override;
@@ -57,7 +57,7 @@ public:
 #endif
 
 	void makeFarBlock(const v3bpos_t &blockpos);
-	void makeFarBlock6(const v3bpos_t &blockpos);
+	void makeFarBlock6(const v3bpos_t &blockpos, size_t step);
 
 	//void makeFarBlocks(const v3bpos_t &blockpos);
 
@@ -93,8 +93,8 @@ private:
 	//constexpr static uint16_t grid_size_min = 16;
 	//constexpr static uint16_t grid_size_max = 256;
 	//constexpr static uint16_t grid_size_max = 64;
-	constexpr static uint16_t grid_size_max_y = 64;
-	//constexpr static uint16_t grid_size_max_y = 128;
+	//constexpr static uint16_t grid_size_max_y = 64;
+	constexpr static uint16_t grid_size_max_y = 128;
 	//constexpr static uint16_t grid_size_max_y = 256;
 	//constexpr static uint16_t grid_size_max_y = 16;
 	//cylinder: constexpr static uint16_t grid_size_max_x = grid_size_max_y * 4;
@@ -152,7 +152,7 @@ private:
 
 	struct ray_cache
 	{
-		unsigned int finished = {}; // last depth, SIZE_MAX if visible
+		unsigned int finished = {}; /// last depth, -1 if visible
 		content_t visible = {};
 		size_t step_num = {};
 	};

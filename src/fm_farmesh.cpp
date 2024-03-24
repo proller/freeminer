@@ -102,10 +102,10 @@ void FarMesh::makeFarBlock(const v3bpos_t &blockpos)
 	}
 }
 
-void FarMesh::makeFarBlock6(const v3bpos_t &blockpos)
+void FarMesh::makeFarBlock6(const v3bpos_t &blockpos, size_t step)
 {
 	for (const auto &dir : g_7dirs) {
-		makeFarBlock(blockpos + dir);
+		makeFarBlock(blockpos + dir * step);
 	}
 }
 
@@ -270,6 +270,8 @@ void FarMesh::OnRegisterSceneNode()
 
 int FarMesh::go_direction(const size_t dir_n)
 {
+	constexpr auto block_step_reduce = 1;
+	constexpr auto align_reduce = 1;
 	//DUMP(mg_cache.size(), dir_n);
 	auto &cache = direction_caches[dir_n];
 	auto &mg_cache = mg_caches[dir_n];
@@ -283,6 +285,7 @@ int FarMesh::go_direction(const size_t dir_n)
 	//const auto last_distance_max = last_distance_max;
 	//DUMP(depth_max, m_client->fog_range);
 	const auto grid_size_xy = grid_size_x * grid_size_y;
+
 	int processed = 0;
 	//m_cycle_stop_i = 0;
 	bool report = false;
@@ -316,29 +319,34 @@ int FarMesh::go_direction(const size_t dir_n)
 
 		//const int depth_steps = 512 + 100; // TODO CALC  256+128+64+32+16+8+4+2+1+?
 		// const int grid_size = 64;		   // 255;
-		unsigned int depth = distance_min /** BS*/; // 255;
+		//unsigned int depth = distance_min /** BS*/; // 255;
 		//DUMP(pos_center, depth);
+		v3f pos_last = pos_center;
 		for (size_t steps = 0;
 				//ray_cache.step_num < depth_steps &&
-				steps < 20; ++ray_cache.step_num, ++steps) {
+				steps < 10; ++ray_cache.step_num, ++steps) {
 
-			const auto dstep = ray_cache.step_num + 1;
+			const auto dstep = ray_cache.step_num; // + 1;
+			//const auto block_step = getFarmeshStep(draw_control, m_camera_pos_aligned / MAP_BLOCKSIZE,floatToInt(pos_center, BS) / MAP_BLOCKSIZE);
 			const auto block_step =
 					getFarmeshStep(draw_control, m_camera_pos_aligned / MAP_BLOCKSIZE,
-							floatToInt(pos_center, BS) / MAP_BLOCKSIZE);
-			const auto step_width = MAP_BLOCKSIZE * pow(2, block_step);
+							floatToInt(pos_last, BS) / MAP_BLOCKSIZE);
+			const auto step_width =
+					MAP_BLOCKSIZE * pow(2, block_step - block_step_reduce);
 			//const auto step_width =	std::min(std::max<int>(1, step_r.getLength() / BS), 1024);
 			//DUMP(dstep, m_camera_pos_aligned, block_step, step_width);
 			//const auto  depth_last = depth;
 			//const auto depth_was = depth;
 
-			depth += step_width * dstep; // TODO: TUNE ME
+			const auto ddepdth = step_width * dstep;
+			//depth += ddepdth; // TODO: TUNE ME
+			unsigned int depth = distance_min + ddepdth;
 			// errorstream << depth << "\n";
 			//if (!i) DUMP(steps, ray_cache.step_num, processed, depth, last_distance_max,step_width); 
 
 			if (depth > last_distance_max) {
 				//DUMP("b1", depth, depth_max, step_width, dstep);
-				ray_cache.finished = depth; //_was;
+				ray_cache.finished = distance_min + step_width * (dstep - 1);
 				break;
 			}
 
@@ -346,7 +354,7 @@ int FarMesh::go_direction(const size_t dir_n)
 
 			// auto pos_l = pos_ld + (step_u * y);
 			const auto pos = dir_l * depth * BS + m_camera_pos;
-
+			pos_last = pos;
 			//++stat_probes;
 			// auto pos = pos_l + (step_r * x);
 			if (pos.X > MAX_MAP_GENERATION_LIMIT * BS ||
@@ -361,8 +369,8 @@ int FarMesh::go_direction(const size_t dir_n)
 			}
 			++processed;
 
-			//DUMP(processed, steps, ray_cache.step_num, depth);
-			const int step_aligned = pow(2, ceil(log(step_width) / log(2)));
+			const int step_aligned =
+					pow(2, ceil(log(step_width) / log(2)) - align_reduce);
 
 			v3pos_t pos_int_raw = floatToInt(pos, BS);
 			v3pos_t pos_int((pos_int_raw.X / step_aligned) * step_aligned,
@@ -399,7 +407,7 @@ int FarMesh::go_direction(const size_t dir_n)
 				ray_cache.finished = -1;
 				const auto blockpos = getNodeBlockPos(pos_int);
 				//DUMP("mfb", pos_int, blockpos);
-				makeFarBlock6(blockpos);
+				makeFarBlock6(blockpos, pow(2, block_step));
 				//ray_cache.visible = visible;
 				break;
 			}
@@ -407,13 +415,13 @@ int FarMesh::go_direction(const size_t dir_n)
 	}
 
 	//m_cycle_stop_i = 0;
-	//DUMP(processed, last_distance_max);
+	//DUMP(processed, last_distance_max, mg_cache.size());
 	return processed;
 }
 
 void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		CameraMode camera_mode, f32 camera_pitch, f32 camera_yaw, v3pos_t camera_offset,
-		float brightness, pos_t render_range, float speed)
+		float brightness, int render_range, float speed)
 {
 	// errorstream << "update    " << (long)mesh << std::endl;
 
@@ -490,13 +498,17 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		m_camera_pos_aligned_by_step.reserve(256); // todo calc from grid_size?
 #endif*/
 	//#if cache0
+	const auto distance_max =
+			(std::min<unsigned int>(render_range, 1.2 * m_client->fog_range / BS) >> 7)
+			<< 7;
 	//if (!m_client->getEnv().getClientMap().m_far_blocks_clean_timestamp)
 	if (!timestamp_complete) {
 		if (!m_camera_pos_aligned.X && !m_camera_pos_aligned.Y && !m_camera_pos_aligned.Z)
 			m_camera_pos_aligned = camera_pos_aligned_int;
 		m_client->getEnv().getClientMap().m_far_blocks_last_cam_pos =
 				m_camera_pos_aligned;
-
+		if (!last_distance_max)
+			last_distance_max = distance_max;
 		DUMP("zeromove", m_camera_pos_aligned, planes_processed_last);
 	}
 	//floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
@@ -523,11 +535,6 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 	m_camera_yaw = camera_yaw;
 	m_camera_offset = camera_offset;
 	m_speed = speed;
-	//distance_min = std::min<pos_t>(render_range, MAP_BLOCKSIZE * 8);
-	//const auto distance_max = (std::min<int>(std::min<int>(render_range, m_render_range_max), 1.2 * m_client->fog_range / BS) >> 7) << 7;
-	const auto distance_max =
-			(std::min<unsigned int>(render_range, 1.2 * m_client->fog_range / BS) >> 7)
-			<< 7;
 	/*errorstream << "update pos=" << m_camera_pos << " dir=" << m_camera_dir
 					<< " fov=" << m_camera_fov << " pitch=" << m_camera_pitch
 					<< " yaw=" << m_camera_yaw << " render_range=" << m_render_range

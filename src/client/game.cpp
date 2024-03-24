@@ -724,7 +724,7 @@ struct GameRunData {
 	bool show_block_boundaries = false;
 	bool connected = false;
 	bool reconnect = false;
-	bool enable_fog = true;
+	bool enable_fog = false;
     //==
 
 
@@ -2799,7 +2799,7 @@ void Game::toggleFog()
 	else
 		m_game_ui->showTranslatedStatusText("Fog enabled");
 
-	runData.enable_fog = fog_enabled;
+	runData.enable_fog = !fog_enabled;
 }
 
 
