@@ -175,23 +175,27 @@ for (short i = 32; i > 0; --i){
 
 bool inFarmeshGrid(const v3bpos_t &blockpos, int step)
 {
+	return getFarmeshActual(blockpos, step) == blockpos;
+/*
 #if !FARMESH_OLD
 	//int skip = pow(2, step - 1);
 	//int skip = pow(2, step - 2);
 	//int skip = pow(2, step + 1);
 	int skip = pow(2, step - 1);
+	//int skip = pow(2, step);
 	//if (skip > 1) --skip;
 	return !(blockpos.X % skip || blockpos.Y % skip || blockpos.Z % skip);
 #else
 	return true;
 #endif
+*/
 }
 
 v3bpos_t getFarmeshActual(v3bpos_t blockpos, int step)
 {
 #if !FARMESH_OLD
 	//infostream<<" getFarmeshActual "<<blockpos << " step="<< step << " => ";
-	--step;
+	//--step;
 	blockpos.X >>= step;
 	blockpos.X <<= step;
 	blockpos.Y >>= step;

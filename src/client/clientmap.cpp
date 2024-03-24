@@ -1098,11 +1098,14 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 					int mesh_step = getFarmeshStep(m_control,
 							getNodeBlockPos(m_far_blocks_last_cam_pos),
 							it->first); // m_camera_position_node
-					const auto mesh = it->second->getFarMesh(mesh_step);
-					if (!mesh) {
-						//m_client->farmesh_remake.insert_or_assign(it->first, false);
+					if (mesh_step > 1 && !inFarmeshGrid(it->first, mesh_step)) {
 					} else {
-						drawlist.emplace(it->first, it->second.get());
+						const auto mesh = it->second->getFarMesh(mesh_step);
+						if (!mesh) {
+							//m_client->farmesh_remake.insert_or_assign(it->first, false);
+						} else {
+							drawlist.emplace(it->first, it->second.get());
+						}
 					}
 				}
 				++it;
