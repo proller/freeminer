@@ -115,7 +115,7 @@ void Client::handleCommand_InitLegacy(NetworkPacket* pkt)   {
         params->MapgenParams::readParams(&settings);
         params->readParams(&settings);
 
-		if (g_settings->getS32("farmesh5")) {
+		if (g_settings->getS32("farmesh")) {
 	 	    m_emerge = new EmergeManager(this);
         	m_emerge->initMapgens(params);
 		}

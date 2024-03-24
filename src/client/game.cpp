@@ -1681,8 +1681,8 @@ bool Game::createClient(const GameStartData &start_data)
 		client->getScript()->on_minimap_ready(mapper);
 
 
-	if (g_settings->getS32("farmesh5")) {
-		farmesh.reset(new FarMesh(/*smgr->getRootSceneNode(), smgr, -1,*/ client, server));
+	if (g_settings->getS32("farmesh")) {
+		farmesh.reset(new FarMesh(client, server));
 	}
 
 	//freeminer:
@@ -4419,9 +4419,9 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 		runData.fog_range = draw_control->wanted_range * BS
 				+ 0.0 * MAP_BLOCKSIZE * BS;
 
-		thread_local static const auto farmesh5 = g_settings->getS32("farmesh5");
-		if (runData.fog_range < farmesh5) {
-			runData.fog_range = farmesh5;
+		thread_local static const auto farmesh = g_settings->getS32("farmesh");
+		if (runData.fog_range < farmesh) {
+			runData.fog_range = farmesh;
 		}
 
 		if (client->use_weather) {
@@ -4502,18 +4502,16 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 		updateClouds(dtime);
 
 	if (!runData.headless_optimize && farmesh) {
-		thread_local static const auto farmesh5 = g_settings->getS32("farmesh5");
-		auto farmesh_range = farmesh5; //draw_control->wanted_range; // * 10;
-		if (draw_control->range_all && farmesh_range < 512)
-			farmesh_range = 512;
+		thread_local static const auto farmesh_range = g_settings->getS32("farmesh");
+		//if (draw_control->range_all && farmesh_range < 512)
+		//	farmesh_range = 512;
 
-		//if (farmesh_range > 1024)
-		//	farmesh_range = 1024;
-		farmesh_async.step([&, farmesh_range, yaw = player->getYaw(), pitch = player->getPitch(), speed = player->getSpeed().getLength()]() {
+		farmesh_async.step([&, farmesh_range = farmesh_range, yaw = player->getYaw(),
+								   pitch = player->getPitch(),
+								   speed = player->getSpeed().getLength()]() {
 			farmesh->update(camera->getPosition(), camera->getDirection(),
 					camera->getFovMax(), camera->getCameraMode(), pitch, yaw,
-					camera->getOffset(), sky->getBrightness(),
-					farmesh_range, speed);
+					camera->getOffset(), sky->getBrightness(), farmesh_range, speed);
 		});
 	}
 

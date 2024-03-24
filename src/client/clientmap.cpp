@@ -65,9 +65,11 @@ void MeshBufListList::add(scene::IMeshBuffer *buf, v3s16 position, u8 layer)
 
 void MapDrawControl::fm_init()
 {
-	g_settings->getPosNoEx("farmesh", farmesh);
+	g_settings->getU32NoEx("farmesh", farmesh);
+	g_settings->getU32NoEx("lodmesh", lodmesh);
 	//farmesh_step = g_settings->getS32("farmesh_step");
 	fov_want = fov = g_settings->getFloat("fov");
+DUMP(farmesh, lodmesh);
 }
 
 static void on_settings_changed(const std::string &name, void *data)

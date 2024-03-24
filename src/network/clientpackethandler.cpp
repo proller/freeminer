@@ -1848,7 +1848,9 @@ void Client::handleCommand_FreeminerInit(NetworkPacket* pkt) {
 		conf.updateConfigFile(conf_path.c_str());
 	}
 
-	if (g_settings->getS32("farmesh5") && !m_localserver) {
+	const thread_local static auto farmesh_range = g_settings->getS32("farmesh");
+
+	if (farmesh_range && !m_localserver) {
 		m_localserver = new Server("farmesh", findSubgame("devtest"), false, {}, true);
 	}
 
@@ -1872,7 +1874,7 @@ void Client::handleCommand_FreeminerInit(NetworkPacket* pkt) {
 		params->MapgenParams::readParams(&settings);
 		params->readParams(&settings);
 
-		if (!m_simple_singleplayer_mode && g_settings->getS32("farmesh5")) {
+		if (!m_simple_singleplayer_mode && farmesh_range) {
 			m_emerge = new EmergeManager(
 					m_localserver, m_localserver->m_metrics_backend.get());
 			m_emerge->initMapgens(params);

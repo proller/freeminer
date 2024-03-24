@@ -23,9 +23,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include "irr_v3d.h"
+#include "irrlichttypes.h"
 #include "irrlichttypes_extrabloated.h"
 #include "map.h"
 #include "camera.h"
+#include <cstdint>
 #include <set>
 #include <unordered_set>
 #include <vector>
@@ -35,8 +37,8 @@ struct MapDrawControl
 {
 
 // freeminer:
-	pos_t farmesh = 0;
-	int farmesh_step = 4;
+	uint32_t farmesh = 30000;
+	uint32_t lodmesh = 4;
 	int cell_size = 1;
 
 	float fps = 30;

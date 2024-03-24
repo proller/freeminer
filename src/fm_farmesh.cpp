@@ -175,7 +175,7 @@ FarMesh::FarMesh( //scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id
 #endif
 		m_camera_pos{-1337, -1337, -1337},
 		m_client{client}
-		//m_render_range_max{g_settings->getU32("farmesh5")}
+		//m_render_range_max{g_settings->getU32("farmesh")}
 
 {
 	// dstream<<__FUNCTION_NAME<<std::endl;
@@ -512,7 +512,7 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 				m_camera_pos_aligned;
 		if (!last_distance_max)
 			last_distance_max = distance_max;
-		DUMP("zeromove", m_camera_pos_aligned, planes_processed_last);
+		// DUMP("zeromove", m_camera_pos_aligned, planes_processed_last);
 	}
 	//floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
 	//#endif
