@@ -102,7 +102,7 @@ void FarMesh::makeFarBlock(const v3bpos_t &blockpos)
 	}
 }
 
-void FarMesh::makeFarBlock6(const v3bpos_t &blockpos, size_t step)
+void FarMesh::makeFarBlock7(const v3bpos_t &blockpos, size_t step)
 {
 	for (const auto &dir : g_7dirs) {
 		makeFarBlock(blockpos + dir * step);
@@ -310,11 +310,12 @@ int FarMesh::go_direction(const size_t dir_n)
 		auto pos_center = dir_first + m_camera_pos;
 
 		if (!dir.X)
-			dir_first.X += distance_min/grid_size_x *  (x - grid_size_x / 2);
+			dir_first.X += distance_min / grid_size_x * (x - grid_size_x / 2);
 		if (!dir.Y)
-			dir_first.Y += distance_min/grid_size_x *  (y - grid_size_x / 2);
+			dir_first.Y += distance_min / grid_size_x * (y - grid_size_x / 2);
 		if (!dir.Z)
-			dir_first.Z += distance_min/grid_size_x *  ((!dir.Y ? x : y) - grid_size_x / 2);
+			dir_first.Z +=
+					distance_min / grid_size_x * ((!dir.Y ? x : y) - grid_size_x / 2);
 
 		//DUMP(dir_l, x, y);
 		v3f dir_l = dir_first.normalize();
@@ -326,7 +327,7 @@ int FarMesh::go_direction(const size_t dir_n)
 		v3f pos_last = pos_center;
 		for (size_t steps = 0;
 				//ray_cache.step_num < depth_steps &&
-				steps < 10; ++ray_cache.step_num, ++steps) {
+				steps < 20; ++ray_cache.step_num, ++steps) {
 
 			const auto dstep = ray_cache.step_num; // + 1;
 			//const auto block_step = getFarmeshStep(draw_control, m_camera_pos_aligned / MAP_BLOCKSIZE,floatToInt(pos_center, BS) / MAP_BLOCKSIZE);
@@ -409,7 +410,7 @@ int FarMesh::go_direction(const size_t dir_n)
 				ray_cache.finished = -1;
 				const auto blockpos = getNodeBlockPos(pos_int);
 				//DUMP("mfb", pos_int, blockpos);
-				makeFarBlock6(blockpos, pow(2, block_step));
+				makeFarBlock7(blockpos, pow(2, block_step));
 				//ray_cache.visible = visible;
 				break;
 			}
@@ -589,7 +590,8 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 			//DUMP("movefcam", planes_processed, m_camera_pos_aligned, complete_set);
 		}
 		if (!planes_processed && !complete_set) {
-			//DUMP("complete", timestamp_complete, m_client->m_uptime);
+			constexpr auto clean_old_time = 300;
+			if (timestamp_complete - clean_old_time > 0)
 			m_client->getEnv().getClientMap().m_far_blocks_clean_timestamp =
 					timestamp_complete;
 			timestamp_complete = m_client->m_uptime;

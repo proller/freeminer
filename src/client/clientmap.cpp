@@ -1089,7 +1089,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 		m_far_blocks_delete.clear();
 
 		for (auto it = m_far_blocks.begin(); it != m_far_blocks.end();) {
-			if (m_far_blocks_clean_timestamp &&
+			if (m_far_blocks_clean_timestamp > 0 &&
 					it->second->getTimestamp() < m_far_blocks_clean_timestamp) {
 				m_far_blocks_delete.emplace_back(it->second);
 				it = m_far_blocks.erase(it);

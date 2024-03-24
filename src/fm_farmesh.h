@@ -57,7 +57,7 @@ public:
 #endif
 
 	void makeFarBlock(const v3bpos_t &blockpos);
-	void makeFarBlock6(const v3bpos_t &blockpos, size_t step);
+	void makeFarBlock7(const v3bpos_t &blockpos, size_t step);
 
 	//void makeFarBlocks(const v3bpos_t &blockpos);
 
