@@ -724,6 +724,7 @@ struct GameRunData {
 	bool show_block_boundaries = false;
 	bool connected = false;
 	bool reconnect = false;
+	bool enable_fog = true;
     //==
 
 
@@ -2797,6 +2798,8 @@ void Game::toggleFog()
 		m_game_ui->showTranslatedStatusText("Fog disabled");
 	else
 		m_game_ui->showTranslatedStatusText("Fog enabled");
+
+	runData.enable_fog = fog_enabled;
 }
 
 
@@ -2870,7 +2873,7 @@ void Game::toggleBlockBoundaries(float *statustext_time, VolatileRunFlags *flags
 void Game::increaseViewRange()
 {
 	s16 range = g_settings->getS16("viewing_range");
-	s16 range_new = range + 10;
+	int range_new = range + 10;
 	s16 server_limit = sky->getFogDistance();
 
 	{ //fm:
@@ -4420,6 +4423,8 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 			auto humidity = client->getEnv().getClientMap().getHumidity(pos_i, 1);
 			runData.fog_range *= (1.55 - 1.4*(float)humidity/100);
 		}
+		if (!runData.enable_fog)
+			runData.fog_range = FARSCALE_LIMIT * 2 * BS;
 
 		runData.fog_range = MYMIN(
 				runData.fog_range,
@@ -4494,8 +4499,8 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 		auto farmesh_range = draw_control->wanted_range; // * 10;
 		if (draw_control->range_all && farmesh_range < 512)
 			farmesh_range = 512;
-		if (farmesh_range > 1024)
-			farmesh_range = 1024;
+		//if (farmesh_range > 1024)
+		//	farmesh_range = 1024;
 		farmesh_async.step([&, farmesh_range, yaw = player->getYaw(), pitch = player->getPitch(), speed = player->getSpeed().getLength()]() {
 			farmesh->update(camera->getPosition(), camera->getDirection(),
 					camera->getFovMax(), camera->getCameraMode(), pitch, yaw,
@@ -4896,6 +4901,8 @@ void Game::readSettings()
 	m_invert_hotbar_mouse_wheel = g_settings->getBool("invert_hotbar_mouse_wheel");
 
 	m_does_lost_focus_pause_game = g_settings->getBool("pause_on_lost_focus");
+
+	runData.enable_fog = m_cache_enable_fog;
 }
 
 

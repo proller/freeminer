@@ -46,7 +46,7 @@ public:
 
 	void update(v3f camera_pos, v3f camera_dir, f32 camera_fov, CameraMode camera_mode,
 			f32 camera_pitch, f32 camera_yaw, v3pos_t m_camera_offset, float brightness,
-			s16 render_range, float speed);
+			pos_t render_range, float speed);
 #if 0 
 	virtual void render() override;
 	virtual void OnRegisterSceneNode() override;
@@ -62,13 +62,13 @@ public:
 	//void makeFarBlocks(const v3bpos_t &blockpos);
 
 private:
-	int m_make_far_blocks_last = 0;
+	//int m_make_far_blocks_last = 0;
 	std::vector<v3bpos_t> m_make_far_blocks_list;
 
-	video::SMaterial m_materials[FARMESH_MATERIAL_COUNT];
-	core::aabbox3d<f32> m_box;
-	float m_cloud_y;
-	float m_brightness;
+	//video::SMaterial m_materials[FARMESH_MATERIAL_COUNT];
+	//core::aabbox3d<f32> m_box;
+	//float m_cloud_y;
+	//float m_brightness;
 	v3f m_camera_pos = {-1337, -1337, -1337};
 #if cache0
 // v3pos_t m_camera_pos_aligned;
@@ -83,11 +83,11 @@ private:
 	f32 m_camera_fov;
 	f32 m_camera_pitch;
 	f32 m_camera_yaw;
-	float m_time;
+	//float m_time;
 	Client *m_client;
-	pos_t distance_min = 16 * MAP_BLOCKSIZE;
-	uint32_t m_render_range_max;
-	pos_t m_water_level = 0;
+	pos_t distance_min = 8 * MAP_BLOCKSIZE;
+	//const uint32_t m_render_range_max;
+	//pos_t m_water_level = 0;
 	v3pos_t m_camera_offset;
 	float m_speed;
 	//constexpr static uint16_t grid_size_min = 16;
@@ -146,13 +146,13 @@ private:
 
 	uint16_t m_cycle_stop_x = 0, m_cycle_stop_y = 0, m_cycle_stop_i = 0;
 #endif
-	uint16_t m_cycle_stop_i = 0;
+	//uint16_t m_cycle_stop_i = 0;
 
 	FarContainer farcontainer;
 
 	struct ray_cache
 	{
-		size_t finished = {}; // last depth, SIZE_MAX if visible
+		unsigned int finished = {}; // last depth, SIZE_MAX if visible
 		content_t visible = {};
 		size_t step_num = {};
 	};
@@ -164,7 +164,7 @@ private:
 		int processed = -1;
 	};
 	std::array<plane_cache, 6> plane_caches;
-	int last_fog = 0;
+	unsigned int last_distance_max = 0;
 	int go_direction(const size_t dir_n);
 	std::array<async_step_runner, 6> async;
 	int timestamp_complete = 0;

@@ -633,6 +633,28 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 
 void Camera::updateViewingRange()
 {
+	f32 viewing_range = g_settings->getFloat("viewing_range");
+
+	m_cameranode->setNearValue(0.1f * BS);
+
+	m_draw_control.wanted_range = std::fmin(adjustDist(viewing_range, getFovMax()), FARSCALE_LIMIT * 2);
+	if (m_draw_control.range_all) {
+		m_cameranode->setFarValue(FARSCALE_LIMIT * 2 * BS);
+		return;
+	}
+
+	/*if (thread_local static const auto farmesh5 = g_settings->getS32("farmesh5");
+			farmesh5) {
+		if (m_draw_control.wanted_range < farmesh5) {
+			m_draw_control.wanted_range = farmesh5;
+		}
+	}*/
+
+	m_cameranode->setFarValue((viewing_range < 2000) ? 2000 * BS : viewing_range * BS);
+}
+#if 0
+void Camera::updateViewingRange()
+{
 	const f32 viewing_range = g_settings->getFloat("viewing_range");
 
 	m_cameranode->setNearValue(0.1f * BS);
@@ -731,6 +753,7 @@ void Camera::updateViewingRange()
 
 	m_cameranode->setFarValue((viewing_range_new < 2000) ? 2000 * BS : viewing_range_new * BS);
 }
+#endif
 
 void Camera::setDigging(s32 button)
 {

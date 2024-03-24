@@ -246,6 +246,7 @@ public:
 
 	MapNode visible_surface;
 	MapNode visible_surface_green;
+	MapNode visible_surface_dry;
 	MapNode visible_surface_cold;
 	MapNode visible_surface_hot;
 	MapNode visible_water;

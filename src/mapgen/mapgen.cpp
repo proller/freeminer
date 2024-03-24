@@ -1231,11 +1231,14 @@ const MapNode &Mapgen::visible_content(const v3pos_t &p)
 		return visible_transparent;
 	const auto heat = m_emerge->biomemgr->calcBlockHeat(p, seed,
 			env ? env->getTimeOfDay() * env->m_time_of_day_speed : 0,
-			env ? env->getGameTime() : 0, !!env);
+			env ? env->getGameTime() : 0, !!env && env->m_use_weather);
 	if (p.Y <= water_level)
 		return heat < 0 ? visible_ice : visible_water;
-	return heat < 0	   ? visible_surface_cold
+	const auto humidity = m_emerge->biomemgr->calcBlockHumidity(p, seed,
+			env ? env->getTimeOfDay() * env->m_time_of_day_speed : 0,
+			env ? env->getGameTime() : 0, !!env && env->m_use_weather);
+	return heat < 0	   ? (humidity < 20 ? visible_surface : visible_surface_cold)
 		   : heat < 10 ? visible_surface
-		   : heat < 40 ? visible_surface_green
+		   : heat < 40 ? (humidity < 20 ? visible_surface_dry : visible_surface_green)
 					   : visible_surface_hot;
 }

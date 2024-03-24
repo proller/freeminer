@@ -104,7 +104,7 @@ void FarMesh::makeFarBlock(const v3bpos_t &blockpos)
 
 void FarMesh::makeFarBlock6(const v3bpos_t &blockpos)
 {
-	for (const auto &dir : g_6dirs) {
+	for (const auto &dir : g_7dirs) {
 		makeFarBlock(blockpos + dir);
 	}
 }
@@ -173,11 +173,10 @@ FarMesh::FarMesh( //scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id
 #if 0
 		scene::ISceneNode(parent, mgr, id),
 #endif
-		// m_seed(seed),
 		m_camera_pos{-1337, -1337, -1337},
-		// m_time(0),
-		m_client{client} //,
-						 // m_render_range(20*MAP_BLOCKSIZE)
+		m_client{client} 
+		//m_render_range_max{g_settings->getU32("farmesh5")}
+
 {
 	// dstream<<__FUNCTION_NAME<<std::endl;
 
@@ -201,14 +200,12 @@ FarMesh::FarMesh( //scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id
 	m_materials[1].setFlag(video::EMF_FOG_ENABLE, true);
 */
 
-	m_render_range_max = g_settings->getS32("farmesh5");
-
 	//  m_box = core::aabbox3d<f32>(-BS * MAX_MAP_GENERATION_LIMIT,-BS *
 	//  MAX_MAP_GENERATION_LIMIT,-BS * MAX_MAP_GENERATION_LIMIT, BS * 1000000, BS
 	//  * MAX_MAP_GENERATION_LIMIT, BS * MAX_MAP_GENERATION_LIMIT);
-	m_box = core::aabbox3d<f32>(-BS * m_render_range_max, -BS * m_render_range_max,
-			-BS * m_render_range_max, BS * m_render_range_max, BS * m_render_range_max,
-			BS * m_render_range_max);
+	//m_box = core::aabbox3d<f32>(-BS * m_render_range_max, -BS * m_render_range_max,
+	//		-BS * m_render_range_max, BS * m_render_range_max, BS * m_render_range_max,
+	//		BS * m_render_range_max);
 
 	EmergeManager *emerge_use = server			   ? server->getEmergeManager()
 								: client->m_emerge ? client->m_emerge
@@ -238,6 +235,7 @@ FarMesh::FarMesh( //scene::ISceneNode *parent, scene::ISceneManager *mgr, s32 id
 		mg->visible_water = ndef->getId("default:water_source");
 		mg->visible_ice = ndef->getId("default:ice");
 		mg->visible_surface_green = ndef->getId("default:dirt_with_grass");
+		mg->visible_surface_dry = ndef->getId("default:dirt_with_dry_grass");
 		mg->visible_surface_cold = ndef->getId("default:dirt_with_snow");
 		mg->visible_surface_hot = ndef->getId("default:sand");
 	}
@@ -280,137 +278,140 @@ int FarMesh::go_direction(const size_t dir_n)
 	//auto &plane_cache_item = plane_cache[m_camera_pos_aligned];
 	//auto &plane_cache_item = plane_cache_dir[dir_n];
 	const auto dir = g_6dirsf[dir_n];
-	const int depth_max =
-			std::min<uint32_t>(m_render_range_max, 1.3 * m_client->fog_range / BS);
+	//const int depth_max = std::min<uint32_t>(m_render_range_max, 1.3 * m_client->fog_range / BS);
+	//const auto last_distance_max = last_distance_max;
+	//DUMP(depth_max, m_client->fog_range);
 	const auto grid_size_xy = grid_size_x * grid_size_y;
 	int processed = 0;
-	m_cycle_stop_i = 0;
-	for (uint16_t i = m_cycle_stop_i; i < grid_size_xy; ++i) {
+	//m_cycle_stop_i = 0;
+	for (uint16_t i = 0 /*m_cycle_stop_i*/; i < grid_size_xy; ++i) {
 		//const auto p = i/grid_size_xy;
-		{
-			auto &ray_cache = cache[i];
-			if (ray_cache.finished > depth_max)
-				continue;
-			//ray_cache.filled = true;
+
+		auto &ray_cache = cache[i];
+		if (ray_cache.finished > last_distance_max)
+			continue;
+		//ray_cache.filled = true;
+		//++processed;
+		uint16_t y = uint16_t(process_order[i] / grid_size_x);
+		uint16_t x = process_order[i] % grid_size_x;
+
+		//(*grid_result_fill)[x][y].depth = 0; // clean cache
+
+		//const auto first_square_r = MAP_BLOCKSIZE * grid_size_x;
+		v3f dir_first = dir * distance_min / 2; //first_square_r;
+		//dir_l.X += x * MAP_BLOCKSIZE - MAP_BLOCKSIZE * grid_size_x/2;
+		//dir_l.Y += y * MAP_BLOCKSIZE - MAP_BLOCKSIZE * grid_size_y/2;
+		auto pos_center = dir_first + m_camera_pos;
+		if (!dir.X)
+			dir_first.X += MAP_BLOCKSIZE * (x - grid_size_x / 2);
+		if (!dir.Y)
+			dir_first.Y += MAP_BLOCKSIZE * (y - grid_size_y / 2);
+		if (!dir.Z)
+			dir_first.Z += MAP_BLOCKSIZE * (x - grid_size_x / 2);
+
+		//DUMP(dir_l, x, y);
+		v3f dir_l = dir_first.normalize();
+
+		//const int depth_steps = 512 + 100; // TODO CALC  256+128+64+32+16+8+4+2+1+?
+		// const int grid_size = 64;		   // 255;
+		unsigned int depth = distance_min /** BS*/; // 255;
+		//DUMP(pos_center, depth);
+		for (size_t steps = 0;
+				//ray_cache.step_num < depth_steps &&
+				steps < 10; ++ray_cache.step_num, ++steps) {
+
+			const auto dstep = ray_cache.step_num + 1;
+			const auto block_step =
+					getFarmeshStep(draw_control, m_camera_pos_aligned / MAP_BLOCKSIZE,
+							floatToInt(pos_center, BS) / MAP_BLOCKSIZE);
+			const auto step_width = MAP_BLOCKSIZE * pow(2, block_step);
+			//const auto step_width =	std::min(std::max<int>(1, step_r.getLength() / BS), 1024);
+			//DUMP(dstep, m_camera_pos_aligned, block_step, step_width);
+			//const auto  depth_last = depth;
+			//const auto depth_was = depth;
+
+			depth += step_width * dstep; // TODO: TUNE ME
+			// errorstream << depth << "\n";
+			//if (!i) DUMP(steps, ray_cache.step_num, processed, depth, last_distance_max,step_width); 
+
+			if (depth > last_distance_max) {
+				//DUMP("b1", depth, depth_max, step_width, dstep);
+				ray_cache.finished = depth; //_was;
+				break;
+			}
+
+			// v1 auto pos_l = pos_ld + (step_u * y);
+
+			// auto pos_l = pos_ld + (step_u * y);
+			const auto pos = dir_l * depth * BS + m_camera_pos;
+
+			//++stat_probes;
+			// auto pos = pos_l + (step_r * x);
+			if (pos.X > MAX_MAP_GENERATION_LIMIT * BS ||
+					pos.X < -MAX_MAP_GENERATION_LIMIT * BS ||
+					pos.Y > MAX_MAP_GENERATION_LIMIT * BS ||
+					pos.Y < -MAX_MAP_GENERATION_LIMIT * BS ||
+					pos.Z > MAX_MAP_GENERATION_LIMIT * BS ||
+					pos.Z < -MAX_MAP_GENERATION_LIMIT * BS) {
+				//DUMP("b2", pos);
+				ray_cache.finished = depth;
+				break;
+			}
 			++processed;
-			uint16_t y = uint16_t(process_order[i] / grid_size_x);
-			uint16_t x = process_order[i] % grid_size_x;
 
-			//(*grid_result_fill)[x][y].depth = 0; // clean cache
+			//DUMP(processed, steps, ray_cache.step_num, depth);
+			const int step_aligned = pow(2, ceil(log(step_width) / log(2)));
 
-			//const auto first_square_r = MAP_BLOCKSIZE * grid_size_x;
-			v3f dir_first = dir * distance_min / 2; //first_square_r;
-			//dir_l.X += x * MAP_BLOCKSIZE - MAP_BLOCKSIZE * grid_size_x/2;
-			//dir_l.Y += y * MAP_BLOCKSIZE - MAP_BLOCKSIZE * grid_size_y/2;
-			auto pos_center = dir_first + m_camera_pos;
-			if (!dir.X)
-				dir_first.X += MAP_BLOCKSIZE * (x - grid_size_x / 2);
-			if (!dir.Y)
-				dir_first.Y += MAP_BLOCKSIZE * (y - grid_size_y / 2);
-			if (!dir.Z)
-				dir_first.Z += MAP_BLOCKSIZE * (x - grid_size_x / 2);
+			v3pos_t pos_int_raw = floatToInt(pos, BS);
+			v3pos_t pos_int((pos_int_raw.X / step_aligned) * step_aligned,
+					(pos_int_raw.Y / step_aligned) * step_aligned,
+					(pos_int_raw.Z / step_aligned) * step_aligned);
 
-			//DUMP(dir_l, x, y);
-			v3f dir_l = dir_first.normalize();
+			//bool visible = false;
+			auto &visible = ray_cache.visible;
 
-			//const int depth_steps = 512 + 100; // TODO CALC  256+128+64+32+16+8+4+2+1+?
-			// const int grid_size = 64;		   // 255;
-			int depth = distance_min /** BS*/; // 255;
-			//DUMP(pos_center, depth);
-			for (size_t steps = 0;
-					//ray_cache.step_num < depth_steps &&
-					steps < 10; ++ray_cache.step_num, ++steps) {
-
-				const auto dstep = (ray_cache.step_num + 1);
-				const auto block_step =
-						getFarmeshStep(draw_control, m_camera_pos_aligned / MAP_BLOCKSIZE,
-								floatToInt(pos_center, BS) / MAP_BLOCKSIZE);
-				const auto step_width = MAP_BLOCKSIZE * pow(2, block_step);
-				//const auto step_width =	std::min(std::max<int>(1, step_r.getLength() / BS), 1024);
-				//DUMP(dstep, m_camera_pos_aligned, block_step, step_width);
-				depth += step_width * dstep; // TODO: TUNE ME
-				// errorstream << depth << "\n";
-				//if (!i)
-				//	DUMP(steps, ray_cache.step_num, processed, depth, step_width);
-
-				if (depth > depth_max) {
-					//DUMP("b1", depth, depth_max, step_width, dstep);
-					ray_cache.finished = depth; //depth_last;
-					break;
-				}
-
-				// v1 auto pos_l = pos_ld + (step_u * y);
-
-				// auto pos_l = pos_ld + (step_u * y);
-				const auto pos = dir_l * depth * BS + m_camera_pos;
-
-				//++stat_probes;
-				// auto pos = pos_l + (step_r * x);
-				if (pos.X > MAX_MAP_GENERATION_LIMIT * BS ||
-						pos.X < -MAX_MAP_GENERATION_LIMIT * BS ||
-						pos.Y > MAX_MAP_GENERATION_LIMIT * BS ||
-						pos.Y < -MAX_MAP_GENERATION_LIMIT * BS ||
-						pos.Z > MAX_MAP_GENERATION_LIMIT * BS ||
-						pos.Z < -MAX_MAP_GENERATION_LIMIT * BS) {
-					//DUMP("b2", pos);
-					ray_cache.finished = depth;
-					break;
-				}
-				//++processed;
-
-				//DUMP(processed, steps, ray_cache.step_num, depth);
-				const int step_aligned = pow(2, ceil(log(step_width) / log(2)));
-
-				v3pos_t pos_int_raw = floatToInt(pos, BS);
-				v3pos_t pos_int((pos_int_raw.X / step_aligned) * step_aligned,
-						(pos_int_raw.Y / step_aligned) * step_aligned,
-						(pos_int_raw.Z / step_aligned) * step_aligned);
-
-				//bool visible = false;
-				auto &visible = ray_cache.visible;
-
+			/*
 				if (pos_int.Y <= m_water_level && m_camera_pos.Y > m_water_level) {
 					visible = true;
 					ray_cache.finished = SIZE_MAX;
 				} else
+*/
+			{
+				if (const auto &it = mg_cache.find(pos_int); it != mg_cache.end()) {
+					visible = it->second;
+					//++stat_cached;
+				} else {
 
-				{
-					if (const auto &it = mg_cache.find(pos_int); it != mg_cache.end()) {
-						visible = it->second;
-						//++stat_cached;
-					} else {
-
-						//++stat_mg;
-						visible = mg->visible(pos_int);
-						// if (visible) {
-						//  cache.first = true;
-						//  cache.second = pos_int;
-						//}
-						mg_cache[pos_int] = visible;
-					}
+					//++stat_mg;
+					visible = mg->visible(pos_int);
+					// if (visible) {
+					//  cache.first = true;
+					//  cache.second = pos_int;
+					//}
+					mg_cache[pos_int] = visible;
 				}
-				//DUMP(visible, step_num, pos, pos_int);
-				//plane_cache_item.depth[p]
-				if (visible) {
-					ray_cache.finished = SIZE_MAX;
-					const auto blockpos = getNodeBlockPos(pos_int);
-					//DUMP("mfb", pos_int, blockpos);
-					makeFarBlock6(blockpos);
-					//ray_cache.visible = visible;
-					break;
-				}
+			}
+			//DUMP(visible, step_num, pos, pos_int);
+			//plane_cache_item.depth[p]
+			if (visible) {
+				ray_cache.finished = -1;
+				const auto blockpos = getNodeBlockPos(pos_int);
+				//DUMP("mfb", pos_int, blockpos);
+				makeFarBlock6(blockpos);
+				//ray_cache.visible = visible;
+				break;
 			}
 		}
 	}
 
-	m_cycle_stop_i = 0;
-	//DUMP(processed);
+	//m_cycle_stop_i = 0;
+	//DUMP(processed, last_distance_max);
 	return processed;
 }
 
 void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 		CameraMode camera_mode, f32 camera_pitch, f32 camera_yaw, v3pos_t camera_offset,
-		float brightness, s16 render_range, float speed)
+		float brightness, pos_t render_range, float speed)
 {
 	// errorstream << "update    " << (long)mesh << std::endl;
 
@@ -469,81 +470,95 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 	auto camera_pos_aligned_int = floatToInt(
 			intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
 	// reset on significant move
-	if (m_camera_pos_aligned != camera_pos_aligned_int) {
-		//errorstream << " m_camera_pos_aligned=" << m_camera_pos_aligned << "!=" << " camera_pos_aligned=" <<  camera_pos_aligned << " m_cycle_stop_i=" << m_cycle_stop_i << std::endl;
-		//m_cycle_stop_i = 0;
-	}
+	//if (m_camera_pos_aligned != camera_pos_aligned_int) {
+	//errorstream << " m_camera_pos_aligned=" << m_camera_pos_aligned << "!=" << " camera_pos_aligned=" <<  camera_pos_aligned << " m_cycle_stop_i=" << m_cycle_stop_i << std::endl;
+	//m_cycle_stop_i = 0;
+
+	//if (!timestamp_complete)
+	//	m_camera_pos_aligned = camera_pos_aligned_int;
+	//}
 	//#endif
 
 	//DUMP(m_cycle_stop_i);
 	//if (!m_cycle_stop_i)
-	{
+	//{
 
-		/*#if cache_step
+	/*#if cache_step
 		m_camera_pos_aligned_by_step.clear();
 		m_camera_pos_aligned_by_step.reserve(256); // todo calc from grid_size?
-		if (!timestamp_complete) {
-			if (!m_camera_pos_aligned.X && !m_camera_pos_aligned.Y &&
-					!m_camera_pos_aligned.Z)
-				m_camera_pos_aligned = camera_pos_aligned_int;
-			m_client->getEnv().getClientMap().m_far_blocks_last_cam_pos =
-					m_camera_pos_aligned;
-		}
-		//#endif
+#endif*/
+	//#if cache0
+	//if (!m_client->getEnv().getClientMap().m_far_blocks_clean_timestamp)
+	if (!timestamp_complete) {
+		if (!m_camera_pos_aligned.X && !m_camera_pos_aligned.Y && !m_camera_pos_aligned.Z)
+			m_camera_pos_aligned = camera_pos_aligned_int;
+		m_client->getEnv().getClientMap().m_far_blocks_last_cam_pos =
+				m_camera_pos_aligned;
 
-		const auto camera_pos_aligned = intToFloat(m_camera_pos_aligned, BS);
-		// errorstream << " camera_pos_aligned=" << camera_pos_aligned	<< "
-		// m_camera_pos="
-		// << m_camera_pos << "\n";
-		if (m_camera_pos == camera_pos_aligned) {
-			//DUMP(m_cycle_stop_i, m_camera_pos, camera_pos_aligned);
+		DUMP("zeromove", m_camera_pos_aligned, planes_processed_last);
+	}
+	//floatToInt(intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
+	//#endif
 
-			//return;
-		}
-		m_camera_pos = camera_pos_aligned;
-		// errorstream << " camera_pos_aligned=" << camera_pos_aligned << "\n";
-		//  v1:
-		//  m_camera_pos = camera_pos;
+	//const auto camera_pos_aligned
+	m_camera_pos = intToFloat(m_camera_pos_aligned, BS);
+	// errorstream << " camera_pos_aligned=" << camera_pos_aligned	<< "
+	// m_camera_pos="
+	// << m_camera_pos << "\n";
+	//if (m_camera_pos == camera_pos_aligned) {
+	//DUMP(m_cycle_stop_i, m_camera_pos, camera_pos_aligned);
 
-		m_camera_dir = camera_dir;
-		m_camera_fov = camera_fov;
-		m_camera_pitch = camera_pitch;
-		m_camera_yaw = camera_yaw;
-		m_camera_offset = camera_offset;
-		m_speed = speed;
-		distance_min = std::min<pos_t>(render_range, MAP_BLOCKSIZE * 8);
+	//return;
+	//}
+	//m_camera_pos = camera_pos_aligned;
+	// errorstream << " camera_pos_aligned=" << camera_pos_aligned << "\n";
+	//  v1:
+	//  m_camera_pos = camera_pos;
 
-		/*errorstream << "update pos=" << m_camera_pos << " dir=" << m_camera_dir
+	m_camera_dir = camera_dir;
+	m_camera_fov = camera_fov;
+	m_camera_pitch = camera_pitch;
+	m_camera_yaw = camera_yaw;
+	m_camera_offset = camera_offset;
+	m_speed = speed;
+	//distance_min = std::min<pos_t>(render_range, MAP_BLOCKSIZE * 8);
+	//const auto distance_max = (std::min<int>(std::min<int>(render_range, m_render_range_max), 1.2 * m_client->fog_range / BS) >> 7) << 7;
+	const auto distance_max = (std::min<unsigned int>(render_range, 1.2 * m_client->fog_range / BS) >> 7) << 7;
+	/*errorstream << "update pos=" << m_camera_pos << " dir=" << m_camera_dir
 					<< " fov=" << m_camera_fov << " pitch=" << m_camera_pitch
 					<< " yaw=" << m_camera_yaw << " render_range=" << m_render_range
 					<< std::endl;*/
-	}
-
+	//}
+	//DUMP(distance_max, last_distance_max, render_range,  m_client->fog_range);//m_render_range_max,
 	if (direction_caches_pos != m_camera_pos_aligned && !planes_processed_last) {
-		timestamp_clean = m_client->m_uptime;
+		timestamp_clean = m_client->m_uptime - 1;
 		//DUMP("cache clear", direction_caches_pos, m_camera_pos_aligned);
 		direction_caches_pos = m_camera_pos_aligned;
 		direction_caches.fill({});
 		plane_caches.fill({});
-	} else if (last_fog < m_client->fog_range) {
+		//} else if (last_fog / MAP_BLOCKSIZE < m_client->fog_range / MAP_BLOCKSIZE) {
+	} else if (last_distance_max < distance_max) {
+		//DUMP("fog reset", last_distance_max, distance_max, m_client->fog_range);
 		plane_caches.fill({});
 		//last_fog = m_client->fog_range + MAP_BLOCKSIZE * BS * 3;
-		last_fog = m_client->fog_range * 1.1;
+		last_distance_max = distance_max; // * 1.1;
 	}
 
-	const int max_cycle_ms = 1000;
-	u32 end_ms = porting::getTimeMs() + max_cycle_ms;
+	//const int max_cycle_ms = 1000;
+	//u32 end_ms = porting::getTimeMs() + max_cycle_ms;
 
 	{
 		size_t planes_processed = 0;
-		for (auto i = 0; i < sizeof(g_6dirsf) / sizeof(g_6dirsf[0]); ++i) {
+		for (size_t i = 0; i < sizeof(g_6dirsf) / sizeof(g_6dirsf[0]); ++i) {
 			if (!plane_caches[i].processed)
 				continue;
 			++planes_processed;
+			//DUMP("i?", i, planes_processed, direction_caches_pos, m_camera_pos_aligned);
 			async[i].step([this, i = i]() {
 				//DUMP("steps goooo", i, async[i].valid());
 				for (int depth = 0; depth < 100; ++depth) {
 					plane_caches[i].processed = go_direction(i);
+					//DUMP("onedir", i, depth, plane_caches[i].processed,m_camera_pos_aligned, direction_caches[i][0].step_num,direction_caches[i][0].finished);
 					if (!plane_caches[i].processed)
 						break;
 				}
@@ -553,17 +568,20 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 
 		if (planes_processed) {
 			complete_set = false;
-		} else {
+		} else if (m_camera_pos_aligned != camera_pos_aligned_int) {
 			m_client->getEnv().getClientMap().m_far_blocks_last_cam_pos =
 					m_camera_pos_aligned = camera_pos_aligned_int;
 
+			//DUMP("movefcam", planes_processed, m_camera_pos_aligned, complete_set);
 		}
 		if (!planes_processed && !complete_set) {
+			//DUMP("complete", timestamp_complete, m_client->m_uptime);
 			m_client->getEnv().getClientMap().m_far_blocks_clean_timestamp =
 					timestamp_complete;
 			timestamp_complete = m_client->m_uptime;
 			complete_set = true;
 		}
+		//DUMP(complete_set, timestamp_complete, m_camera_pos_aligned, camera_pos_aligned_int, planes_processed);
 	}
 	// else {
 	//	//for (const auto dir & :  g_6dirsf) {
