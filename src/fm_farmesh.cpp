@@ -63,7 +63,7 @@ MapNode FarContainer::getNodeNoEx(const v3pos_t &p)
 	return getNodeRefUnsafe(p);
 };
 
-thread_local unordered_map_v3pos<bool> FarMesh::mg_cache;
+//thread_local unordered_map_v3pos<bool> FarMesh::mg_cache;
 
 void FarMesh::makeFarBlock(const v3bpos_t &blockpos)
 {

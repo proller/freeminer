@@ -93,8 +93,8 @@ private:
 	//constexpr static uint16_t grid_size_min = 16;
 	//constexpr static uint16_t grid_size_max = 256;
 	//constexpr static uint16_t grid_size_max = 64;
-	//constexpr static uint16_t grid_size_max_y = 64;
-	constexpr static uint16_t grid_size_max_y = 128;
+	constexpr static uint16_t grid_size_max_y = 64;
+	//constexpr static uint16_t grid_size_max_y = 128;
 	//constexpr static uint16_t grid_size_max_y = 256;
 	//constexpr static uint16_t grid_size_max_y = 16;
 	//cylinder: constexpr static uint16_t grid_size_max_x = grid_size_max_y * 4;
@@ -115,7 +115,7 @@ private:
 	// uint16_t grid_size = 32;
 	// uint16_t grid_size = 8;
 	Mapgen *mg = nullptr;
-	static thread_local unordered_map_v3pos<bool> mg_cache;
+	//static thread_local unordered_map_v3pos<bool> mg_cache;
 
 #if 0
 	struct ls_cache
@@ -159,11 +159,12 @@ private:
 	using direction_cache = std::array<ray_cache, grid_size_xy>;
 	std::array<direction_cache, 6> direction_caches;
 	v3pos_t direction_caches_pos;
+	std::array<unordered_map_v3pos<bool>, 6> mg_caches;
 	struct plane_cache
 	{
 		int processed = -1;
 	};
-	std::array<plane_cache, 6> plane_caches;
+	std::array<plane_cache, 6> plane_processed;
 	unsigned int last_distance_max = 0;
 	int go_direction(const size_t dir_n);
 	std::array<async_step_runner, 6> async;

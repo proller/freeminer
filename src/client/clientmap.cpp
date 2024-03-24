@@ -917,13 +917,14 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 				Ignore if mesh doesn't exist
 			*/
 			{
-				if(!mesh && smesh_size < 0) {
+				if((!mesh && smesh_size < 0) || mesh_step != mesh->lod_step) {
 					blocks_in_range_without_mesh++;
 					if (m_mesh_queued < maxq || range <= 1) {
 						m_client->addUpdateMeshTask(bp, false);
 						++m_mesh_queued;
 					}
-					continue;
+					if (!mesh)
+						continue;
 				}
 				if(mesh_step == mesh->lod_step && block->getTimestamp() <= mesh->timestamp && !smesh_size) {
 					++blocks_in_range_without_mesh;
