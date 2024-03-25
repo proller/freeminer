@@ -264,7 +264,6 @@ Server::Server(
 			CONNECTION_TIMEOUT,
 			m_bind_addr.isIPv6(),
 			this)),
-	stat(path_world),
 	m_itemdef(createItemDefManager()),
 	m_nodedef(createNodeDefManager()),
 	m_craftdef(createCraftDefManager()),
@@ -272,6 +271,7 @@ Server::Server(
 	m_clients(m_con),
 	m_admin_chat(iface),
 	m_on_shutdown_errmsg(on_shutdown_errmsg),
+	stat(path_world),
 	m_modchannel_mgr(new ModChannelMgr())
 {
 #if ENABLE_THREADS
@@ -4256,8 +4256,11 @@ v3f Server::findSpawnPos()
 		for (s32 ii = (find > 0) ? 0 : find - 50;
 				ii < find; ii++) {
 			v3bpos_t blockpos = getNodeBlockPos(nodepos);
-			if (!map.emergeBlock(blockpos, false))
+			if (!map.emergeBlock(blockpos, false)) {
+				nodeposf = intToFloat(nodepos, BS);
+				is_good = true;
 				break;
+			}
 			content_t c = map.getNode(nodepos).getContent();
 
 			// In generated mapblocks allow spawn in all 'airlike' drawtype nodes.
