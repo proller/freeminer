@@ -210,6 +210,7 @@ public:
 	bool getS32NoEx(const std::string &name, s32 &val) const;
 	bool getPosNoEx(const std::string &name, pos_t &val) const;
 	bool getU64NoEx(const std::string &name, u64 &val) const;
+	bool getPosNoEx(const std::string &name, pos_t &val) const;
 	bool getFloatNoEx(const std::string &name, float &val) const;
 	bool getFloatNoEx(const std::string &name, double &val) const;
 	bool getV2FNoEx(const std::string &name, v2f &val) const;
@@ -242,7 +243,7 @@ public:
 	bool setS16(const std::string &name, s16 value);
 	bool setU16(const std::string &name, u16 value);
 	bool setS32(const std::string &name, s32 value);
-	bool setU64(const std::string &name, u64 value);
+	bool setU64(const std::string &name, uint64_t value);
 	bool setPos(const std::string &name, pos_t value);
 	bool setFloat(const std::string &name, float value);
 	bool setV2F(const std::string &name, v2f value);

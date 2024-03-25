@@ -35,7 +35,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "log.h"
 
 #ifdef __EMSCRIPTEN__
-#include <emsocket.h>
+//#include <emsocket.h>
 #include <mainloop.h>
 #endif
 
