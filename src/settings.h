@@ -210,7 +210,6 @@ public:
 	bool getS32NoEx(const std::string &name, s32 &val) const;
 	bool getPosNoEx(const std::string &name, pos_t &val) const;
 	bool getU64NoEx(const std::string &name, u64 &val) const;
-	bool getPosNoEx(const std::string &name, pos_t &val) const;
 	bool getFloatNoEx(const std::string &name, float &val) const;
 	bool getFloatNoEx(const std::string &name, double &val) const;
 	bool getV2FNoEx(const std::string &name, v2f &val) const;

@@ -590,7 +590,7 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 		//resolve(false);
 		//return;
 #else
-		return false;
+		return;
 #endif
 	}
 

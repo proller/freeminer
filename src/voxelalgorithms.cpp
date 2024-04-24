@@ -1221,7 +1221,7 @@ void fill_with_sunlight(MapBlock *block, const NodeDefManager *ndef,
 	}
 }
 
-void repair_block_light(Map *map, MapBlock *block,
+bool repair_block_light(Map *map, MapBlock *block,
 	std::map<v3bpos_t, MapBlock*> *modified_blocks)
 {
 	if (!block)
