@@ -172,6 +172,8 @@ Client::Client(
 	m_cache_save_interval = g_settings->getU16("server_map_save_interval");
 	m_mesh_grid = { g_settings->getU16("client_mesh_chunk") };
 	control.cell_size = m_mesh_grid.cell_size;
+	control.cell_size_pow =	log(control.cell_size) / log(2);
+	control.farmesh_quality = g_settings->getU16("farmesh_quality");
 }
 
 void Client::migrateModStorage()
@@ -705,13 +707,15 @@ void Client::step(float dtime)
 				blocks_to_ack.emplace_back(p);
 			}
 */		
-			if (porting::getTimeMs() > end_ms)
-				break;
 
 
 			for (auto block : r.map_blocks)
 				if (block)
 					block->refDrop();
+
+			if (porting::getTimeMs() > end_ms)
+				break;
+
 		}
 /*
 		if (blocks_to_ack.size() > 0) {
@@ -2007,14 +2011,14 @@ void Client::updateMeshTimestampWithEdge(v3bpos_t blockpos) {
 		block->setTimestampNoChangedFlag(m_uptime);
 	}
 
-	int to = FARMESH_STEP_MAX;
+	/*int to = FARMESH_STEP_MAX;
 	for (int step = 1; step <= to; ++step) {
 		v3pos_t actualpos = getFarmeshActual(blockpos, step);
 		auto *block = m_env.getMap().getBlockNoCreateNoEx(actualpos); // todo maybe update bp1 too if differ
 		if(!block)
 			continue;
 		block->setTimestampNoChangedFlag(m_uptime);
-	}
+	}*/
 
 }
 

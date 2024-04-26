@@ -17,6 +17,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 */
 
+#include "threading/async.h"
 #include "util/serialize.h"
 #include "util/pointedthing.h"
 #include "client.h"
@@ -377,9 +378,12 @@ void ClientEnvironment::step(f32 dtime, double uptime, unsigned int max_cycle_ms
 		if (update_lighting)
 			cao->updateLight(day_night_ratio);
 	};
+	static thread_local async_step_runner m_ao_manager_async;
+	m_ao_manager_async.step([this, dtime = dtime, cb_state=cb_state]{
 
 	m_ao_manager.step(dtime, cb_state);
 
+	});
 	/*
 		Step and handle simple objects
 	*/

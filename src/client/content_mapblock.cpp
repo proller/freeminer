@@ -430,10 +430,14 @@ void MapblockMeshGenerator::drawSolidNode()
 		if (n2 == CONTENT_IGNORE)
 			continue;
 		if (n2 != CONTENT_AIR) {
+
+			if (data->far_step)
+				continue; // Maybe skip too much
+			// TODO: always draw corner block faces for far and maybe lod for closing step-change-holes
+
 			const ContentFeatures &f2 = nodedef->get(n2);
 			if (data->fscale > 1 ? f2.solidness_far == 2 : f2.solidness == 2)
 				continue;
-		   if (data->fscale <= 1)
 			if (cur_node.f->drawtype == NDT_LIQUID) {
 				if (cur_node.f->sameLiquidRender(f2))
 					continue;
@@ -457,13 +461,14 @@ void MapblockMeshGenerator::drawSolidNode()
 	u8 mask = faces ^ 0b0011'1111; // k-th bit is set if k-th face is to be *omitted*, as expected by cuboid drawing functions.
 	cur_node.origin = intToFloat(cur_node.p, BS);
 	auto box = aabb3f(v3f(-0.5 * BS ), v3f(0.5 * BS));
-	if (data->lod_step) {
-		box.MinEdge *= data->fscale;
-		box.MaxEdge *= data->fscale;
-	}
-	if (data->far_step) {
-		box.MinEdge *= data->fscale;
-		box.MaxEdge *= data->fscale;
+	if (data->fscale > 1) {
+		// TODO: maybe possibe make simpler?/
+		box.MinEdge += v3f(HBS, 0, HBS);
+		box.MinEdge *= v3f(data->fscale, data->fscale, data->fscale);
+		box.MinEdge += v3f(-HBS, -HBS * (data->fscale) + HBS + BS, -HBS);
+		box.MaxEdge += v3f(HBS, 0, HBS);
+		box.MaxEdge *= v3f(data->fscale, data->fscale, data->fscale);
+		box.MaxEdge += v3f(-HBS, -HBS * (data->fscale) + HBS + BS, -HBS);
 	}
 
 	f32 texture_coord_buf[24];
@@ -1745,11 +1750,11 @@ void MapblockMeshGenerator::drawNode()
 
 void MapblockMeshGenerator::generate()
 {
-	const auto step = data->lod_step ? data->fscale : 1;
+	const auto lstep = data->lod_step ? data->fscale : 1;
 	const auto fstep = data->far_step ? data->fscale : 1;
-	for (cur_node.pf.Z = cur_node.pr.Z = 0; cur_node.pr.Z < data->side_length_data; cur_node.pr.Z+=step, cur_node.pf.Z+=fstep)
-	for (cur_node.pf.Y = cur_node.pr.Y = 0; cur_node.pr.Y < data->side_length_data; cur_node.pr.Y+=step, cur_node.pf.Y+=fstep)
-	for (cur_node.pf.X = cur_node.pr.X = 0; cur_node.pr.X < data->side_length_data; cur_node.pr.X+=step, cur_node.pf.X+=fstep) {
+	for (cur_node.pf.Z = cur_node.pr.Z = 0; cur_node.pr.Z < data->side_length_data; cur_node.pr.Z+=lstep, cur_node.pf.Z+=fstep)
+	for (cur_node.pf.Y = cur_node.pr.Y = 0; cur_node.pr.Y < data->side_length_data; cur_node.pr.Y+=lstep, cur_node.pf.Y+=fstep)
+	for (cur_node.pf.X = cur_node.pr.X = 0; cur_node.pr.X < data->side_length_data; cur_node.pr.X+=lstep, cur_node.pf.X+=fstep) {
 		cur_node.p = (data->far_step ? cur_node.pf : cur_node.pr);
 		cur_node.n = data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p);
 		cur_node.f = &nodedef->get(cur_node.n);

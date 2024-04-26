@@ -19,6 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "clientmap.h"
 #include "client.h"
+#include "client/fm_far_calc.h"
 #include "client/mesh.h"
 #include "mapblock_mesh.h"
 #include <IMaterialRenderer.h>
@@ -361,7 +362,7 @@ void ClientMap::updateDrawList(float dtime, unsigned int max_cycle_ms)
 						m_control, getNodeBlockPos(cam_pos_nodes), block_coord);
 				auto mesh = block ? block->getLodMesh(mesh_step, true) : nullptr;
 				if (!mesh && block) {
-					int fmesh_step = getFarmeshStep(
+					int fmesh_step = getFarStep(
 							m_control, getNodeBlockPos(m_far_blocks_last_cam_pos), block_coord);
 					mesh = block->getFarMesh(fmesh_step);
 				}
@@ -504,7 +505,7 @@ void ClientMap::updateDrawList(float dtime, unsigned int max_cycle_ms)
 					getLodStep(m_control, getNodeBlockPos(cam_pos_nodes), block_coord);
 			auto mesh = block ? block->getLodMesh(mesh_step, true) : nullptr;
 			if (!mesh && block) {
-				int fmesh_step = getFarmeshStep(
+				int fmesh_step = getFarStep(
 						m_control, getNodeBlockPos(m_far_blocks_last_cam_pos), block_coord);
 				mesh = block->getFarMesh(fmesh_step);
 			}
@@ -872,7 +873,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 
 
 	// Number of blocks frustum culled
-	u32 blocks_frustum_culled = 0;
+	//u32 blocks_frustum_culled = 0;
 
 	MeshGrid mesh_grid = m_client->getMeshGrid();
 	// No occlusion culling when free_move is on and camera is inside ground
@@ -886,7 +887,6 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 			occlusion_culling_enabled = false;
 	}
 
-	u32 calls = 0;
 	const auto end_ms = porting::getTimeMs() + u32(max_cycle_ms);
 	std::unordered_set<v3bpos_t> blocks_skip_farmesh;
 
@@ -899,24 +899,22 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 		int range = ir.second;
 		const auto d = range;
 		draw_nearest.pop_back();
-		++calls;
 
 		//auto block = getBlockNoCreateNoEx(bp);
 		auto block = m_blocks.get(bp);
 		if (!block)
 			continue;
 
-		blocks_skip_farmesh.insert(bp);
-
-		int mesh_step =
+		const auto mesh_step =
 				getLodStep(m_control, getNodeBlockPos(m_camera_position_node), bp);
+	
 
 			/*
 				Compare block position to camera position, skip
 				if not seen on display
 			*/
 
-		auto mesh = block->getLodMesh(mesh_step, true);
+		const auto mesh = block->getLodMesh(mesh_step, true);
 			{
 			blocks_in_range++;
 
@@ -1012,8 +1010,8 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 					continue; // Out of range, skip.
 
 				// Keep the block alive as long as it is in range.
-				block->resetUsageTimer();
-				blocks_in_range_with_mesh++;
+				//block->resetUsageTimer();
+				//blocks_in_range_with_mesh++;
 
 				/*
 
@@ -1064,7 +1062,13 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 			if(!smesh_size)
 				continue;
 
-			mesh->incrementUsageTimer(dtime);
+			{
+				const auto fmesh_step = getFarStep(
+						m_control, getNodeBlockPos(m_far_blocks_last_cam_pos), bp);
+				blocks_skip_farmesh.insert(
+						getFarActual(bp, getNodeBlockPos(m_far_blocks_last_cam_pos),
+								fmesh_step, m_control.cell_size));
+			}
 
 			// Add to set
 			//block->refGrab();
@@ -1097,17 +1101,19 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 																: m_far_blocks_delete_2;
 		m_far_blocks_delete.clear();
 
+		auto lock = m_far_blocks.lock_unique_rec();
 		for (auto it = m_far_blocks.begin(); it != m_far_blocks.end();) {
 			if (m_far_blocks_clean_timestamp > 0 &&
 					it->second->getTimestamp() < m_far_blocks_clean_timestamp) {
 				m_far_blocks_delete.emplace_back(it->second);
 				it = m_far_blocks.erase(it);
-			} else {
+			} else if (it->second->getTimestamp() >= m_far_blocks_use_timestamp) {
 				if (!blocks_skip_farmesh.contains(it->first)) {
-					int mesh_step = getFarmeshStep(m_control,
+					int mesh_step = getFarStep(m_control,
 							getNodeBlockPos(m_far_blocks_last_cam_pos),
 							it->first); // m_camera_position_node
-					if (mesh_step > 1 && !inFarmeshGrid(it->first, mesh_step)) {
+					if (mesh_step > 1 &&
+							!inFarGrid(it->first, getNodeBlockPos(m_far_blocks_last_cam_pos), mesh_step, m_control.cell_size)) {
 					} else {
 						const auto mesh = it->second->getFarMesh(mesh_step);
 						if (!mesh) {
@@ -1117,6 +1123,8 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 						}
 					}
 				}
+				++it;
+			} else {
 				++it;
 			}
 		}
@@ -1225,17 +1233,19 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 
 		// If the mesh of the block happened to get deleted, ignore it
 		auto block_mesh = block->getLodMesh(mesh_step, true);
+		bool is_far = false;
 		// If the mesh of the block happened to get deleted, ignore it
 
 		if (!block_mesh) {
 			int &fmesh_step = mesh_step;
 
-			fmesh_step = getFarmeshStep(
+			fmesh_step = getFarStep(
 					m_control, getNodeBlockPos(m_far_blocks_last_cam_pos), block->getPos());
-			if (fmesh_step > 1 && !inFarmeshGrid(block_pos, fmesh_step)) {
+			if (fmesh_step > 1 && !inFarGrid(block_pos, getNodeBlockPos(m_far_blocks_last_cam_pos), fmesh_step, m_control.cell_size)) {
 				continue;
 			}
 			block_mesh = block->getFarMesh(fmesh_step);
+			is_far = true;
 		}
 		
 		if (!block_mesh)
@@ -1246,6 +1256,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 		v3f mesh_sphere_center = intToFloat(block->getPosRelative(), BS)
 				+ block_mesh->getBoundingSphereCenter();
 		f32 mesh_sphere_radius = block_mesh->getBoundingRadius();
+	  if (!is_far)
 		if (is_frustum_culled(mesh_sphere_center, mesh_sphere_radius))
 			continue;
 
@@ -1619,10 +1630,10 @@ void ClientMap::renderMapShadows(video::IVideoDriver *driver,
 		MapBlock *block = i.second;
 
 		// If the mesh of the block happened to get deleted, ignore it
-		auto mapBlockMesh = block->getLodMesh(getLodStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos()), false);
+		auto mapBlockMesh = block->getLodMesh(getLodStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos()), true);
 
-		if (mapBlockMesh)
-			mapBlockMesh = block->getFarMesh(getFarmeshStep(m_control, getNodeBlockPos(m_far_blocks_last_cam_pos), block->getPos()));
+		//if (!mapBlockMesh)
+		//	mapBlockMesh = block->getFarMesh(getFarStep(m_control, getNodeBlockPos(m_far_blocks_last_cam_pos), block->getPos()));
 
 		if (!mapBlockMesh)
 			continue;
@@ -1764,10 +1775,10 @@ void ClientMap::updateDrawListShadow(v3f shadow_light_pos, v3f shadow_light_dir,
 		/*
 			Loop through blocks in sector
 		*/
-		for (auto & [key, block] : m_blocks) {
+		for (const auto & [key, block] : m_blocks) {
 			++blocks_loaded;
 			
-			const auto mesh = block->getLodMesh(getLodStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos()), false);
+			const auto mesh = block->getLodMesh(getLodStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos()), true);
 /*
 		for (MapBlock *block : sectorblocks) {
 			MapBlockMesh *mesh = block->mesh;

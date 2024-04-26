@@ -64,7 +64,6 @@ const bool win64 =
 
 const bool win = win32 || win64;
 
-
 const bool android =
 #if defined(__ANDROID__)
     true
@@ -88,7 +87,15 @@ const bool threads =
     false
 #endif
     ;
+const bool emscripten = 
+#ifdef __EMSCRIPTEN__
+    true
+#else
+    false
+#endif
+;
 
+const bool slow = android || emscripten;
 
 void fm_set_default_settings(Settings *settings) {
 
@@ -165,17 +172,18 @@ void fm_set_default_settings(Settings *settings) {
 	// Clouds, water, glass, leaves, fog
 	settings->setDefault("cloud_height", "300"); // "120"
 	settings->setDefault("enable_zoom_cinematic", "true");
-	settings->setDefault("wanted_fps", android ? "25" : "30");
-	settings->setDefault("lodmesh", android ? "2" : "4");
-	settings->setDefault("farmesh", android ? "5000" : itos(MAX_MAP_GENERATION_LIMIT*2));
+	settings->setDefault("wanted_fps", slow ? "25" : "30");
+	settings->setDefault("lodmesh", slow ? "2" : "4");
+	settings->setDefault("farmesh", slow ? "5000" : itos(FARSCALE_LIMIT*2));
+	settings->setDefault("farmesh_quality", slow ? "0" : "0");
 	settings->setDefault("headless_optimize", "false");
 	//settings->setDefault("node_highlighting", "halo");
 	//settings->setDefault("enable_vbo", win ? "false" : "true");
 	settings->setDefault("light_ambient", "false");
-	//settings->setDefault("enable_dynamic_shadows", "1");
-	settings->setDefault("enable_bloom", "true");
-	//settings->setDefault("client_mesh_chunk", std::to_string(std::max<int>(1, Thread::getNumberOfProcessors() / 4)));
-	settings->setDefault("client_mesh_chunk", "1");
+	settings->setDefault("enable_dynamic_shadows", "true");
+	settings->setDefault("shadow_map_color", "true");
+    settings->setDefault("enable_bloom", "true");
+	settings->setDefault("client_mesh_chunk", std::to_string(std::max<int>(1, Thread::getNumberOfProcessors() / 4)));
 
 	// Liquid
 	settings->setDefault("liquid_real", "true");
@@ -199,7 +207,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("weather_humidity_days", "2");
 
 	settings->setDefault("respawn_auto", "false");
-	settings->setDefault("autojump", android ? "1" : "0");
+	settings->setDefault("autojump", android || emscripten ? "1" : "0");
 	settings->setDefault("hotbar_cycling", "false");
 
 // TODO: refactor and resolve client/server dependencies
@@ -209,9 +217,8 @@ void fm_set_default_settings(Settings *settings) {
 
 #if !MINETEST_PROTO || !MINETEST_TRANSPORT
 	settings->setDefault("serverlist_url", "servers.freeminer.org");
-//#elif USE_SCTP
-//	settings->setDefault("serverlist_url", "servers2.freeminer.org");
 #endif
+	settings->setDefault("serverlist_url_freeminer", "servers.freeminer.org");
 	settings->setDefault("server_proto", server_proto);
 	settings->setDefault("remote_proto", "");
 	settings->setDefault("timeout_mul", android ? "5" : "1");
@@ -241,7 +248,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("sqlite_synchronous", "1"); // "2"
 	settings->setDefault("save_generated_block", "true");
 	settings->setDefault("save_changed_block", "true");
-	settings->setDefault("block_delete_time", threads && arm ? "60" : threads ? "30" : "10");
+	settings->setDefault("block_delete_time", debug || slow ? "60" : threads ? "30" : "10");
 
 #if (ENET_IPV6 || MINETEST_TRANSPORT || USE_SCTP)
 	//settings->setDefault("enable_ipv6", "true");

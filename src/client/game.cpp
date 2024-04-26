@@ -1805,8 +1805,8 @@ void Game::createClient_after_get(std::function<void(bool,BaseException*)> resol
 	if (mapper && client->modsLoaded())
 		client->getScript()->on_minimap_ready(mapper);
 
-	if (g_settings->getS32("farmesh")) {
-		farmesh.reset(new FarMesh(client, server));
+	if (!runData.headless_optimize && g_settings->getS32("farmesh")) {
+		farmesh.reset(new FarMesh(client, server, draw_control));
 	}
 
 	//freeminer:
@@ -1914,6 +1914,27 @@ void Game::connectToServer_after_dns(const GameStartData *start_data, std::funct
 		resolve(false, nullptr);
 		return;
 	}
+
+#if USE_MULTI
+	if (simple_singleplayer_mode || local_server_mode) {
+		u16 port = 0;
+#if USE_ENET
+		if (!g_settings->getU16NoEx("port_enet", port)) {
+			port = connect_address.getPort() + 200;
+		}
+		g_settings->set("remote_proto", "enet");
+#elif USE_SCTP
+		if (!g_settings->getU16NoEx("port_sctp", port)) {
+			port = connect_address.getPort() + 100;
+		}
+		g_settings->set("remote_proto", "sctp");
+#else
+		g_settings->set("remote_proto", "mt");
+#endif
+		if (port)
+			connect_address.setPort(port);
+	}
+#endif
 
 	try {
 		client = new Client(
@@ -4695,14 +4716,17 @@ void Game::updateFrame(f32 dtime,
 	if (clouds)
 		updateClouds(dtime);
 
-	if (!runData.headless_optimize && farmesh) {
+	if (farmesh) {
 		thread_local static const auto farmesh_range = g_settings->getS32("farmesh");
-		farmesh_async.step([&, farmesh_range = farmesh_range, yaw = player->getYaw(),
-								   pitch = player->getPitch(),
+		farmesh_async.step([&, farmesh_range = farmesh_range, 
+								   //yaw = player->getYaw(),
+								   //pitch = player->getPitch(),
 								   speed = player->getSpeed().getLength()]() {
-			farmesh->update(camera->getPosition(), camera->getDirection(),
-					camera->getFovMax(), camera->getCameraMode(), pitch, yaw,
-					camera->getOffset(), sky->getBrightness(), farmesh_range, speed);
+			farmesh->update(camera->getPosition(),
+					//camera->getDirection(), camera->getFovMax(), camera->getCameraMode(), pitch, yaw,
+					camera->getOffset(), 
+					//sky->getBrightness(), 
+					farmesh_range, speed);
 		});
 	}
 
@@ -4786,8 +4810,7 @@ void Game::updateFrame(f32 dtime,
 	float update_draw_list_delta = 0.2f;
 
 /* mt dir */
-#if !USE_ASYNC_DRAWLIST_UPDATE
-
+#if 0
 	v3f camera_direction = camera->getDirection();
 
 	// call only one of updateDrawList, touchMapBlocks, or updateShadow per frame
@@ -4807,10 +4830,8 @@ void Game::updateFrame(f32 dtime,
 #endif
 /* */
 
-// /* TODO:
-#if USE_ASYNC_DRAWLIST_UPDATE
-// fm pos:
-	auto camera_position = camera->getPosition();
+#if 1
+	const auto camera_position = camera->getPosition();
 	if (!runData.headless_optimize) {
 		if (client->getEnv().getClientMap().m_drawlist_last ||
 				runData.update_draw_list_timer >= update_draw_list_delta ||
@@ -4818,25 +4839,27 @@ void Game::updateFrame(f32 dtime,
 						MAP_BLOCKSIZE * BS * 2 ||
 				m_camera_offset_changed) {
 			bool allow = true;
-#if ENABLE_THREADS && HAVE_FUTURE
-			if (g_settings->getBool("more_threads")) {
-			updateDrawList_async.step([&](const float dtime) {
-				client->getEnv().getClientMap().updateDrawListFm(dtime, 10000);
-			},
-					runData.update_draw_list_timer);
+			static const auto thread_local more_threads =
+					g_settings->getBool("more_threads");
+			if (more_threads) {
+				updateDrawList_async.step(
+						[&](const float dtime) {
+							client->getEnv().getClientMap().updateDrawListFm(
+									dtime, 10000);
+						},
+						runData.update_draw_list_timer);
 			} else
-#endif
-
 				client->getEnv().getClientMap().updateDrawListFm(
 						runData.update_draw_list_timer);
 			runData.update_draw_list_timer = 0;
-			// runData.update_draw_list_last_cam_dir = camera_direction;
-			if (allow)
+			if (allow) {
 				runData.update_draw_list_last_cam_pos = camera->getPosition();
+			}
 		}
+	}
 #endif
-
-	} else if (RenderingEngine::get_shadow_renderer()) {
+   if (!runData.headless_optimize)
+	if (RenderingEngine::get_shadow_renderer()) {
 		updateShadows();
 	}
 

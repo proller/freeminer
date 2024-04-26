@@ -38,95 +38,25 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <algorithm>
 #include <cmath>
 
-int getLodStep(const MapDrawControl &draw_control, const v3bpos_t &playerblockpos,
-		const v3bpos_t &blockpos)
-{
-	int range = radius_box(playerblockpos, blockpos);
-	if (draw_control.lodmesh) {
-		const auto farmesh_cells = std::max<int>(draw_control.cell_size * 2,
-				draw_control.lodmesh / draw_control.cell_size);
-		if (range >= farmesh_cells + draw_control.lodmesh * 4)
-			return 4;
-		else if (range >= farmesh_cells + draw_control.lodmesh * 2)
-			return 3;
-		else if (range >= farmesh_cells + draw_control.lodmesh)
-			return 2;
-		else if (range >= farmesh_cells)
-			return 1;
-	}
-	return 0;
-};
-
-int getFarmeshStep(const MapDrawControl &draw_control, const v3bpos_t &playerblockpos,
-		const v3bpos_t &blockpos)
-{
-	if (!draw_control.farmesh)
-		return 1;
-
-	int range = radius_box(playerblockpos, blockpos);
-
-	const auto next_step = 1;
-	range >>= next_step; // TODO: configurable
-
-	if (range <= 1)
-		return 1;
-
-	int skip = log(range) / log(2);
-	range = radius_box(v3pos_t((playerblockpos.X >> skip) << skip,
-							   (playerblockpos.Y >> skip) << skip,
-							   (playerblockpos.Z >> skip) << skip),
-			v3pos_t((blockpos.X >> skip) << skip, (blockpos.Y >> skip) << skip,
-					(blockpos.Z >> skip) << skip));
-	range >>= next_step; // TODO: configurable
-	range >>= 1;
-	if (range <= 1)
-		return skip;
-
-	skip = log(range) / log(2);
-	if (skip > FARMESH_STEP_MAX)
-		skip = FARMESH_STEP_MAX;
-	return skip;
-};
-
-bool inFarmeshGrid(const v3bpos_t &blockpos, int step)
-{
-	return getFarmeshActual(blockpos, step) == blockpos;
-/*
-	int skip = pow(2, step - 1);
-	return !(blockpos.X % skip || blockpos.Y % skip || blockpos.Z % skip);
-*/
-}
-
-v3bpos_t getFarmeshActual(v3bpos_t blockpos, int step)
-{
-	blockpos.X >>= step;
-	blockpos.X <<= step;
-	blockpos.Y >>= step;
-	blockpos.Y <<= step;
-	blockpos.Z >>= step;
-	blockpos.Z <<= step;
-	return blockpos;
-}
-
 
 /*
 	MeshMakeData
 */
 
 MeshMakeData::MeshMakeData(Client *client, bool use_shaders,
-	int lod_step, int far_step, 
-	NodeContainer *nodecontainer) :
-	m_vmanip{nodecontainer ? *nodecontainer : m_vmanip_store},
+		int lod_step, int far_step,
+		NodeContainer *nodecontainer) :
+
 	m_mesh_grid(client->getMeshGrid()),
 	side_length((MAP_BLOCKSIZE * m_mesh_grid.cell_size) / (pow(2, lod_step))),
 	m_client(client),
 	m_use_shaders(use_shaders)
-	,
-	side_length_data(MAP_BLOCKSIZE * m_mesh_grid.cell_size),
-	lod_step{lod_step},
-	far_step{far_step},
-	fscale(pow(2,  far_step + lod_step))
-
+		,
+		m_vmanip{nodecontainer ? *nodecontainer : m_vmanip_store},
+		side_length_data(MAP_BLOCKSIZE * m_mesh_grid.cell_size),
+		lod_step{lod_step},
+		far_step{far_step},
+		fscale(pow(2, far_step + lod_step))
 {}
 
 bool MeshMakeData::fill_data()
@@ -749,6 +679,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	far_step{data->far_step},
 	lod_step{data->lod_step},
     fscale{data->fscale},
+    timestamp{data->timestamp},
 
 	//no_draw(data->no_draw),
 	m_tsrc(data->m_client->getTextureSource()),
@@ -939,6 +870,7 @@ MapBlockMesh::MapBlockMesh(MeshMakeData *data, v3s16 camera_offset):
 	}
 
 	//std::cout<<"added "<<fastfaces.getSize()<<" faces."<<std::endl;
+  if (data->lod_step <= 0)
 	m_bsp_tree.buildTree(&m_transparent_triangles, data->side_length);
 
 	// Check if animation is required for this mesh

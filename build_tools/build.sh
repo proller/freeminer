@@ -15,7 +15,7 @@ DIST=${DIST=`lsb_release --short --id`} ||:
 DIST=${DIST=`cat /etc/issue /etc/issue.net | head -n1 | cut -d " " -f1`}
 if [ -z "$NO_DEPS" ]; then
   if [ "$DIST" = "Debian" ] || [ "$DIST" = "Ubuntu" ]; then
-    sudo apt install -y git subversion build-essential cmake ninja-build ccache libbz2-dev libzstd-dev  libjpeg-dev libfreetype6-dev libxxf86vm-dev libxi-dev libsqlite3-dev libhiredis-dev libvorbis-dev libopenal-dev libcurl4-openssl-dev libluajit-5.1-dev libgettextpo0 libmsgpack-dev libboost-system-dev  clang lld llvm libc++-dev libc++abi-dev
+    sudo apt install -y git subversion build-essential cmake ninja-build ccache libbz2-dev libzstd-dev  libjpeg-dev libfreetype6-dev libxxf86vm-dev libxi-dev libsqlite3-dev libhiredis-dev libvorbis-dev libopenal-dev libcurl4-openssl-dev libssl-dev libluajit-5.1-dev libgettextpo0 libmsgpack-dev libboost-system-dev  clang lld llvm libc++-dev libc++abi-dev
     for PACKAGE in libpng12-dev libpng-dev libgles1-mesa-dev libgles2-mesa-dev libgl1-mesa-dev libunwind-dev ; do
         sudo apt install -y $PACKAGE ||:
     done
@@ -45,7 +45,7 @@ fi
 [ -s ../src/CMakeLists.txt ] && mkdir -p ../build && cd ../build
 
 #update if second+ run
-git pull --rebase
+git pull --rebase ||:
 
 #compile
 cmake .. -GNinja -DENABLE_GLES=1 -DCMAKE_C_COMPILER=`which clang` -DCMAKE_CXX_COMPILER=`which clang++` # -DIRRLICHT_INCLUDE_DIR=../irrlicht/include -DIRRLICHT_LIBRARY=../irrlicht/lib/Linux/libIrrlicht.a

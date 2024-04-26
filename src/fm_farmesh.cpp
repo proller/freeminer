@@ -23,19 +23,25 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "client/client.h"
 #include "client/clientmap.h"
+#include "client/fm_far_calc.h"
 #include "client/mapblock_mesh.h"
+#include "constants.h"
 #include "emerge.h"
+#include "irr_v3d.h"
 #include "mapnode.h"
+#include "profiler.h"
 #include "server.h"
 #include "util/directiontables.h"
-const v3f g_6dirsf[6] = {
+#include "util/numeric.h"
+#include "util/timetaker.h"
+const v3opos_t g_6dirso[6] = {
 		// +right, +top, +back
-		v3f(0, 0, 1),  // back
-		v3f(0, 1, 0),  // top
-		v3f(1, 0, 0),  // right
-		v3f(0, 0, -1), // front
-		v3f(0, -1, 0), // bottom
-		v3f(-1, 0, 0), // left
+		v3opos_t(0, 0, 1),	// back
+		v3opos_t(0, 1, 0),	// top
+		v3opos_t(1, 0, 0),	// right
+		v3opos_t(0, 0, -1), // front
+		v3opos_t(0, -1, 0), // bottom
+		v3opos_t(-1, 0, 0), // left
 };
 
 FarContainer::FarContainer(){};
@@ -57,14 +63,15 @@ MapNode FarContainer::getNodeNoEx(const v3pos_t &p)
 
 void FarMesh::makeFarBlock(const v3bpos_t &blockpos)
 {
-	const auto step = getFarmeshStep(m_client->getEnv().getClientMap().getControl(),
+	const auto step = getFarStep(m_client->getEnv().getClientMap().getControl(),
 			getNodeBlockPos(m_camera_pos_aligned), blockpos);
 
-	const auto blockpos_actual = getFarmeshActual(blockpos, step);
-
+	const auto blockpos_actual =
+			getFarActual(blockpos, getNodeBlockPos(m_camera_pos_aligned), step,
+					m_client->getEnv().getClientMap().getControl().cell_size);
 	auto &far_blocks = m_client->getEnv().getClientMap().m_far_blocks;
 	{
-		const auto lock = far_blocks.lock_unique_rec();
+		//const auto lock = far_blocks->lock_unique_rec();
 		if (!far_blocks.contains(blockpos_actual)) {
 			far_blocks.emplace(blockpos_actual,
 					std::make_shared<MapBlock>(
@@ -72,14 +79,16 @@ void FarMesh::makeFarBlock(const v3bpos_t &blockpos)
 		}
 	}
 	const auto &block = far_blocks.at(blockpos_actual);
-	const auto lock = block->lock_unique();
-	block->setTimestamp(m_client->m_uptime);
-	if (!block->getFarMesh(step)) {
-		MeshMakeData mdat(m_client, false, 0, step, &farcontainer);
-		mdat.block = block.get();
-		mdat.m_blockpos = blockpos_actual;
-		auto mbmsh = std::make_shared<MapBlockMesh>(&mdat, m_camera_offset);
-		block->setFarMesh(mbmsh);
+	block->setTimestampNoChangedFlag(timestamp_complete);
+	{
+		const auto lock = std::lock_guard(block->far_mutex);
+		if (!block->getFarMesh(step)) {
+			MeshMakeData mdat(m_client, false, 0, step, &farcontainer);
+			mdat.block = block.get();
+			mdat.m_blockpos = blockpos_actual;
+			auto mbmsh = std::make_shared<MapBlockMesh>(&mdat, m_camera_offset);
+			block->setFarMesh(mbmsh, m_client->m_uptime);
+		}
 	}
 }
 
@@ -148,9 +157,8 @@ void FarMesh::makeFarBlocks(const v3bpos_t &blockpos)
 }
 #endif
 
-FarMesh::FarMesh(Client *client, Server *server) :
-		m_camera_pos{-1337, -1337, -1337}, m_client{client}
-
+FarMesh::FarMesh(Client *client, Server *server, MapDrawControl *control) :
+		m_client{client}, m_control{control}
 {
 
 	EmergeManager *emerge_use = server			   ? server->getEmergeManager()
@@ -191,7 +199,7 @@ int FarMesh::go_direction(const size_t dir_n)
 
 	auto &draw_control = m_client->getEnv().getClientMap().getControl();
 
-	const auto dir = g_6dirsf[dir_n];
+	const auto dir = g_6dirso[dir_n];
 	const auto grid_size_xy = grid_size_x * grid_size_y;
 
 	int processed = 0;
@@ -205,7 +213,7 @@ int FarMesh::go_direction(const size_t dir_n)
 		uint16_t y = uint16_t(i / grid_size_x);
 		uint16_t x = i % grid_size_x;
 
-		v3f dir_first = dir * distance_min / 2;
+		auto dir_first = dir * distance_min / 2;
 		auto pos_center = dir_first + m_camera_pos;
 
 		if (!dir.X)
@@ -216,32 +224,44 @@ int FarMesh::go_direction(const size_t dir_n)
 			dir_first.Z +=
 					distance_min / grid_size_x * ((!dir.Y ? x : y) - grid_size_x / 2);
 
-		v3f dir_l = dir_first.normalize();
+		auto dir_l = dir_first.normalize();
 
-		v3f pos_last = pos_center;
-		for (size_t steps = 0; steps < 20; ++ray_cache.step_num, ++steps) {
-
-			const auto dstep = ray_cache.step_num; // + 1;
+		auto pos_last = pos_center;
+		++ray_cache.step_num;
+		for (size_t steps = 0; steps < 200; ++ray_cache.step_num, ++steps) {
+			//const auto dstep = ray_cache.step_num; // + 1;
 			const auto block_step =
-					getFarmeshStep(draw_control, m_camera_pos_aligned / MAP_BLOCKSIZE,
+					getFarStep(draw_control, m_camera_pos_aligned / MAP_BLOCKSIZE,
 							floatToInt(pos_last, BS) / MAP_BLOCKSIZE);
 			const auto step_width =
 					MAP_BLOCKSIZE * pow(2, block_step - block_step_reduce);
+			ray_cache.finished += step_width;
+			const unsigned int depth = ray_cache.finished;
 
-			unsigned int depth = distance_min + step_width * dstep;
-
-			if (depth > last_distance_max) {
-				ray_cache.finished = distance_min + step_width * (dstep - 1);
-				break;
-			}
+			//if (depth > last_distance_max) {
+			//ray_cache.finished = distance_min + step_width;// * (dstep - 1);
+			//break;
+			//}
 
 			const auto pos = dir_l * depth * BS + m_camera_pos;
 			pos_last = pos;
-			if (pos.X > MAX_MAP_GENERATION_LIMIT * BS ||
+
+#if !USE_POS32
+			const auto block_step_real =
+					getFarStep(draw_control, m_camera_pos_aligned / MAP_BLOCKSIZE,
+							floatToInt(pos_last, BS) / MAP_BLOCKSIZE);
+			const auto step_width_real =
+					MAP_BLOCKSIZE *
+					pow(2, block_step_real + log(draw_control.cell_size) / log(2));
+#else
+			const auto step_width_real = step_width;
+#endif
+
+			if (pos.X + step_width_real * BS > MAX_MAP_GENERATION_LIMIT * BS ||
 					pos.X < -MAX_MAP_GENERATION_LIMIT * BS ||
-					pos.Y > MAX_MAP_GENERATION_LIMIT * BS ||
+					pos.Y + step_width_real * BS > MAX_MAP_GENERATION_LIMIT * BS ||
 					pos.Y < -MAX_MAP_GENERATION_LIMIT * BS ||
-					pos.Z > MAX_MAP_GENERATION_LIMIT * BS ||
+					pos.Z + step_width_real * BS > MAX_MAP_GENERATION_LIMIT * BS ||
 					pos.Z < -MAX_MAP_GENERATION_LIMIT * BS) {
 				ray_cache.finished = -1;
 				break;
@@ -262,15 +282,19 @@ int FarMesh::go_direction(const size_t dir_n)
 				if (const auto &it = mg_cache.find(pos_int); it != mg_cache.end()) {
 					visible = it->second;
 				} else {
-
-					visible = mg->visible(pos_int);
+					visible = mg->visible(pos_int) || mg->visible_water_level(pos_int);
 					mg_cache[pos_int] = visible;
 				}
 			}
 			if (visible) {
 				ray_cache.finished = -1;
 				const auto blockpos = getNodeBlockPos(pos_int);
+				TimeTaker timer_step("makeFarBlock");
+				g_profiler->add("Client makeFarBlock", 1);
 				makeFarBlock7(blockpos, pow(2, block_step));
+				break;
+			}
+			if (depth >= last_distance_max) {
 				break;
 			}
 		}
@@ -279,18 +303,28 @@ int FarMesh::go_direction(const size_t dir_n)
 	return processed;
 }
 
-void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
-		CameraMode camera_mode, f32 camera_pitch, f32 camera_yaw, v3pos_t camera_offset,
-		float brightness, int render_range, float speed)
+void FarMesh::update(v3opos_t camera_pos,
+		//v3f camera_dir,
+		//f32 camera_fov,
+		//CameraMode camera_mode,
+		//f32 camera_pitch, f32 camera_yaw,
+		v3pos_t camera_offset,
+		//float brightness,
+		int render_range, float speed)
 {
 	if (!mg)
 		return;
 
-	auto camera_pos_aligned_int = floatToInt(
-			intToFloat(floatToInt(camera_pos, BS * 16), BS * 16), BS); // todo optimize
+	const auto camera_pos_aligned_int =
+			playerBlockAlign(*m_control, floatToInt(camera_pos, BS * 16)) * MAP_BLOCKSIZE;
 	const auto distance_max =
 			(std::min<unsigned int>(render_range, 1.2 * m_client->fog_range / BS) >> 7)
 			<< 7;
+
+	const auto far_fast =
+			//m_client->getEnv().getClientMap().m_far_fast && 
+			m_speed > 200 * BS ||
+			m_camera_pos_aligned.getDistanceFrom(camera_pos_aligned_int) > 1000;
 
 	if (!timestamp_complete) {
 		if (!m_camera_pos_aligned.X && !m_camera_pos_aligned.Y && !m_camera_pos_aligned.Z)
@@ -303,17 +337,26 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 
 	m_camera_pos = intToFloat(m_camera_pos_aligned, BS);
 
-	m_camera_dir = camera_dir;
+	/*m_camera_dir = camera_dir;
 	m_camera_fov = camera_fov;
 	m_camera_pitch = camera_pitch;
-	m_camera_yaw = camera_yaw;
+	m_camera_yaw = camera_yaw;*/
 	m_camera_offset = camera_offset;
 	m_speed = speed;
-	if (direction_caches_pos != m_camera_pos_aligned && !planes_processed_last) {
-		timestamp_clean = m_client->m_uptime - 1;
-		direction_caches_pos = m_camera_pos_aligned;
-		direction_caches.fill({});
-		plane_processed.fill({});
+	if (direction_caches_pos != m_camera_pos_aligned) {
+		// maybe buggy
+		if (far_fast)
+			m_client->getEnv().getClientMap().m_far_blocks_use_timestamp =
+					timestamp_complete; // m_client->m_uptime ?
+
+		if (!planes_processed_last) {
+			//timestamp_clean = m_client->m_uptime - 1;
+			direction_caches_pos = m_camera_pos_aligned;
+			direction_caches.fill({});
+			plane_processed.fill({});
+
+			timestamp_complete = m_client->m_uptime;
+		}
 	} else if (last_distance_max < distance_max) {
 		plane_processed.fill({});
 		last_distance_max = distance_max; // * 1.1;
@@ -321,33 +364,37 @@ void FarMesh::update(v3f camera_pos, v3f camera_dir, f32 camera_fov,
 
 	{
 		size_t planes_processed = 0;
-		for (size_t i = 0; i < sizeof(g_6dirsf) / sizeof(g_6dirsf[0]); ++i) {
+		for (size_t i = 0; i < sizeof(g_6dirso) / sizeof(g_6dirso[0]); ++i) {
 			if (!plane_processed[i].processed)
 				continue;
 			++planes_processed;
 			async[i].step([this, i = i]() {
-				for (int depth = 0; depth < 100; ++depth) {
-					plane_processed[i].processed = go_direction(i);
-					if (!plane_processed[i].processed)
-						break;
-				}
+				//for (int depth = 0; depth < 100; ++depth) {
+				plane_processed[i].processed = go_direction(i);
+				//	if (!plane_processed[i].processed)
+				//		break;
+				//}
 			});
 		}
 		planes_processed_last = planes_processed;
 
 		if (planes_processed) {
 			complete_set = false;
-		} else if (m_camera_pos_aligned != camera_pos_aligned_int) {
+		} //? else
+		if (m_camera_pos_aligned != camera_pos_aligned_int) {
 			m_client->getEnv().getClientMap().m_far_blocks_last_cam_pos =
-					m_camera_pos_aligned;
+					far_fast ? camera_pos_aligned_int : m_camera_pos_aligned;
 			m_camera_pos_aligned = camera_pos_aligned_int;
 		}
 		if (!planes_processed && !complete_set) {
-			constexpr auto clean_old_time = 300;
+			auto &clientMap = m_client->getEnv().getClientMap();
+			constexpr auto clean_old_time = 30;
+			clientMap.m_far_blocks_use_timestamp = timestamp_complete;
+
 			if (timestamp_complete - clean_old_time > 0)
-				m_client->getEnv().getClientMap().m_far_blocks_clean_timestamp =
+				clientMap.m_far_blocks_clean_timestamp =
 						timestamp_complete - clean_old_time;
-			timestamp_complete = m_client->m_uptime;
+			//timestamp_complete = m_client->m_uptime;
 			complete_set = true;
 		}
 	}

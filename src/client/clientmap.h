@@ -36,8 +36,10 @@ struct MapDrawControl
 
 // freeminer:
 	int32_t farmesh = 30000;
+	uint16_t farmesh_quality = 0;
 	int32_t lodmesh = 4;
 	int cell_size = 1;
+	int cell_size_pow = 0;
 
 	float fps = 30;
 	float fps_avg = 30;
@@ -242,8 +244,8 @@ private:
     using drawlist_map = std::map<v3pos_t, MapBlockP, MapBlockComparer>;
 	drawlist_map m_drawlist_0, m_drawlist_1;
 	std::atomic<drawlist_map *> m_drawlist {&m_drawlist_0};
-	int m_drawlist_current = 0;
-	std::vector<std::pair<v3pos_t, int>> draw_nearest;
+	std::atomic_bool m_drawlist_current = 0;
+	std::vector<std::pair<v3bpos_t, int>> draw_nearest;
 public:
 	std::atomic_uint m_drawlist_last {0};
 	std::map<v3pos_t, MapBlock*> m_block_boundary;

@@ -626,9 +626,9 @@ add_subdirectory(server)
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
 
 OPTION(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL, not compatible with other)" 0)
-OPTION(USE_MULTI "Enable MT+SCTP networking" 0)
+OPTION(USE_MULTI "Enable MT+ENET+WSS networking" 1)
 if(USE_MULTI)
-	set(ENABLE_SCTP 1 CACHE BOOL "")
+	#set(ENABLE_SCTP 1 CACHE BOOL "") # Maybe bugs
 	set(ENABLE_ENET 1 CACHE BOOL "")
 	#set(ENABLE_WEBSOCKET_SCTP 1 CACHE BOOL "") # NOT FINISHED
 	set(ENABLE_WEBSOCKET 1 CACHE BOOL "")
@@ -643,9 +643,12 @@ if(ENABLE_WEBSOCKET OR ENABLE_WEBSOCKET_SCTP)
 	message(STATUS "Using websocket: ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp")
 	find_package(OpenSSL)
 	set(WEBSOCKETPP_LIBRARY ${WEBSOCKETPP_LIBRARY} OpenSSL::SSL)
-        set(USE_WEBSOCKET 1)
-	#TODO: 
-	# set(USE_WEBSOCKET_SCTP 1)
+	set(USE_WEBSOCKET 1 CACHE BOOL "")
+	#TODO:
+	# set(USE_WEBSOCKET_SCTP 1 CACHE BOOL "")
+    else()
+	set(USE_WEBSOCKET 0)
+	set(USE_WEBSOCKET_SCTP 0)
     endif()
 endif()
 

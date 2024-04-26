@@ -24,18 +24,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "irrlichttypes_extrabloated.h"
 #include "client/tile.h"
-#include "map.h"
 #include "voxel.h"
 #include <array>
 #include <map>
 #include <unordered_map>
-
-
-// fm:
-//#define MESH_ZEROCOPY //Exprimental, slower, needed for next farmesh
-struct MapDrawControl;
-class Map;
-
 
 class Client;
 class IShaderSource;
@@ -44,11 +36,6 @@ class IShaderSource;
 	Mesh making stuff
 */
 
-int getLodStep(const MapDrawControl& draw_control, const v3bpos_t & playerblockpos, const v3bpos_t & block_pos);
-
-bool inFarmeshGrid(const v3pos_t & blockpos, int step);
-int getFarmeshStep(const MapDrawControl& draw_control, const v3bpos_t & playerblockpos, const v3bpos_t & block_pos);
-v3pos_t getFarmeshActual(v3pos_t blockpos, int step);
 
 class MapBlock;
 struct MinimapMapblock;
@@ -56,8 +43,6 @@ struct MinimapMapblock;
 struct MeshMakeData
 {
 	VoxelManipulator m_vmanip_store;
-	NodeContainer & m_vmanip;
-
 	v3s16 m_blockpos = v3s16(-1337,-1337,-1337);
 	v3s16 m_crack_pos_relative = v3s16(-1337,-1337,-1337);
 	bool m_smooth_lighting = false;
@@ -68,6 +53,7 @@ struct MeshMakeData
 	bool m_use_shaders;
 
     // fm:
+	NodeContainer & m_vmanip;
 	u16 side_length_data;
 	int lod_step;
 	int far_step;
@@ -258,19 +244,19 @@ public:
 
 
 // fm:
-	u32 getUsageTimer() {
+	/*u32 getUsageTimer() {
 		return m_usage_timer;
 	}
 	void incrementUsageTimer(float dtime) {
 		m_usage_timer += dtime;
-	}
+	}*/
 
 	const int far_step;
 	const int lod_step;
 	const int fscale;
 	//bool no_draw = 0;
 	unsigned int timestamp = 0;
-	u32 m_usage_timer = 0;
+	//u32 m_usage_timer = 0;
 // ===
 
 

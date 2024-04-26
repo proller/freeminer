@@ -796,7 +796,7 @@ void MapBlock::deSerializeNetworkSpecific(std::istream &is)
 		m_lod_mesh[ms] = rmesh;
 	}
 
-	void MapBlock::setFarMesh(const MapBlock::mesh_type &rmesh)
+	void MapBlock::setFarMesh(const MapBlock::mesh_type &rmesh, uint32_t time)
 	{
 		const auto ms = rmesh->far_step;
 		if (m_far_mesh[ms]) {

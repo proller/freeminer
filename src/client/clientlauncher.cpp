@@ -594,6 +594,11 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 		start_data.name = "singleplayer";
 		start_data.password = "";
 		start_data.socket_port = myrand_range(49152, 65535);
+
+#if USE_MULTI
+		start_data.socket_port -= 200; //max diffport
+#endif
+
 	} else {
 		g_settings->set("name", start_data.name);
 	}
