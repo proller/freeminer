@@ -64,7 +64,7 @@ public:
 
 	virtual video::SMaterial& getMaterial(u32 i)
 	{
-		return m_material;
+		return m_meshbuffer->getMaterial();
 	}
 
 	/*
@@ -135,7 +135,7 @@ private:
 	s32 m_humidity = 50;
 
 
-	video::SMaterial m_material;
+	scene::SMeshBuffer *m_meshbuffer;
 	aabb3f m_box;
 	u16 m_cloud_radius_i;
 	bool m_enable_3d;
@@ -148,7 +148,7 @@ public:
 	CloudParams m_params;
 private:
 	bool m_camera_inside_cloud = false;
-
+	std::vector<bool> grid;
 };
 
 // fm:

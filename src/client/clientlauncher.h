@@ -19,6 +19,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #pragma once
 
+#include "chat.h"
+#include "gui/guiMainMenu.h"
 #include "irrlichttypes_extrabloated.h"
 #include "client/inputhandler.h"
 #include "gameparams.h"
@@ -28,24 +30,36 @@ class RenderingEngine;
 class ClientLauncher
 {
 public:
-	ClientLauncher() = default;
+	ClientLauncher(GameStartData &start_data_, const Settings &cmd_args_)
+        : start_data(start_data_),
+          cmd_args(cmd_args_) {
+	}
 
 	~ClientLauncher();
 
-	bool run(GameStartData &start_data, const Settings &cmd_args);
+	void run(std::function<void(bool)> resolve);
+	void run_loop(std::function<void(bool)> resolve);
+	void run_after_launch_game(std::function<void(bool)> resolve, bool game_has_run);
+	void run_cleanup(std::function<void(bool)> resolve);
+	void after_the_game(std::function<void(bool)> resolve);
 
 private:
 	void init_args(GameStartData &start_data, const Settings &cmd_args);
 	bool init_engine();
 	void init_input();
 
-	bool launch_game(std::string &error_message, bool reconnect_requested,
-		GameStartData &start_data, const Settings &cmd_args);
+	void launch_game(std::function<void(bool)> resolve);
+	void after_main_menu(std::function<void(bool)> resolve);
 
-	void main_menu(MainMenuData *menudata);
+	void main_menu(std::function<void()> resolve);
+	void main_menu_loop(std::function<void()> resolve);
+	void main_menu_after_loop(std::function<void()> resolve);
+	void main_menu_after_guiengine(std::function<void()> resolve);
 
 	void speed_tests();
 
+	GameStartData &start_data;
+	const Settings &cmd_args;
 	bool skip_main_menu = false;
 	bool random_input = false;
 	RenderingEngine *m_rendering_engine = nullptr;
@@ -56,4 +70,16 @@ private:
 	//freminer:
 	void wait_data();
 	unsigned int autoexit;
+
+	ChatBackend *chat_backend = nullptr;
+	std::string error_message;
+	bool reconnect_requested = false;
+	bool first_loop = true;
+	bool retval = true;
+	bool *kill = nullptr;
+
+	// locals for launch_game
+        std::string server_name;
+	std::string server_description;
+        MainMenuData *menudata_addr = nullptr;
 };

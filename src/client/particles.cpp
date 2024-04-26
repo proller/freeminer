@@ -72,6 +72,16 @@ Particle::Particle(
 		m_parent(parent),
 		m_owned_texture(std::move(owned_texture))
 {
+	// Mesh Buffer
+	m_meshbuffer = new scene::SMeshBuffer();
+	core::array<u16>& Indices = m_meshbuffer->Indices;
+	Indices.set_used(6);
+	u16 indices[] = {0,1,2, 2,3,0};
+	for (int i = 0; i < 6; i++) {
+		Indices[i] = indices[i];
+	}
+
+
 	// Set material
 	{
 		// translate blend modes to GL blend functions
@@ -107,6 +117,8 @@ Particle::Particle(
 			break;
 		}
 
+		video::SMaterial& m_material = m_meshbuffer->getMaterial();
+
 		// Texture
 		m_material.Lighting = false;
 		m_material.BackfaceCulling = false;
@@ -141,8 +153,13 @@ Particle::Particle(
 
 void Particle::OnRegisterSceneNode()
 {
-	if (IsVisible)
+	if (IsVisible) {
 		SceneManager->registerNodeForRendering(this, scene::ESNRP_TRANSPARENT_EFFECT);
+#if __EMSCRIPTEN__
+		video::IVideoDriver *driver = SceneManager->getVideoDriver();
+		driver->prepareMeshBuffer(m_meshbuffer);
+#endif
+	}
 
 	ISceneNode::OnRegisterSceneNode();
 }
@@ -150,13 +167,9 @@ void Particle::OnRegisterSceneNode()
 void Particle::render()
 {
 	video::IVideoDriver *driver = SceneManager->getVideoDriver();
-	driver->setMaterial(m_material);
+	driver->setMaterial(m_meshbuffer->getMaterial());
 	driver->setTransform(video::ETS_WORLD, AbsoluteTransformation);
-
-	u16 indices[] = {0,1,2, 2,3,0};
-	driver->drawVertexPrimitiveList(m_vertices, 4,
-			indices, 2, video::EVT_STANDARD,
-			scene::EPT_TRIANGLES, video::EIT_16BIT);
+	driver->drawMeshBuffer(m_meshbuffer);
 }
 
 void Particle::step(float dtime)
@@ -215,7 +228,7 @@ void Particle::step(float dtime)
 		m_animation_time += dtime;
 		int frame_length_i, frame_count;
 		m_p.animation.determineParams(
-				m_material.getTexture(0)->getSize(),
+				m_meshbuffer->getMaterial().getTexture(0)->getSize(),
 				&frame_count, &frame_length_i, NULL);
 		float frame_length = frame_length_i / 1000.0;
 		while (m_animation_time > frame_length) {
@@ -275,7 +288,7 @@ void Particle::updateVertices()
 		scale = v2f(1.f, 1.f);
 
 	if (m_p.animation.type != TAT_NONE) {
-		const v2u32 texsize = m_material.getTexture(0)->getSize();
+		const v2u32 texsize = m_meshbuffer->getMaterial().getTexture(0)->getSize();
 		v2f texcoord, framesize_f;
 		v2u32 framesize;
 		texcoord = m_p.animation.getTextureCoords(texsize, m_animation_frame);
@@ -293,25 +306,29 @@ void Particle::updateVertices()
 		ty1 = m_texpos.Y + m_texsize.Y;
 	}
 
+	core::array<video::S3DVertex>& Vertices = m_meshbuffer->Vertices;
+	Vertices.set_used(4);
+
 	auto half = m_p.size * .5f,
 	     hx   = half * scale.X,
 	     hy   = half * scale.Y;
-	m_vertices[0] = video::S3DVertex(-hx, -hy,
+	Vertices[0] = video::S3DVertex(-hx, -hy,
 		0, 0, 0, 0, m_color, tx0, ty1);
-	m_vertices[1] = video::S3DVertex(hx, -hy,
+	Vertices[1] = video::S3DVertex(hx, -hy,
 		0, 0, 0, 0, m_color, tx1, ty1);
-	m_vertices[2] = video::S3DVertex(hx, hy,
+	Vertices[2] = video::S3DVertex(hx, hy,
 		0, 0, 0, 0, m_color, tx1, ty0);
-	m_vertices[3] = video::S3DVertex(-hx, hy,
+	Vertices[3] = video::S3DVertex(-hx, hy,
 		0, 0, 0, 0, m_color, tx0, ty0);
-
 
 	// see #10398
 	// v3s16 camera_offset = m_env->getCameraOffset();
 	// particle position is now handled by step()
 	m_box.reset(v3f());
 
-	for (video::S3DVertex &vertex : m_vertices) {
+	//for (video::S3DVertex &vertex : m_vertices) {
+	for (int i = 0; i < 4; i++) {
+		video::S3DVertex &vertex = Vertices[i];
 		if (m_p.vertical) {
 			v3f ppos = m_player->getPosition()/BS;
 			vertex.Pos.rotateXZBy(std::atan2(ppos.Z - m_pos.Z, ppos.X - m_pos.X) /
@@ -322,6 +339,7 @@ void Particle::updateVertices()
 		}
 		m_box.addInternalPoint(vertex.Pos);
 	}
+	m_meshbuffer->setDirty();
 }
 
 /*

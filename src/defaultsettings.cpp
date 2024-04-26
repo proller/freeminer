@@ -373,6 +373,12 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("touchscreen_threshold","20");
 #endif
 
+#ifdef __EMSCRIPTEN__
+	settings->setDefault("viewing_range", "500");
+	settings->setDefault("client_mesh_chunk", "4");
+#endif
+
+
 }
 
 
@@ -559,7 +565,11 @@ void set_default_settings()
 	settings->setDefault("lighting_boost_spread", "0.2");
 	settings->setDefault("texture_path", "");
 	settings->setDefault("shader_path", "");
+#ifdef __EMSCRIPTEN__
+	settings->setDefault("video_driver", "webgl1");
+#else
 	settings->setDefault("video_driver", "");
+#endif
 	settings->setDefault("cinematic", "false");
 	settings->setDefault("camera_smoothing", "0.0");
 	settings->setDefault("cinematic_camera_smoothing", "0.7");
@@ -711,7 +721,7 @@ void set_default_settings()
 #endif
 
 	// Network
-	settings->setDefault("enable_ipv6", "true");
+	settings->setDefault("enable_ipv6", "false"); // TODO: enable this
 	settings->setDefault("ipv6_server", "false");
 	settings->setDefault("max_packets_per_iteration", "1024");
 	settings->setDefault("port", "30000");

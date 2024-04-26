@@ -183,6 +183,11 @@ public:
 	~Server();
 	DISABLE_CLASS_COPY(Server);
 
+#ifdef __EMSCRIPTEN__
+        // For warming the cache.
+        std::unordered_map<std::string, MediaInfo> getMedia();
+#endif
+
 	void start();
 	void stop();
 	// This is mainly a way to pass the time to the server.

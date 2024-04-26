@@ -221,6 +221,16 @@ private:
 	video::ITexture *m_sun_tonemap;
 	video::ITexture *m_moon_tonemap;
 
+	irr_ptr<scene::SMeshBuffer> m_skybox[6];
+	irr_ptr<scene::SMeshBuffer> m_fog1[4];
+	irr_ptr<scene::SMeshBuffer> m_glow[1];
+	irr_ptr<scene::SMeshBuffer> m_fog2[4];
+	irr_ptr<scene::SMeshBuffer> m_fog3[1];
+	irr_ptr<scene::SMeshBuffer> m_sun[4];
+	irr_ptr<scene::SMeshBuffer> m_sun2[1];
+	irr_ptr<scene::SMeshBuffer> m_moon[4];
+	irr_ptr<scene::SMeshBuffer> m_moon2[1];
+
 	void updateStars();
 
 	void draw_sun(video::IVideoDriver *driver, const video::SColor &suncolor,

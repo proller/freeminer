@@ -613,7 +613,8 @@ ShaderInfo ShaderSource::generateShader(const std::string &name,
 	video::IGPUProgrammingServices *gpu = driver->getGPUProgrammingServices();
 
 	// Create shaders header
-	bool use_gles = driver->getDriverType() == video::EDT_OGLES2;
+	bool use_gles = driver->getDriverType() == video::EDT_OGLES2
+		|| driver->getDriverType() == video::EDT_WEBGL1;
 	std::stringstream shaders_header;
 	shaders_header
 		<< std::noboolalpha
@@ -621,8 +622,8 @@ ShaderInfo ShaderSource::generateShader(const std::string &name,
 		;
 	std::string vertex_header, fragment_header, geometry_header;
 	if (use_gles) {
-		shaders_header << R"(
-			#version 100
+		// Emscripten requires no whitespace before #version
+		shaders_header << R"(#version 100
 		)";
 		vertex_header = R"(
 			precision mediump float;
@@ -788,6 +789,7 @@ ShaderInfo ShaderSource::generateShader(const std::string &name,
 	}
 
 	irr_ptr<ShaderCallback> cb{new ShaderCallback(m_setter_factories)};
+	std::cout << "---------------- COMPILING SHADER " << name << std::endl;
 	infostream<<"Compiling high level shaders for "<<name<<std::endl;
 	s32 shadermat = gpu->addHighLevelShaderMaterial(
 		vertex_shader.c_str(), nullptr, video::EVST_VS_1_1,

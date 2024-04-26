@@ -151,6 +151,9 @@ bool httpfetch_async_get(u64 caller, HTTPFetchResult &fetch_result)
 #include <sys/utsname.h>
 #endif
 
+// Unfortunate naming conflict
+#undef write
+
 /*
 	USE_CURL is on: use cURL based httpfetch implementation
 */
@@ -192,6 +195,8 @@ public:
 			if (curl == NULL) {
 				errorstream<<"curl_easy_init returned NULL"<<std::endl;
 			}
+			curl_easy_setopt(curl, CURLOPT_PROXY, "http://10.0.0.1:8080");
+			curl_easy_setopt(curl, CURLOPT_HTTPPROXYTUNNEL, 1L);
 		}
 		else {
 			curl = handles.front();

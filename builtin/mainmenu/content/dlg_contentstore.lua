@@ -641,6 +641,19 @@ local function fetch_pkgs()
 			url = url .. "&hide=" .. core.urlencode(item)
 		end
 	end
+	core.handle_async(
+		get_packages_full,
+		url,
+		function(result)
+			store.loading = nil
+			store.load(result)
+			store.update_paths()
+			store.sort_packages()
+			store.filter_packages(search_string)
+			core.event_handler("Refresh")
+		end
+	)
+end
 
 	local http = core.get_http_api()
 	local response = http.fetch_sync({ url = url })

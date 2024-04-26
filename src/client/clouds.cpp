@@ -50,6 +50,9 @@ Clouds::Clouds(scene::ISceneManager* mgr,
 	scene::ISceneNode(mgr->getRootSceneNode(), mgr, id),
 	m_seed(seed)
 {
+	m_meshbuffer = new scene::SMeshBuffer();
+	video::SMaterial& m_material = m_meshbuffer->getMaterial();
+
 	m_material.Lighting = false;
 	m_material.BackfaceCulling = true;
 	m_material.FogEnable = true;
@@ -78,6 +81,7 @@ Clouds::~Clouds()
 {
 	g_settings->deregisterChangedCallback("enable_3d_clouds",
 		&cloud_3d_setting_changed, this);
+	m_meshbuffer->drop();
 }
 
 void Clouds::OnRegisterSceneNode()
@@ -113,6 +117,8 @@ void Clouds::render()
 /*
 	ScopeProfiler sp(g_profiler, "Clouds::render()", SPT_AVG);
 */
+
+	video::SMaterial& m_material = m_meshbuffer->getMaterial();
 
 	int num_faces_to_draw = m_enable_3d ? 6 : 1;
 
@@ -193,11 +199,7 @@ void Clouds::render()
 			cloud_full_radius*1.2, fog_density, fog_pixelfog, fog_rangefog);
 
 	// Read noise
-
-	std::vector<bool> grid(m_cloud_radius_i * 2 * m_cloud_radius_i * 2);
-	std::vector<video::S3DVertex> vertices;
-	vertices.reserve(16 * m_cloud_radius_i * m_cloud_radius_i);
-
+	grid.assign(m_cloud_radius_i * 2 * m_cloud_radius_i * 2, false);
 	for(s16 zi = -m_cloud_radius_i; zi < m_cloud_radius_i; zi++) {
 		u32 si = (zi + m_cloud_radius_i) * m_cloud_radius_i * 2 + m_cloud_radius_i;
 
@@ -211,6 +213,9 @@ void Clouds::render()
 			);
 		}
 	}
+
+	core::array<video::S3DVertex>& Vertices = m_meshbuffer->Vertices;
+	Vertices.set_used(0);
 
 #define GETINDEX(x, z, radius) (((z)+(radius))*(radius)*2 + (x)+(radius))
 #define INAREA(x, z, radius) \
@@ -336,23 +341,25 @@ void Clouds::render()
 
 			for (video::S3DVertex &vertex : v) {
 				vertex.Pos += pos;
-				vertices.push_back(vertex);
+				Vertices.push_back(vertex);
 			}
 		}
 	}
-	int quad_count = vertices.size() / 4;
-	std::vector<u16> indices;
-	indices.reserve(quad_count * 6);
+
+	int quad_count = Vertices.size() / 4;
+	core::array<u16>& Indices = m_meshbuffer->Indices;
+	Indices.set_used(0);
 	for (int k = 0; k < quad_count; k++) {
-		indices.push_back(4 * k + 0);
-		indices.push_back(4 * k + 1);
-		indices.push_back(4 * k + 2);
-		indices.push_back(4 * k + 2);
-		indices.push_back(4 * k + 3);
-		indices.push_back(4 * k + 0);
+		Indices.push_back(4 * k + 0);
+		Indices.push_back(4 * k + 1);
+		Indices.push_back(4 * k + 2);
+		Indices.push_back(4 * k + 2);
+		Indices.push_back(4 * k + 3);
+		Indices.push_back(4 * k + 0);
 	}
-	driver->drawVertexPrimitiveList(vertices.data(), vertices.size(), indices.data(), 2 * quad_count,
-			video::EVT_STANDARD, scene::EPT_TRIANGLES, video::EIT_16BIT);
+
+	m_meshbuffer->setDirty();
+	driver->drawMeshBuffer(m_meshbuffer);
 
 	// Restore fog settings
 	driver->setFog(fog_color, fog_type, fog_start, fog_end, fog_density,

@@ -175,6 +175,15 @@ public:
 		return a;
 	}
 
+	v2s32 getMouseMovement(bool reset) {
+		v2s32 delta = v2s32(relX, relY);
+		if (reset) {
+			relX = 0;
+			relY = 0;
+		}
+		return delta;
+	}
+
 	void clearInput()
 	{
 		keyIsDown.clear();
@@ -235,6 +244,10 @@ private:
 	// often changing keys, and keysListenedFor is expected
 	// to change seldomly but contain lots of keys.
 	KeyList keysListenedFor;
+
+	// Track relative mouse movement
+	s32 relX = 0;
+	s32 relY = 0;
 };
 
 class InputHandler
@@ -270,6 +283,8 @@ public:
 
 	virtual v2s32 getMousePos() = 0;
 	virtual void setMousePos(s32 x, s32 y) = 0;
+
+	virtual v2s32 getMouseMovement(bool reset = true) = 0;
 
 	virtual s32 getMouseWheel() = 0;
 
@@ -396,6 +411,10 @@ public:
 		return m_mousepos;
 	}
 
+	virtual v2s32 getMouseMovement(bool reset) {
+		return m_receiver->getMouseMovement(reset);
+	}
+
 	virtual void setMousePos(s32 x, s32 y)
 	{
 		auto control = RenderingEngine::get_raw_device()->getCursorControl();
@@ -447,6 +466,7 @@ public:
 	virtual float getMovementDirection() { return movementDirection; }
 	virtual v2s32 getMousePos() { return mousepos; }
 	virtual void setMousePos(s32 x, s32 y) { mousepos = v2s32(x, y); }
+	virtual v2s32 getMouseMovement(bool reset) { return v2s32(0, 0); }
 
 	virtual s32 getMouseWheel() { return 0; }
 

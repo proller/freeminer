@@ -586,6 +586,14 @@ void Server::init()
 	m_emerge->startThreads();
 }
 
+#ifdef __EMSCRIPTEN__
+std::unordered_map<std::string, MediaInfo> Server::getMedia()
+{
+	init();
+	return m_media;
+}
+#endif
+
 void Server::start()
 {
 	init();

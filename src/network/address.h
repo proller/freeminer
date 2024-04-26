@@ -22,6 +22,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include <functional>
 #ifdef _WIN32
 #include <windows.h>
 #include <winsock2.h>
@@ -68,6 +69,8 @@ public:
 
 	// Resolve() may throw ResolveError (address is unchanged in this case)
 	void Resolve(const char *name);
+
+        void ResolveAsync(const char *name, std::function<void(BaseException*)> resolve);
 
 	void setAddress(u32 address);
 	void setAddress(u8 a, u8 b, u8 c, u8 d);

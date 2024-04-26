@@ -106,6 +106,8 @@ void UpscaleStep::run(PipelineContext &context)
 std::unique_ptr<RenderStep> create3DStage(Client *client, v2f scale)
 {
 	RenderStep *step = new Draw3D();
+// TODO(paradust): Make post-processing work with WebGL
+#ifndef __EMSCRIPTEN__
 	if (g_settings->getBool("enable_shaders")) {
 		RenderPipeline *pipeline = new RenderPipeline();
 		pipeline->addStep(pipeline->own(std::unique_ptr<RenderStep>(step)));
@@ -114,6 +116,7 @@ std::unique_ptr<RenderStep> create3DStage(Client *client, v2f scale)
 		effect->setRenderTarget(pipeline->getOutput());
 		step = pipeline;
 	}
+#endif
 	return std::unique_ptr<RenderStep>(step);
 }
 

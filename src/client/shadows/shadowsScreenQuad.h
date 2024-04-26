@@ -19,6 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #pragma once
 #include "irrlichttypes_extrabloated.h"
+#include "irr_ptr.h"
 #include <IMaterialRendererServices.h>
 #include <IShaderConstantSetCallBack.h>
 #include "client/shader.h"
@@ -29,11 +30,10 @@ public:
 	shadowScreenQuad();
 
 	void render(video::IVideoDriver *driver);
-	video::SMaterial &getMaterial() { return Material; }
+	video::SMaterial &getMaterial() { return m_meshbuffer->getMaterial(); }
 
 private:
-	video::S3DVertex Vertices[6];
-	video::SMaterial Material;
+	irr_ptr<scene::SMeshBuffer> m_meshbuffer;
 };
 
 class shadowScreenQuadCB : public video::IShaderConstantSetCallBack

@@ -54,6 +54,10 @@ typedef int socklen_t;
 #define SOCKET_ERR_STR(e) strerror(e)
 #endif
 
+#ifdef __EMSCRIPTEN__
+#include <emsocket.h>
+#endif
+
 // Set to true to enable verbose debug output
 bool socket_enable_debug_output = false; // yuck
 

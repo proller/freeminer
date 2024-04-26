@@ -91,7 +91,7 @@ public:
 
 	virtual video::SMaterial& getMaterial(u32 i)
 	{
-		return m_material;
+		return m_meshbuffer->getMaterial();
 	}
 
 	virtual void OnRegisterSceneNode();
@@ -109,7 +109,6 @@ private:
 	void updateVertices();
 	void setVertexAlpha(float a);
 
-	video::S3DVertex m_vertices[4];
 	float m_time = 0.0f;
 	float m_expiration;
 
@@ -117,8 +116,9 @@ private:
 	IGameDef *m_gamedef;
 	aabb3f m_box;
 	aabb3f m_collisionbox;
+	scene::SMeshBuffer *m_meshbuffer;
 	ClientParticleTexRef m_texture;
-	video::SMaterial m_material;
+	//video::SMaterial m_material;
 	v2f m_texpos;
 	v2f m_texsize;
 	v3f m_pos;

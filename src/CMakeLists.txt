@@ -623,6 +623,7 @@ add_subdirectory(util)
 add_subdirectory(irrlicht_changes)
 add_subdirectory(server)
 
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
 
 OPTION(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL, not compatible with other)" 0)
 OPTION(USE_MULTI "Enable MT+SCTP networking" 0)
@@ -642,13 +643,12 @@ if(ENABLE_WEBSOCKET OR ENABLE_WEBSOCKET_SCTP)
 	message(STATUS "Using websocket: ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp")
 	find_package(OpenSSL)
 	set(WEBSOCKETPP_LIBRARY ${WEBSOCKETPP_LIBRARY} OpenSSL::SSL)
-	set(USE_WEBSOCKET 1 CACHE BOOL "")
-	#TODO: set(USE_WEBSOCKET_SCTP 1 CACHE BOOL "")
-    else()
-	set(USE_WEBSOCKET 0)
-	set(USE_WEBSOCKET_SCTP 0)
+        set(USE_WEBSOCKET 1)
+	#TODO: 
+	# set(USE_WEBSOCKET_SCTP 1)
     endif()
 endif()
+
 
 if(ENABLE_SCTP AND NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp/usrsctplib)
     message(WARNING "Please Clone usrsctp:  git clone --depth 1 https://github.com/sctplab/usrsctp ${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp")
@@ -692,6 +692,8 @@ if(ENABLE_ENET)
 		message(STATUS "Using enet: ${ENET_INCLUDE_DIR} ${ENET_LIBRARY}")
 		set(USE_ENET 1)
 	endif()
+endif()
+
 endif()
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND ${CMAKE_VERSION} VERSION_GREATER "3.11.0")
@@ -766,6 +768,7 @@ set(common_SRCS
 	lighting.cpp
 	log.cpp
 	main.cpp
+	mainloop.cpp
 	map.cpp
 	map_settings_manager.cpp
 	mapblock.cpp

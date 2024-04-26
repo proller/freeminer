@@ -20,6 +20,7 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "mainloop.h"
 #include "guiEngine.h"
 
 #include <IGUIStaticText.h>
@@ -126,7 +127,8 @@ GUIEngine::GUIEngine(JoystickController *joystick,
 		RenderingEngine *rendering_engine,
 		IMenuManager *menumgr,
 		MainMenuData *data,
-		bool &kill) :
+		bool &kill,
+		std::function<void()> resolve) :
 	m_rendering_engine(rendering_engine),
 	m_parent(parent),
 	m_menumanager(menumgr),
@@ -158,12 +160,14 @@ GUIEngine::GUIEngine(JoystickController *joystick,
 	// create topleft header
 	m_toplefttext = L"";
 
-	core::rect<s32> rect(0, 0, g_fontengine->getTextWidth(m_toplefttext.c_str()),
-		g_fontengine->getTextHeight());
-	rect += v2s32(4, 0);
+	{
+		core::rect<s32> rect(0, 0, g_fontengine->getTextWidth(m_toplefttext.c_str()),
+			g_fontengine->getTextHeight());
+		rect += v2s32(4, 0);
 
-	m_irr_toplefttext = gui::StaticText::add(rendering_engine->get_gui_env(),
-			m_toplefttext, rect, false, true, 0, -1);
+		m_irr_toplefttext = gui::StaticText::add(rendering_engine->get_gui_env(),
+				m_toplefttext, rect, false, true, 0, -1);
+	}
 
 	// create formspecsource
 	auto formspecgui = std::make_unique<FormspecFormSource>("");
@@ -201,15 +205,17 @@ GUIEngine::GUIEngine(JoystickController *joystick,
 			errorstream << "No future without main menu!" << std::endl;
 			abort();
 		}
-
-		run();
 	} catch (LuaError &e) {
 		errorstream << "Main menu error: " << e.what() << std::endl;
 		m_data->script_data.errormessage = e.what();
 	}
 
-	m_menu->quitMenu();
-	m_menu.reset();
+	run([this, resolve]() {
+		m_menu->quitMenu();
+		m_menu.reset();
+		delete this; // should probably be handed at a higher level
+		resolve();
+	});
 }
 
 /******************************************************************************/
@@ -237,15 +243,15 @@ bool GUIEngine::loadMainMenuScript()
 }
 
 /******************************************************************************/
-void GUIEngine::run()
+void GUIEngine::run(std::function<void()> resolve)
 {
 	// Always create clouds because they may or may not be
 	// needed based on the game selected
-	video::IVideoDriver *driver = m_rendering_engine->get_video_driver();
+	driver = m_rendering_engine->get_video_driver();
 
 	cloudInit();
 
-	unsigned int text_height = g_fontengine->getTextHeight();
+	text_height = g_fontengine->getTextHeight();
 
 	// Reset fog color
 	{
@@ -263,16 +269,32 @@ void GUIEngine::run()
 				fog_end, fog_density, fog_pixelfog, fog_rangefog);
 	}
 
-	const irr::core::dimension2d<u32> initial_screen_size(
+	//const irr::core::dimension2d<u32> 
+	initial_screen_size = irr::core::dimension2d<u32>(
 			g_settings->getU16("screen_w"),
 			g_settings->getU16("screen_h")
 		);
-	const bool initial_window_maximized = g_settings->getBool("window_maximized");
+	//const bool 
+	initial_window_maximized = g_settings->getBool("window_maximized");
 
-	u64 t_last_frame = porting::getTimeUs();
-	f32 dtime = 0.0f;
+	//u64 
+	t_last_frame = porting::getTimeUs();
+	//f32 
+	dtime = 0.0f;
 
-	while (m_rendering_engine->run() && (!m_startgame) && (!m_kill)) {
+    run_loop(resolve);
+}
+
+//	while (m_rendering_engine->run() && (!m_startgame) && (!m_kill)) {
+
+void GUIEngine::run_loop(std::function<void()> resolve) {
+    // EXTRANEOUS INDENT
+           bool keep_going = m_rendering_engine->run() && (!m_startgame) && (!m_kill);
+           if (!keep_going) {
+        RenderingEngine::autosaveScreensizeAndCo(initial_screen_size, initial_window_maximized);
+                   resolve();
+                   return;
+           }
 
 		//check if we need to update the "upper left corner"-text
 		if (text_height != g_fontengine->getTextHeight()) {
@@ -306,10 +328,10 @@ void GUIEngine::run()
 		u32 frametime_min = 1000 / (device->isWindowFocused()
 			? g_settings->getFloat("fps_max")
 			: g_settings->getFloat("fps_max_unfocused"));
-		if (m_clouds_enabled)
-			cloudPostProcess(frametime_min, device);
-		else
-			sleep_ms(frametime_min);
+		//if (m_clouds_enabled)
+		//	cloudPostProcess(frametime_min, device);
+		//else
+		//	sleep_ms(frametime_min);
 
 		u64 t_now = porting::getTimeUs();
 		dtime = static_cast<f32>(t_now - t_last_frame) * 1.0e-6f;
@@ -322,9 +344,8 @@ void GUIEngine::run()
 #ifdef __ANDROID__
 		m_menu->getAndroidUIInput();
 #endif
-	}
 
-	RenderingEngine::autosaveScreensizeAndCo(initial_screen_size, initial_window_maximized);
+		MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
 }
 
 /******************************************************************************/

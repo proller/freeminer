@@ -1138,9 +1138,6 @@ void drawItemStack(
 		u32 mc = mesh->getMeshBufferCount();
 		for (u32 j = 0; j < mc; ++j) {
 			scene::IMeshBuffer *buf = mesh->getMeshBuffer(j);
-			// we can modify vertices relatively fast,
-			// because these meshes are not buffered.
-			assert(buf->getHardwareMappingHint_Vertex() == scene::EHM_NEVER);
 			video::SColor c = basecolor;
 
 			if (imesh->buffer_colors.size() > j) {
@@ -1157,6 +1154,7 @@ void drawItemStack(
 			video::SMaterial &material = buf->getMaterial();
 			material.MaterialType = video::EMT_TRANSPARENT_ALPHA_CHANNEL_REF;
 			material.Lighting = false;
+			buf->setDirty();
 			driver->setMaterial(material);
 			driver->drawMeshBuffer(buf);
 		}

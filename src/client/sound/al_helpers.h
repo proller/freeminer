@@ -40,7 +40,9 @@ with this program; ifnot, write to the Free Software Foundation, Inc.,
 #else
 	#include <AL/al.h>
 	#include <AL/alc.h>
+   #if !__EMSCRIPTEN__
 	#include <AL/alext.h>
+   #endif
 #endif
 
 #include <utility>

@@ -83,6 +83,10 @@ extern "C" {
 }
 #endif
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 namespace porting
 {
 
@@ -399,6 +403,15 @@ bool getCurrentExecPath(char *buf, size_t len)
 		return false;
 
 	return true;
+}
+
+#elif defined(__EMSCRIPTEN__)
+
+bool getCurrentExecPath(char *buf, size_t len)
+{
+  const char *hardcoded_path = "/minetest/bin/minetest.exe";
+  strncpy(buf, hardcoded_path, len);
+  return true;
 }
 
 
@@ -868,6 +881,16 @@ static bool open_uri(const std::string &uri)
 	const char *argv[] = {"open", uri.c_str(), NULL};
 	return posix_spawnp(NULL, "open", NULL, NULL, (char**)argv,
 		(*_NSGetEnviron())) == 0;
+#elif defined(__EMSCRIPTEN__)
+	// Use a static buffer to store the URI for the async operation.
+	// There's a race condition here, but it should be inconsequential.
+	static char buf[512];
+	strncpy(buf, uri.c_str(), sizeof(buf));
+	buf[sizeof(buf) - 1] = '\0';
+	MAIN_THREAD_ASYNC_EM_ASM({
+		 window.open(UTF8ToString($0), "_blank");
+	}, buf);
+	return true;
 #else
 	const char *argv[] = {"xdg-open", uri.c_str(), NULL};
 	return posix_spawnp(NULL, "xdg-open", NULL, NULL, (char**)argv, environ) == 0;
