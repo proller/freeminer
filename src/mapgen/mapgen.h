@@ -172,6 +172,9 @@ public:
 	int id = -1;
 
 	MMVManip *vm = nullptr;
+	// Note that this contains various things the mapgens *can* use, so biomegen
+	// might be NULL while m_emerge->biomegen is not.
+	EmergeParams *m_emerge = nullptr;
 	const NodeDefManager *ndef = nullptr;
 
 	u32 blockseed;
@@ -184,7 +187,7 @@ public:
 
 	Mapgen() = default;
 	Mapgen(int mapgenid, MapgenParams *params, EmergeParams *emerge);
-	virtual ~Mapgen() = default;
+	virtual ~Mapgen();
 	DISABLE_CLASS_COPY(Mapgen);
 
 	virtual MapgenType getType() const { return MAPGEN_INVALID; }
@@ -241,7 +244,19 @@ public:
 	s16 liquid_pressure = 0;
 	unordered_map_v3pos<s16> heat_cache;
 	unordered_map_v3pos<s16> humidity_cache;
-	virtual bool visible(pos_t x, pos_t y, pos_t z) { return getGroundLevelAtPoint({x,z}) >= y; }
+
+	MapNode visible_surface;
+	MapNode visible_surface_green;
+	MapNode visible_surface_dry;
+	MapNode visible_surface_cold;
+	MapNode visible_surface_hot;
+	MapNode visible_water;
+	MapNode visible_ice;
+	MapNode visible_transparent = {CONTENT_AIR, LIGHT_SUN};
+
+	virtual bool visible(const v3pos_t &p);
+	virtual bool visible_water_level(const v3pos_t &p);
+	const MapNode &visible_content(const v3pos_t &p);
 
 	// getSpawnLevelAtPoint() is a function within each mapgen that returns a
 	// suitable y co-ordinate for player spawn ('suitable' usually meaning
@@ -308,7 +323,6 @@ public:
 	virtual void generateDungeons(s16 max_stone_y);
 
 protected:
-	EmergeParams *m_emerge;
 	BiomeManager *m_bmgr;
 
 	Noise *noise_filler_depth;

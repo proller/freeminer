@@ -18,8 +18,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 */
 
 #include <algorithm>
-#include "irr_v3d.h"
+#include <stack>
 #include "serverenvironment.h"
+#include "activeobject.h"
 #include "settings.h"
 #include "log.h"
 #include "mapblock.h"
@@ -48,6 +49,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #if USE_LEVELDB
 #include "database/database-leveldb.h"
 #endif
+#include "irrlicht_changes/printing.h"
 #include "server/luaentity_sao.h"
 #include "server/player_sao.h"
 
@@ -391,6 +393,8 @@ void ActiveBlockList::update(std::vector<PlayerSAO*> &active_players,
 			v3f camera_dir = v3f(0,0,1);
 			camera_dir.rotateYZBy(playersao->getLookPitch());
 			camera_dir.rotateXZBy(playersao->getRotation().Y);
+			if (playersao->getCameraInverted())
+				camera_dir = -camera_dir;
 			fillViewConeBlock(pos,
 				player_ao_range,
 				playersao->getEyePosition(),
@@ -452,6 +456,7 @@ ServerEnvironment::ServerEnvironment(ServerMap *map,
 
 	m_abmhandler(this),
 	m_circuit(script_iface, map, server->ndef(), path_world),
+	blocks_with_abm(path_world, "abm_world"),
 
 	m_map(map),
 	m_script(script_iface),
@@ -567,8 +572,12 @@ ServerEnvironment::~ServerEnvironment()
 	// This makes the next one delete all active objects.
 	m_active_blocks.clear();
 
-	// Convert all objects to static and delete the active objects
-	deactivateFarObjects(true);
+	try {
+		// Convert all objects to static and delete the active objects
+		deactivateFarObjects(true);
+	} catch (ModError &e) {
+		m_server->addShutdownError(e);
+	}
 
 
 	removeRemovedObjects(50000);
@@ -700,14 +709,14 @@ void ServerEnvironment::savePlayer(RemotePlayer *player)
 PlayerSAO *ServerEnvironment::loadPlayer(RemotePlayer *player, bool *new_player,
 	session_t peer_id, bool is_singleplayer)
 {
-	PlayerSAO *playersao = new PlayerSAO(this, player, peer_id, is_singleplayer);
+	auto playersao = std::make_unique<PlayerSAO>(this, player, peer_id, is_singleplayer);
 	// Create player if it doesn't exist
-	if (!m_player_database->loadPlayer(player, playersao)) {
+	if (!m_player_database->loadPlayer(player, playersao.get())) {
 		*new_player = true;
 		// Set player position
 		infostream << "Server: Finding spawn place for player \""
 			<< player->getName() << "\"" << std::endl;
-		playersao->setBasePosition(m_server->findSpawnPos());
+		playersao->setBasePosition(m_server->findSpawnPos(player->getName()));
 
 		// Make sure the player is saved
 		player->setModified(true);
@@ -718,7 +727,7 @@ PlayerSAO *ServerEnvironment::loadPlayer(RemotePlayer *player, bool *new_player,
 		if (objectpos_over_limit(playersao->getBasePosition())) {
 			actionstream << "Respawn position for player \""
 				<< player->getName() << "\" outside limits, resetting" << std::endl;
-			playersao->setBasePosition(m_server->findSpawnPos());
+			playersao->setBasePosition(m_server->findSpawnPos(player->getName()));
 		}
 	}
 
@@ -729,12 +738,13 @@ PlayerSAO *ServerEnvironment::loadPlayer(RemotePlayer *player, bool *new_player,
 	player->clearHud();
 
 	/* Add object to environment */
-	addActiveObject(playersao);
+	PlayerSAO *ret = playersao.get();
+	addActiveObject(std::move(playersao));
 
 	// Update active blocks quickly for a bit so objects in those blocks appear on the client
 	m_fast_active_block_divider = 10;
 
-	return playersao;
+	return ret;
 }
 
 void ServerEnvironment::saveMeta()
@@ -748,6 +758,10 @@ void ServerEnvironment::saveMeta()
 	std::ostringstream ss(std::ios_base::binary);
 
 	Settings args("EnvArgsEnd");
+
+	if (abm_world_last)
+		args.setU64("abm_world_last", abm_world_last);
+
 	args.setU64("game_time", m_game_time);
 	args.setU64("time_of_day", getTimeOfDay());
 	args.setU64("last_clear_objects_time", m_last_clear_objects_time);
@@ -798,6 +812,8 @@ void ServerEnvironment::loadMeta()
 			"EnvArgsEnd not found!");
 */	
 	}
+
+	if (args.exists("abm_world_last")) {abm_world_last = args.getU64("abm_world_last");}
 
 	try {
 		m_game_time_start =
@@ -1217,10 +1233,30 @@ bool ServerEnvironment::removeNode(v3pos_t p, s16 fast, bool important)
 	return true;
 }
 
-bool ServerEnvironment::swapNode(v3s16 p, const MapNode &n)
+bool ServerEnvironment::swapNode(v3s16 p, const MapNode &n, s16 fast)
 {
-	if (!m_map->addNodeWithEvent(p, n, false))
-		return false;
+	if (fast) {
+		try {
+			MapNode nn = n;
+			if (fast == 2 && !nn.param1) {
+				MapNode n_old = m_map->getNode(p);
+
+				if (n_old.param1)
+					nn.param1 = n_old.param1;
+				else if (p.Y > 0)
+					nn.param1 = 5; // will be recalculated by next light step
+			}
+			m_map->setNode(p, nn);
+		} catch (const InvalidPositionException &e) {
+		}
+	} else {
+
+		if (!m_map->addNodeWithEvent(p, n, false))
+			return false;
+
+	}
+
+	m_circuit.addNode(p);
 
 	// Update active VoxelManipulator if a mapgen thread
 	m_map->updateVManip(p);
@@ -1336,14 +1372,10 @@ void ServerEnvironment::clearObjects(ClearObjectsMode mode)
 		m_script->removeObjectReference(obj.get());
 
 		// Delete active object
-		if (obj->environmentDeletes())
-			m_ao_manager.deferDelete(obj);
-			//delete obj;
-
 		return true;
 	};
 
-	m_ao_manager.clear(cb_removal);
+	m_ao_manager.clearIf(cb_removal);
 
 	// Get list of loaded blocks
 	std::vector<v3s16> loaded_blocks;
@@ -1395,7 +1427,7 @@ void ServerEnvironment::clearObjects(ClearObjectsMode mode)
 		MapBlock *block = m_map->emergeBlock(p, false);
 		if (!block) {
 			errorstream << "ServerEnvironment::clearObjects(): "
-				<< "Failed to emerge block " << PP(p) << std::endl;
+				<< "Failed to emerge block " << p << std::endl;
 			continue;
 		}
 
@@ -1906,16 +1938,16 @@ u32 ServerEnvironment::addParticleSpawner(float exptime)
 	// Timers with lifetime 0 do not expire
 	float time = exptime > 0.f ? exptime : PARTICLE_SPAWNER_NO_EXPIRY;
 
-	u32 id = 0;
-	for (;;) { // look for unused particlespawner id
-		id++;
-		std::unordered_map<u32, float>::iterator f = m_particle_spawners.find(id);
-		if (f == m_particle_spawners.end()) {
-			m_particle_spawners[id] = time;
-			break;
-		}
-	}
-	return id;
+	u32 free_id = m_particle_spawners_id_last_used;
+	do {
+		free_id++;
+		if (free_id == m_particle_spawners_id_last_used)
+			return 0; // full
+	} while (free_id == 0 || m_particle_spawners.find(free_id) != m_particle_spawners.end());
+
+	m_particle_spawners_id_last_used = free_id;
+	m_particle_spawners[free_id] = time;
+	return free_id;
 }
 
 u32 ServerEnvironment::addParticleSpawner(float exptime, u16 attached_id)
@@ -1942,7 +1974,7 @@ void ServerEnvironment::deleteParticleSpawner(u32 id, bool remove_from_object)
 	}
 }
 
-u16 ServerEnvironment::addActiveObject(ServerActiveObject *object)
+u16 ServerEnvironment::addActiveObject(std::shared_ptr<ServerActiveObject> object)
 {
 	if (!object)
 		return 0;
@@ -2119,10 +2151,11 @@ void ServerEnvironment::getSelectedActiveObjects(
 	************ Private methods *************
 */
 
-u16 ServerEnvironment::addActiveObjectRaw(ServerActiveObject *object,
+u16 ServerEnvironment::addActiveObjectRaw(std::shared_ptr<ServerActiveObject> object_u,
 	bool set_changed, u32 dtime_s)
 {
-	if (!m_ao_manager.registerObject(object)) {
+	auto object = object_u.get();
+	if (!m_ao_manager.registerObject(object_u)) {
 		return 0;
 	}
 
@@ -2153,7 +2186,7 @@ u16 ServerEnvironment::addActiveObjectRaw(ServerActiveObject *object,
 			v3s16 p = floatToInt(objectpos, BS);
 			errorstream<<"ServerEnvironment::addActiveObjectRaw(): "
 				<<"could not emerge block for storing id="<<object->getId()
-				<<" statically (pos="<<PP(p)<<")"<<std::endl;
+				<<" statically (pos="<<p<<")"<<std::endl;
 		}
 	}
 
@@ -2211,7 +2244,7 @@ void ServerEnvironment::removeRemovedObjects(u32 max_cycle_ms)
 					warningstream << "ServerEnvironment::removeRemovedObjects(): "
 							<< "id=" << id << " m_static_exists=true but "
 							<< "static data doesn't actually exist in "
-							<< PP(obj->m_static_block) << std::endl;
+							<< obj->m_static_block << std::endl;
 				}
 			} else {
 				infostream << "Failed to emerge block from which an object to "
@@ -2225,15 +2258,10 @@ void ServerEnvironment::removeRemovedObjects(u32 max_cycle_ms)
 		m_script->removeObjectReference(obj.get());
 
 		// Delete
-
-		if (obj->environmentDeletes())
-			m_ao_manager.deferDelete(obj);
-			//delete obj;
-
 		return true;
 	};
 
-	m_ao_manager.clear(clear_cb);
+	m_ao_manager.clearIf(clear_cb);
 }
 
 static void print_hexdump(std::ostream &o, const std::string &data)
@@ -2270,12 +2298,16 @@ static void print_hexdump(std::ostream &o, const std::string &data)
 	}
 }
 
-ServerActiveObject* ServerEnvironment::createSAO(ActiveObjectType type, v3f pos,
-		const std::string &data)
+std::unique_ptr<ServerActiveObject> ServerEnvironment::createSAO(ActiveObjectType type,
+		v3f pos, const std::string &data)
 {
 	switch (type) {
 		case ACTIVEOBJECT_TYPE_LUAENTITY:
-			return new LuaEntitySAO(this, pos, data);
+			return std::make_unique<LuaEntitySAO>(this, pos, data);
+		case ACTIVEOBJECT_TYPE_LUAFALLING:
+			return std::unique_ptr<ServerActiveObject>(epixel::FallingSAO::create(this, pos, data));
+		case ACTIVEOBJECT_TYPE_LUAITEM:
+			return std::unique_ptr<ServerActiveObject>(epixel::ItemSAO::create(this, pos, data));
 		default:
 			warningstream << "ServerActiveObject: No factory for type=" << type << std::endl;
 	}
@@ -2303,13 +2335,13 @@ void ServerEnvironment::activateObjects(MapBlock *block, u32 dtime_s)
 		}
 
 		// Create an active object from the data
-		ServerActiveObject *obj =
+		std::unique_ptr<ServerActiveObject> obj =
 				createSAO((ActiveObjectType)s_obj.type, s_obj.pos, s_obj.data);
 		// If couldn't create object, store static data back.
 		if (!obj) {
 			errorstream << "ServerEnvironment::activateObjects(): "
 				<< "failed to create active object from static object "
-				<< "in block " << PP(s_obj.pos / BS)
+				<< "in block " << (s_obj.pos / BS)
 				<< " type=" << (int)s_obj.type << " data:" << std::endl;
 			break;
 			print_hexdump(verbosestream, s_obj.data);
@@ -2319,11 +2351,11 @@ void ServerEnvironment::activateObjects(MapBlock *block, u32 dtime_s)
 		}
 #if !NDEBUG
 		verbosestream << "ServerEnvironment::activateObjects(): "
-			<< "activated static object pos=" << PP(s_obj.pos / BS)
+			<< "activated static object pos=" << (s_obj.pos / BS)
 			<< " type=" << (int)s_obj.type << std::endl;
 #endif
 		// This will also add the object to the active static list
-		addActiveObjectRaw(obj, false, dtime_s);
+		addActiveObjectRaw(std::move(obj), false, dtime_s);
 		if (block->isOrphan())
 			return;
 	}
@@ -2418,7 +2450,7 @@ void ServerEnvironment::deactivateFarObjects(bool _force_delete)
 
 		verbosestream << "ServerEnvironment::deactivateFarObjects(): "
 					  << "deactivating object id=" << id << " on inactive block "
-					  << PP(blockpos_o) << std::endl;
+					  << blockpos_o << std::endl;
 
 		// If known by some client, don't immediately delete.
 		bool pending_delete = (obj->m_known_by_count > 0 && !force_delete);
@@ -2452,7 +2484,7 @@ void ServerEnvironment::deactivateFarObjects(bool _force_delete)
 						warningstream << "ServerEnvironment::deactivateFarObjects(): "
 								<< "id=" << id << " m_static_exists=true but "
 								<< "static data doesn't actually exist in "
-								<< PP(obj->m_static_block) << std::endl;
+								<< obj->m_static_block << std::endl;
 					}
 				}
 			}
@@ -2493,29 +2525,16 @@ void ServerEnvironment::deactivateFarObjects(bool _force_delete)
 			return false;
 		}
 
-#if !NDEBUG
-		verbosestream << "ServerEnvironment::deactivateFarObjects(): "
-					  << "object id=" << id << " is not known by clients"
-					  << "; deleting" << std::endl;
-#endif
-
 		// Tell the object about removal
 		obj->removingFromEnvironment();
 		// Deregister in scripting api
 		m_script->removeObjectReference(obj);
 
 		// Delete active object
-
-		if (obj->environmentDeletes())
-		{
-			//m_active_objects.set(id, nullptr);
-			m_ao_manager.deferDelete(objp);
-		}
-
 		return true;
 	};
 
-	m_ao_manager.clear(cb_deactivate);
+	m_ao_manager.clearIf(cb_deactivate);
 }
 
 void ServerEnvironment::deleteStaticFromBlock(
@@ -2531,7 +2550,7 @@ void ServerEnvironment::deleteStaticFromBlock(
 		block = m_map->emergeBlock(obj->m_static_block, false);
 	if (!block) {
 		if (!no_emerge)
-			errorstream << "ServerEnv: Failed to emerge block " << PP(obj->m_static_block)
+			errorstream << "ServerEnv: Failed to emerge block " << obj->m_static_block
 					<< " when deleting static data of object from it. id=" << id << std::endl;
 		return;
 	}
@@ -2558,7 +2577,7 @@ bool ServerEnvironment::saveStaticToBlock(
 	}
 
 	if (!block) {
-		errorstream << "ServerEnv: Failed to emerge block " << PP(obj->m_static_block)
+		errorstream << "ServerEnv: Failed to emerge block " << obj->m_static_block
 				<< " when saving static data of object to it. id=" << store_id << std::endl;
 		return false;
 	}

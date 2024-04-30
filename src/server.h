@@ -30,8 +30,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "content/mods.h"
 #include "inventorymanager.h"
 #include "content/subgames.h"
-#include "tileanimation.h" // TileAnimationParams
-#include "particles.h" // ParticleParams
 #include "network/peerhandler.h"
 #include "network/address.h"
 #include "util/numeric.h"
@@ -41,7 +39,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "serverenvironment.h"
 #include "clientiface.h"
 #include "chatmessage.h"
+#include "sound.h"
 #include "translation.h"
+#include <memory>
 #include <string>
 #include <list>
 #include <map>
@@ -59,6 +59,7 @@ class SendBlocksThread;
 class LiquidThread;
 class EnvThread;
 class AbmThread;
+class AbmWorldThread;
 
 
 class ClientNotFoundException : public BaseException
@@ -89,7 +90,7 @@ struct RollbackAction;
 class EmergeManager;
 class ServerScripting;
 class ServerEnvironment;
-struct SimpleSoundSpec;
+struct SoundSpec;
 struct CloudParams;
 struct SkyboxParams;
 struct SunParams;
@@ -100,6 +101,8 @@ class ServerThread;
 class ServerModManager;
 class ServerInventoryManager;
 struct PackedValue;
+struct ParticleParameters;
+struct ParticleSpawnerParameters;
 
 enum ClientDeletionReason {
 	CDR_LEAVE,
@@ -122,7 +125,7 @@ struct MediaInfo
 	}
 };
 
-// Combines the pure sound (SimpleSoundSpec) with positional information
+// Combines the pure sound (SoundSpec) with positional information
 struct ServerPlayingSound
 {
 	SoundLocation type = SoundLocation::Local;
@@ -136,7 +139,7 @@ struct ServerPlayingSound
 
 	v3f getPos(ServerEnvironment *env, bool *pos_exists) const;
 
-	SimpleSoundSpec spec;
+	SoundSpec spec;
 
 	std::unordered_set<session_t> clients; // peer ids
 };
@@ -175,7 +178,7 @@ public:
 		Address bind_addr,
 		bool dedicated,
 		ChatInterface *iface = nullptr,
-		std::string *on_shutdown_errmsg = nullptr
+		std::string *shutdown_errmsg = nullptr
 	);
 	~Server();
 	DISABLE_CLASS_COPY(Server);
@@ -326,10 +329,13 @@ public:
 		setAsyncFatalError(std::string("Lua: ") + e.what());
 	}
 
+	// Not thread-safe.
+	void addShutdownError(const ModError &e);
+
 	bool showFormspec(const char *name, const std::string &formspec, const std::string &formname);
 	Map & getMap() { return m_env->getMap(); }
 	ServerEnvironment & getEnv() { return *m_env; }
-	v3f findSpawnPos();
+	v3f findSpawnPos(const std::string &player_name);
 
 	u32 hudAdd(RemotePlayer *player, HudElement *element);
 	bool hudRemove(RemotePlayer *player, u32 id);
@@ -343,7 +349,7 @@ public:
 
 	void setLocalPlayerAnimations(RemotePlayer *player, v2s32 animation_frames[4],
 			f32 frame_speed);
-	void setPlayerEyeOffset(RemotePlayer *player, const v3f &first, const v3f &third);
+	void setPlayerEyeOffset(RemotePlayer *player, const v3f &first, const v3f &third, const v3f &third_front);
 
 	void setSky(RemotePlayer *player, const SkyboxParams &params);
 	void setSun(RemotePlayer *player, const SunParams &params);
@@ -409,8 +415,8 @@ public:
 	// Lua files registered for init of async env, pair of modname + path
 	std::vector<std::pair<std::string, std::string>> m_async_init_files;
 
-	// Data transferred into async envs at init time
-	std::unique_ptr<PackedValue> m_async_globals_data;
+	// Data transferred into other Lua envs at init time
+	std::unique_ptr<PackedValue> m_lua_globals_data;
 
 	// Bind address
 	Address m_bind_addr;
@@ -474,7 +480,7 @@ private:
 
 	void SendLocalPlayerAnimations(session_t peer_id, v2s32 animation_frames[4],
 		f32 animation_speed);
-	void SendEyeOffset(session_t peer_id, v3f first, v3f third);
+	void SendEyeOffset(session_t peer_id, v3f first, v3f third, v3f third_front);
 	void SendPlayerPrivileges(session_t peer_id);
 	void SendPlayerInventoryFormspec(session_t peer_id);
 	void SendPlayerFormspecPrepend(session_t peer_id);
@@ -693,9 +699,9 @@ private:
 	ChatInterface *m_admin_chat;
 	std::string m_admin_nick;
 
-	// if a mod-error occurs in the on_shutdown callback, the error message will
-	// be written into this
-	std::string *const m_on_shutdown_errmsg;
+	// If a mod error occurs while shutting down, the error message will be
+	// written into this.
+	std::string *const m_shutdown_errmsg;
 
 	/*
 		Map edit event queue. Automatically receives all map edits.
@@ -730,7 +736,7 @@ private:
 		Sounds
 	*/
 	std::unordered_map<s32, ServerPlayingSound> m_playing_sounds;
-	s32 m_next_sound_id = 0; // positive values only
+	s32 m_playing_sounds_id_last_used = 0; // positive values only
 	s32 nextSoundId();
 
 	ModStorageDatabase *m_mod_storage_database = nullptr;
@@ -772,14 +778,12 @@ public:
 	void handleCommand_Drawcontrol(NetworkPacket* pkt);
 	Stat stat;
 
-	MapThread *m_map_thread = nullptr;
-	SendBlocksThread *m_sendblocks = nullptr;
-	LiquidThread *m_liquid = nullptr;
-	EnvThread *m_envthread = nullptr;
-	AbmThread *m_abmthread = nullptr;
-
-
-
+	std::unique_ptr<MapThread> m_map_thread;
+	std::unique_ptr<SendBlocksThread> m_sendblocks_thead;
+	std::unique_ptr<LiquidThread> m_liquid;
+	std::unique_ptr<EnvThread> m_env_thread;
+	std::unique_ptr<AbmThread> m_abm_thread;
+	std::unique_ptr<AbmWorldThread> m_abm_world_thread;
 
 	// CSM restrictions byteflag
 	u64 m_csm_restriction_flags = CSMRestrictionFlags::CSM_RF_NONE;

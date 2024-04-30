@@ -388,7 +388,10 @@ void spread_light(Map *map, const NodeDefManager *nodemgr, LightBank bank,
 				neighbor_block = current.block;
 			}
 
-			auto lock = neighbor_block->lock_unique_rec();
+			auto lock = neighbor_block->try_lock_unique_rec();
+			if (!lock->owns_lock()) {
+				continue; // may cause dark areas
+			}
 
 			// Get the neighbor itself
 			MapNode neighbor = neighbor_block->getNodeNoLock(neighbor_rel_pos);
@@ -922,7 +925,10 @@ bool propagate_block_sunlight(Map *map, const NodeDefManager *ndef,
 		return false;
 	}
 
-	auto lock = block->lock_unique_rec();
+	auto lock = block->try_lock_unique_rec();
+	if (!lock->owns_lock()) {
+		return false; // may cause dark areas
+	}
 
 	// For each changing column of nodes:
 	size_t index;
@@ -1088,6 +1094,9 @@ void blit_back_with_light(Map *map, MMVManip *vm,
 	std::map<v3s16, MapBlock*> *modified_blocks)
 {
 	const NodeDefManager *ndef = map->getNodeDefManager();
+
+	if (vm->m_area.hasEmptyExtent())
+		return;
 	mapblock_v3 minblock = getNodeBlockPos(vm->m_area.MinEdge);
 	mapblock_v3 maxblock = getNodeBlockPos(vm->m_area.MaxEdge);
 	// First queue is for day light, second is for night light.
@@ -1243,7 +1252,10 @@ bool repair_block_light(Map *map, MapBlock *block,
 
   {
 
-	auto lock = block->lock_unique_rec();
+	auto lock = block->try_lock_unique_rec();
+	if (!lock->owns_lock()) {
+		return true; // may cause dark areas
+	}
 
 	// Reset the voxel manipulator.
 	fill_with_sunlight(block, ndef, lights);

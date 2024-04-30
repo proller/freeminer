@@ -24,18 +24,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "irrlichttypes_extrabloated.h"
 #include "client/tile.h"
-#include "map.h"
 #include "voxel.h"
 #include <array>
 #include <map>
 #include <unordered_map>
-
-
-// fm:
-//#define MESH_ZEROCOPY //Exprimental, slower, needed for next farmesh
-struct MapDrawControl;
-class Map;
-
 
 class Client;
 class IShaderSource;
@@ -44,18 +36,13 @@ class IShaderSource;
 	Mesh making stuff
 */
 
-int getFarmeshStep(MapDrawControl& draw_control, const v3bpos_t & playerblockpos, const v3bpos_t & block_pos);
 
 class MapBlock;
 struct MinimapMapblock;
 
 struct MeshMakeData
 {
-#if defined(MESH_ZEROCOPY)
-	Map & m_vmanip;
-#else
-	VoxelManipulator m_vmanip;
-#endif
+	VoxelManipulator m_vmanip_store;
 	v3s16 m_blockpos = v3s16(-1337,-1337,-1337);
 	v3s16 m_crack_pos_relative = v3s16(-1337,-1337,-1337);
 	bool m_smooth_lighting = false;
@@ -66,8 +53,12 @@ struct MeshMakeData
 	bool m_use_shaders;
 
     // fm:
+	NodeContainer & m_vmanip;
 	u16 side_length_data;
-	int step = 1;
+	int lod_step;
+	int far_step;
+	const int fscale;
+
 	int range = 1;
 	bool no_draw = false;
 	unsigned int timestamp = 0;
@@ -78,10 +69,10 @@ struct MeshMakeData
 	bool filled = false;
 	bool fill_data();
 
-	MeshMakeData(Client *client, bool use_shaders
-			, int step = 1
-			//Map & map_ = {nullptr},
-			 //MapDrawControl& draw_control_ = {}
+	explicit MeshMakeData(Client *client, bool use_shaders
+			, int lod_step = 0
+			, int far_step = 0
+			, NodeContainer * nodecontainer = nullptr
 			 );
 
 	/*
@@ -253,17 +244,19 @@ public:
 
 
 // fm:
-	u32 getUsageTimer() {
+	/*u32 getUsageTimer() {
 		return m_usage_timer;
 	}
 	void incrementUsageTimer(float dtime) {
 		m_usage_timer += dtime;
-	}
+	}*/
 
-	int step = 1;
+	const int far_step;
+	const int lod_step;
+	const int fscale;
 	//bool no_draw = 0;
 	unsigned int timestamp = 0;
-	u32 m_usage_timer = 0;
+	//u32 m_usage_timer = 0;
 // ===
 
 
@@ -348,8 +341,7 @@ video::SColor encode_light(u16 light, u8 emissive_light);
 
 // Compute light at node
 u16 getInteriorLight(MapNode n, s32 increment, const NodeDefManager *ndef);
-u16 getFaceLight(MapNode n, MapNode n2, const v3s16 &face_dir,
-	const NodeDefManager *ndef);
+u16 getFaceLight(MapNode n, MapNode n2, const NodeDefManager *ndef);
 u16 getSmoothLightSolid(const v3s16 &p, const v3s16 &face_dir, const v3s16 &corner, MeshMakeData *data);
 u16 getSmoothLightTransparent(const v3s16 &p, const v3s16 &corner, MeshMakeData *data);
 

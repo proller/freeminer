@@ -35,9 +35,11 @@ struct MapDrawControl
 {
 
 // freeminer:
-	float farmesh = 0;
-	int farmesh_step = 1;
+	int32_t farmesh = 30000;
+	uint16_t farmesh_quality = 0;
+	int32_t lodmesh = 4;
 	int cell_size = 1;
+	int cell_size_pow = 0;
 
 	float fps = 30;
 	float fps_avg = 30;
@@ -117,7 +119,7 @@ public:
 		ISceneNode::drop(); // calls destructor
 	}
 
-	void updateCamera(v3f pos, v3f dir, f32 fov, v3s16 offset);
+	void updateCamera(v3f pos, v3f dir, f32 fov, v3s16 offset, video::SColor light_color);
 
 	/*
 		Forcefully get a sector from somewhere
@@ -162,9 +164,6 @@ public:
 			int oldvalue, bool *sunlight_seen_result);
 
 	void renderPostFx(CameraMode cam_mode);
-
-	// For debugging the status and position of MapBlocks
-	void renderBlockBoundaries(const std::map<v3pos_t, MapBlock*> & blocks);
 
 	// For debug printing
 	void PrintInfo(std::ostream &out) override;
@@ -236,6 +235,7 @@ private:
 	v3f m_camera_direction = v3f(0,0,1);
 	f32 m_camera_fov = M_PI;
 	v3s16 m_camera_offset;
+	video::SColor m_camera_light_color = video::SColor(0xFFFFFFFF);
 	bool m_needs_update_transparent_meshes = true;
 
 
@@ -244,8 +244,8 @@ private:
     using drawlist_map = std::map<v3pos_t, MapBlockP, MapBlockComparer>;
 	drawlist_map m_drawlist_0, m_drawlist_1;
 	std::atomic<drawlist_map *> m_drawlist {&m_drawlist_0};
-	int m_drawlist_current = 0;
-	std::vector<std::pair<v3pos_t, int>> draw_nearest;
+	std::atomic_bool m_drawlist_current = 0;
+	std::vector<std::pair<v3bpos_t, int>> draw_nearest;
 public:
 	std::atomic_uint m_drawlist_last {0};
 	std::map<v3pos_t, MapBlock*> m_block_boundary;

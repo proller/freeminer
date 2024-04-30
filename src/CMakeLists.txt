@@ -60,28 +60,6 @@ else()
 	set(STATIC_BUILD 0)
 endif()
 
-
-if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND ${CMAKE_VERSION} VERSION_GREATER "3.11.0")
-    set(USE_DEBUG_HELPERS ON)
-endif()
-
-if (USE_DEBUG_HELPERS)
-    #get_target_property(MAGIC_ENUM_INCLUDE_DIR ch_contrib::magic_enum INTERFACE_INCLUDE_DIRECTORIES)
-    # CMake generator expression will do insane quoting when it encounters special character like quotes, spaces, etc.
-    # Prefixing "SHELL:" will force it to use the original text.
-    #set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${MAGIC_ENUM_INCLUDE_DIR}\" -include \"${ClickHouse_SOURCE_DIR}/base/base/iostream_debug_helpers.h\"")
-    set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${CMAKE_CURRENT_SOURCE_DIR}/debug/\" -include \"${CMAKE_CURRENT_SOURCE_DIR}/debug/iostream_debug_helpers.h\"")
-    #set (INCLUDE_DEBUG_HELPERS "SHELL:-include \"${CMAKE_CURRENT_SOURCE_DIR}/util/iostream_debug_helpers.h\"")
-    # Use generator expression as we don't want to pollute CMAKE_CXX_FLAGS, which will interfere with CMake check system.
-    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:${INCLUDE_DEBUG_HELPERS}>)
-	if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-		add_definitions(-DDUMP_STREAM=actionstream)
-	else()
-		add_definitions(-DDUMP_STREAM=verbosestream)
-	endif()
-endif ()
-
-
 if(NOT MSVC)
         # FM: TODO: REMOVE:
 	set(WARNING_FLAGS "${WARNING_FLAGS} -Wno-inconsistent-missing-override")
@@ -299,14 +277,6 @@ if(ENABLE_SOUND AND BUILD_CLIENT)
 	endif()
 endif()
 
-# TODO: this should be removed one day, we can enable it unconditionally
-if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm")
-option(ENABLE_GLES "Enable extra support code for OpenGL ES" TRUE)
-else()
-option(ENABLE_GLES "Enable extra support code for OpenGL ES" FALSE)
-mark_as_advanced(ENABLE_GLES)
-endif()
-
 option(ENABLE_TOUCH "Enable Touchscreen support" FALSE)
 if(ENABLE_TOUCH)
 	add_definitions(-DHAVE_TOUCHSCREENGUI)
@@ -371,10 +341,17 @@ if(ENABLE_LEVELDB)
 		list(REVERSE CMAKE_FIND_LIBRARY_SUFFIXES)
 	endif()
 
+	if (LIBCXX_LIBRARY)
+		set(SYSTEM_LEVELDB 0 CACHE BOOL "")
+	endif()
+
+   if (SYSTEM_LEVELDB)
 	find_library(LEVELDB_LIBRARY NAMES leveldb libleveldb)
 	find_path(LEVELDB_INCLUDE_DIR db.h PATH_SUFFIXES leveldb)
 	find_library(SNAPPY_LIBRARY snappy)
 	find_path(SNAPPY_INCLUDE_DIR snappy.h PATH_SUFFIXES snappy)
+   endif()
+
 	message (STATUS "Snappy library: ${SNAPPY_LIBRARY} : ${SNAPPY_INCLUDE_DIR}")
 	message (STATUS "Leveldb library: ${LEVELDB_LIBRARY} : ${LEVELDB_INCLUDE_DIR}")
 
@@ -382,20 +359,25 @@ if(ENABLE_LEVELDB)
 		list(REVERSE CMAKE_FIND_LIBRARY_SUFFIXES)
 	endif()
 
-	if (NOT SNAPPY_INCLUDE_DIR)
-		find_path(SNAPPY_INCLUDE_DIR leveldb/db.h ${PROJECT_SOURCE_DIR}/external/leveldb/include NO_DEFAULT_PATH)
+	if (NOT SNAPPY_INCLUDE_DIR OR NOT SNAPPY_LIBRARY)
+		find_path(SNAPPY_INCLUDE_DIR snappy.h ${PROJECT_SOURCE_DIR}/external/snappy NO_DEFAULT_PATH)
 	  if (SNAPPY_INCLUDE_DIR)
 		# Snappy have no cmake by default,
 		# git clone --recursive --depth 1 https://github.com/google/snappy src/external/snappy
 		# But we can collect something from pulls
 		# wget -O src/external/snappy/CMakeLists.txt https://raw.githubusercontent.com/adasworks/snappy-cmake/master/CMakeLists.txt
+		set(SNAPPY_BUILD_TESTS 0 CACHE INTERNAL "")
+		set(SNAPPY_BUILD_BENCHMARKS 0 CACHE INTERNAL "")
+		set(SNAPPY_INSTALL 0 CACHE INTERNAL "")
+
 		add_subdirectory(${PROJECT_SOURCE_DIR}/external/snappy)
 		set(SNAPPY_LIBRARY snappy)
+		set(HAVE_SNAPPY 1 CACHE INTERNAL "")
 		message(STATUS "Using bundled snappy ${SNAPPY_LIBRARY} : ${SNAPPY_INCLUDE_DIR}")
 	  endif()
 	endif()
 
-	if (NOT LEVELDB_INCLUDE_DIR)
+	if (NOT LEVELDB_INCLUDE_DIR OR NOT LEVELDB_LIBRARY)
 		find_path(LEVELDB_INCLUDE_DIR leveldb/db.h ${PROJECT_SOURCE_DIR}/external/leveldb/include NO_DEFAULT_PATH)
 	  if (LEVELDB_INCLUDE_DIR)
 		# bad try direct make build 
@@ -414,6 +396,7 @@ if(ENABLE_LEVELDB)
 		set(LEVELDB_BUILD_TESTS 0 CACHE INTERNAL "")
 		set(LEVELDB_BUILD_BENCHMARKS 0 CACHE INTERNAL "")
 		set(LEVELDB_INSTALL 0 CACHE INTERNAL "")
+		set(HAVE_CLANG_THREAD_SAFETY 0 CACHE INTERNAL "") # -Werror remove
 		add_subdirectory(${PROJECT_SOURCE_DIR}/external/leveldb)
 		set(LEVELDB_LIBRARY leveldb)
 		message(STATUS "Using bundled leveldb ${LEVELDB_INCLUDE_DIR} ${LEVELDB_LIBRARY}")
@@ -421,13 +404,13 @@ if(ENABLE_LEVELDB)
 	endif()
 
 	if(SNAPPY_LIBRARY AND SNAPPY_INCLUDE_DIR)
-		include_directories(${SNAPPY_INCLUDE_DIR})
+		include_directories(SYSTEM ${SNAPPY_INCLUDE_DIR})
 	endif()
 
 	if(LEVELDB_LIBRARY AND LEVELDB_INCLUDE_DIR)
 		set(USE_LEVELDB TRUE)
 		message(STATUS "LevelDB backend enabled. ${LEVELDB_LIBRARY} : ${LEVELDB_INCLUDE_DIR}")
-		include_directories(${LEVELDB_INCLUDE_DIR})
+		include_directories(SYSTEM ${LEVELDB_INCLUDE_DIR})
 	elseif (NOT FORCE_LEVELDB)
 		message(WARNING "LevelDB not found! Player data cannot be saved in singleplayer or server")
 	endif()
@@ -542,7 +525,7 @@ add_definitions(-DUSE_CMAKE_CONFIG_H)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-set(PLATFORM_LIBS Threads::Threads)
+set(PLATFORM_LIBS ${PLATFORM_LIBS} Threads::Threads)
 
 if(WIN32)
 	# Windows
@@ -577,12 +560,6 @@ if(WIN32)
 	endif()
 else()
 	# Unix probably
-	if(BUILD_CLIENT AND NOT NO_BUILD)
-		if(NOT HAIKU AND NOT APPLE)
-			find_package(X11 REQUIRED)
-		endif(NOT HAIKU AND NOT APPLE)
-	endif()
-
 	set(PLATFORM_LIBS ${PLATFORM_LIBS} ${CMAKE_DL_LIBS})
 	if(APPLE)
 		set(PLATFORM_LIBS "-framework CoreFoundation" ${PLATFORM_LIBS})
@@ -601,6 +578,14 @@ else()
 
 	if (HAIKU)
 		set(PLATFORM_LIBS ${PLATFORM_LIBS} network)
+	endif()
+
+	if (ANDROID)
+		include_directories(${ANDROID_NDK}/sources/android/native_app_glue)
+		add_library(native_app_glue OBJECT ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
+		set(PLATFORM_LIBS ${PLATFORM_LIBS} native_app_glue)
+
+		set(PLATFORM_LIBS ${PLATFORM_LIBS} android log)
 	endif()
 endif()
 
@@ -640,12 +625,14 @@ add_subdirectory(server)
 
 
 OPTION(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL, not compatible with other)" 0)
-OPTION(USE_MULTI "Enable MT+SCTP networking" 0)
+OPTION(USE_MULTI "Enable MT+ENET+WSS networking" 1)
 if(USE_MULTI)
-	set(ENABLE_SCTP 1)
-	set(ENABLE_ENET 1)
-	# set(ENABLE_WEBSOCKET_SCTP 1) # NOT FINISHED
-	set(ENABLE_WEBSOCKET 1)
+	#set(ENABLE_SCTP 1 CACHE BOOL "") # Maybe bugs
+	set(ENABLE_ENET 1 CACHE BOOL "")
+	#set(ENABLE_WEBSOCKET_SCTP 1 CACHE BOOL "") # NOT FINISHED
+        if (NOT ANDROID)
+	    	set(ENABLE_WEBSOCKET 1 CACHE BOOL "")
+        endif()
 endif()
 
 
@@ -657,9 +644,12 @@ if(ENABLE_WEBSOCKET OR ENABLE_WEBSOCKET_SCTP)
 	message(STATUS "Using websocket: ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp")
 	find_package(OpenSSL)
 	set(WEBSOCKETPP_LIBRARY ${WEBSOCKETPP_LIBRARY} OpenSSL::SSL)
-        set(USE_WEBSOCKET 1)
-	#TODO: 
-	# set(USE_WEBSOCKET_SCTP 1)
+	set(USE_WEBSOCKET 1 CACHE BOOL "")
+	#TODO:
+	# set(USE_WEBSOCKET_SCTP 1 CACHE BOOL "")
+    else()
+	set(USE_WEBSOCKET 0)
+	set(USE_WEBSOCKET_SCTP 0)
     endif()
 endif()
 
@@ -707,6 +697,26 @@ if(ENABLE_ENET)
 	endif()
 endif()
 
+if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND ${CMAKE_VERSION} VERSION_GREATER "3.11.0")
+    set(USE_DEBUG_HELPERS ON CACHE BOOL "")
+endif()
+
+if (USE_DEBUG_HELPERS)
+    #get_target_property(MAGIC_ENUM_INCLUDE_DIR ch_contrib::magic_enum INTERFACE_INCLUDE_DIRECTORIES)
+    # CMake generator expression will do insane quoting when it encounters special character like quotes, spaces, etc.
+    # Prefixing "SHELL:" will force it to use the original text.
+    #set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${MAGIC_ENUM_INCLUDE_DIR}\" -include \"${ClickHouse_SOURCE_DIR}/base/base/iostream_debug_helpers.h\"")
+    set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${CMAKE_CURRENT_SOURCE_DIR}/debug/\" -include \"${CMAKE_CURRENT_SOURCE_DIR}/debug/iostream_debug_helpers.h\"")
+    #set (INCLUDE_DEBUG_HELPERS "SHELL:-include \"${CMAKE_CURRENT_SOURCE_DIR}/util/iostream_debug_helpers.h\"")
+    # Use generator expression as we don't want to pollute CMAKE_CXX_FLAGS, which will interfere with CMake check system.
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:${INCLUDE_DEBUG_HELPERS}>)
+	if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+		add_definitions(-DDUMP_STREAM=actionstream)
+	else()
+		add_definitions(-DDUMP_STREAM=verbosestream)
+	endif()
+endif ()
+
 set(FMcommon_SRCS ${FMcommon_SRCS}
 	circuit.cpp
 	circuit_element.cpp
@@ -724,7 +734,6 @@ set(FMcommon_SRCS ${FMcommon_SRCS}
     content_abm_grow_tree.cpp
     fm_serverenvironment.cpp
 )
-#	FMColoredString.cpp
 
 
 set(common_SRCS
@@ -806,6 +815,10 @@ set(common_SRCS
 	${DEBUG_SRCS}
 )
 
+if(ANDROID)
+	set(common_SRCS ${common_SRCS} porting_android.cpp)
+endif()
+
 if(BUILD_UNITTESTS)
 	set(common_SRCS ${common_SRCS} ${UNITTEST_SRCS})
 endif()
@@ -836,13 +849,13 @@ endif()
 
 set(FMclient_SRCS
 	guiTextInputMenu.cpp
+	fm_farmesh.cpp
 )
 	#gui/intlGUIEditBox.cpp
 	#FMStaticText.cpp
 
 if (USE_TOUCHSCREENGUI)
 	add_definitions(-DHAVE_TOUCHSCREENGUI)
-	set(FMclient_SRCS ${FMclient_SRCS} touchscreengui.cpp)
 endif()
 
 # Client sources
@@ -911,7 +924,6 @@ if(BUILD_CLIENT)
 	include_directories(SYSTEM
 		${FREETYPE_INCLUDE_DIRS}
 		${SOUND_INCLUDE_DIRS}
-		${X11_INCLUDE_DIR}
 	)
 endif()
 
@@ -935,14 +947,17 @@ else()
 endif()
 
 if(BUILD_CLIENT)
-	add_executable(${PROJECT_NAME} ${client_SRCS} ${extra_windows_SRCS})
+	if(ANDROID)
+		add_library(${PROJECT_NAME} SHARED ${client_SRCS})
+	else()
+		add_executable(${PROJECT_NAME} ${client_SRCS} ${extra_windows_SRCS})
+	endif()
 	add_dependencies(${PROJECT_NAME} GenerateVersion)
 	target_link_libraries(
 		${PROJECT_NAME}
 		${ZLIB_LIBRARIES}
 		IrrlichtMt::IrrlichtMt
 		${ZSTD_LIBRARY}
-		${X11_LIBRARIES}
 		${SOUND_LIBRARIES}
 		${LUA_LIBRARY}
 		${GMP_LIBRARY}
@@ -1084,17 +1099,9 @@ if(BUILD_SERVER)
 	target_link_libraries(${PROJECT_NAME}server ${PLATFORM_LIBS})
 endif(BUILD_SERVER)
 
-# Blacklisted locales that don't work.
-# see issue #4638
-set(GETTEXT_BLACKLISTED_LOCALES
-	ar
-	dv
-	he
-	hi
-	kn
-	ms_Arab
-	th
-)
+# See issue #4638
+FILE(READ "${CMAKE_SOURCE_DIR}/src/unsupported_language_list.txt" GETTEXT_BLACKLISTED_LOCALES)
+STRING(REGEX REPLACE "\n" ";" GETTEXT_BLACKLISTED_LOCALES "${GETTEXT_BLACKLISTED_LOCALES}")
 
 option(APPLY_LOCALE_BLACKLIST "Use a blacklist to avoid known broken locales" TRUE)
 
@@ -1152,7 +1159,7 @@ endif()
 
 if(MSVC)
 	# Visual Studio
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /D WIN32_LEAN_AND_MEAN")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /D _WIN32_WINNT=0x0601 /D WIN32_LEAN_AND_MEAN")
 	# EHa enables SEH exceptions (used for catching segfaults)
 	set(CMAKE_CXX_FLAGS_RELEASE "/EHa /Ox /MD /GS- /Zi /fp:fast /D NDEBUG /D _HAS_ITERATOR_DEBUGGING=0")
 	if(CMAKE_SIZEOF_VOID_P EQUAL 4)
@@ -1191,7 +1198,7 @@ if(MSVC)
 else()
 	# GCC or compatible compilers such as Clang
 	set(WARNING_FLAGS "-Wall -Wextra")
-	set(WARNING_FLAGS "${WARNING_FLAGS} -Wno-unused-parameter -Wno-implicit-fallthrough")
+	set(WARNING_FLAGS "${WARNING_FLAGS} -Wno-unused-parameter")
 	if(WARN_ALL)
 		set(RELEASE_WARNING_FLAGS "${WARNING_FLAGS}")
 	else()
@@ -1200,7 +1207,7 @@ else()
 
 	if(MINGW)
 		set(OTHER_FLAGS "${OTHER_FLAGS} -mthreads -fexceptions")
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DWIN32_LEAN_AND_MEAN")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_WIN32_WINNT=0x0601 -DWIN32_LEAN_AND_MEAN")
 	endif()
 
 	# Use a safe subset of flags to speed up math calculations:
@@ -1312,7 +1319,7 @@ if(WIN32 AND NOT STATIC_BUILD)
 	endif()
 endif()
 
-if(BUILD_CLIENT)
+if(BUILD_CLIENT AND NOT ANDROID)
 	install(TARGETS ${PROJECT_NAME}
 		RUNTIME DESTINATION ${BINDIR}
 		LIBRARY DESTINATION ${BINDIR}
@@ -1338,13 +1345,16 @@ if(BUILD_CLIENT)
 
 	install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../fonts" DESTINATION "${SHAREDIR}"
 			FILES_MATCHING PATTERN "*.ttf" PATTERN "*.txt")
-endif(BUILD_CLIENT)
+endif()
 
 if(BUILD_SERVER)
 	install(TARGETS ${PROJECT_NAME}server DESTINATION ${BINDIR})
 endif()
 
-if (USE_GETTEXT)
+if (ANDROID)
+	# Android does this manually in app/build.gradle -> prepareAssets
+	# for now!
+elseif (USE_GETTEXT)
 	set(MO_FILES)
 
 	foreach(LOCALE ${GETTEXT_USED_LOCALES})

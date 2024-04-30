@@ -1,4 +1,8 @@
 /*
+Copyright (C) 2024 proller <proler@gmail.com>
+*/
+
+/*
 This file is part of Freeminer.
 
 Freeminer is free software: you can redistribute it and/or modify
@@ -164,7 +168,7 @@ bool Map::eraseBlock(v3pos_t blockpos)
 
 void Map::eraseBlock(const MapBlockP block)
 {
-	auto block_p = block->getPos();
+	const auto block_p = block->getPos();
 	(*m_blocks_delete)[block] = 1;
 	m_blocks.erase(block_p);
 #if ENABLE_THREADS && !HAVE_THREAD_LOCAL
@@ -173,7 +177,9 @@ void Map::eraseBlock(const MapBlockP block)
 	m_block_cache = nullptr;
 }
 
-MapNode Map::getNodeTry(const v3pos_t &p)
+MapNode dummy{CONTENT_IGNORE};
+
+MapNode &Map::getNodeTry(const v3pos_t &p)
 {
 #ifndef NDEBUG
 	ScopeProfiler sp(g_profiler, "Map: getNodeTry");
@@ -181,7 +187,7 @@ MapNode Map::getNodeTry(const v3pos_t &p)
 	auto blockpos = getNodeBlockPos(p);
 	auto block = getBlockNoCreateNoEx(blockpos, true);
 	if (!block)
-		return MapNode(CONTENT_IGNORE);
+		return dummy; // MapNode(CONTENT_IGNORE);
 	auto relpos = p - blockpos * MAP_BLOCKSIZE;
 	return block->getNodeTry(relpos);
 }
@@ -366,7 +372,7 @@ u32 Map::timerUpdate(float uptime, float unload_timeout, s32 max_loaded_blocks,
 	if (porting::getTimeMs() > m_blocks_delete_time) {
 		m_blocks_delete = (m_blocks_delete == &m_blocks_delete_1 ? &m_blocks_delete_2
 																 : &m_blocks_delete_1);
-		if (m_blocks_delete->size())
+		if (!m_blocks_delete->empty())
 			verbosestream << "Deleting blocks=" << m_blocks_delete->size() << std::endl;
 		for (auto &ir : *m_blocks_delete) {
 			delete ir.first;
@@ -415,9 +421,11 @@ u32 Map::timerUpdate(float uptime, float unload_timeout, s32 max_loaded_blocks,
 				continue;
 			}
 
+			/*
 			if (block->refGet()) {
 				continue;
 			}
+			*/
 
 			if (!block->isGenerated()) {
 				blocks_delete.emplace_back(block);
@@ -454,12 +462,6 @@ u32 Map::timerUpdate(float uptime, float unload_timeout, s32 max_loaded_blocks,
 
 					deleted_blocks_count++;
 				} else {
-
-#if BUILD_CLIENT
-					if (block->mesh_old)
-						block->mesh_old = nullptr;
-#endif
-
 					if (!block->m_uptime_timer_last) // not very good place, but minimum
 													 // modifications
 						block->m_uptime_timer_last = uptime - 0.1;

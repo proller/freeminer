@@ -30,6 +30,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "irr_aabb3d.h"
 #include "SColor.h"
 #include <matrix4.h>
+#include <cmath>
 
 //fm:
 #include <algorithm>
@@ -183,7 +184,7 @@ struct MeshGrid {
 	{
 		return v3s16(getMeshPos(p.X), getMeshPos(p.Y), getMeshPos(p.Z));
 	}
-	
+
 	/// @brief Returns true if p is an origin of a cell in the grid.
 	bool isMeshPos(v3s16 &p) const
 	{
@@ -204,30 +205,10 @@ struct MeshGrid {
  *
  *  \note This is also used in cases where degrees wrapped to the range [0, 360]
  *  is innapropriate (e.g. pitch needs negative values)
- *
- *  \internal functionally equivalent -- although precision may vary slightly --
- *  to fmodf((f), 360.0f) however empirical tests indicate that this approach is
- *  faster.
  */
 inline float modulo360f(float f)
 {
-	int sign;
-	int whole;
-	float fraction;
-
-	if (f < 0) {
-		f = -f;
-		sign = -1;
-	} else {
-		sign = 1;
-	}
-
-	whole = f;
-
-	fraction = f - whole;
-	whole %= 360;
-
-	return sign * (whole + fraction);
+	return fmodf(f, 360.0f);
 }
 
 
@@ -554,18 +535,20 @@ inline float cycle_shift(float value, float by = 0, float max = 1)
     return value + by;
 }
 
-inline int radius_box(const v3pos_t & a, const v3pos_t & b) {
-	return std::max(std::max(std::abs((float)a.X - b.X), std::abs((float)a.Y - b.Y)), std::abs((float)a.Z - b.Z));
+inline int radius_box(const v3pos_t &a, const v3pos_t &b)
+{
+	return std::max({std::abs((float)a.X - b.X), std::abs((float)a.Y - b.Y), std::abs((float)a.Z - b.Z)});
 }
 
 /*
 inline int radius_box(const v3bpos_t & a, const v3bpos_t & b) {
-	return std::max(std::max(std::abs((float)a.X - b.X), std::abs((float)a.Y - b.Y)), std::abs((float)a.Z - b.Z));
+	return std::max([std::abs((float)a.X - b.X), std::abs((float)a.Y - b.Y), std::abs((float)a.Z - b.Z)});
 }
 */
 
-inline int radius_box(const v3opos_t & a, const v3opos_t & b) {
-	return std::max(std::max(std::fabs(a.X - b.X), std::fabs(a.Y - b.Y)), std::fabs(a.Z - b.Z));
+inline int radius_box(const v3opos_t &a, const v3opos_t &b)
+{
+	return std::max({std::fabs(a.X - b.X), std::fabs(a.Y - b.Y), std::fabs(a.Z - b.Z)});
 }
 
 inline bool is_power_of_two(u32 n)

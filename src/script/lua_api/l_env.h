@@ -26,7 +26,38 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "serverenvironment.h"
 #include "raycast.h"
 
-class ModApiEnvMod : public ModApiBase {
+// base class containing helpers
+class ModApiEnvBase : public ModApiBase {
+protected:
+
+	static void collectNodeIds(lua_State *L, int idx,
+		const NodeDefManager *ndef, std::vector<content_t> &filter);
+
+	static void checkArea(v3s16 &minp, v3s16 &maxp);
+
+	// F must be (v3s16 pos) -> MapNode
+	template <typename F>
+	static int findNodeNear(lua_State *L, v3s16 pos, int radius,
+		const std::vector<content_t> &filter, int start_radius, F &&getNode);
+
+	// F must be (G callback) -> void
+	// with G being (v3s16 p, MapNode n) -> bool
+	// and behave like Map::forEachNodeInArea
+	template <typename F>
+	static int findNodesInArea(lua_State *L,  const NodeDefManager *ndef,
+		const std::vector<content_t> &filter, bool grouped, F &&iterate);
+
+	// F must be (v3s16 pos) -> MapNode
+	template <typename F>
+	static int findNodesInAreaUnderAir(lua_State *L, v3s16 minp, v3s16 maxp,
+		const std::vector<content_t> &filter, F &&getNode);
+
+	static const EnumString es_ClearObjectsMode[];
+	static const EnumString es_BlockStatusType[];
+
+};
+
+class ModApiEnv : public ModApiEnvBase {
 private:
 	// set_node(pos, node)
 	// pos = {x=num, y=num, z=num}
@@ -217,20 +248,12 @@ private:
 	// compare_block_status(nodepos)
 	static int l_compare_block_status(lua_State *L);
 
-	// Get a string translated server side
+	// get_translated_string(lang_code, string)
 	static int l_get_translated_string(lua_State * L);
-
-	/* Helpers */
-
-	static void collectNodeIds(lua_State *L, int idx,
-		const NodeDefManager *ndef, std::vector<content_t> &filter);
 
 public:
 	static void Initialize(lua_State *L, int top);
 	static void InitializeClient(lua_State *L, int top);
-
-	static const EnumString es_ClearObjectsMode[];
-	static const EnumString es_BlockStatusType[];
 };
 
 class LuaABM : public ActiveBlockModifier {
@@ -266,7 +289,7 @@ public:
 	{
 		return m_trigger_contents;
 	}
-	virtual const std::vector<std::string> getRequiredNeighbors(bool activate) const
+	virtual const std::vector<std::string> getRequiredNeighbors(uint8_t activate) const
 	{
 		return m_required_neighbors;
 	}
@@ -296,7 +319,7 @@ public:
 	}
 	virtual void trigger(ServerEnvironment *env, v3s16 p, MapNode n,
 			u32 active_object_count, u32 active_object_count_wider, 
-			v3pos_t neighbor_pos, bool activate);
+			v3pos_t neighbor_pos, uint8_t activate);
 };
 
 class LuaLBM : public LoadingBlockModifierDef

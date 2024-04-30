@@ -190,7 +190,7 @@ LOCAL_SRC_FILES +=                                \
 		jni/src/mapgen_math.cpp                   \
 		jni/src/mapgen_earth.cpp                   \
 		jni/src/threading/lock.cpp                \
-		jni/src/threading/thread_pool.cpp         \
+		jni/src/threading/thread_vector.cpp       \
 		jni/src/circuit.cpp                       \
 		jni/src/circuit_element_virtual.cpp       \
 		jni/src/circuit_element.cpp               \

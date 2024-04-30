@@ -114,7 +114,7 @@ bool MyEventReceiver::OnEvent(const SEvent &event)
 	if (isMenuActive()) {
 #ifdef HAVE_TOUCHSCREENGUI
 		if (m_touchscreengui) {
-			m_touchscreengui->Toggle(false);
+			m_touchscreengui->setVisible(false);
 		}
 #endif
 		return g_menumgr.preprocessEvent(event);
@@ -231,6 +231,9 @@ struct RandomInputHandlerSimData {
 void RandomInputHandler::step(float dtime)
 {
 	static RandomInputHandlerSimData rnd_data[] = {
+		{ "keymap_sneak", 0.0f, 45 },
+		{ "keymap_right", 0.0f, 10 },
+
 		{ "keymap_jump", 0.0f, 40 },
 		{ "keymap_aux1", 0.0f, 40 },
 		{ "keymap_forward", 0.0f, 40 },

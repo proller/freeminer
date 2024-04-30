@@ -21,15 +21,23 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 // Todo: pass disconnect to Connection (need to change api)
 
+/* 
+openssl genrsa > privkey.pem                             
+openssl req -new -x509 -key privkey.pem > fullchain.pem  
+*/
+
 #include "config.h"
 #if USE_WEBSOCKET || USE_WEBSOCKET_SCTP
 
 #include "wssocket.h"
 #include "constants.h"
-#include "iostream_debug_helpers.h"
+#include "filesys.h"
 #include "log.h"
+#include "serverlist.h"
+#include "settings.h"
 #include "util/numeric.h"
 #include "util/string.h"
+#include <string>
 
 #ifdef _WIN32
 // Without this some of the network functions are not found on mingw
@@ -55,10 +63,8 @@ typedef int socklen_t;
 #define SOCKET_ERR_STR(e) strerror(e)
 #endif
 
-#include <websocketpp/config/debug_asio_no_tls.hpp>
-
 // Custom logger
-#include <websocketpp/logger/syslog.hpp>
+//#include <websocketpp/logger/syslog.hpp>
 #include <websocketpp/server.hpp>
 
 #define WS_DEBUG 0
@@ -69,54 +75,6 @@ auto &cs = errorstream; // remove after debug
 auto &cs = tracestream; // remove after debug
 #endif
 
-////////////////////////////////////////////////////////////////////////////////
-///////////////// Custom Config for debugging custom policies //////////////////
-////////////////////////////////////////////////////////////////////////////////
-
-struct debug_custom : public websocketpp::config::debug_asio
-{
-	typedef debug_custom type;
-	typedef debug_asio base;
-
-	typedef base::concurrency_type concurrency_type;
-
-	typedef base::request_type request_type;
-	typedef base::response_type response_type;
-
-	typedef base::message_type message_type;
-	typedef base::con_msg_manager_type con_msg_manager_type;
-	typedef base::endpoint_msg_manager_type endpoint_msg_manager_type;
-
-	/// Custom Logging policies
-	/*typedef websocketpp::log::syslog<concurrency_type,
-		websocketpp::log::elevel> elog_type;
-	typedef websocketpp::log::syslog<concurrency_type,
-		websocketpp::log::alevel> alog_type;
-	*/
-	typedef base::alog_type alog_type;
-	typedef base::elog_type elog_type;
-
-	typedef base::rng_type rng_type;
-
-	struct transport_config : public base::transport_config
-	{
-		typedef type::concurrency_type concurrency_type;
-		typedef type::alog_type alog_type;
-		typedef type::elog_type elog_type;
-		typedef type::request_type request_type;
-		typedef type::response_type response_type;
-		typedef websocketpp::transport::asio::basic_socket::endpoint socket_type;
-	};
-
-	typedef websocketpp::transport::asio::endpoint<transport_config> transport_type;
-
-	static const long timeout_open_handshake = 0;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-typedef websocketpp::server<debug_custom> server;
-
 void WSSocket::on_http(const websocketpp::connection_hdl &hdl)
 {
 	ws_server_t::connection_ptr con = server.get_con_from_hdl(hdl);
@@ -125,24 +83,98 @@ void WSSocket::on_http(const websocketpp::connection_hdl &hdl)
 
 	std::stringstream ss;
 	ss << "got HTTP request with " << res.size() << " bytes of body data.";
-	cs << ss.str() << std::endl;
+	cs << ss.str() << '\n';
+	std::string http_root = porting::path_share + DIR_DELIM + "http_root" + DIR_DELIM;
+	g_settings->getNoEx("http_root", http_root);
 
+	if (con->get_request().get_method() == "GET") {
+
+		if (con->get_request().get_uri().find("..") != std::string::npos) {
+			con->set_status(websocketpp::http::status_code::bad_request);
+			return;
+		}
+
+		std::string path_serve;
+
+		auto uri = con->get_request().get_uri();
+		if (const auto f = uri.find('?'); f != std::string::npos) {
+			uri.resize(f);
+		}
+		if (uri == "/") {
+			uri = "index.html";
+		}
+
+		if (uri == "/favicon.ico") {
+			path_serve = porting::path_share + DIR_DELIM + "misc" + DIR_DELIM +
+						 PROJECT_NAME + ".ico";
+			con->append_header("Content-Type", "image/x-icon");
+		} else if (!uri.empty()) {
+			path_serve = http_root + uri;
+			if (uri.ends_with(".wasm")) {
+				con->append_header("Content-Type", "application/wasm");
+			} else if (uri.ends_with(".js")) {
+				con->append_header("Content-Type", "application/javascript");
+			}
+		}
+
+		std::string body;
+		if (uri == "/status.json") {
+			path_serve = {};
+			body = ServerList::last_status;
+			con->append_header("Content-Type", "application/json; charset=utf-8");
+		}
+
+		bool defered = false;
+		if (!path_serve.empty() && body.empty()) {
+			con->append_header("Access-Control-Allow-Origin", "*");
+			con->append_header("Cross-Origin-Embedder-Policy", "require-corp");
+			con->append_header("Cross-Origin-Opener-Policy", "same-origin");
+			con->defer_http_response();
+			defered = true;
+			std::ifstream t(path_serve);
+			std::stringstream buffer;
+			buffer << t.rdbuf();
+			body = buffer.str();
+		}
+
+		actionstream << con->get_request().get_version() << " "
+					 << con->get_request().get_method() << " "
+					 << con->get_request().get_uri()
+					 //<< " " << res.size()
+					 << " " << body.size() 
+					 << "\n";
+
+		if (!body.empty()) {
+			con->set_body(std::move(body));
+			con->set_status(websocketpp::http::status_code::ok);
+			websocketpp::lib::error_code ec;
+			if (defered) {
+				con->send_http_response(ec);
+				if (ec.value())
+					errorstream << "http send error:" << ec.category().name() << " "
+								<< ec.value() << " " << ec.message() << "\n";
+			}
+			// TODO: serve log here?
+			return;
+		}
+	}
+	// DUMP(con->get_request().get_method(), con->get_request().get_version(), con->get_request().get_uri(), con->get_request().get_headers(), res);
+
+	con->set_status(websocketpp::http::status_code::not_found);
 	con->set_body(ss.str());
-	con->set_status(websocketpp::http::status_code::ok);
 }
 
 void WSSocket::on_fail(const websocketpp::connection_hdl &hdl)
 {
 	ws_server_t::connection_ptr con = server.get_con_from_hdl(hdl);
 
-	cs << "Fail handler: " << con->get_ec() << " " << con->get_ec().message()
-	   << std::endl;
-	   //auto ec = websocketpp::get_transport_ec();
+	cs << "Fail handler: " << con->get_ec() << " " << con->get_ec().message() << '\n';
+	//auto ec = websocketpp::get_transport_ec();
 }
 
 void WSSocket::on_close(const websocketpp::connection_hdl &hdl)
 {
-	cs << "Close handler" << std::endl;
+	cs << "Close handler" << '\n';
 
 	// auto ws = hdls.at(hdl);
 
@@ -152,7 +184,7 @@ void WSSocket::on_close(const websocketpp::connection_hdl &hdl)
 
 void WSSocket::on_open(const websocketpp::connection_hdl &)
 {
-	cs << "open handler" << std::endl;
+	cs << "open handler" << '\n';
 }
 
 void WSSocket::on_message(const websocketpp::connection_hdl &hdl, const message_ptr &msg)
@@ -178,7 +210,7 @@ void WSSocket::on_message(const websocketpp::connection_hdl &hdl, const message_
 		// con->get_remote_endpoint());
 
 		cs << "first message from " << a << " : " << msg->get_payload().size() << " "
-		   << msg->get_payload() << std::endl;
+		   << msg->get_payload() << '\n';
 
 		hdls.emplace(hdl, a);
 
@@ -186,14 +218,13 @@ void WSSocket::on_message(const websocketpp::connection_hdl &hdl, const message_
 		server.send(hdl, "PROXY OK", msg->get_opcode(), ec);
 		if (ec) {
 			cs << "Echo failed because: "
-			   << "(" << ec.value() << ":" << ec.message() << ")" << std::endl;
+			   << "(" << ec.value() << ":" << ec.message() << ")" << '\n';
 		}
 		return;
 	}
 
 	std::string s{msg->get_payload().data(), msg->get_payload().size()};
-	cs << "A message: " << msg->get_payload().size() << " " << msg->get_payload()
-	   << std::endl;
+	cs << "A message: " << msg->get_payload().size() << " " << msg->get_payload() << '\n';
 
 	incoming_queue.emplace_back(queue_item{a, std::move(s)});
 }
@@ -222,6 +253,9 @@ bool WSSocket::init(bool ipv6, bool noExceptions)
 	server.set_close_handshake_timeout(timeouts);
 	server.set_pong_timeout(timeouts);
 	server.set_listen_backlog(100);
+	server.set_max_http_body_size(500000000);
+	server.set_max_message_size(500000000);
+
 	server.init_asio();
 
 	server.set_reuse_addr(true);
@@ -258,9 +292,13 @@ WSSocket::context_ptr WSSocket::on_tls_init(const websocketpp::connection_hdl & 
 		ctx->set_password_callback(std::bind([&]() {
 			return ""; /*GetSSLPassword();*/
 		}));
-		ctx->use_certificate_chain_file("fullchain.pem" /*GetSSLCertificateChain()*/);
-		ctx->use_private_key_file(
-				"privkey.pem" /*GetSSLPrivateKey()*/, asio::ssl::context::pem);
+
+		std::string chain = "fullchain.pem";
+		std::string key = "privkey.pem";
+		g_settings->getNoEx("https_chain", chain);
+		g_settings->getNoEx("https_key", key);
+		ctx->use_certificate_chain_file(chain /*GetSSLCertificateChain()*/);
+		ctx->use_private_key_file(key /*GetSSLPrivateKey()*/, asio::ssl::context::pem);
 		std::string ciphers; // = GetSSLCiphers();
 		if (ciphers.empty())
 			ciphers = "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:"
@@ -289,7 +327,7 @@ WSSocket::~WSSocket()
 	if (socket_enable_debug_output) {
 		tracestream << "WSSocket( "
 					//<< (int)m_handle
-					<< ")::~WSSocket()" << std::endl;
+					<< ")::~WSSocket()" << '\n';
 	}
 }
 
@@ -298,18 +336,18 @@ void WSSocket::Bind(Address addr)
 	if (socket_enable_debug_output) {
 		tracestream << "WSSocket(" //<< (int)m_handle
 					<< ")::Bind(): " << addr.serializeString() << ":" << addr.getPort()
-					<< std::endl;
+					<< '\n';
 	}
 	websocketpp::lib::error_code ec;
 	server.listen(addr.getPort(), ec);
 	if (ec) {
-		errorstream << "WS listen fail: " << ec.message() << std::endl;
+		errorstream << "WS listen fail: " << ec.message() << '\n';
 		return;
 	}
 	// Start the server accept loop
 	server.start_accept(ec);
 	if (ec) {
-		errorstream << "WS listen fail: " << ec.message() << std::endl;
+		errorstream << "WS listen fail: " << ec.message() << '\n';
 		return;
 	}
 
@@ -344,13 +382,12 @@ void WSSocket::Send(const Address &destination, const void *data, int size)
 		if (dumping_packet)
 			tracestream << " (DUMPED BY INTERNET_SIMULATOR)";
 
-		tracestream << std::endl;
+		tracestream << '\n';
 	}
 
 	if (dumping_packet) {
 		// Lol let's forget it
-		tracestream << "WSSocket::Send(): INTERNET_SIMULATOR: dumping packet."
-					<< std::endl;
+		tracestream << "WSSocket::Send(): INTERNET_SIMULATOR: dumping packet." << '\n';
 		return;
 	}
 
@@ -363,14 +400,13 @@ void WSSocket::Send(const Address &destination, const void *data, int size)
 		}
 	}
 	if (!found) {
-		verbosestream << " Send to " << destination << " not found in peers" << std::endl;
+		verbosestream << " Send to " << destination << " not found in peers" << '\n';
 		return;
 	}
 	websocketpp::lib::error_code ec;
 	server.send(hdl, data, size, websocketpp::frame::opcode::value::binary, ec);
 	if (ec.value()) {
-		verbosestream << "WS Send failed " << ec.value() << ":" << ec.message()
-					  << std::endl;
+		verbosestream << "WS Send failed " << ec.value() << ":" << ec.message() << '\n';
 		// Maybe delete peer here?
 	}
 	// Server.run_one();
@@ -387,7 +423,7 @@ int WSSocket::Receive(Address &sender, void *data, int size)
 	int received = item.data.size();
 	if (size < received) {
 		tracestream << "Packet size " << size << " larger than buffer " << received
-					<< std::endl;
+					<< '\n';
 		return -1;
 	}
 	sender = item.address;
@@ -411,7 +447,7 @@ int WSSocket::Receive(Address &sender, void *data, int size)
 		if (received > 20)
 			tracestream << "...";
 
-		tracestream << std::endl;
+		tracestream << '\n';
 	}
 
 	return received;

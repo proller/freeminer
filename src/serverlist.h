@@ -20,10 +20,10 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <iostream>
 #include "config.h"
 #include "content/mods.h"
-#include <json/json.h>
+#include "json-forwards.h"
+#include <iostream>
 
 #include "network/fm_lan.h"
 
@@ -31,7 +31,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace ServerList
 {
+
 	//fm:
+	extern std::string last_status;
 	extern lan_adv lan_adv_client;
 	void lan_get();
 	bool lan_fresh();

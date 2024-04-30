@@ -22,6 +22,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "server.h"
 #include <iostream>
+#include <memory>
 #include <queue>
 #include <algorithm>
 #include "irr_v3d.h"
@@ -77,6 +78,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "database/database-files.h"
 #include "database/database-dummy.h"
 #include "gameparams.h"
+#include "particles.h"
+#include "gettext.h"
 
 
 #if BUILD_CLIENT && !NDEBUG
@@ -89,7 +92,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "msgpack_fix.h"
 #include <chrono>
 #include <sys/types.h>
-#include "threading/thread_pool.h"
+#include "threading/thread_vector.h"
 #include "key_value_storage.h"
 #if !MINETEST_PROTO
 #include "network/fm_serverpacketsender.cpp"
@@ -136,6 +139,7 @@ void *ServerThread::run()
 	}
 
 	while (!stopRequested()) {
+		ScopeProfiler spm(g_profiler, "Server::RunStep() (max)", SPT_MAX);
 		try {
 			m_server->AsyncRunStep();
 
@@ -251,7 +255,7 @@ Server::Server(
 		Address bind_addr,
 		bool dedicated,
 		ChatInterface *iface,
-		std::string *on_shutdown_errmsg
+		std::string *shutdown_errmsg
 	):
 	m_bind_addr(bind_addr),
 	m_path_world(path_world),
@@ -270,7 +274,7 @@ Server::Server(
 	m_thread(new ServerThread(this)),
 	m_clients(m_con),
 	m_admin_chat(iface),
-	m_on_shutdown_errmsg(on_shutdown_errmsg),
+	m_shutdown_errmsg(shutdown_errmsg),
 	stat(path_world),
 	m_modchannel_mgr(new ModChannelMgr())
 {
@@ -381,14 +385,7 @@ Server::~Server()
 		try {
 			m_script->on_shutdown();
 		} catch (ModError &e) {
-			errorstream << "ModError: " << e.what() << std::endl;
-			if (m_on_shutdown_errmsg) {
-				if (m_on_shutdown_errmsg->empty()) {
-					*m_on_shutdown_errmsg = std::string("ModError: ") + e.what();
-				} else {
-					*m_on_shutdown_errmsg += std::string("\nModError: ") + e.what();
-				}
-			}
+			addShutdownError(e);
 		}
 
 		infostream << "Server: Saving environment metadata" << std::endl;
@@ -400,12 +397,6 @@ Server::~Server()
 		stop();
 		delete m_thread;
 	}
-
-	delete m_liquid;
-	delete m_sendblocks;
-	delete m_map_thread;
-	delete m_abmthread;
-	delete m_envthread;
 
 	// Write any changes before deletion.
 	if (m_mod_storage_database)
@@ -459,11 +450,12 @@ void Server::init()
 	m_emerge = new EmergeManager(this, m_metrics_backend.get());
 
 	if (m_more_threads) {
-		m_map_thread = new MapThread(this);
-		m_sendblocks = new SendBlocksThread(this);
-		m_liquid = new LiquidThread(this);
-		m_envthread = new EnvThread(this);
-		m_abmthread = new AbmThread(this);
+		m_map_thread =  std::make_unique<MapThread>(this);
+		m_sendblocks_thead = std::make_unique<SendBlocksThread>(this);
+		m_liquid = std::make_unique<LiquidThread>(this);
+		m_env_thread = std::make_unique<EnvThread>(this);
+		m_abm_thread = std::make_unique< AbmThread>(this);
+		m_abm_world_thread = std::make_unique<AbmWorldThread>(this);
 	}
 
 	// Create world if it doesn't exist
@@ -511,6 +503,8 @@ void Server::init()
 
 	m_gamespec.checkAndLog();
 	m_modmgr->loadMods(m_script);
+
+	m_script->saveGlobals();
 
 	// Read Textures and calculate sha1 sums
 	fillMediaCache();
@@ -608,28 +602,40 @@ void Server::start()
 	m_thread->restart();
 	if (m_map_thread)
 		m_map_thread->restart();
-	if (m_sendblocks)
-		m_sendblocks->restart();
+	if (m_sendblocks_thead)
+		m_sendblocks_thead->restart();
 	if (m_liquid)
 		m_liquid->restart();
-	if(m_envthread)
-		m_envthread->restart();
-	if(m_abmthread)
-		m_abmthread->restart();
+	if(m_env_thread)
+		m_env_thread->restart();
+	if(m_abm_thread)
+		m_abm_thread->restart();
+	if(m_abm_world_thread)
+		m_abm_world_thread->restart();
 
 	if (!m_simple_singleplayer_mode && g_settings->getBool("serverlist_lan"))
 		lan_adv_server.serve(m_bind_addr.getPort());
 
 	// ASCII art for the win!
-/*
-	std::cerr
-		<< "         __.               __.                 __.  " << std::endl
-		<< "  _____ |__| ____   _____ /  |_  _____  _____ /  |_ " << std::endl
-		<< " /     \\|  |/    \\ /  __ \\    _\\/  __ \\/   __>    _\\" << std::endl
-		<< "|  Y Y  \\  |   |  \\   ___/|  | |   ___/\\___  \\|  |  " << std::endl
-		<< "|__|_|  /  |___|  /\\______>  |  \\______>_____/|  |  " << std::endl
-		<< "      \\/ \\/     \\/         \\/                  \\/   " << std::endl;
-*/
+	const char *art[] = {
+		"         __.               __.                 __.  ",
+		"  _____ |__| ____   _____ /  |_  _____  _____ /  |_ ",
+		" /     \\|  |/    \\ /  __ \\    _\\/  __ \\/   __>    _\\",
+		"|  Y Y  \\  |   |  \\   ___/|  | |   ___/\\___  \\|  |  ",
+		"|__|_|  /  |___|  /\\______>  |  \\______>_____/|  |  ",
+		"      \\/ \\/     \\/         \\/                  \\/   "
+	};
+
+   if(0)
+	if (!m_admin_chat) {
+		// we're not printing to rawstream to avoid it showing up in the logs.
+		// however it would then mess up the ncurses terminal (m_admin_chat),
+		// so we skip it in that case.
+		for (auto line : art)
+			std::cerr << line << std::endl;
+	}
+
+
 
 	actionstream << "\033[1mfree\033[1;33mminer \033[1;36mv" << g_version_hash
 				 << "\033[0m \t"
@@ -672,6 +678,8 @@ void Server::start()
 #endif
 				 << std::endl;
 
+
+
 	actionstream << "World at [" << m_path_world << "]" << std::endl;
 	actionstream << "Server for gameid=\"" << m_gamespec.id
 			<< "\" mapgen=\"" << Mapgen::getMapgenName(m_emerge->mgparams->mgtype)
@@ -689,14 +697,16 @@ void Server::stop()
 
 	if (m_liquid)
 		m_liquid->stop();
-	if (m_sendblocks)
-		m_sendblocks->stop();
+	if (m_sendblocks_thead)
+		m_sendblocks_thead->stop();
 	if (m_map_thread)
 		m_map_thread->stop();
-	if(m_abmthread)
-		m_abmthread->stop();
-	if(m_envthread)
-		m_envthread->stop();
+	if(m_abm_thread)
+		m_abm_thread->stop();
+	if(m_abm_world_thread)
+		m_abm_world_thread->stop();
+	if(m_env_thread)
+		m_env_thread->stop();
 
 
 	m_thread->wait();
@@ -704,14 +714,16 @@ void Server::stop()
 
 	if (m_liquid)
 		m_liquid->join();
-	if (m_sendblocks)
-		m_sendblocks->join();
+	if (m_sendblocks_thead)
+		m_sendblocks_thead->join();
 	if (m_map_thread)
 		m_map_thread->join();
-	if(m_abmthread)
-		m_abmthread->join();
-	if(m_envthread)
-		m_envthread->join();
+	if(m_abm_thread)
+		m_abm_thread->join();
+	if(m_abm_world_thread)
+		m_abm_world_thread->join();
+	if(m_env_thread)
+		m_env_thread->join();
 
 	infostream<<"Server: Threads stopped"<<std::endl;
 }
@@ -750,7 +762,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 	}
 */
 
-	if (!m_sendblocks)
+	if (!m_sendblocks_thead)
 	{
 		TimeTaker timer_step("Server step: SendBlocks");
 		// Send blocks to clients
@@ -1269,11 +1281,11 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 	{
 		if (porting::g_sighup) {
 			porting::g_sighup = false;
-			if(!maintenance_status) {
+			if (!maintenance_status) {
 				maintenance_status = 1;
 				maintenance_start();
 				maintenance_status = 2;
-			} else if(maintenance_status == 2) {
+			} else if (maintenance_status == 2) {
 				maintenance_status = 3;
 				maintenance_end();
 				maintenance_status = 0;
@@ -1282,7 +1294,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 		if (porting::g_siginfo) {
 			// todo: add here more info
 			porting::g_siginfo = false;
-			infostream<<"uptime="<< (int)m_uptime_counter->get()<<std::endl;
+			infostream << "uptime=" << (int)m_uptime_counter->get() << '\n';
 			m_clients.UpdatePlayerList(); //print list
 			g_profiler->print(infostream);
 			g_profiler->clear();
@@ -1327,6 +1339,8 @@ int Server::save(float dtime, float dedicated_server_step, bool breakable) {
 			m_env->saveMeta();
 
 			stat.save();
+			m_env->blocks_with_abm.save();
+
 		}
 		save_break:;
 
@@ -1563,6 +1577,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 
 			errorstream << "Got packet command: " << command << " for peer id "
 					<< peer_id << " but client isn't active yet. Dropping packet "
+					<< "state=" << m_clients.getClientState(peer_id)
 					<< std::endl;
 			return;
 		}
@@ -1989,8 +2004,9 @@ void Server::SendAddParticleSpawner(session_t peer_id, u16 protocol_version,
 		) / 4.0f * BS;
 		const float radius_sq = radius * radius;
 		/* Don't send short-lived spawners to distant players.
-		 * This could be replaced with proper tracking at some point. */
-		const bool distance_check = !attached_id && p.time <= 1.0f;
+		 * This could be replaced with proper tracking at some point.
+		 * A lifetime of 0 means that the spawner exists forever.*/
+		const bool distance_check = !attached_id && p.time <= 1.0f && p.time != 0.0f;
 
 		for (const session_t client_id : clients) {
 			RemotePlayer *player = m_env->getPlayer(client_id);
@@ -2208,6 +2224,7 @@ void Server::SendSetSky(session_t peer_id, const SkyboxParams &params)
 		}
 
 		pkt << params.body_orbit_tilt;
+		pkt << params.fog_distance << params.fog_start;
 	}
 
 	Send(&pkt);
@@ -2347,10 +2364,10 @@ void Server::SendLocalPlayerAnimations(session_t peer_id, v2s32 animation_frames
 	Send(&pkt);
 }
 
-void Server::SendEyeOffset(session_t peer_id, v3f first, v3f third)
+void Server::SendEyeOffset(session_t peer_id, v3f first, v3f third, v3f third_front)
 {
 	NetworkPacket pkt(TOCLIENT_EYE_OFFSET, 0, peer_id);
-	pkt << first << third;
+	pkt << first << third << third_front;
 	Send(&pkt);
 }
 
@@ -2561,12 +2578,19 @@ void Server::SendPlayerSpeed(session_t peer_id, const v3f &added_vel)
 
 inline s32 Server::nextSoundId()
 {
-	s32 ret = m_next_sound_id;
-	if (m_next_sound_id == INT32_MAX)
-		m_next_sound_id = 0; // signed overflow is undefined
-	else
-		m_next_sound_id++;
-	return ret;
+	s32 free_id = m_playing_sounds_id_last_used;
+	do {
+		if (free_id == INT32_MAX)
+			free_id = 0; // signed overflow is undefined
+		else
+			free_id++;
+
+		if (free_id == m_playing_sounds_id_last_used)
+			return 0;
+	} while (free_id == 0 || m_playing_sounds.find(free_id) != m_playing_sounds.end());
+
+	m_playing_sounds_id_last_used = free_id;
+	return free_id;
 }
 
 s32 Server::playSound(ServerPlayingSound &params, bool ephemeral)
@@ -2622,13 +2646,15 @@ s32 Server::playSound(ServerPlayingSound &params, bool ephemeral)
 
 	// old clients will still use this, so pick a reserved ID (-1)
 	const s32 id = ephemeral ? -1 : nextSoundId();
+	if (id == 0)
+		return 0;
 
 	float gain = params.gain * params.spec.gain;
 	NetworkPacket pkt(TOCLIENT_PLAY_SOUND, 0);
 	pkt << id << params.spec.name << gain
 			<< (u8) params.type << pos << params.object
 			<< params.spec.loop << params.spec.fade << params.spec.pitch
-			<< ephemeral;
+			<< ephemeral << params.spec.start_time;
 
 	bool as_reliable = !ephemeral;
 
@@ -2931,7 +2957,7 @@ size_t Server::addMediaFile(const std::string &filename,
 {
 	// If name contains illegal characters, ignore the file
 	if (!string_allowed(filename, TEXTURENAME_ALLOWED_CHARS)) {
-		infostream << "Server: ignoring illegal file name: \""
+		warningstream << "Server: ignoring file as it has disallowed characters: \""
 				<< filename << "\"" << std::endl;
 		return false;
 	}
@@ -2963,6 +2989,13 @@ size_t Server::addMediaFile(const std::string &filename,
 		errorstream << "Server::addMediaFile(): Empty file \""
 				<< filepath << "\"" << std::endl;
 		return false;
+	}
+
+	const char *deprecated_ext[] = { ".bmp", nullptr };
+	if (!removeStringEnd(filename, deprecated_ext).empty())
+	{
+		warningstream << "Media file \"" << filename << "\" is using a"
+			" deprecated format and will stop working in the future." << std::endl;
 	}
 
 	class SHA1 sha1;
@@ -3280,7 +3313,7 @@ void Server::RespawnPlayer(session_t peer_id)
 	bool repositioned = m_script->on_respawnplayer(playersao);
 	if (!repositioned) {
 		// setPos will send the new position to client
-		playersao->setPos(findSpawnPos());
+		playersao->setPos(findSpawnPos(playersao->getPlayer()->getName()));
 	}
 
 	playersao->m_ms_from_last_respawn = 0;
@@ -3851,12 +3884,13 @@ void Server::setLocalPlayerAnimations(RemotePlayer *player,
 	SendLocalPlayerAnimations(player->getPeerId(), animation_frames, frame_speed);
 }
 
-void Server::setPlayerEyeOffset(RemotePlayer *player, const v3f &first, const v3f &third)
+void Server::setPlayerEyeOffset(RemotePlayer *player, const v3f &first, const v3f &third, const v3f &third_front)
 {
 	sanity_check(player);
 	player->eye_offset_first = first;
 	player->eye_offset_third = third;
-	SendEyeOffset(player->getPeerId(), first, third);
+	player->eye_offset_third_front = third_front;
+	SendEyeOffset(player->getPeerId(), first, third, third_front);
 }
 
 void Server::setSky(RemotePlayer *player, const SkyboxParams &params)
@@ -4062,7 +4096,7 @@ bool Server::dynamicAddMedia(std::string filepath,
 			if (client->getState() < CS_Active)
 				continue;
 
-			const ushort proto_ver = client->net_proto_version;
+			const unsigned short proto_ver = client->net_proto_version;
 			if (proto_ver < 39)
 				continue;
 
@@ -4115,7 +4149,7 @@ bool Server::rollbackRevertActions(const std::list<RollbackAction> &actions,
 	// Fail if no actions to handle
 	if (actions.empty()) {
 		assert(log);
-		log->push_back("Nothing to do.");
+		log->emplace_back("Nothing to do.");
 		return false;
 	}
 
@@ -4200,8 +4234,25 @@ std::string Server::getBuiltinLuaPath()
 	return porting::path_share + DIR_DELIM + "builtin";
 }
 
+// Not thread-safe.
+void Server::addShutdownError(const ModError &e)
+{
+	// DO NOT TRANSLATE the `ModError`, it's used by `ui.lua`
+	std::string msg = fmtgettext("%s while shutting down: ", "ModError") +
+			e.what() + strgettext("\nCheck debug.txt for details.");
+	errorstream << msg << std::endl;
+
+	if (m_shutdown_errmsg) {
+		if (m_shutdown_errmsg->empty()) {
+			*m_shutdown_errmsg = msg;
+		} else {
+			*m_shutdown_errmsg += "\n\n" + msg;
+		}
+	}
+}
+
 #if 1
-v3f Server::findSpawnPos()
+v3f Server::findSpawnPos(const std::string &player_name)
 {
 	ServerMap &map = m_env->getServerMap();
 	v3f nodeposf;
@@ -4209,6 +4260,8 @@ v3f Server::findSpawnPos()
 	pos_t find = 0;
 	g_settings->getS16NoEx("static_spawnpoint_find", find);
 	if (g_settings->getV3FNoEx("static_spawnpoint", nodeposf) && !find) {
+		return nodeposf * BS;
+	} else if (g_settings->getV3FNoEx("static_spawnpoint_" + player_name, nodeposf) && !find) {
 		return nodeposf * BS;
 	}
 

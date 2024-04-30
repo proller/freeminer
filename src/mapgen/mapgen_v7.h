@@ -74,10 +74,6 @@ struct MapgenV7Params : public MapgenParams {
 	NoiseParams np_dungeons;
 
 	//freeminer: ===
-	//s16 float_islands;
-	//NoiseParams np_float_islands1;
-	//NoiseParams np_float_islands2;
-	//NoiseParams np_float_islands3;
 	NoiseParams np_layers;
 	NoiseParams np_cave_indev;
 	Json::Value paramsj;
@@ -112,6 +108,15 @@ public:
 
 	virtual int generateTerrain();
 
+
+	//freeminer:
+	bool visible(const v3pos_t &p)
+	{
+		// TODO: add more height features
+		return baseTerrainLevelAtPoint(p.X, p.Z) >= p.Y;
+	}
+
+
 private:
 	s16 mount_zero_level;
 	s16 floatland_ymin;
@@ -134,7 +139,6 @@ private:
 
 	//freeminer:
 	MapgenV7Params *sp;
-	//s16 float_islands;
 	//virtual void generateExperimental();
 	//=========
 

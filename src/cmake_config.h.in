@@ -13,18 +13,17 @@
 #cmakedefine01 MINETEST_PROTO
 #cmakedefine01 MINETEST_TRANSPORT
 #cmakedefine01 USE_ENET
-#cmakedefine01 STATIC_BUILD
-#cmakedefine01 USE_ICONV
 #cmakedefine01 USE_SCTP
 #cmakedefine01 USE_WEBSOCKET
 #cmakedefine01 USE_WEBSOCKET_SCTP
 #cmakedefine01 USE_MULTI
+#cmakedefine01 STATIC_BUILD
+#cmakedefine01 USE_ICONV
 #cmakedefine01 USE_UNWIND
 #cmakedefine01 LOCK_PROFILE
 #cmakedefine01 BUILD_CLIENT
 #cmakedefine01 BUILD_SERVER
 #cmakedefine01 EXCEPTION_DEBUG
-#define USE_ASYNC_DRAWLIST_UPDATE 1
 
 
 #define PROJECT_NAME "@PROJECT_NAME@"
@@ -53,8 +52,8 @@
 #cmakedefine01 USE_PROMETHEUS
 #cmakedefine01 USE_SPATIAL
 #cmakedefine01 USE_SYSTEM_GMP
+#cmakedefine01 USE_SYSTEM_JSONCPP
 #cmakedefine01 USE_REDIS
-#cmakedefine01 ENABLE_GLES
 #cmakedefine01 HAVE_ENDIAN_H
 #cmakedefine01 CURSES_HAVE_CURSES_H
 #cmakedefine01 CURSES_HAVE_NCURSES_H

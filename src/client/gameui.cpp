@@ -135,9 +135,11 @@ void GameUI::update(const RunStats &stats, Client *client, MapDrawControl *draw_
 			<< std::setprecision(2)
 ;
 
+		if (draw_control->lodmesh)
+			os << ", lod = " << draw_control->lodmesh;
 		if (draw_control->farmesh)
-			os << ", farmesh = " << draw_control->farmesh << ":"
-			   << draw_control->farmesh_step;
+			os << ", farmesh = " << draw_control->farmesh;
+			   
 #if MINETEST_TRANSPORT
 		os 
 
@@ -255,9 +257,7 @@ void GameUI::showMinimap(bool show)
 
 void GameUI::showTranslatedStatusText(const char *str)
 {
-	const wchar_t *wmsg = wgettext(str);
-	showStatusText(wmsg);
-	delete[] wmsg;
+	showStatusText(wstrgettext(str));
 }
 
 void GameUI::setChatText(const EnrichedString &chat_text, u32 recent_chat_count)
@@ -297,10 +297,11 @@ void GameUI::updateProfiler()
 		os << "   Profiler page " << (int)m_profiler_current_page <<
 				", elapsed: " << g_profiler->getElapsedMs() << " ms)" << std::endl;
 
-		int lines = g_profiler->print(os, m_profiler_current_page, m_profiler_max_page);
-		++lines;
+		g_profiler->print(os, m_profiler_current_page, m_profiler_max_page);
 
-		EnrichedString str(utf8_to_wide(os.str()));
+		auto & str = str_profiler;
+
+		str = (utf8_to_wide(os.str()));
 		str.setBackground(video::SColor(120, 0, 0, 0));
 		setStaticText(m_guitext_profiler, str);
 

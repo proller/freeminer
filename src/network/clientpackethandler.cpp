@@ -18,6 +18,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 */
 
 #include "config.h"
+#include "server.h"
 
 #if !MINETEST_PROTO
 #include "network/fm_clientpackethandler.cpp"
@@ -29,6 +30,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "util/base64.h"
 #include "client/camera.h"
+#include "client/mesh_generator_thread.h"
 #include "chatmessage.h"
 #include "client/clientmedia.h"
 #include "log.h"
@@ -38,12 +40,13 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "modchannels.h"
 #include "nodedef.h"
 #include "serialization.h"
-#include "server.h"
 #include "util/strfnd.h"
 #include "client/clientevent.h"
 #include "client/sound.h"
+#include "client/localplayer.h"
 #include "network/clientopcodes.h"
 #include "network/connection.h"
+#include "network/networkpacket.h"
 #include "script/scripting_client.h"
 #include "util/serialize.h"
 #include "util/srp.h"
@@ -51,6 +54,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "tileanimation.h"
 #include "gettext.h"
 #include "skyparams.h"
+#include "particles.h"
 #include <memory>
 
 void Client::handleCommand_Deprecated(NetworkPacket* pkt)
@@ -692,7 +696,7 @@ void Client::handleCommand_AnnounceMedia(NetworkPacket* pkt)
 
 	// Mesh update thread must be stopped while
 	// updating content definitions
-	sanity_check(!m_mesh_update_manager.isRunning());
+	sanity_check(!m_mesh_update_manager->isRunning());
 
 	for (u16 i = 0; i < num_files; i++) {
 		std::string name, sha1_base64;
@@ -752,7 +756,7 @@ void Client::handleCommand_Media(NetworkPacket* pkt)
 	if (init_phase) {
 		// Mesh update thread must be stopped while
 		// updating content definitions
-		sanity_check(!m_mesh_update_manager.isRunning());
+		sanity_check(!m_mesh_update_manager->isRunning());
 	}
 
 	for (u32 i = 0; i < num_files; i++) {
@@ -789,7 +793,7 @@ void Client::handleCommand_NodeDef(NetworkPacket* pkt)
 
 	// Mesh update thread must be stopped while
 	// updating content definitions
-	sanity_check(!m_mesh_update_manager.isRunning());
+	sanity_check(!m_mesh_update_manager->isRunning());
 
 	// Decompress node definitions
 	std::istringstream tmp_is(pkt->readLongString(), std::ios::binary);
@@ -808,7 +812,7 @@ void Client::handleCommand_ItemDef(NetworkPacket* pkt)
 
 	// Mesh update thread must be stopped while
 	// updating content definitions
-	sanity_check(!m_mesh_update_manager.isRunning());
+	sanity_check(!m_mesh_update_manager->isRunning());
 
 	// Decompress item definitions
 	std::istringstream tmp_is(pkt->readLongString(), std::ios::binary);
@@ -823,57 +827,74 @@ void Client::handleCommand_ItemDef(NetworkPacket* pkt)
 void Client::handleCommand_PlaySound(NetworkPacket* pkt)
 {
 	/*
-		[0] u32 server_id
+		[0] s32 server_id
 		[4] u16 name length
 		[6] char name[len]
 		[ 6 + len] f32 gain
-		[10 + len] u8 type
-		[11 + len] (f32 * 3) pos
+		[10 + len] u8 type (SoundLocation)
+		[11 + len] v3f pos (in BS-space)
 		[23 + len] u16 object_id
 		[25 + len] bool loop
 		[26 + len] f32 fade
 		[30 + len] f32 pitch
 		[34 + len] bool ephemeral
+		[35 + len] f32 start_time (in seconds)
 	*/
 
 	s32 server_id;
 
-	SimpleSoundSpec spec;
-	SoundLocation type; // 0=local, 1=positional, 2=object
+	SoundSpec spec;
+	SoundLocation type;
 	v3f pos;
 	u16 object_id;
 	bool ephemeral = false;
 
 	*pkt >> server_id >> spec.name >> spec.gain >> (u8 &)type >> pos >> object_id >> spec.loop;
+	pos *= 1.0f/BS;
 
 	try {
 		*pkt >> spec.fade;
 		*pkt >> spec.pitch;
 		*pkt >> ephemeral;
+		*pkt >> spec.start_time;
 	} catch (PacketError &e) {};
 
+	// Generate a new id
+	sound_handle_t client_id = (ephemeral && object_id == 0) ? 0 : m_sound->allocateId(2);
+
 	// Start playing
-	int client_id = -1;
 	switch(type) {
 	case SoundLocation::Local:
-		client_id = m_sound->playSound(spec);
+		m_sound->playSound(client_id, spec);
 		break;
 	case SoundLocation::Position:
-		client_id = m_sound->playSoundAt(spec, pos);
+		m_sound->playSoundAt(client_id, spec, pos, v3f(0.0f));
 		break;
-	case SoundLocation::Object:
-		{
-			auto cao = m_env.getActiveObject(object_id);
-			if (cao)
-				pos = cao->getPosition();
-			client_id = m_sound->playSoundAt(spec, pos);
-			break;
+	case SoundLocation::Object: {
+		auto cao = m_env.getActiveObject(object_id);
+		v3f vel(0.0f);
+		if (cao) {
+			pos = cao->getPosition() * (1.0f/BS);
+			vel = cao->getVelocity() * (1.0f/BS);
 		}
+		m_sound->playSoundAt(client_id, spec, pos, vel);
+		break;
+	}
+	default:
+		// Unknown SoundLocation, instantly remove sound
+		if (client_id != 0)
+			m_sound->freeId(client_id, 2);
+		if (!ephemeral)
+			sendRemovedSounds({server_id});
+		return;
 	}
 
-	if (client_id != -1) {
-		// for ephemeral sounds, server_id is not meaningful
-		if (!ephemeral) {
+	if (client_id != 0) {
+		// Note: m_sounds_client_to_server takes 1 ownership
+		// For ephemeral sounds, server_id is not meaningful
+		if (ephemeral) {
+			m_sounds_client_to_server[client_id] = -1;
+		} else {
 			m_sounds_server_to_client[server_id] = client_id;
 			m_sounds_client_to_server[client_id] = server_id;
 		}
@@ -1399,9 +1420,13 @@ void Client::handleCommand_HudSetSky(NetworkPacket* pkt)
 				>> skybox.sky_color.indoors;
 		}
 
-		try {
+		if (pkt->getRemainingBytes() >= 4) {
 			*pkt >> skybox.body_orbit_tilt;
-		} catch (PacketError &e) {}
+		}
+
+		if (pkt->getRemainingBytes() >= 6) {
+			*pkt >> skybox.fog_distance >> skybox.fog_start;
+		}
 
 		ClientEvent *event = new ClientEvent();
 		event->type = CE_SET_SKY;
@@ -1508,7 +1533,7 @@ void Client::handleCommand_LocalPlayerAnimations(NetworkPacket* pkt)
 	*pkt >> player->local_animations[3];
 	*pkt >> player->local_animation_speed;
 
-	player->last_animation = -1;
+	player->last_animation = LocalPlayerAnimation::NO_ANIM;
 }
 
 void Client::handleCommand_EyeOffset(NetworkPacket* pkt)
@@ -1517,6 +1542,11 @@ void Client::handleCommand_EyeOffset(NetworkPacket* pkt)
 	assert(player != NULL);
 
 	*pkt >> player->eye_offset_first >> player->eye_offset_third;
+	try {
+		*pkt >> player->eye_offset_third_front;
+	} catch (PacketError &e) {
+		player->eye_offset_third_front = player->eye_offset_third;
+	};
 }
 
 void Client::handleCommand_UpdatePlayerList(NetworkPacket* pkt)
@@ -1817,11 +1847,13 @@ void Client::handleCommand_FreeminerInit(NetworkPacket* pkt) {
 		conf.set("gameid", gameid);
 		conf.updateConfigFile(conf_path.c_str());
 	}
-/* TODO
-	if (g_settings->getS32("farmesh5") && !m_localserver) {
+
+	const thread_local static auto farmesh_range = g_settings->getS32("farmesh");
+
+	if (farmesh_range && !m_localserver) {
 		m_localserver = new Server("farmesh", findSubgame("devtest"), false, {}, true);
 	}
-*/
+
 	{
 		Settings settings;
 		packet[TOCLIENT_INIT_MAP_PARAMS].convert(settings);
@@ -1842,20 +1874,21 @@ void Client::handleCommand_FreeminerInit(NetworkPacket* pkt) {
 		params->MapgenParams::readParams(&settings);
 		params->readParams(&settings);
 
-/*
-		if (g_settings->getS32("farmesh5")) {
+		if (!m_simple_singleplayer_mode && farmesh_range) {
+			const auto num_emerge_threads = g_settings->get("num_emerge_threads");
+			g_settings->set("num_emerge_threads", "1");
 			m_emerge = new EmergeManager(
 					m_localserver, m_localserver->m_metrics_backend.get());
 			m_emerge->initMapgens(params);
+			g_settings->set("num_emerge_threads", num_emerge_threads);
 		}
-*/
 
 		if (!m_world_path.empty()) {
 			m_settings_mgr =
 					new MapSettingsManager(m_world_path + DIR_DELIM + "map_meta");
 			m_settings_mgr->mapgen_params = params;
 			m_settings_mgr->saveMapMeta();
-		} else {
+		} else if (!m_emerge) {
 			delete params;
 		}
 	}

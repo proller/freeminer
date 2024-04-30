@@ -22,6 +22,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include "fm_nodecontainer.h"
 #include "irrlichttypes.h"
 #include "irr_v3d.h"
 #include <iostream>
@@ -30,7 +31,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mapnode.h"
 #include <set>
 #include <list>
-#include "util/basic_macros.h"
+#include "irrlicht_changes/printing.h"
 
 class NodeDefManager;
 
@@ -187,6 +188,31 @@ public:
 	}
 
 	/*
+		Returns the intersection of this area and `a`.
+	*/
+	VoxelArea intersect(const VoxelArea &a) const
+	{
+		// This is an example of an operation that would be simpler with
+		// non-inclusive edges, but oh well.
+		VoxelArea ret;
+
+		if (a.MaxEdge.X < MinEdge.X || a.MinEdge.X > MaxEdge.X)
+			return VoxelArea();
+		if (a.MaxEdge.Y < MinEdge.Y || a.MinEdge.Y > MaxEdge.Y)
+			return VoxelArea();
+		if (a.MaxEdge.Z < MinEdge.Z || a.MinEdge.Z > MaxEdge.Z)
+			return VoxelArea();
+		ret.MinEdge.X = std::max(a.MinEdge.X, MinEdge.X);
+		ret.MaxEdge.X = std::min(a.MaxEdge.X, MaxEdge.X);
+		ret.MinEdge.Y = std::max(a.MinEdge.Y, MinEdge.Y);
+		ret.MaxEdge.Y = std::min(a.MaxEdge.Y, MaxEdge.Y);
+		ret.MinEdge.Z = std::max(a.MinEdge.Z, MinEdge.Z);
+		ret.MaxEdge.Z = std::min(a.MaxEdge.Z, MaxEdge.Z);
+
+		return ret;
+	}
+
+	/*
 		Returns 0-6 non-overlapping areas that can be added to
 		a to make up this area.
 
@@ -317,7 +343,7 @@ public:
 	*/
 	void print(std::ostream &o) const
 	{
-		o << PP(MinEdge) << PP(MaxEdge) << "="
+		o << MinEdge << MaxEdge << "="
 			<< m_cache_extent.X << "x" << m_cache_extent.Y << "x" << m_cache_extent.Z
 			<< "=" << getVolume();
 	}
@@ -355,7 +381,7 @@ enum VoxelPrintMode
 	VOXELPRINT_LIGHT_DAY,
 };
 
-class VoxelManipulator
+class VoxelManipulator : public NodeContainer
 {
 public:
 	VoxelManipulator() = default;

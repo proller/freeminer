@@ -19,6 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "mesh_generator_thread.h"
 #include "client/clientmap.h"
+#include "client/fm_far_calc.h"
 #include "client/mapblock_mesh.h"
 #include "settings.h"
 #include "profiler.h"
@@ -193,9 +194,8 @@ void MeshUpdateQueue::done(v3s16 pos)
 void MeshUpdateQueue::fillDataFromMapBlocks(QueuedMeshUpdate *q)
 {
 
-    const auto step = q->step ? q->step : getFarmeshStep(m_client->m_env.getClientMap().getControl(), getNodeBlockPos(floatToInt(m_client->m_env.getLocalPlayer()->getPosition(), BS)), q->p);
-
-    MeshMakeData * data = new MeshMakeData(m_client, m_cache_enable_shaders, step);
+    const auto lod_step = getLodStep(m_client->m_env.getClientMap().getControl(), getNodeBlockPos(floatToInt(m_client->m_env.getLocalPlayer()->getPosition(), BS)), q->p);
+    MeshMakeData * data = new MeshMakeData(m_client, m_cache_enable_shaders, lod_step, 0);
 	q->data = data;
 
 	data->fillBlockDataBegin(q->p);
@@ -217,10 +217,7 @@ void MeshUpdateQueue::fillDataFromMapBlocks(QueuedMeshUpdate *q)
 	data->setCrack(q->crack_level, q->crack_pos);
 	data->setSmoothLighting(m_cache_smooth_lighting);
 
-    data->step = step;
 	data->range = getNodeBlockPos(floatToInt(m_client->m_env.getLocalPlayer()->getPosition(), BS)).getDistanceFrom(q->p);
-	if (q->step)
-		data->no_draw = true;
 }
 
 /*
@@ -243,6 +240,9 @@ void MeshUpdateWorkerThread::doUpdate()
 		ScopeProfiler sp(g_profiler, "Client: Mesh making (sum)");
 
 		MapBlock::mesh_type mesh_new = std::make_shared<MapBlockMesh>(q->data, *m_camera_offset);
+
+
+
 		MeshUpdateResult r;
 		r.p = q->p;
 		r.mesh = mesh_new;
@@ -269,7 +269,7 @@ MeshUpdateManager::MeshUpdateManager(Client *client):
 	// Automatically use 33% of the system cores for mesh generation, max 4
 	if (number_of_threads == 0)
 		number_of_threads = MYMIN(8, Thread::getNumberOfProcessors() / 3);
-	
+
 	// use at least one thread
 	number_of_threads = MYMAX(1, number_of_threads);
 	infostream << "MeshUpdateManager: using " << number_of_threads << " threads" << std::endl;

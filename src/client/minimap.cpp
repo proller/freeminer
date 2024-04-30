@@ -21,6 +21,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <cmath>
 #include "client.h"
 #include "clientmap.h"
+#include "fm_nodecontainer.h"
 #include "irr_v3d.h"
 #include "settings.h"
 #include "shader.h"
@@ -270,11 +271,6 @@ Minimap::~Minimap()
 	driver->removeTexture(data->texture);
 	if (data->heightmap_texture)
 	driver->removeTexture(data->heightmap_texture);
-	if (data->minimap_overlay_round)
-	driver->removeTexture(data->minimap_overlay_round);
-	if (data->minimap_overlay_square)
-	driver->removeTexture(data->minimap_overlay_square);
-	driver->removeTexture(data->object_marker_red);
 
 	for (MinimapMarker *m : m_markers)
 		delete m;
@@ -636,10 +632,13 @@ void Minimap::drawMinimap(core::rect<s32> rect) {
 	matrix.makeIdentity();
 
 	video::SMaterial &material = m_meshbuffer->getMaterial();
-	material.setFlag(video::EMF_TRILINEAR_FILTER, true);
+	material.forEachTexture([] (auto &tex) {
+		tex.MinFilter = video::ETMINF_LINEAR_MIPMAP_LINEAR;
+		tex.MagFilter = video::ETMAGF_LINEAR;
+	});
 	material.Lighting = false;
-	material.TextureLayer[0].Texture = minimap_texture;
-	material.TextureLayer[1].Texture = data->heightmap_texture;
+	material.TextureLayers[0].Texture = minimap_texture;
+	material.TextureLayers[1].Texture = data->heightmap_texture;
 
 	if (m_enable_shaders && data->mode.type == MINIMAP_TYPE_SURFACE) {
 		u16 sid = m_shdrsrc->getShader("minimap_shader", TILE_MATERIAL_ALPHA);
@@ -659,7 +658,7 @@ void Minimap::drawMinimap(core::rect<s32> rect) {
 	// Draw overlay
 	video::ITexture *minimap_overlay = data->minimap_shape_round ?
 		data->minimap_overlay_round : data->minimap_overlay_square;
-	material.TextureLayer[0].Texture = minimap_overlay;
+	material.TextureLayers[0].Texture = minimap_overlay;
 	material.MaterialType = video::EMT_TRANSPARENT_ALPHA_CHANNEL;
 	driver->setMaterial(material);
 	driver->drawMeshBuffer(m_meshbuffer);
@@ -671,7 +670,7 @@ void Minimap::drawMinimap(core::rect<s32> rect) {
 		matrix.setRotationDegrees(core::vector3df(0, 0, m_angle));
 	}
 
-	material.TextureLayer[0].Texture = data->player_marker;
+	material.TextureLayers[0].Texture = data->player_marker;
 	driver->setTransform(video::ETS_WORLD, matrix);
 	driver->setMaterial(material);
 	driver->drawMeshBuffer(m_meshbuffer);
@@ -761,7 +760,7 @@ void Minimap::updateActiveMarkers()
 //// MinimapMapblock
 ////
 
-void MinimapMapblock::getMinimapNodes(VoxelManipulator *vmanip, const v3s16 &pos)
+void MinimapMapblock::getMinimapNodes(NodeContainer *vmanip, const v3s16 &pos)
 {
 
 	for (s16 x = 0; x < MAP_BLOCKSIZE; x++)
