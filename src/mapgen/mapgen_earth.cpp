@@ -17,10 +17,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <cmath>
 #include <cstdlib>
-#include <functional>
-#include <cstdint>
 #include <string>
-#include <utility>
 
 #include "debug/iostream_debug_helpers.h"
 #include "filesys.h"
@@ -193,9 +190,27 @@ MapNode MapgenEarth::layers_get(float value, float max)
 	return layers_node[layer_index];
 }
 
-bool MapgenEarth::visible(pos_t x, pos_t y, pos_t z)
+bool MapgenEarth::visible(const v3pos_t &p)
 {
-	return y < get_height(x, z);
+	return p.Y < get_height(p.X, p.Z);
+}
+
+const MapNode &MapgenEarth::visible_content(const v3pos_t &p)
+{
+	const auto v = visible(p);
+	const auto vw = visible_water_level(p);
+	if (!v && !vw)
+		return visible_transparent;
+	auto heat = 10;
+	heat += p.Y / -100; // upper=colder, lower=hotter, 3c per 1000
+
+	if (!v && p.Y < water_level)
+		return heat < 0 ? visible_ice : visible_water;
+	const auto humidity = 60;
+	return heat < 0	   ? (humidity < 20 ? visible_surface : visible_surface_cold)
+		   : heat < 10 ? visible_surface
+		   : heat < 40 ? (humidity < 20 ? visible_surface_dry : visible_surface_green)
+					   : visible_surface_hot;
 }
 
 ll MapgenEarth::pos_to_ll(const pos_t x, const pos_t z)
@@ -209,9 +224,10 @@ ll MapgenEarth::pos_to_ll(const pos_t x, const pos_t z)
 pos_t MapgenEarth::get_height(pos_t x, pos_t z)
 {
 	const auto tc = pos_to_ll(x, z);
-	auto y = hgt_reader.get(tc.lat, tc.lon);
+	auto y = hgt_reader.get(tc.lat, tc.lon)->get(tc.lat, tc.lon);
 	return y * scale.Y - center.Y;
 }
+
 int MapgenEarth::getSpawnLevelAtPoint(v2pos_t p)
 {
 	return get_height(p.X, p.Y) + 2;

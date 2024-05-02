@@ -38,8 +38,8 @@ inline std::ostream &operator<<(std::ostream &s, const ll &p)
 struct MapgenEarthParams : public MapgenV7Params
 {
 
-	MapgenEarthParams() {}
-	~MapgenEarthParams() {}
+	MapgenEarthParams(){};
+	~MapgenEarthParams(){};
 
 	Json::Value params;
 
@@ -70,9 +70,10 @@ public:
 	MapNode n_air, n_water, n_stone;
 
 	MapNode layers_get(float value, float max);
-	bool visible(pos_t x, pos_t y, pos_t z) override;
+	bool visible(const v3pos_t &p) override;
+	const MapNode &visible_content(const v3pos_t &p) override;
 
-	hgt hgt_reader;
+	hgts hgt_reader;
 
 	pos_t get_height(pos_t x, pos_t z);
 	ll pos_to_ll(pos_t x, pos_t z);
