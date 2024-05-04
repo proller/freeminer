@@ -1585,6 +1585,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 
 			errorstream << "Got packet command: " << command << " for peer id "
 					<< peer_id << " but client isn't active yet. Dropping packet "
+					<< "state=" << m_clients.getClientState(peer_id)
 					<< std::endl;
 			return;
 		}
@@ -4103,7 +4104,7 @@ bool Server::dynamicAddMedia(std::string filepath,
 			if (client->getState() < CS_Active)
 				continue;
 
-			const ushort proto_ver = client->net_proto_version;
+			const unsigned short proto_ver = client->net_proto_version;
 			if (proto_ver < 39)
 				continue;
 

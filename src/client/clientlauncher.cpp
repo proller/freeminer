@@ -320,7 +320,6 @@ void ClientLauncher::run_after_launch_game(std::function<void(bool)> resolve, bo
 #ifdef HAVE_TOUCHSCREENGUI
 			receiver->m_touchscreengui = new TouchScreenGUI(m_rendering_engine->get_raw_device(), receiver);
 			g_touchscreengui = receiver->m_touchscreengui;
-		}
 #endif
 			int tries = start_data.isSinglePlayer() ? 1 : g_settings->getU16("reconnects");
 			int n = 0;

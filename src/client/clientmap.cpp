@@ -732,7 +732,7 @@ void ClientMap::touchMapBlocks()
 		for (auto & [key, block] : m_blocks) {
 		//for (MapBlock *block : sectorblocks) {
 		//	MapBlockMesh *mesh = block->mesh;
-			const auto mesh = block->getLodMesh(1, true);
+			const auto mesh = block->getLodMesh(0, true);
 
 			// Calculate the coordinates for range and frustum culling
 			v3f mesh_sphere_center;
@@ -1067,7 +1067,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 						m_control, getNodeBlockPos(m_far_blocks_last_cam_pos), bp);
 				blocks_skip_farmesh.insert(
 						getFarActual(bp, getNodeBlockPos(m_far_blocks_last_cam_pos),
-								fmesh_step, m_control.cell_size));
+								fmesh_step, m_control));
 			}
 
 			// Add to set
@@ -1113,7 +1113,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 							getNodeBlockPos(m_far_blocks_last_cam_pos),
 							it->first); // m_camera_position_node
 					if (mesh_step > 1 &&
-							!inFarGrid(it->first, getNodeBlockPos(m_far_blocks_last_cam_pos), mesh_step, m_control.cell_size)) {
+							!inFarGrid(it->first, getNodeBlockPos(m_far_blocks_last_cam_pos), mesh_step, m_control)) {
 					} else {
 						const auto mesh = it->second->getFarMesh(mesh_step);
 						if (!mesh) {
@@ -1241,7 +1241,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 
 			fmesh_step = getFarStep(
 					m_control, getNodeBlockPos(m_far_blocks_last_cam_pos), block->getPos());
-			if (fmesh_step > 1 && !inFarGrid(block_pos, getNodeBlockPos(m_far_blocks_last_cam_pos), fmesh_step, m_control.cell_size)) {
+			if (fmesh_step > 1 && !inFarGrid(block_pos, getNodeBlockPos(m_far_blocks_last_cam_pos), fmesh_step, m_control)) {
 				continue;
 			}
 			block_mesh = block->getFarMesh(fmesh_step);

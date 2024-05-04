@@ -174,6 +174,7 @@ Client::Client(
 	control.cell_size = m_mesh_grid.cell_size;
 	control.cell_size_pow =	log(control.cell_size) / log(2);
 	control.farmesh_quality = g_settings->getU16("farmesh_quality");
+	control.farmesh_stable = g_settings->getU16("farmesh_stable");
 }
 
 void Client::migrateModStorage()
@@ -620,7 +621,7 @@ void Client::step(float dtime)
 
 		auto qsize = m_mesh_update_manager->m_queue_out.size();
 		if (qsize > 1000)
-			end_ms += 200;
+			end_ms += 100;
 
 		bool force_update_shadows = false;
 		MeshUpdateResult r;
@@ -863,7 +864,7 @@ bool Client::loadMedia(const std::string &data, const std::string &filename,
 	bool from_media_push)
 {
 #ifdef __ANDROID__
-	m_device->run();
+	// m_device->run(); // old fm?
 #endif
 	std::string name;
 
@@ -2083,7 +2084,8 @@ void Client::showUpdateProgressTexture(void *args, u32 progress, u32 max_progres
 				72 + (u16) ((18. / 100.) * (double) targs->last_percent));
 		}
 
-#ifdef __ANDROID__
+//#ifdef __ANDROID__
+#if 0 // old fm?
 		else {
 			targs->device->run();
 		}

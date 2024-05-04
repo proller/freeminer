@@ -2801,7 +2801,7 @@ void Game::openConsole(float scale, const wchar_t *line)
 #ifdef __ANDROID__
 	} else {
 		int type = 2;
-		porting::showInputDialog(_("ok"), "", wide_to_narrow(gui_chat_console->getText()), type);
+		porting::showInputDialog(_("ok"), "", wide_to_utf8(gui_chat_console->getText()), type);
 
 /*
 	porting::showInputDialog(_("ok"), "", "", 2);
@@ -4721,10 +4721,12 @@ void Game::updateFrame(f32 dtime,
 		farmesh_async.step([&, farmesh_range = farmesh_range, 
 								   //yaw = player->getYaw(),
 								   //pitch = player->getPitch(),
+								   camera_pos = camera->getPosition(),
+								   camera_offset = camera->getOffset(),
 								   speed = player->getSpeed().getLength()]() {
-			farmesh->update(camera->getPosition(),
+			farmesh->update(camera_pos,
 					//camera->getDirection(), camera->getFovMax(), camera->getCameraMode(), pitch, yaw,
-					camera->getOffset(), 
+					camera_offset,
 					//sky->getBrightness(), 
 					farmesh_range, speed);
 		});
