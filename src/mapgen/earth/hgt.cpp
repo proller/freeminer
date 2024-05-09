@@ -1,6 +1,6 @@
 // Some code from https://github.com/zbycz/srtm-hgt-reader
 
-#include "hgt.h" //fmod
+#include "hgt.h"
 
 #include <cmath>
 #include <cstddef>
@@ -13,13 +13,16 @@
 #include <sstream>
 #include <string>
 #include <sys/wait.h>
+#include <thread>
 #include <vector>
 #include "debug/iostream_debug_helpers.h"
 
 #include "filesys.h"
 #include "httpfetch.h"
 #include "log.h"
+#include "settings.h"
 #include "threading/concurrent_set.h"
+#include "util/timetaker.h"
 
 hgts::hgts(const std::string &folder) : folder{folder}
 {
@@ -40,13 +43,14 @@ hgt *hgts::get(hgt::ll_t lat, hgt::ll_t lon)
 	return &map[lat][lon].value();
 }
 
-hgt::hgt(const std::string &folder, int lat_dec, int lon_dec) : folder{folder}
+hgt::hgt(const std::string &folder, ll_t lat, ll_t lon) : folder{folder}
 {
+	const int lat_dec = (int)floor(lat);
+	const int lon_dec = (int)floor(lon);
 	if (load(lat_dec, lon_dec)) {
 		static thread_local auto once = 0;
 		if (!once--)
-			DUMP("no load", lat_dec, lon_dec);
-		//return 0;
+			DUMP("load failed", lat_dec, lon_dec);
 	}
 }
 
@@ -81,7 +85,8 @@ bool hgt::load(int lat_dec, int lon_dec)
 		//DUMP(lat_dec, lon_dec);
 		return true;
 	}
-	DUMP((long)this, lat_dec, lon_dec, lat_loading, lon_loading, lat_loaded, lon_loaded);
+	// DUMP((long)this, lat_dec, lon_dec, lat_loading, lon_loading, lat_loaded, lon_loaded);
+	TimeTaker timer("hgt load");
 
 	lat_loading = lat_dec;
 	lon_loading = lon_dec;
@@ -132,7 +137,6 @@ bool hgt::load(int lat_dec, int lon_dec)
 			lon_dec > 0 ? 'E' : 'W', abs(lon_dec));
 	std::string filefull = folder + "/" + filename;
 	// DUMP(lat_dec, lon_dec, filename, zipname, zipfull);
-	//if (std::filesystem::exists(zipfull)) DUMP(std::filesystem::file_size(zipfull));
 
 	std::basic_string<uint8_t> srtmTile;
 	size_t filesize = 0;
@@ -154,11 +158,27 @@ bool hgt::load(int lat_dec, int lon_dec)
 		const auto http_to_file = [](const std::string &url, const std::string &zipfull) {
 			HTTPFetchRequest req;
 			req.url = url;
-			req.connect_timeout = req.timeout = 300000;
+			req.connect_timeout = req.timeout =
+					g_settings->getS32("curl_file_download_timeout");
 			actionstream << "Downloading map from " << req.url << "\n";
 
 			HTTPFetchResult res;
+
+			if (1) {
+				// TODO: why sync does not work?
+				req.caller = HTTPFETCH_SYNC;
 			httpfetch_sync(req, res);
+			} else {
+				req.caller = httpfetch_caller_alloc();
+				httpfetch_async(req);
+				std::this_thread::sleep_for(std::chrono::milliseconds(50));
+				HTTPFetchResult res;
+				while (!httpfetch_async_get(req.caller, res)) {
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				}
+				httpfetch_caller_free(req.caller);
+			}
+
 			actionstream << req.url << " " << res.succeeded << " " << res.response_code
 						 << " " << res.data.size() << "\n";
 			if (!res.succeeded)
@@ -172,13 +192,15 @@ bool hgt::load(int lat_dec, int lon_dec)
 				return uintmax_t{0};
 			return std::filesystem::file_size(zipfull);
 		};
+
 		// TODO: https://viewfinderpanoramas.org/Coverage%20map%20viewfinderpanoramas_org15.htm
 		static concurrent_set<std::string> http_failed;
 		if (!http_failed.contains(zipfile))
 			if (!http_to_file("http://build.freeminer.org/earth/" + zipfile, zipfull))
-			// if (!http_to_file("https://viewfinderpanoramas.org/dem1/" + zipfile, zipfull))
-			// if (!http_to_file("https://viewfinderpanoramas.org/dem3/" + zipfile, zipfull))
-			{
+				if (!http_to_file(
+							"https://viewfinderpanoramas.org/dem1/" + zipfile, zipfull))
+					if (!http_to_file("https://viewfinderpanoramas.org/dem3/" + zipfile,
+								zipfull)) {
 				errorstream << "Not found " << zipfile << "\n"
 							<< "try to download manually: \n"
 							<< "curl -o " << zipfull
@@ -197,7 +219,7 @@ bool hgt::load(int lat_dec, int lon_dec)
 		//auto fs = RenderingEngine::get_raw_device()->getFileSystem();
 		//bool ok = fs::extractZipFile(fs, zipfile, destination);
 
-		std::string cmd{"unzip -b -p " + zipfull + " " + zipname + "/" + filename};
+		std::string cmd{"unzip -C -b -p " + zipfull + " " + zipname + "/" + filename};
 
 		srtmTile = exec_to_string(cmd);
 		filesize = srtmTile.size();
@@ -205,7 +227,7 @@ bool hgt::load(int lat_dec, int lon_dec)
 			set_ratio();
 		}
 	}
-	// TODO: firs try load unpached file, then unpack zip
+	// TODO: first try load unpached file, then unpack zip
 	if (srtmTile.empty()) {
 
 		if (!std::filesystem::exists(filename)) {
@@ -228,7 +250,6 @@ bool hgt::load(int lat_dec, int lon_dec)
 			return true;
 		}
 
-		// std::vector<uint8_t> srtmTile;
 		srtmTile.resize(filesize);
 		istrm.read(reinterpret_cast<char *>(srtmTile.data()), filesize);
 	}
@@ -252,7 +273,7 @@ bool hgt::load(int lat_dec, int lon_dec)
 	}
 	lat_loaded = lat_dec;
 	lon_loaded = lon_dec;
-	// DUMP("loadok", (long)this, heights.size(), lat_loaded, lon_loaded, filesize);
+	// DUMP("loadok", (long)this, heights.size(), lat_loaded, lon_loaded, filesize, zipname, filename, seconds_per_px, get(lat_dec, lon_dec));
 	return false;
 }
 
@@ -271,6 +292,7 @@ float hgt::get(ll_t lat, ll_t lon)
 	const int lon_dec = (int)floor(lon);
 
 	if (lat_loaded != lat_dec || lon_loaded != lon_dec) {
+		// DUMP("notloaded", lat, lon, lat_dec, lon_dec, lat_loaded, lon_loaded, lat_loading, lon_loading, heights.size());
 		return {};
 	}
 

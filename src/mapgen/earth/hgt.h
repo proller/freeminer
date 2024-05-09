@@ -4,9 +4,9 @@
 #include <map>
 #include <mutex>
 #include <optional>
-
 #include <string>
 #include <vector>
+
 class hgt
 {
 public:
@@ -35,7 +35,7 @@ class hgts
 {
 	std::map<int, std::map<int, std::optional<hgt>>> map;
 	const std::string folder;
-	std::mutex mutex; //, mutex2;
+	std::mutex mutex;
 
 public:
 	hgts(const std::string &folder);
