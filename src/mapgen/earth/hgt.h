@@ -47,7 +47,7 @@ private:
 	int16_t read(int16_t y, int16_t x);
 
 public:
-	hgt(const std::string &folder, int lat_dec, int lon_dec);
+	hgt(const std::string &folder, ll_t lat, ll_t lon);
 	float get(ll_t lat, ll_t lon);
 };
 

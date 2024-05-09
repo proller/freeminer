@@ -61,12 +61,9 @@ public:
 	MapgenEarth(MapgenEarthParams *mg_params, EmergeParams *emerge);
 	~MapgenEarth();
 
-	// virtual void calculateNoise() {};
 	virtual int generateTerrain() override;
-	// virtual void generateRidgeTerrain() {};
 	int getSpawnLevelAtPoint(v2s16 p) override;
 
-	// double size;
 	v3d scale{1, 1, 1};
 	v3d center{0, 0, 0};
 	bool no_layers = false;

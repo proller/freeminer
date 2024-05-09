@@ -34,14 +34,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "map.h"
 #include "nodedef.h"
 #include "voxelalgorithms.h"
-// #include "profiler.h"
 #include "settings.h"
 #include "emerge.h"
 #include "serverenvironment.h"
 #include "mg_biome.h"
 #include "log_types.h"
-
-// #include "earth/WGS84toCartesian/WGS84toCartesian.hpp"
 
 void MapgenEarthParams::setDefaultSettings(Settings *settings)
 {
@@ -241,7 +238,7 @@ int MapgenEarth::generateTerrain()
 	MapNode n_ice(c_ice);
 	u32 index = 0;
 	v3pos_t em = vm->m_area.getExtent();
-	auto zstride_1d = csize.X * (csize.Y + 1);
+	//auto zstride_1d = csize.X * (csize.Y + 1);
 
 	for (pos_t z = node_min.Z; z <= node_max.Z; z++) {
 		for (pos_t x = node_min.X; x <= node_max.X; x++, index++) {
