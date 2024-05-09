@@ -2,17 +2,28 @@
 
 #include "hgt.h" //fmod
 
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <fstream>
 #include <ios>
 #include <filesystem>
 #include <iostream>
 #include <math.h>
+#include <sstream>
 #include <string>
+#include <sys/wait.h>
 #include <vector>
 #include "debug/iostream_debug_helpers.h"
 
+#include "filesys.h"
+#include "httpfetch.h"
+#include "log.h"
+#include "threading/concurrent_set.h"
+
 hgts::hgts(const std::string &folder) : folder{folder}
 {
+	fs::CreateAllDirs(folder);
 }
 
 hgt *hgts::get(hgt::ll_t lat, hgt::ll_t lon)
@@ -20,53 +31,217 @@ hgt *hgts::get(hgt::ll_t lat, hgt::ll_t lon)
 	if (map[lat].contains(lon)) {
 		return &map[lat][lon].value();
 	}
-	map[lat][lon].emplace(folder).get(lat, lon);
+	auto lock = std::unique_lock(mutex);
+	if (map[lat].contains(lon)) {
+		return &map[lat][lon].value();
+	}
+	// DUMP("insert", (long)this, lat, lon, folder, map.size(), map[lat].size());
+	map[lat][lon].emplace(folder, lat, lon).get(lat, lon);
 	return &map[lat][lon].value();
 }
 
-hgt::hgt(const std::string &folder) : folder{folder}
+hgt::hgt(const std::string &folder, int lat_dec, int lon_dec) : folder{folder}
 {
+	if (load(lat_dec, lon_dec)) {
+		static thread_local auto once = 0;
+		if (!once--)
+			DUMP("no load", lat_dec, lon_dec);
+		//return 0;
+	}
+}
+
+std::basic_string<uint8_t> exec_to_string(const std::string &cmd)
+{
+	std::array<uint8_t, 1000000> buffer;
+	std::basic_stringstream<uint8_t> result;
+	std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
+	if (!pipe) {
+		throw std::runtime_error("popen() failed!");
+	}
+	size_t sz = 0;
+	while ((sz = read(pipe.get()->_fileno, buffer.data(),
+					static_cast<int>(buffer.size()))) > 0) {
+		result << std::basic_string<uint8_t>{buffer.data(), sz};
+	}
+	return result.str();
 }
 
 bool hgt::load(int lat_dec, int lon_dec)
 {
+	//DUMP(lat_dec, lon_dec);
 	if (lat_loaded == lat_dec && lon_loaded == lon_dec) {
 		return false;
 	}
-	// auto lock = std::unique_lock(mutex);
+	auto lock = std::unique_lock(mutex);
+	//DUMP(lat_dec, lon_dec);
+	if (lat_loaded == lat_dec && lon_loaded == lon_dec) {
+		return false;
+	}
+	if (lat_loading == lat_dec && lon_loading == lon_dec) {
+		//DUMP(lat_dec, lon_dec);
+		return true;
+	}
+	DUMP((long)this, lat_dec, lon_dec, lat_loading, lon_loading, lat_loaded, lon_loaded);
+
+	lat_loading = lat_dec;
+	lon_loading = lon_dec;
+
+	const auto gen_zip_name = [](int lat_dec, int lon_dec) {
+		std::string zipname;
+		if (lat_dec < 0) {
+			zipname += 'S';
+			zipname += char('A' + abs(ceil(lat_dec / 90.0 * 23)));
+		} else {
+			zipname += char('A' + abs(floor(lat_dec / 90.0 * 23)));
+		}
+		zipname += std::to_string(int(floor((((lon_dec + 180) / 360.0)) * 60) + 1));
+		return zipname;
+	};
+
+#if GEN_TEST
+	{
+		size_t fails = 0;
+		for (const auto &t : {
+					 std::pair{std::pair{36, 30}, "J36"},
+					 std::pair{std::pair{39, 35}, "J36"},
+					 std::pair{std::pair{36, 24}, "J35"},
+					 std::pair{std::pair{39, 29}, "J35"},
+					 std::pair{std::pair{40, 18}, "K34"},
+					 std::pair{std::pair{80, 25}, "U26"},
+					 std::pair{std::pair{83, 30}, "U26"},
+					 std::pair{std::pair{68, 163}, "R03"}, // TODO!!!
+					 std::pair{std::pair{70, 164}, "R03"},
+			 }) {
+			std::string r;
+			if (r = gen_zip_name(t.first.first, t.first.second); t.second != r) {
+				DUMP("fail", t, r);
+				++fails;
+			}
+		}
+		DUMP(fails);
+	}
+#endif
+
+	const auto zipname = gen_zip_name(lat_dec, lon_dec);
+
+	std::string zipfile = zipname + ".zip";
+	std::string zipfull = folder + "/" + zipfile;
 
 	std::string filename(255, 0);
+	sprintf(filename.data(), "%c%02d%c%03d.hgt", lat_dec > 0 ? 'N' : 'S', abs(lat_dec),
+			lon_dec > 0 ? 'E' : 'W', abs(lon_dec));
+	std::string filefull = folder + "/" + filename;
+	// DUMP(lat_dec, lon_dec, filename, zipname, zipfull);
+	//if (std::filesystem::exists(zipfull)) DUMP(std::filesystem::file_size(zipfull));
 
-	sprintf(filename.data(), "%s/%c%02d%c%03d.hgt", folder.c_str(),
-			lat_dec > 0 ? 'N' : 'S', abs(lat_dec), lon_dec > 0 ? 'E' : 'W', abs(lon_dec));
-	if (!std::filesystem::exists(filename)) {
+	std::basic_string<uint8_t> srtmTile;
+	size_t filesize = 0;
+
+	auto set_ratio = [&]() {
+		if (filesize == 2884802) {
+			seconds_per_px = 3;
+		} else if (filesize == 25934402) {
+			seconds_per_px = 1;
+		} else {
+			throw std::logic_error("unknown file size " + std::to_string(filesize));
+		}
+
+		side_length = sqrt(filesize >> 1);
+	};
+
+	// DUMP(filefull, zipfull);
+	if (!std::filesystem::exists(filefull) && !std::filesystem::exists(zipfull)) {
+		const auto http_to_file = [](const std::string &url, const std::string &zipfull) {
+			HTTPFetchRequest req;
+			req.url = url;
+			req.connect_timeout = req.timeout = 300000;
+			actionstream << "Downloading map from " << req.url << "\n";
+
+			HTTPFetchResult res;
+			httpfetch_sync(req, res);
+			actionstream << req.url << " " << res.succeeded << " " << res.response_code
+						 << " " << res.data.size() << "\n";
+			if (!res.succeeded)
+				return uintmax_t{0};
+
+			if (!res.data.size())
+				return uintmax_t{0};
+
+			std::ofstream(zipfull) << res.data;
+			if (!std::filesystem::exists(zipfull))
+				return uintmax_t{0};
+			return std::filesystem::file_size(zipfull);
+		};
+		// TODO: https://viewfinderpanoramas.org/Coverage%20map%20viewfinderpanoramas_org15.htm
+		static concurrent_set<std::string> http_failed;
+		if (!http_failed.contains(zipfile))
+			if (!http_to_file("http://build.freeminer.org/earth/" + zipfile, zipfull))
+			// if (!http_to_file("https://viewfinderpanoramas.org/dem1/" + zipfile, zipfull))
+			// if (!http_to_file("https://viewfinderpanoramas.org/dem3/" + zipfile, zipfull))
+			{
+				errorstream << "Not found " << zipfile << "\n"
+							<< "try to download manually: \n"
+							<< "curl -o " << zipfull
+							<< " https://viewfinderpanoramas.org/dem1/" << zipfile
+							<< " || " << "curl -o " << zipfull
+							<< " https://viewfinderpanoramas.org/dem3/" << zipfile
+							<< "\n";
+				http_failed.insert(zipfile);
+			}
+	}
+
+	if (!std::filesystem::exists(filefull) && std::filesystem::exists(zipfull)) {
+
+		// TODO: use some available in server and client zip lib to extract files
+
+		//auto fs = RenderingEngine::get_raw_device()->getFileSystem();
+		//bool ok = fs::extractZipFile(fs, zipfile, destination);
+
+		std::string cmd{"unzip -b -p " + zipfull + " " + zipname + "/" + filename};
+
+		srtmTile = exec_to_string(cmd);
+		filesize = srtmTile.size();
+		if (filesize) {
+			set_ratio();
+		}
+	}
+	// TODO: firs try load unpached file, then unpack zip
+	if (srtmTile.empty()) {
+
+		if (!std::filesystem::exists(filename)) {
+			static thread_local auto once = 0;
+			if (!once++) {
+				std::cerr << "Missing file " << filename << " for " << lat_dec << ","
+						  << lon_dec << std::endl;
+			}
+			return true;
+		}
+
+		filesize = std::filesystem::file_size(filename);
+
+		set_ratio();
+
+		std::ifstream istrm(filename, std::ios::binary);
+
+		if (!istrm.good()) {
+			std::cerr << "Error opening " << filename << std::endl;
+			return true;
+		}
+
+		// std::vector<uint8_t> srtmTile;
+		srtmTile.resize(filesize);
+		istrm.read(reinterpret_cast<char *>(srtmTile.data()), filesize);
+	}
+
+	if (srtmTile.empty()) {
 		static thread_local auto once = 0;
 		if (!once++) {
-			std::cerr << "Missing file " << filename << " for " << lat_dec << ","
-					  << lon_dec << std::endl;
+			std::cerr << "Missing file " << filename << " " << zipname << " for "
+					  << lat_dec << "," << lon_dec << std::endl;
 		}
 		return true;
 	}
-	auto filesize = std::filesystem::file_size(filename);
-	if (filesize == 2884802)
-		seconds_per_px = 3;
-	else if (filesize == 25934402)
-		seconds_per_px = 1;
-	else
-		throw std::logic_error("unknown file size " + std::to_string(filesize));
 
-	side_length = sqrt(filesize >> 1);
-
-	std::ifstream istrm(filename, std::ios::binary);
-
-	if (!istrm.good()) {
-		std::cerr << "Error opening " << filename << std::endl;
-		return true;
-	}
-
-	std::vector<uint8_t> srtmTile;
-	srtmTile.resize(filesize);
-	istrm.read(reinterpret_cast<char *>(srtmTile.data()), filesize);
 	heights.resize(filesize >> 1);
 	for (uint32_t i = 0; i < filesize >> 1; ++i) {
 		int16_t height = (srtmTile[i << 1] << 8) | (srtmTile[(i << 1) + 1]);
@@ -77,7 +252,7 @@ bool hgt::load(int lat_dec, int lon_dec)
 	}
 	lat_loaded = lat_dec;
 	lon_loaded = lon_dec;
-
+	// DUMP("loadok", (long)this, heights.size(), lat_loaded, lon_loaded, filesize);
 	return false;
 }
 
@@ -95,12 +270,12 @@ float hgt::get(ll_t lat, ll_t lon)
 	const int lat_dec = (int)floor(lat);
 	const int lon_dec = (int)floor(lon);
 
+	if (lat_loaded != lat_dec || lon_loaded != lon_dec) {
+		return {};
+	}
+
 	const ll_t lat_seconds = (lat - (ll_t)lat_dec) * 60 * 60;
 	const ll_t lon_seconds = (lon - (ll_t)lon_dec) * 60 * 60;
-
-	if (load(lat_dec, lon_dec)) {
-		return 0;
-	}
 
 	const int y = lat_seconds / seconds_per_px;
 	const int x = lon_seconds / seconds_per_px;
