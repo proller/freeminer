@@ -1,5 +1,5 @@
 /*
-mapgen_math.h
+Copyright (C) 2024 proller <proler@gmail.com>
 */
 
 /*
@@ -22,65 +22,60 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include "config.h"
-#include "irr_v3d.h"
+#include "mapgen/earth/hgt.h"
 #include "mapgen/mapgen.h"
 #include "mapgen/mapgen_v7.h"
 #include "json/json.h"
 
-#if USE_MANDELBULBER
-#define MANDELBULBER_EMBEDDED
-#include "mandelbulber/fractal.h"
-#endif
+using ll_t = float;
+struct ll
+{
+	ll_t lat = 0;
+	ll_t lon = 0;
+};
+inline std::ostream &operator<<(std::ostream &s, const ll &p)
+{
+	s << "(" << p.lat << "," << p.lon << ")";
+	return s;
+}
 
-struct MapgenMathParams : public MapgenV7Params
+struct MapgenEarthParams : public MapgenV7Params
 {
 
-	MapgenMathParams() {}
-	~MapgenMathParams() {}
+	MapgenEarthParams(){};
+	~MapgenEarthParams(){};
 
 	Json::Value params;
-
-#if USE_MANDELBULBER
-	sFractal par;
-	enumCalculationMode mode;
-#endif
 
 	void readParams(const Settings *settings) override;
 	void writeParams(Settings *settings) const override;
 	void setDefaultSettings(Settings *settings) override;
 };
 
-class MapgenMath : public MapgenV7
+class MapgenEarth : public MapgenV7
 {
 public:
-	MapgenMathParams *mg_params;
+	MapgenEarthParams *mg_params;
 
-	virtual MapgenType getType() const { return MAPGEN_MATH; }
-	MapgenMath(MapgenMathParams *mg_params, EmergeParams *emerge);
-	~MapgenMath();
+	virtual MapgenType getType() const override { return MAPGEN_EARTH; }
+	MapgenEarth(MapgenEarthParams *mg_params, EmergeParams *emerge);
+	~MapgenEarth();
 
-	virtual void calculateNoise();
-	virtual int generateTerrain();
-	virtual void generateRidgeTerrain();
-	//int getGroundLevelAtPoint(v2POS p);
+	virtual int generateTerrain() override;
+	int getSpawnLevelAtPoint(v2pos_t p) override;
 
-	bool internal;
-	bool invert;
-	bool invert_yz;
-	bool invert_xy;
-	double size;
-	v3f scale;
-	v3f center;
-	int iterations;
-	double distance;
-	double result_max;
+	v3d scale{1, 1, 1};
+	v3d center{0, 0, 0};
 	bool no_layers = false;
 
 	MapNode n_air, n_water, n_stone;
 
-	double (*func)(double, double, double, double, int, int);
 	MapNode layers_get(float value, float max);
-	std::pair<bool, double> calc_point(pos_t x, pos_t y, pos_t z);
 	bool visible(const v3pos_t &p) override;
-	bool surface_2d() override { return false; };
+	const MapNode &visible_content(const v3pos_t &p) override;
+
+	hgts hgt_reader;
+
+	pos_t get_height(pos_t x, pos_t z);
+	ll pos_to_ll(pos_t x, pos_t z);
 };

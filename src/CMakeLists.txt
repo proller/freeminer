@@ -97,12 +97,10 @@ if(NOT MSVC)
         set(ENABLE_SYSTEM_JSONCPP 0)
 	endif()
 
-	if(USE_GPERF)
-		set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+	option(ENABLE_TCMALLOC "Enable tcmalloc" 1)
 
-		# find_library(TCMALLOC_LIBRARY NAMES libtcmalloc.a tcmalloc)
-		# find_library(PROFILER_LIBRARY NAMES libprofiler.a profiler)
-		# find_library(UNWIND_LIBRARY NAMES libunwind.a unwind)
+	if(ENABLE_GPERF OR ENABLE_TCMALLOC)
+		set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 		if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 			find_library(TCMALLOC_LIBRARY NAMES tcmalloc_debug tcmalloc)
@@ -110,17 +108,25 @@ if(NOT MSVC)
 			find_library(TCMALLOC_LIBRARY NAMES tcmalloc tcmalloc_and_profiler)
 		endif()
 
-		find_library(PROFILER_LIBRARY NAMES profiler tcmalloc_and_profiler)
+		if(ENABLE_GPERF)
+			find_library(PROFILER_LIBRARY NAMES profiler tcmalloc_and_profiler)
+		endif()
 
-		SET(PLATFORM_LIBS ${PLATFORM_LIBS} ${PROFILER_LIBRARY} ${TCMALLOC_LIBRARY})
-		SET(OTHER_FLAGS "${OTHER_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
-		message(STATUS "Build with gperf ${PROFILER_LIBRARY} ${TCMALLOC_LIBRARY}")
+		if (PROFILER_LIBRARY)
+			set(PLATFORM_LIBS ${PLATFORM_LIBS} ${PROFILER_LIBRARY})
+		endif()
+
+		if (TCMALLOC_LIBRARY)
+    		set(PLATFORM_LIBS ${PLATFORM_LIBS} ${TCMALLOC_LIBRARY})
+			set(OTHER_FLAGS "${OTHER_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
+		endif()
+
+		message(STATUS "Build with tcmalloc ${TCMALLOC_LIBRARY} ${PROFILER_LIBRARY}")
 	endif()
 
 	find_library(UNWIND_LIBRARY NAMES unwind)
 
 	if(UNWIND_LIBRARY)
-
         CHECK_CXX_SOURCE_RUNS("
        #include <execinfo.h> // for backtrace
        int main(int argc, char *argv[]) {
@@ -639,18 +645,21 @@ endif()
 
 if(ENABLE_WEBSOCKET OR ENABLE_WEBSOCKET_SCTP)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp/CMakeLists.txt)
-	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp)
-	#add_subdirectory(external/websocketpp)
-	#set(WEBSOCKETPP_LIBRARY websocketpp::websocketpp)
-	message(STATUS "Using websocket: ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp")
-	find_package(OpenSSL)
-	set(WEBSOCKETPP_LIBRARY ${WEBSOCKETPP_LIBRARY} OpenSSL::SSL)
-	set(USE_WEBSOCKET 1 CACHE BOOL "")
-	#TODO:
-	# set(USE_WEBSOCKET_SCTP 1 CACHE BOOL "")
-    else()
-	set(USE_WEBSOCKET 0)
-	set(USE_WEBSOCKET_SCTP 0)
+		find_package(Boost)
+		if(Boost_FOUND)
+			include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp)
+			# add_subdirectory(external/websocketpp)
+			# set(WEBSOCKETPP_LIBRARY websocketpp::websocketpp)
+			message(STATUS "Using websocket: ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp")
+			find_package(OpenSSL)
+			set(WEBSOCKETPP_LIBRARY ${WEBSOCKETPP_LIBRARY} OpenSSL::SSL)
+			set(USE_WEBSOCKET 1 CACHE BOOL "")
+			#TODO:
+			# set(USE_WEBSOCKET_SCTP 1 CACHE BOOL "")
+		endif()
+	else()
+		#set(USE_WEBSOCKET 0)
+		#set(USE_WEBSOCKET_SCTP 0)
     endif()
 endif()
 
@@ -699,6 +708,19 @@ if(ENABLE_ENET)
 	endif()
 endif()
 
+#set(TinyTIFF_BUILD_TESTS 0 CACHE INTERNAL "")
+#add_subdirectory(external/TinyTIFF/src)
+#set(TINYTIFF_LIRARY TinyTIFF)
+
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/libtiff/CMakeLists.txt)
+	set(tiff-tools 0 CACHE INTERNAL "")
+	set(tiff-tests 0 CACHE INTERNAL "")
+	set(tiff-docs 0 CACHE INTERNAL "")
+	add_subdirectory(external/libtiff)
+	set(TIFF_LIRARY TIFF::tiff)
+	set(TIFF_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/external/libtiff/libtiff ${CMAKE_CURRENT_SOURCE_DIR}/external/libtiff/libtiff)
+	include_directories(BEFORE SYSTEM ${TIFF_INCLUDE_DIR})
+	set(USE_TIFF 1)
 endif()
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND ${CMAKE_VERSION} VERSION_GREATER "3.11.0")
@@ -965,6 +987,7 @@ if(BUILD_CLIENT)
 		${ENET_LIBRARY}
 		${SCTP_LIBRARY}
 		${WEBSOCKETPP_LIBRARY}
+		${TIFF_LIRARY}
 
 		${LUA_BIT_LIBRARY}
 		${FREETYPE_LIBRARY}
@@ -1044,6 +1067,7 @@ if(BUILD_SERVER)
 		${ENET_LIBRARY}
 		${SCTP_LIBRARY}
 		${WEBSOCKETPP_LIBRARY}
+		${TIFF_LIRARY}
 
 		${LUA_LIBRARY}
 		${LUA_BIT_LIBRARY}

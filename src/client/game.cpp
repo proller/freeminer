@@ -3086,7 +3086,7 @@ void Game::toggleBlockBoundaries(float *statustext_time, VolatileRunFlags *flags
 }*/
 void Game::increaseViewRange()
 {
-	s16 range = g_settings->getS16("viewing_range");
+	pos_t range = g_settings->getPos("viewing_range");
 	int range_new = range + 10;
 	s16 server_limit = sky->getFogDistance();
 
@@ -3121,9 +3121,9 @@ void Game::increaseViewRange()
 
 void Game::decreaseViewRange()
 {
-	s16 range = g_settings->getS16("viewing_range");
-	s16 range_new = range - 10;
-	s16 server_limit = sky->getFogDistance();
+	pos_t range = g_settings->getPos("viewing_range");
+	pos_t range_new = range - 10;
+	pos_t server_limit = sky->getFogDistance();
 
 	{ //fm:
 		if (g_settings->getS32("farmesh")) {
@@ -3670,7 +3670,7 @@ void Game::handleClientEvent_SetSky(ClientEvent *event, CameraOrientation *cam)
 
 	// if the fog distance is reset, switch back to the client's viewing_range
 	if (event->set_sky->fog_distance < 0)
-		draw_control->wanted_range = g_settings->getS16("viewing_range");
+		draw_control->wanted_range = g_settings->getPos("viewing_range");
 
 	if (event->set_sky->fog_start >= 0)
 		sky->setFogStart(rangelim(event->set_sky->fog_start, 0.0f, 0.99f));
@@ -4645,7 +4645,7 @@ void Game::updateFrame(f32 dtime,
 		}
 
 		if (!runData.enable_fog)
-			runData.fog_range = FARSCALE_LIMIT * BS;
+			runData.fog_range = FARMESH_LIMIT * BS;
 		else
 		runData.fog_range = MYMIN(
 				runData.fog_range,
@@ -4718,7 +4718,7 @@ void Game::updateFrame(f32 dtime,
 
 	if (farmesh) {
 		thread_local static const auto farmesh_range = g_settings->getS32("farmesh");
-		farmesh_async.step([&, farmesh_range = farmesh_range, 
+		farmesh_async.step([&, farmesh_range = farmesh_range,
 								   //yaw = player->getYaw(),
 								   //pitch = player->getPitch(),
 								   camera_pos = camera->getPosition(),
@@ -4727,7 +4727,7 @@ void Game::updateFrame(f32 dtime,
 			farmesh->update(camera_pos,
 					//camera->getDirection(), camera->getFovMax(), camera->getCameraMode(), pitch, yaw,
 					camera_offset,
-					//sky->getBrightness(), 
+					//sky->getBrightness(),
 					farmesh_range, speed);
 		});
 	}
