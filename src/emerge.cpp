@@ -196,9 +196,9 @@ EmergeManager::EmergeManager(Server *server, MetricsBackend *mb)
 		m_qlimit_total = nthreads * 128;
 
 	// FIXME: these fallback values are probably not good
-	if (!g_settings->getU32NoEx("emergequeue_limit_diskonly", m_qlimit_diskonly))
+	if (!g_settings->getU32NoEx("emergequeue_limit_diskonly", m_qlimit_diskonly) || !m_qlimit_diskonly)
 		m_qlimit_diskonly = nthreads * 100;
-	if (!g_settings->getU32NoEx("emergequeue_limit_generate", m_qlimit_generate))
+	if (!g_settings->getU32NoEx("emergequeue_limit_generate", m_qlimit_generate) || !m_qlimit_generate)
 		m_qlimit_generate = nthreads * 32;
 
 	// don't trust user input for something very important like this
@@ -740,10 +740,12 @@ void *EmergeThread::run()
 	m_mapgen = m_emerge->m_mapgens[id];
 	enable_mapgen_debug_info = m_emerge->enable_mapgen_debug_info;
 
-    try {
 	reg("EmergeThread" + itos(id), 5);
 
 	while (!stopRequested()) {
+
+    try {
+
 		BlockEmergeData bedata;
 		BlockMakeData bmdata;
 		EmergeAction action;
@@ -794,7 +796,6 @@ void *EmergeThread::run()
 		if (m_mapgen->heat_cache.size() > 1000) {
 			m_mapgen->heat_cache.clear();
 			m_mapgen->humidity_cache.clear();
-		}
 	}
 	} catch (VersionMismatchException &e) {
 		std::ostringstream err;
@@ -816,6 +817,7 @@ void *EmergeThread::run()
 		m_server->setAsyncFatalError(err.str());
 	} catch (const std::exception &e) {
 		errorstream << m_name << ": exception at " << pos << " : " << e.what() << std::endl;
+	}
 	}
 
 	cancelPendingItems();

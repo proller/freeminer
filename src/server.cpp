@@ -643,13 +643,13 @@ void Server::start()
 			std::cerr << line << std::endl;
 	}
 
-	actionstream << "\033[1mfree\033[1;33mminer \033[1;36mv" << g_version_hash
-				 << "\033[0m \t"
+   actionstream << "\033[1mfree\033[1;33mminer \033[1;36mv" << g_version_hash
+				<< "\033[0m \t"
 #if ENABLE_THREADS
-				 << " threads \t"
+				<< " threads \t"
 #endif
 #ifndef NDEBUG
-				 << " debug \t"
+				<< " debug \t"
 #endif
 #if USE_GPERF
 				<< " gperf \t"
@@ -670,46 +670,44 @@ void Server::start()
 #endif
 #endif
 #if USE_MULTI
-				 << " multi: \t"
+				<< " multi: \t"
 #endif
 #if MINETEST_PROTO && MINETEST_TRANSPORT
-				 << " mt " << SERVER_PROTOCOL_VERSION_MIN << "-"
-				 << SERVER_PROTOCOL_VERSION_MAX << "\t"
+				<< " mt " << SERVER_PROTOCOL_VERSION_MIN << "-"
+				<< SERVER_PROTOCOL_VERSION_MAX << "\t"
 #endif
 #if USE_SCTP
-				 << " sctp \t"
+				<< " sctp \t"
 #endif
 #if USE_ENET
-				 << " enet \t"
+				<< " enet \t"
 #endif
 #if USE_WEBSOCKET
-				 << " ws \t"
+				<< " ws \t"
 #endif
 #if USE_WEBSOCKET_SCTP
-				 << " wssctp \t"
+				<< " wssctp \t"
 #endif
-				 << " cpp=" << __cplusplus << " \t"
+				<< " cpp=" << __cplusplus << " \t"
 
-				 << " cores=";
-	auto cores_online = std::thread::hardware_concurrency(),
-		 cores_avail = Thread::getNumberOfProcessors();
-	if (cores_online != cores_avail)
-		actionstream << cores_online << "/";
-	actionstream << cores_avail
+				<< " cores=";
+   auto cores_online = std::thread::hardware_concurrency(),
+		cores_avail = Thread::getNumberOfProcessors();
+   if (cores_online != cores_avail)
+	   actionstream << cores_online << "/";
+   actionstream << cores_avail
 
 #if __ANDROID__
-				 << " android=" << porting::android_version_sdk_int
+				<< " android=" << porting::android_version_sdk_int
 #endif
-				 << std::endl;
+				<< std::endl;
 
-
-
-	actionstream << "World at [" << m_path_world << "]" << std::endl;
-	actionstream << "Server for gameid=\"" << m_gamespec.id
-			<< "\" mapgen=\"" << Mapgen::getMapgenName(m_emerge->mgparams->mgtype)
-			<< "\" listening on ";
-	m_bind_addr.print(actionstream);
-	actionstream << "." << std::endl;
+   actionstream << "World at [" << m_path_world << "]" << std::endl;
+   actionstream << "Server for gameid=\"" << m_gamespec.id << "\" mapgen=\""
+				<< Mapgen::getMapgenName(m_emerge->mgparams->mgtype)
+				<< "\" listening on ";
+   m_bind_addr.print(actionstream);
+   actionstream << "." << std::endl;
 }
 
 void Server::stop()
@@ -1234,8 +1232,8 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 				for (const v3s16 &modified_block : event->modified_blocks) {
 					m_clients.markBlockposAsNotSent(modified_block);
 				}
-*/				
 				SetBlocksNotSent(); //fmtodo
+*/				
 				break;
 			default:
 				prof.add("unknown", 1);
@@ -1257,10 +1255,12 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 				}
 */
 				// Set blocks not sent
+#if 0
 				for (const u16 far_player : far_players) {
 					if (RemoteClient *client = getClient(far_player))
 						client->SetBlocksNotSent(/*modified_blocks2*/);
 				}
+#endif
 			}
 
 			//delete event;
@@ -1635,7 +1635,7 @@ void Server::onMapEditEvent(const MapEditEvent &event)
 }
 
 /* delete:
-void Server::SetBlocksNotSent(std::map<v3s16, MapBlock *>& block)
+void Server::SetBlocksNotSent(std::map<v3pos_t, MapBlock *>& block)
 {
 	SetBlocksNotSent();
 }
@@ -4282,15 +4282,17 @@ v3f Server::findSpawnPos(const std::string &player_name)
 	v3f nodeposf;
 
 	pos_t find = 0;
-	g_settings->getS16NoEx("static_spawnpoint_find", find);
-	if (g_settings->getV3FNoEx("static_spawnpoint", nodeposf) && !find) {
-		return nodeposf * BS;
-	} else if (g_settings->getV3FNoEx("static_spawnpoint_" + player_name, nodeposf) && !find) {
-		return nodeposf * BS;
+	g_settings->getPosNoEx("static_spawnpoint_find", find);
+	if (g_settings->getV3FNoEx("static_spawnpoint_" + player_name, nodeposf)) {
+		if (!find)
+			return nodeposf * BS;
+	} else if (g_settings->getV3FNoEx("static_spawnpoint", nodeposf)) {
+		if (!find)
+			return nodeposf * BS;
 	}
 
 	pos_t min_air_height = 3;
-	g_settings->getS16NoEx("static_spawnpoint_find_height", min_air_height);
+	g_settings->getPosNoEx("static_spawnpoint_find_height", min_air_height);
 
 	bool is_good = false;
 	// Limit spawn range to mapgen edges (determined by 'mapgen_limit')
@@ -4306,7 +4308,7 @@ v3f Server::findSpawnPos(const std::string &player_name)
 		    nodeposf.Z
 			-range + myrand_range(0, range*2));
 		// Get spawn level at point
-		s16 spawn_level = nodeposf.Y ? nodeposf.Y : m_emerge->getSpawnLevelAtPoint(nodepos2d);
+		auto spawn_level = nodeposf.Y ? nodeposf.Y : m_emerge->getSpawnLevelAtPoint(nodepos2d);
 		// Continue if MAX_MAP_GENERATION_LIMIT was returned by the mapgen to
 		// signify an unsuitable spawn position, or if outside limits.
 		if (spawn_level >= MAX_MAP_GENERATION_LIMIT ||
@@ -4369,39 +4371,39 @@ v3f Server::findSpawnPos(const std::string &player_name)
 }
 #endif
 
-#if 0 
+#if 0
 //fmtodo?
 
 v3f Server::findSpawnPos()
 {
 	ServerMap &map = m_env->getServerMap();
 	v3f nodeposf;
-	POS find = 0;
-	g_settings->getS16NoEx("static_spawnpoint_find", find);
+	pos_t find = 0;
+	g_settings->getPosNoEx("static_spawnpoint_find", find);
 	if (g_settings->getV3FNoEx("static_spawnpoint", nodeposf) && !find) {
 		return nodeposf * BS;
 	}
 
 	// todo: remove
-	//s16 water_level = map.getWaterLevel();
-	s16 water_level = m_emerge->getSpawnLevelAtPoint(v2s16(nodeposf.X, nodeposf.Z));
-	s16 vertical_spawn_range = g_settings->getS16("vertical_spawn_range");
+	//auto water_level = map.getWaterLevel();
+	auto water_level = m_emerge->getSpawnLevelAtPoint(v2pos_t(nodeposf.X, nodeposf.Z));
+	auto vertical_spawn_range = g_settings->getPos("vertical_spawn_range");
 	//============
 	auto cache_block_before_spawn = g_settings->getBool("cache_block_before_spawn");
 
 	bool is_good = false;
-	POS min_air_height = 3;
-	g_settings->getS16NoEx("static_spawnpoint_find_height", min_air_height);
+	pos_t min_air_height = 3;
+	g_settings->getPosNoEx("static_spawnpoint_find_height", min_air_height);
 
 	// Try to find a good place a few times
 	for (s32 i = 0; i < 4000 && !is_good; i++) {
 		s32 range = 1 + i;
 		// We're going to try to throw the player to this position
-		v2s16 nodepos2d = v2s16(nodeposf.X - range + (myrand() % (range * 2)),
+		auto nodepos2d = v2pos_t(nodeposf.X - range + (myrand() % (range * 2)),
 				nodeposf.Z - range + (myrand() % (range * 2)));
 		// FM version:
 		// Get ground height at point
-		s16 spawn_level = map.findGroundLevel(nodepos2d, cache_block_before_spawn);
+		auto spawn_level = map.findGroundLevel(nodepos2d, cache_block_before_spawn);
 
 //DUMP(i, is_good, nodepos2d.X, nodepos2d.Y, spawn_level);
 
@@ -4423,11 +4425,10 @@ v3f Server::findSpawnPos()
 		s32 air_count = 0;
 		for (s32 ii = (vertical_spawn_range > 0) ? 0 : vertical_spawn_range - 50;
 				ii < vertical_spawn_range; ii++) {
-			v3s16 blockpos = getNodeBlockPos(nodepos);
+			auto blockpos = getNodeBlockPos(nodepos);
 			if (!map.emergeBlock(blockpos, false))
 				continue;
 			content_t c = map.getNode(nodepos).getContent();
-DUMP(ii, c, air_count, nodepos.Y, is_good);
 			if (c == CONTENT_AIR /*|| c == CONTENT_IGNORE*/) {
 				air_count++;
 				if (air_count >= min_air_height) {
