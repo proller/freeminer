@@ -42,7 +42,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 
-const bool debug =
+constexpr bool debug =
 #ifdef NDEBUG
     false
 #else
@@ -50,7 +50,7 @@ const bool debug =
 #endif
     ;
 
-const bool win32 =
+constexpr bool win32 =
 #if defined(_WIN32) && !defined(_WIN64)
     true
 #else
@@ -58,7 +58,7 @@ const bool win32 =
 #endif
     ;
 
-const bool win64 =
+constexpr bool win64 =
 #if defined(_WIN64)
     true
 #else
@@ -66,9 +66,9 @@ const bool win64 =
 #endif
     ;
 
-const bool win = win32 || win64;
+constexpr bool win = win32 || win64;
 
-const bool android =
+constexpr bool android =
 #if defined(__ANDROID__)
     true
 #else
@@ -76,7 +76,7 @@ const bool android =
 #endif
     ;
 
-const bool arm =
+constexpr bool arm =
 #if defined(__ARM_ARCH)
     true
 #else
@@ -84,14 +84,14 @@ const bool arm =
 #endif
     ;
 
-const bool threads =
+constexpr bool threads =
 #if ENABLE_THREADS
     true
 #else
     false
 #endif
     ;
-const bool emscripten = 
+constexpr bool emscripten = 
 #ifdef __EMSCRIPTEN__
     true
 #else
@@ -259,14 +259,10 @@ void fm_set_default_settings(Settings *settings) {
 
 #if (ENET_IPV6 || MINETEST_TRANSPORT || USE_SCTP)
 	//settings->setDefault("enable_ipv6", "true");
-#else
-	settings->setDefault("enable_ipv6", "false");
 #endif
 
-#if !USE_IPV4_DEFAULT && (ENET_IPV6 || MINETEST_TRANSPORT || USE_SCTP)
+#if !USE_IPV4_DEFAULT && (ENET_IPV6 || MINETEST_TRANSPORT || USE_SCTP) && !__EMSCRIPTEN__
 	settings->setDefault("ipv6_server", "true"); // problems on all windows versions (unable to play in local game)
-#else
-	//settings->setDefault("ipv6_server", "false");
 #endif
 
 #if !MINETEST_PROTO
@@ -388,10 +384,12 @@ void fm_set_default_settings(Settings *settings) {
 #endif
 
 #ifdef __EMSCRIPTEN__
-	settings->setDefault("viewing_range", "100");
-	settings->setDefault("client_mesh_chunk", "4");
+	settings->setDefault("viewing_range", "64");
 	//settings->setDefault("farmesh", "0");
-	settings->setDefault("farmesh", "4000");
+	settings->setDefault("farmesh", "16000");
+	settings->setDefault("lodmesh", "0");
+	settings->setDefault("client_mesh_chunk", "1");
+	settings->setDefault("client_unload_unused_data_timeout", "30");
 #endif
 
 

@@ -732,6 +732,8 @@ if(ENABLE_ENET)
 	endif()
 endif()
 
+endif()
+
 #set(TinyTIFF_BUILD_TESTS 0 CACHE INTERNAL "")
 #add_subdirectory(external/TinyTIFF/src)
 #set(TINYTIFF_LIRARY TinyTIFF)
