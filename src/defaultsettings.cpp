@@ -388,10 +388,10 @@ void fm_set_default_settings(Settings *settings) {
 #endif
 
 #ifdef __EMSCRIPTEN__
-	settings->setDefault("viewing_range", "160");
+	settings->setDefault("viewing_range", "100");
 	settings->setDefault("client_mesh_chunk", "4");
-	settings->setDefault("farmesh", "0");
-	//settings->setDefault("farmesh", "1600");
+	//settings->setDefault("farmesh", "0");
+	settings->setDefault("farmesh", "4000");
 #endif
 
 

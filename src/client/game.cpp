@@ -4835,7 +4835,7 @@ void Game::updateFrame(f32 dtime,
 #if 1
 	const auto camera_position = camera->getPosition();
 	if (!runData.headless_optimize) {
-		if (client->getEnv().getClientMap().m_drawlist_last ||
+		if (//client->getEnv().getClientMap().m_drawlist_last ||
 				runData.update_draw_list_timer >= update_draw_list_delta ||
 				runData.update_draw_list_last_cam_pos.getDistanceFrom(camera_position) >
 						MAP_BLOCKSIZE * BS * 2 ||
