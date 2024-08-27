@@ -189,6 +189,8 @@ void ClientMap::OnRegisterSceneNode()
 		SceneManager->registerNodeForRendering(this, scene::ESNRP_SOLID);
 		SceneManager->registerNodeForRendering(this, scene::ESNRP_TRANSPARENT);
 
+		[[maybe_unused]] auto *m_drawlist = m_drawlist_current ? &m_drawlist_1 : &m_drawlist_0;
+
 #if __EMSCRIPTEN__
 		// Prepare meshes
 		video::IVideoDriver* driver = SceneManager->getVideoDriver();
