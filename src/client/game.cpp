@@ -745,7 +745,7 @@ struct GameRunData {
 	float repeat_place_timer;
 	float object_hit_delay_timer;
 	float time_from_last_punch;
-	ClientActiveObject *selected_object;
+	ClientActiveObjectPtr selected_object;
 
 	float jump_timer_up;          // from key up until key down
 	float jump_timer_down;        // since last key down
@@ -1166,10 +1166,11 @@ Game::Game() :
 
 Game::~Game()
 {
-	farmesh.reset();
 	farmesh_async.wait();
 	updateDrawList_async.wait();
-	
+	update_shadows_async.wait();
+	farmesh.reset();
+
 	delete client;
 	delete soundmaker;
 	sound_manager.reset();
@@ -4077,14 +4078,14 @@ PointedThing Game::updatePointedThing(
 	if (result.type == POINTEDTHING_OBJECT) {
 		hud->pointing_at_object = true;
 
-		runData.selected_object = client->getEnv().getActiveObject(result.object_id);
+		runData.selected_object = client->getEnv().getActiveObjectPtr(result.object_id);
 		aabb3f selection_box;
 		if (show_entity_selectionbox && runData.selected_object->doShowSelectionBox() &&
 				runData.selected_object->getSelectionBox(&selection_box)) {
 			v3f pos = runData.selected_object->getPosition();
 			selectionboxes->emplace_back(selection_box);
 			hud->setSelectionPos(pos, camera_offset);
-			GenericCAO* gcao = dynamic_cast<GenericCAO*>(runData.selected_object);
+			GenericCAO* gcao = dynamic_cast<GenericCAO*>(runData.selected_object.get());
 			if (gcao != nullptr && gcao->getProperties().rotate_selectionbox)
 				hud->setSelectionRotation(gcao->getSceneNode()->getAbsoluteTransformation().getRotationDegrees());
 			else
@@ -4860,7 +4861,7 @@ void Game::updateFrame(f32 dtime,
 						MAP_BLOCKSIZE * BS * 1 ||
 				m_camera_offset_changed) {
 			updateDrawList_async.step(
-					[&](const float dtime) {
+					[camera_position, this](const float dtime) {
 						client->m_new_meshes = 0;
 						runData.update_draw_list_timer = 0;
 						runData.update_draw_list_last_cam_pos = camera_position;
@@ -5269,7 +5270,11 @@ void Game::showPauseMenu()
 	} else {
 		os << mode << strgettext("Singleplayer") << "\n";
 	}
-	os << strgettext("- Proto: ") << g_settings->get("remote_proto") << "\n";
+
+	if (!g_settings->get("remote_proto").empty()) {
+		os << strgettext("- Proto: ") << g_settings->get("remote_proto") << "\n";
+	}
+
 	if (simple_singleplayer_mode || address.empty()) {
 		static const std::string on = strgettext("On");
 		static const std::string off = strgettext("Off");

@@ -305,7 +305,7 @@ void ClientMap::updateDrawList(float dtime, unsigned int max_cycle_ms)
 	m_needs_update_drawlist = false;
 
 	for (auto &i : m_drawlist) {
-		MapBlock *block = i.second;
+		auto block = i.second;
 		block->refDrop();
 	}
 	m_drawlist.clear();
@@ -440,7 +440,7 @@ void ClientMap::updateDrawList(float dtime, unsigned int max_cycle_ms)
 				// Raytraced occlusion culling - send rays from the camera to the block's corners
 				if (!m_control.range_all && occlusion_culling_enabled && m_enable_raytraced_culling &&
 						mesh &&
-						isMeshOccluded(block, mesh_grid.cell_size, cam_pos_nodes)) {
+						isMeshOccluded(block.get(), mesh_grid.cell_size, cam_pos_nodes)) {
 					blocks_occlusion_culled++;
 					continue;
 				}
@@ -451,7 +451,7 @@ void ClientMap::updateDrawList(float dtime, unsigned int max_cycle_ms)
 					// Add them to the de-dup set.
 					shortlist.emplace(mesh_grid.getMeshPos(block->getPos()));
 					// All other blocks we can grab and add to the keeplist right away.
-					m_keeplist.push_back(block);
+					m_keeplist.push_back(block.get());
 					block->refGrab();
 				} else if (mesh) {
 					// without mesh chunking we can add the block to the drawlist
@@ -895,10 +895,10 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 						++m_mesh_queued;
 						}
 					}
-					if (!mesh)
-						continue;
+					//if (!mesh)
+					//	continue;
 				}
-				if (mesh_step == mesh->lod_step &&
+				if (mesh && mesh_step == mesh->lod_step &&
 						block->getTimestamp() <= mesh->timestamp && !smesh_size) {
 					++blocks_in_range_without_mesh;
 					continue;
@@ -999,7 +999,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 				if (range_blocks>3)
 				if (!m_control.range_all && occlusion_culling_enabled && m_enable_raytraced_culling &&
 						mesh &&
-						isMeshOccluded(block, mesh_grid.cell_size, m_camera_position_node)) {
+						isMeshOccluded(block.get(), mesh_grid.cell_size, m_camera_position_node)) {
 					blocks_occlusion_culled++;
 					continue;
 				}
@@ -1014,25 +1014,26 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 				continue;
 */
 
-			if (mesh_step != mesh->lod_step && smesh_size < 0 &&
-					(m_mesh_queued < maxq * 1.2 || range_blocks <= 2)) {
-				m_client->addUpdateMeshTask(bp);
-				++m_mesh_queued;
-			} else if (const auto bts = block->getTimestamp();
-					   bts != BLOCK_TIMESTAMP_UNDEFINED &&
-					   block->getTimestamp() > mesh->timestamp + (smesh_size ? 0
-																		 : range_blocks >= 2
-																				 ? 60
-																				 : 0) &&
-					   (m_mesh_queued < maxq * 1.5 || range_blocks <= 2)) {
-				if (mesh_step > 1)
+			if (mesh) {
+				if (mesh_step != mesh->lod_step && smesh_size < 0 &&
+						(m_mesh_queued < maxq * 1.2 || range_blocks <= 2)) {
 					m_client->addUpdateMeshTask(bp);
-				else
-					m_client->addUpdateMeshTaskWithEdge(bp);
-				++m_mesh_queued;
+					++m_mesh_queued;
+				} else if (const auto bts = block->getTimestamp();
+						   bts != BLOCK_TIMESTAMP_UNDEFINED &&
+						   block->getTimestamp() >
+								   mesh->timestamp + (smesh_size				 ? 0
+															 : range_blocks >= 2 ? 60
+																				 : 0) &&
+						   (m_mesh_queued < maxq * 1.5 || range_blocks <= 2)) {
+					if (mesh_step > 1)
+						m_client->addUpdateMeshTask(bp);
+					else
+						m_client->addUpdateMeshTaskWithEdge(bp);
+					++m_mesh_queued;
+				}
 			}
-
-			if(!smesh_size)
+			if (!smesh_size)
 				continue;
 
 			{
@@ -1090,7 +1091,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 						if (!mesh) {
 							//m_client->farmesh_remake.insert_or_assign(it->first, false);
 						} else {
-							drawlist.emplace(it->first, it->second.get());
+							drawlist.emplace(it->first, it->second);
 						}
 					}
 				}
@@ -1193,7 +1194,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 	const MeshGrid mesh_grid = m_client->getMeshGrid();
 	for (auto &i : m_drawlist) {
 		v3s16 block_pos = i.first;
-		MapBlock *block = i.second;
+		auto block = i.second;
 		//int mesh_step = getFarmeshStep(m_control, getNodeBlockPos(cam_pos_nodes), block->getPos());
 		int mesh_step = getLodStep(
 				m_control, getNodeBlockPos(m_camera_position_node), block->getPos());
@@ -1274,7 +1275,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 					bool transparent = (rnd && rnd->isTransparent());
 					if (!transparent) {
 						if (buf->getVertexCount() == 0)
-							errorstream << "Block [" << analyze_block(block)
+							errorstream << "Block [" << analyze_block(block.get())
 									<< "] contains an empty meshbuf" << std::endl;
 
 						grouped_buffers.add(buf, block_pos, layer);
@@ -1597,7 +1598,7 @@ void ClientMap::renderMapShadows(video::IVideoDriver *driver,
 			break;
 
 		v3s16 block_pos = i.first;
-		MapBlock *block = i.second;
+		auto block = i.second;
 
 		// If the mesh of the block happened to get deleted, ignore it
 		auto mapBlockMesh = block->getLodMesh(getLodStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos()), true);
@@ -1726,7 +1727,7 @@ void ClientMap::updateDrawListShadow(v3f shadow_light_pos, v3f shadow_light_dir,
 	getBlocksInViewRange(cam_pos_nodes, &p_blocks_min, &p_blocks_max, radius + length);
 
 	for (auto &i : m_drawlist_shadow) {
-		MapBlock *block = i.second;
+		auto block = i.second;
 		block->refDrop();
 	}
 	m_drawlist_shadow.clear();
@@ -1803,7 +1804,7 @@ void ClientMap::updateTransparentMeshBuffers()
 
 	// Update the order of transparent mesh buffers in each mesh
 	for (auto it = m_drawlist.begin(); it != m_drawlist.end(); it++) {
-		MapBlock* block = it->second;
+		auto block = it->second;
 		const auto block_mesh = block->getLodMesh(getLodStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos()));
 		if (!block_mesh)
 			continue;
