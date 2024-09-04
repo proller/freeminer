@@ -195,7 +195,7 @@ void ClientMap::OnRegisterSceneNode()
 		// Prepare meshes
 		video::IVideoDriver* driver = SceneManager->getVideoDriver();
 		for (auto &i : *m_drawlist) {
-			MapBlock *block = i.second;
+			auto block = i.second;
 			auto mapBlockMesh = block->getLodMesh(0, true); // !! TODO
 			if (!mapBlockMesh)
 				continue;
