@@ -4965,8 +4965,13 @@ void Game::updateFrame(f32 dtime,
 				playerlist->getAbsolutePosition(), video::SColor(255, 128, 128, 128));
 	}
 
-	//stats.drawtime = tt_draw.stop(true);
-	g_profiler->graphAdd("Draw scene [us]", stats.drawtime);
+	if (!runData.headless_optimize)
+		driver->endScene();
+
+	if (m_game_ui->m_flags.show_profiler_graph)
+	stats->drawtime = tt_draw.stop(true);
+	
+	g_profiler->graphAdd("Draw scene [us]", stats->drawtime);
 	g_profiler->avg("Game::updateFrame(): update frame [ms]", tt_update.stop(true));
 }
 
