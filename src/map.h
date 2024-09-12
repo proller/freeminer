@@ -282,7 +282,7 @@ public:
 	MapNode getNodeTry(const v3pos_t &p);
 	//MapNode getNodeNoLock(v3s16 p); // dont use
 
-	std::atomic_uint m_liquid_step_flow{0};
+	std::atomic_uint m_liquid_step_flow{1000};
 
 	virtual s16 getHeat(const v3pos_t &p, bool no_random = 0);
 	virtual s16 getHumidity(const v3pos_t &p, bool no_random = 0);
@@ -425,6 +425,7 @@ public:
 	v3pos_t transforming_liquid_pop();
 	void transforming_liquid_add(const v3pos_t &p);
 	size_t transformLiquidsReal(Server *m_server, const unsigned int max_cycle_ms);
+	std::vector<v3pos_t> m_transforming_liquid_local;
 
 	//getSurface level starting on basepos.y up to basepos.y + searchup
 	//returns basepos.y -1 if no surface has been found

@@ -19,21 +19,20 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "emerge.h"
+#include "gamedef.h"
+#include "irr_v3d.h"
+#include "log_types.h"
+#include "map.h"
+#include "nodedef.h"
+#include "profiler.h"
+#include "scripting_server.h"
+#include "server.h"
+#include "settings.h"
+#include "util/unordered_map_hash.h"
 #include <cstddef>
 #include <cstdint>
 #include <unordered_set>
-#include "irr_v3d.h"
-#include "map.h"
-#include "gamedef.h"
-#include "scripting_server.h"
-#include "settings.h"
-#include "nodedef.h"
-#include "log_types.h"
-#include "server.h"
-// #include "scripting_game.h"
-#include "profiler.h"
-#include "emerge.h"
-#include "util/unordered_map_hash.h"
 
 #define LIQUID_DEBUG 0
 
@@ -107,10 +106,10 @@ size_t ServerMap::transformLiquidsReal(Server *m_server, unsigned int max_cycle_
 	const auto *nodemgr = m_nodedef;
 
 	// TimeTaker timer("transformLiquidsReal()");
-	uint32_t loopcount = 0;
+	size_t loopcount = 0;
 	const auto initial_size = transforming_liquid_size();
 
-	int32_t regenerated = 0;
+	size_t regenerated = 0;
 
 #if LIQUID_DEBUG
 	bool debug = 1;
@@ -133,19 +132,29 @@ size_t ServerMap::transformLiquidsReal(Server *m_server, unsigned int max_cycle_
 
 	const auto end_ms = porting::getTimeMs() + max_cycle_ms;
 
-NEXT_LIQUID:;
-	while (transforming_liquid_size() > 0) {
+	{
+		std::lock_guard<std::mutex> lock(m_transforming_liquid_mutex);
+		m_transforming_liquid_local.reserve(initial_size);
+		while (!m_transforming_liquid.m_queue.empty()) {
+			m_transforming_liquid_local.emplace_back(
+					m_transforming_liquid.m_queue.front());
+			m_transforming_liquid.m_queue.pop();
+		}
+		m_transforming_liquid.m_set.clear();
+	}
+
+	for (const auto &p0 : m_transforming_liquid_local) {
 		// This should be done here so that it is done when continue is used
-		if (loopcount >= initial_size * 2 || porting::getTimeMs() > end_ms)
-			break;
+		//if (loopcount >= initial_size * 2 || porting::getTimeMs() > end_ms)
+		//	break;
 		++loopcount;
 		/*
 			Get a queued transforming liquid node
 		*/
-		v3pos_t p0;
+		//v3pos_t p0;
 		{
 			// MutexAutoLock lock(m_transforming_liquid_mutex);
-			p0 = transforming_liquid_pop();
+			// p0 = transforming_liquid_pop();
 		}
 		int16_t total_level = 0;
 		// u16 level_max = 0;
@@ -168,6 +177,7 @@ NEXT_LIQUID:;
 		/*
 			Collect information about the environment, start from self
 		 */
+		bool want_continue = false;
 		for (uint8_t e = D_BOTTOM; e <= D_TOP; e++) {
 			uint8_t i = liquid_explore_map[e];
 			NodeNeighbor &nb = neighbors[i];
@@ -190,9 +200,8 @@ NEXT_LIQUID:;
 			nb.drop = 0;
 
 			if (!nb.node) {
-				// if (i == D_SELF && (loopcount % 2) && initial_size < m_liquid_step_flow
-				// * 3) 	must_reflow_third[nb.pos] = 1;
-				//	must_reflow_third.push_back(nb.pos);
+				//if (i == D_SELF && (loopcount % 8) && initial_size < m_liquid_step_flow * 3)	// must_reflow_third[nb.pos] = 1;
+				//	must_reflow_third.emplace_back(nb.pos);
 				continue;
 			}
 
@@ -296,8 +305,8 @@ NEXT_LIQUID:;
 						setNode(neighbors[D_BOTTOM].pos, neighbors[D_SELF].node);
 						// must_reflow_second[neighbors[D_SELF].pos] = 1;
 						// must_reflow_second[neighbors[D_BOTTOM].pos] = 1;
-						must_reflow_second.push_back(neighbors[D_SELF].pos);
-						must_reflow_second.push_back(neighbors[D_BOTTOM].pos);
+						must_reflow_second.emplace_back(neighbors[D_SELF].pos);
+						must_reflow_second.emplace_back(neighbors[D_BOTTOM].pos);
 #if LIQUID_DEBUG
 						infostream << "Liquid swap1" << neighbors[D_SELF].pos
 								   << nodemgr->get(neighbors[D_SELF].node).name
@@ -308,7 +317,8 @@ NEXT_LIQUID:;
 								   << neighbors[D_BOTTOM].node
 								   << " w=" << neighbors[D_BOTTOM].weight << std::endl;
 #endif
-						goto NEXT_LIQUID;
+						want_continue = true;
+						break;
 					}
 					if (e == 2 && neighbors[D_SELF].weight &&
 							neighbors[D_TOP].weight > neighbors[D_SELF].weight) {
@@ -316,8 +326,8 @@ NEXT_LIQUID:;
 						setNode(neighbors[D_TOP].pos, neighbors[D_SELF].node);
 						// must_reflow_second[neighbors[D_SELF].pos] = 1;
 						// must_reflow_second[neighbors[D_TOP].pos] = 1;
-						must_reflow_second.push_back(neighbors[D_SELF].pos);
-						must_reflow_second.push_back(neighbors[D_TOP].pos);
+						must_reflow_second.emplace_back(neighbors[D_SELF].pos);
+						must_reflow_second.emplace_back(neighbors[D_TOP].pos);
 #if LIQUID_DEBUG
 						infostream << "Liquid swap2" << neighbors[D_TOP].pos
 								   << nodemgr->get(neighbors[D_TOP].node).name
@@ -328,7 +338,8 @@ NEXT_LIQUID:;
 								   << neighbors[D_SELF].node
 								   << " w=" << neighbors[D_SELF].weight << std::endl;
 #endif
-						goto NEXT_LIQUID;
+						want_continue = true;
+						break;
 					}
 				} catch (const InvalidPositionException &e) {
 					verbosestream
@@ -362,6 +373,8 @@ NEXT_LIQUID:;
 					   << std::endl;
 #endif
 		}
+		if (want_continue)
+			continue;
 
 		if (liquid_kind == CONTENT_IGNORE || !neighbors[D_SELF].liquid ||
 				total_level <= 0)
@@ -406,7 +419,8 @@ NEXT_LIQUID:;
 				++falling[bpos];
 				fall_down = true;
 				if (m_server->getEnv().nodeUpdate(neighbors[D_SELF].pos, 2)) {
-					goto NEXT_LIQUID;
+					want_continue = true;
+					break;
 				} else {
 					falling[bpos] += 100;
 				}
@@ -740,7 +754,7 @@ NEXT_LIQUID:;
 				for (uint8_t ir = D_SELF + 1; ir < D_TOP; ++ir) { // only same level
 					uint8_t ii = liquid_random_map[(loopcount + loop_rand + 5) % 4][ir];
 					if (neighbors[ii].liquid)
-						must_reflow_second.push_back(
+						must_reflow_second.emplace_back(
 								neighbors[i].pos + liquid_flow_dirs[ii]);
 					// must_reflow_second[neighbors[i].pos + liquid_flow_dirs[ii]] = 1;
 				}
@@ -775,8 +789,9 @@ NEXT_LIQUID:;
 				blocks_lighting_update.emplace(blockpos);
 			}
 			// fmtodo: make here random %2 or..
-			if (total_level < level_max * can_liquid)
-				must_reflow.push_back(neighbors[i].pos);
+			if (total_level < level_max * can_liquid) {
+				must_reflow.emplace_back(neighbors[i].pos);
+			}
 		}
 
 		if (fall_down) {
@@ -802,9 +817,11 @@ NEXT_LIQUID:;
 		}*/
 		// g_profiler->graphAdd("liquids", 1);
 	}
+	m_transforming_liquid_local.clear();
 
-	uint32_t ret = loopcount >= initial_size ? 0 : transforming_liquid_size();
-	if (ret || loopcount > m_liquid_step_flow)
+	//size_t ret = loopcount >= initial_size ? 0 : transforming_liquid_size();
+	//if (ret || loopcount > m_liquid_step_flow)
+	if (porting::getTimeMs() > end_ms)
 		m_liquid_step_flow +=
 				(m_liquid_step_flow > loopcount ? -1 : 1) * (int)loopcount / 10;
 	/*
@@ -823,27 +840,35 @@ NEXT_LIQUID:;
 	{
 		// TimeTaker timer13("transformLiquidsReal() reflow");
 		// auto lock = m_transforming_liquid.lock_unique_rec();
-		std::lock_guard<std::mutex> lock(m_transforming_liquid_mutex);
+		//std::lock_guard<std::mutex> lock(m_transforming_liquid_mutex);
 
 		// m_transforming_liquid.insert(must_reflow.begin(), must_reflow.end());
-		for (const auto &p : must_reflow)
-			m_transforming_liquid.push_back(p);
+		std::unordered_set<v3pos_t> uniq;
+		m_transforming_liquid_local.reserve(must_reflow.size() +
+											must_reflow_second.size() +
+											must_reflow_third.size());
+		for (const auto &p : must_reflow) {
+			if (!uniq.contains(p))
+				m_transforming_liquid_local.emplace_back(p);
+			uniq.emplace(p);
+		}
 		must_reflow.clear();
-		// m_transforming_liquid.insert(must_reflow_second.begin(),
-		// must_reflow_second.end());
-		for (const auto &p : must_reflow_second)
-			m_transforming_liquid.push_back(p);
+		for (const auto &p : must_reflow_second) {
+			if (!uniq.contains(p))
+				m_transforming_liquid_local.emplace_back(p);
+			uniq.emplace(p);
+		}
 		must_reflow_second.clear();
-		// m_transforming_liquid.insert(must_reflow_third.begin(),
-		// must_reflow_third.end());
-		for (const auto &p : must_reflow_third)
-			m_transforming_liquid.push_back(p);
+		for (const auto &p : must_reflow_third) {
+			if (!uniq.contains(p))
+				m_transforming_liquid_local.emplace_back(p);
+			uniq.emplace(p);
+		}
 		must_reflow_third.clear();
 	}
 
 	for (const auto &blockpos : blocks_lighting_update) {
-		MapBlock *block =
-				getBlockNoCreateNoEx(blockpos, true); // remove true if light bugs
+		auto block = getBlockNoCreateNoEx(blockpos, true); // remove true if light bugs
 		if (!block)
 			continue;
 		block->setLightingComplete(0);
@@ -860,6 +885,7 @@ NEXT_LIQUID:;
 		if (loopcount < initial_size)
 			g_profiler->add("Server: liquids queue", initial_size);
 	*/
+	g_profiler->avg("Server: liquids queue internal", m_transforming_liquid_local.size());
 
 	return loopcount;
 }
