@@ -620,6 +620,8 @@ void Server::start()
 		m_abm_thread->restart();
 	if(m_abm_world_thread)
 		m_abm_world_thread->restart();
+	if(m_world_merge_thread)
+		m_world_merge_thread->restart();
 
 	if (!m_simple_singleplayer_mode && g_settings->getBool("serverlist_lan"))
 		lan_adv_server.serve(m_bind_addr.getPort());
@@ -727,6 +729,8 @@ void Server::stop()
 		m_abm_thread->stop();
 	if(m_abm_world_thread)
 		m_abm_world_thread->stop();
+	if(m_world_merge_thread)
+		m_world_merge_thread->stop();
 	if(m_env_thread)
 		m_env_thread->stop();
 
@@ -744,6 +748,8 @@ void Server::stop()
 		m_abm_thread->join();
 	if(m_abm_world_thread)
 		m_abm_world_thread->join();
+	if(m_world_merge_thread)
+		m_world_merge_thread->join();
 	if(m_env_thread)
 		m_env_thread->join();
 
@@ -1574,7 +1580,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 		}
 
 #if BUILD_CLIENT && !NDEBUG
-		tracestream << "Server processing packet" << (int)command << " ["
+		tracestream << "Server processing packet " << (int)command << " ["
 					<< toServerCommandTable[command].name
 					<< "] state=" << (int)toServerCommandTable[command].state
 					<< " size=" << pkt->getSize()
@@ -2897,6 +2903,9 @@ int Server::SendBlocks(float dtime)
 
 		std::vector<session_t> clients = m_clients.getClientIDs();
 
+		const auto clients_size = clients.size();
+		const auto max_ms = 1000 / (clients_size ? clients.size() : 1);
+
 		ClientInterface::AutoLock clientlock(m_clients);
 		for (const session_t client_id : clients) {
 			auto client = m_clients.getClient(client_id, CS_Active);
@@ -2908,9 +2917,9 @@ int Server::SendBlocks(float dtime)
 			const auto old_count = queue.size();
 			if (client->net_proto_version_fm) {
 				total += client->GetNextBlocksFm(m_env, m_emerge, dtime, queue,
-						m_uptime_counter->get() + m_env->m_game_time_start);
+						m_uptime_counter->get() + m_env->m_game_time_start, max_ms);
 			} else {
-				total += client->GetNextBlocks(m_env, m_emerge, dtime, queue);
+				total += client->GetNextBlocks(m_env, m_emerge, dtime, queue, max_ms);
 			}
 			//total_sending += queue.size();
 			unique_clients += queue.size() > old_count ? 1 : 0;

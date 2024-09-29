@@ -957,7 +957,7 @@ private:
     async_step_runner farmesh_async;
 	std::unique_ptr<RaycastState> pointedRaycastState;
 	PointedThing pointed;
-	float far_blocks_send_timer = 5;
+	float far_blocks_send_timer = 1;
 	// minetest:
 
 
@@ -4976,9 +4976,9 @@ void Game::updateFrame(f32 dtime,
 		driver->endScene();
 
 	if (m_game_ui->m_flags.show_profiler_graph)
-	stats->drawtime = tt_draw.stop(true);
+	stats.drawtime = tt_draw.stop(true);
 	
-	g_profiler->graphAdd("Draw scene [us]", stats->drawtime);
+	g_profiler->graphAdd("Draw scene [us]", stats.drawtime);
 	g_profiler->avg("Game::updateFrame(): update frame [ms]", tt_update.stop(true));
 }
 
