@@ -518,6 +518,11 @@ public:
 
 	void pushElementsToCircuit(Circuit* circuit);
 
+	void fill(const MapNode & n) {
+		for (u32 i = 0; i < nodecount; ++i)
+			data[i] = n;
+	}
+
 	using mesh_type = std::shared_ptr<MapBlockMesh>;
 	using block_step_t = uint8_t;
 
@@ -530,6 +535,7 @@ public:
 	u32 mesh_requested_timestamp = 0;
 	uint8_t mesh_requested_step = 0;
 
+	bool want_remake_farmesh = false;
 private:
 	std::array<MapBlock::mesh_type, LODMESH_STEP_MAX + 1> m_lod_mesh;
 	std::array<MapBlock::mesh_type, FARMESH_STEP_MAX + 1> m_far_mesh;
