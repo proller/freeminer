@@ -28,7 +28,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <unordered_map>
 #include <utility>
 #include "database/database.h"
-#include "debug/iostream_debug_helpers.h"
 #include "emerge.h"
 #include "filesys.h"
 #include "irrTypes.h"
@@ -57,7 +56,6 @@ void *ServerThreadBase::run()
 	auto time_last = porting::getTimeMs();
 
 	while (!stopRequested()) {
-		DUMP("");
 		try {
 			const auto time_now = porting::getTimeMs();
 			const auto result = step(time_now - time_last);
@@ -219,42 +217,19 @@ size_t SendFarBlocksThread::step(float dtime)
 }
 
 SendBlocksThread::SendBlocksThread(Server *server) :
-		thread_vector{"SendBlocks", 30}, m_server{server}
+		ServerThreadBase{server, "SendBlocks", 30}
 {
+	sleep_start = 100;
+	sleep_result = 5;
+	sleep_nothing = 200;
 }
 
-void *SendBlocksThread::run()
+size_t SendBlocksThread::step(float dtime)
 {
-	BEGIN_DEBUG_EXCEPTION_HANDLER
-
-	auto time = porting::getTimeMs();
-	while (!stopRequested()) {
-		// infostream<<"S run d="<<m_server->m_step_dtime<< "
-		// myt="<<(porting::getTimeMs() - time)/1000.0f<<std::endl;
-		try {
-			m_server->getEnv().getMap().getBlockCacheFlush();
-			auto time_now = porting::getTimeMs();
-			auto sent = m_server->SendBlocks((time_now - time) / 1000.0f);
-			time = time_now;
-			std::this_thread::sleep_for(std::chrono::milliseconds(sent ? 5 : 100));
-#if !EXCEPTION_DEBUG
-		} catch (const std::exception &e) {
-			errorstream << m_name << ": exception: " << e.what() << std::endl
-						<< stacktrace() << std::endl;
-		} catch (...) {
-			errorstream << m_name << ": Unknown unhandled exception at "
-						<< __PRETTY_FUNCTION__ << ":" << __LINE__ << std::endl
-						<< stacktrace() << std::endl;
-#else
-		} catch (int) { // nothing
-#endif
-		}
-	}
-	END_DEBUG_EXCEPTION_HANDLER
-	return nullptr;
+	return m_server->SendBlocks(dtime);
 }
 
-LiquidThread::LiquidThread(Server *server) : thread_vector("Liquid", 4), m_server(server)
+LiquidThread::LiquidThread(Server *server) : thread_vector{"Liquid", 4}, m_server{server}
 {
 }
 
@@ -295,7 +270,7 @@ void *LiquidThread::run()
 	return nullptr;
 }
 
-EnvThread::EnvThread(Server *server) : thread_vector("Env", 20), m_server(server)
+EnvThread::EnvThread(Server *server) : thread_vector{"Env", 20}, m_server{server}
 {
 }
 
@@ -329,7 +304,7 @@ void *EnvThread::run()
 	return nullptr;
 }
 
-AbmThread::AbmThread(Server *server) : thread_vector("Abm", 20), m_server(server)
+AbmThread::AbmThread(Server *server) : thread_vector{"Abm", 20}, m_server{server}
 {
 }
 
@@ -675,7 +650,7 @@ void Server::SendBlockFm(session_t peer_id, MapBlockP block, u8 ver,
 
 uint32_t Server::SendFarBlocks(float dtime)
 {
-	ScopeProfiler sp(g_profiler, "Server send far blocks");
+	ScopeProfiler sp(g_profiler, "Server: Far blocks send");
 	uint32_t sent{};
 	for (const auto &client : m_clients.getClientList()) {
 		if (!client)

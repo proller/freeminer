@@ -24,6 +24,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "game.h"
 
+#include <atomic>
 #include <iomanip>
 #include <cmath>
 #include "client/renderingengine.h"
@@ -4651,7 +4652,7 @@ void Game::updateFrame(f32 dtime,
 	*/
 
 	if (sky->getFogDistance() >= 0) {
-		draw_control->wanted_range = MYMIN(draw_control->wanted_range, sky->getFogDistance());
+		draw_control->wanted_range = MYMIN(draw_control->wanted_range.load(std::memory_order::relaxed), sky->getFogDistance());
 	}
 
 
