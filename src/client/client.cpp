@@ -75,6 +75,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "database/database.h"
 #include "server.h"
 #include "emerge.h"
+#include "fm_world_merge.h"
+
 #include "network/fm_connection_use.h"
 #if !MINETEST_PROTO
 #include "network/fm_clientpacketsender.cpp"
@@ -358,6 +360,8 @@ void Client::Stop()
 
 	if (m_mods_loaded)
 		delete m_script;
+
+	merger.reset(); // before m_localdb
 
 	if (m_localdb)
 		delete m_localdb;
@@ -1062,7 +1066,26 @@ void Client::initLocalMapSaving(const Address &address,
 
 	m_localdb->beginSave();
 	actionstream << "Local map saving started, map will be saved at '" << world_path << "'" << std::endl;
+
+	{
+		far_world_path = world_path;
+		far_dbases[0].reset(m_localdb, [](auto) {});
+		if (!merger) {
+			merger = std::make_unique<WorldMerger>(WorldMerger{
+					.get_time_func{[this]() {
+						return m_uptime.load(std::memory_order::relaxed);
+					}}, // find client game time == server time?
+					.partial{true},
+					.ndef{getNodeDefManager()},
+					.smap{&getEnv().getClientMap()},
+					.far_dbases{far_dbases},
+					.dbase{m_localdb},
+					.save_dir{far_world_path},
+			});
+		}
+	}
 }
+
 
 void Client::ReceiveAll()
 {

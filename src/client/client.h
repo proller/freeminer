@@ -22,12 +22,15 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
-//fm:
+// fm:
 #include "client/fm_far_container.h"
+#include "map.h"
 #include "map_settings_manager.h"
+#include "mapgen/mapgen.h"
 #include "msgpack_fix.h"
 #include "network/fm_connection_use.h"
-
+constexpr const auto FARMESH_DEFAULT_MAPGEN = MAPGEN_FLAT;
+// ==
 
 #include "clientenvironment.h"
 #include "irr_v3d.h"
@@ -126,6 +129,7 @@ private:
 
 class ClientScripting;
 class GameUI;
+class WorldMerger;
 
 class Client : public con::PeerHandler, public InventoryManager, public IGameDef
 {
@@ -146,6 +150,7 @@ public:
 	void sendDrawControl();
 	void sendGetBlocks();
 	void updateMeshTimestampWithEdge(const v3bpos_t &blockpos);
+	void MakeEmerge(const Settings &settings, const MapgenType& mgtype);
 	void createFarMesh(MapBlockP &block);
 
 	std::unique_ptr<Server> m_localserver;
@@ -159,7 +164,9 @@ public:
 	size_t m_new_farmeshes {};
 	ChatBackend *chat_backend {};
 	FarContainer far_container;
-
+	ServerMap::far_dbases_t far_dbases;
+	std::string far_world_path;
+	std::unique_ptr<WorldMerger> merger;
 	// ==
 
 public:
