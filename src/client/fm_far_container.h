@@ -8,11 +8,11 @@ class Mapgen;
 class Client;
 class FarContainer : public NodeContainer
 {
-	Client *m_client;
+	Client *m_client{};
 
 public:
 	Mapgen *m_mg{};
-
+	bool use_weather {true};
 	FarContainer(Client *client);
 	const MapNode &getNodeRefUnsafe(const v3pos_t &p) override;
 };
