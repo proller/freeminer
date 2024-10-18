@@ -431,7 +431,7 @@ void Client::connect(Address address, bool is_local_server)
 
 void Client::step(float dtime)
 {
-	m_uptime += dtime;
+	m_uptime = m_uptime + dtime;
 
 	// Limit a bit
 	if (dtime > 2.0)

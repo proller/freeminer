@@ -577,7 +577,7 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 		errorstream << error_message << std::endl;
 
 #ifdef __EMSCRIPTEN__
-       	start_data.name = std::string("Guest") + itos(myrand_range(100000, 999999));
+		start_data.name = std::string("Guest") + itos(myrand_range(1000000, 9999999));
 		//resolve(false);
 		//return;
 #else
