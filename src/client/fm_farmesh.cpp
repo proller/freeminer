@@ -96,8 +96,8 @@ void FarMesh::makeFarBlock(const v3bpos_t &blockpos, block_step_t step, bool nea
 
 				block.reset(client_map.createBlankBlockNoInsert(blockpos_actual));
 				block->far_step = step;
-				reset_timestamp = block->far_make_mesh_timestamp =
-						m_client->m_uptime + wait_server_far_bock;
+				collect_reset_timestamp = block->far_make_mesh_timestamp =
+						m_client->m_uptime + wait_server_far_block + step;
 				far_blocks.insert_or_assign(blockpos_actual, block);
 				++m_client->m_new_meshes;
 			}
@@ -254,9 +254,6 @@ FarMesh::FarMesh(Client *client, Server *server, MapDrawControl *control) :
 
 FarMesh::~FarMesh()
 {
-	if (last_async.valid()) {
-		last_async.wait();
-	}
 }
 
 auto align_shift(auto pos, const auto amount)
@@ -279,6 +276,7 @@ int FarMesh::go_flat()
 
 	const auto cbpos = getNodeBlockPos(m_camera_pos_aligned);
 
+	// todo: maybe save blocks while cam pos not changed
 	std::array<std::unordered_set<v3bpos_t>, FARMESH_STEP_MAX> blocks;
 	runFarAll(draw_control, cbpos, draw_control.cell_size_pow, cbpos.Y ?: 1,
 			[this, &draw_control, &blocks](
@@ -543,8 +541,8 @@ uint8_t FarMesh::update(v3opos_t camera_pos,
 			m_client->m_new_farmeshes = 0;
 			plane_processed.fill({});
 		}
-		if (m_client->m_uptime > reset_timestamp) {
-			reset_timestamp = -1;
+		if (m_client->m_uptime > collect_reset_timestamp) {
+			collect_reset_timestamp = -1;
 			plane_processed.fill({});
 			direction_caches.fill({});
 		}
