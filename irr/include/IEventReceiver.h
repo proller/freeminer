@@ -322,6 +322,12 @@ struct SEvent
 		//! Y position of mouse cursor
 		s32 Y;
 
+		//! X movement of mouse cursor (only valid for EMIE_MOUSE_MOVED)
+		s32 XRel;
+
+		//! Y movement of mouse cursor (only valid for EMIE_MOUSE_MOVED)
+		s32 YRel;
+
 		//! mouse wheel delta, often 1.0 or -1.0, but can have other values < 0.f or > 0.f;
 		/** Only valid if event was EMIE_MOUSE_WHEEL */
 		f32 Wheel;

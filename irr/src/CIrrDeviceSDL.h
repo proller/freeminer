@@ -117,8 +117,8 @@ public:
 	class CCursorControl : public gui::ICursorControl
 	{
 	public:
-		CCursorControl(CIrrDeviceSDL *dev) :
-				Device(dev), IsVisible(true)
+		CCursorControl(CIrrDeviceSDL *dev, bool *want_pointerlock) :
+				Device(dev), IsVisible(true), WantPointerLock(want_pointerlock)
 		{
 			initCursors();
 		}
@@ -127,12 +127,19 @@ public:
 		void setVisible(bool visible) override
 		{
 			IsVisible = visible;
+#ifdef _IRR_EMSCRIPTEN_PLATFORM_
+				// The main loop takes care of reconciling the browser state
+				// and the desired state.
+				*WantPointerLock = !visible;
+#else
+
 			if (visible)
 				SDL_ShowCursor(SDL_ENABLE);
 			else {
 				SDL_ShowCursor(SDL_DISABLE);
 			}
 		}
+#endif
 
 		//! Returns if the cursor is currently visible.
 		bool isVisible() const override
@@ -260,6 +267,7 @@ public:
 		CIrrDeviceSDL *Device;
 		core::position2d<s32> CursorPos;
 		bool IsVisible;
+		bool *WantPointerLock; // external flag consumed by javascript
 
 		struct CursorDeleter
 		{
@@ -275,6 +283,7 @@ public:
 
 private:
 #ifdef _IRR_EMSCRIPTEN_PLATFORM_
+	static EM_BOOL MouseMoveCallback(int eventType, const EmscriptenMouseEvent * event, void* userData);
 	static EM_BOOL MouseUpDownCallback(int eventType, const EmscriptenMouseEvent *event, void *userData);
 	static EM_BOOL MouseEnterCallback(int eventType, const EmscriptenMouseEvent *mouseEvent, void *userData);
 	static EM_BOOL MouseLeaveCallback(int eventType, const EmscriptenMouseEvent *mouseEvent, void *userData);
@@ -299,6 +308,7 @@ private:
 
 	void logAttributes();
 	SDL_GLContext Context;
+	SDL_Renderer *Renderer;
 	SDL_Window *Window;
 #if defined(_IRR_COMPILE_WITH_JOYSTICK_EVENTS_)
 	core::array<SDL_Joystick *> Joysticks;
@@ -337,6 +347,7 @@ private:
 	};
 
 	core::array<SKeyMap> KeyMap;
+	bool KeySuppress;
 	SDL_SysWMinfo Info;
 
 	s32 CurrentTouchCount;

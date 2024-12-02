@@ -358,6 +358,7 @@ if(ENABLE_GLES2)
 	set(IRRDRVROBJ
 		${IRRDRVROBJ}
 		OpenGLES2/Driver.cpp
+		CWebGL1Driver.cpp
 	)
 endif()
 

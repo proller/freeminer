@@ -2,7 +2,10 @@
 // This file is part of the "Irrlicht Engine".
 // For conditions of distribution and use, see copyright notice in irrlicht.h
 
+#include "SDL_keycode.h"
 #ifdef _IRR_COMPILE_WITH_SDL_DEVICE_
+
+#include <iostream>
 
 #include "CIrrDeviceSDL.h"
 #include "IEventReceiver.h"
@@ -28,6 +31,40 @@
 #include "CSDLManager.h"
 
 static int SDLDeviceInstances = 0;
+
+extern "C" {
+	EMSCRIPTEN_KEEPALIVE
+	EM_BOOL irrlicht_want_pointerlock(void);
+
+	EMSCRIPTEN_KEEPALIVE
+	void irrlicht_resize(int width, int height);
+
+	EMSCRIPTEN_KEEPALIVE
+	void irrlicht_force_pointerlock(void);
+
+	void emloop_reenter_blessed(void);
+}
+
+static bool want_pointerlock = false;
+static int canvas_width = 0;
+static int canvas_height = 0;
+static bool canvas_updated = false;
+
+EM_BOOL irrlicht_want_pointerlock(void) {
+	return want_pointerlock ? 1 : 0;
+}
+
+void irrlicht_force_pointerlock(void) {
+	want_pointerlock = true;
+}
+
+void irrlicht_resize(int width, int height) {
+	if (canvas_width != width || canvas_height != height) {
+		canvas_width = width;
+		canvas_height = height;
+		canvas_updated = true;
+	}
+}
 
 namespace irr
 {
@@ -92,6 +129,7 @@ EM_BOOL CIrrDeviceSDL::MouseEnterCallback(int eventType, const EmscriptenMouseEv
 	CIrrDeviceSDL *This = static_cast<CIrrDeviceSDL *>(userData);
 
 	SEvent irrevent;
+	memset(&irrevent, 0, sizeof(SEvent));
 
 	irrevent.EventType = irr::EET_MOUSE_INPUT_EVENT;
 	irrevent.MouseInput.Event = irr::EMIE_MOUSE_ENTER_CANVAS;
@@ -113,6 +151,7 @@ EM_BOOL CIrrDeviceSDL::MouseLeaveCallback(int eventType, const EmscriptenMouseEv
 	CIrrDeviceSDL *This = static_cast<CIrrDeviceSDL *>(userData);
 
 	SEvent irrevent;
+	memset(&irrevent, 0, sizeof(SEvent));
 
 	irrevent.EventType = irr::EET_MOUSE_INPUT_EVENT;
 	irrevent.MouseInput.Event = irr::EMIE_MOUSE_LEAVE_CANVAS;
@@ -291,6 +330,35 @@ void CIrrDeviceSDL::resetReceiveTextInputEvents()
 	}
 }
 
+#ifdef __EMSCRIPTEN__
+Uint32 SDL_NOOP_EVENT;
+
+static int SDLCALL emloop_event_filter(void *userdata, SDL_Event * event) {
+	switch (event->type) {
+	case SDL_MOUSEBUTTONDOWN:
+	case SDL_MOUSEBUTTONUP:
+	case SDL_KEYDOWN:
+	case SDL_KEYUP:
+		// Ignore F11, so that it is handled by the browser.
+		if ((event->type == SDL_KEYDOWN || event->type == SDL_KEYUP) &&
+		    (event->key.keysym.sym == SDLK_F11 || event->key.keysym.scancode == SDLK_F11)) {
+			return 0;
+		}
+		// Push the event manually and re-enter the main loop so that it is processed immediately.
+		if (SDL_PeepEvents(event, 1, SDL_ADDEVENT, 0, 0) <= 0) {
+			return -1;
+		}
+		emloop_reenter_blessed();
+		// Unfortunately, can't return 0 here, or else preventDefault() won't be called in the js event handler.
+		// But returning 1, the event is going to be pushed again. Modify the event to make it a no-op.
+		event->type = SDL_NOOP_EVENT;
+		return 1;
+	}
+	// Handle all other events normally.
+	return 1;
+}
+#endif
+
 //! constructor
 CIrrDeviceSDL::CIrrDeviceSDL(const SIrrlichtCreationParameters &param) :
 		CIrrDeviceStub(param),
@@ -362,10 +430,20 @@ CIrrDeviceSDL::CIrrDeviceSDL(const SIrrlichtCreationParameters &param) :
 		} else {
 			os::Printer::log("SDL initialized", ELL_INFORMATION);
 		}
+
+#ifdef __EMSCRIPTEN__
+		// This is an SDL hook to filter events, but we need to abuse it to make
+		// SDL events (keyboard/mouse) trigger re-entry for immediate processing.
+		SDL_NOOP_EVENT = SDL_RegisterEvents(1);
+		SDL_SetEventFilter(emloop_event_filter, NULL);
+#endif
+
+
 	}
 
 	// create keymap
 	createKeyMap();
+	KeySuppress = false;
 
 	// create window
 	if (CreationParams.DriverType != video::EDT_NULL) {
@@ -393,7 +471,7 @@ CIrrDeviceSDL::CIrrDeviceSDL(const SIrrlichtCreationParameters &param) :
 	}
 
 	// create cursor control
-	CursorControl = new CCursorControl(this);
+	CursorControl = new CCursorControl(this, &want_pointerlock);
 
 	// create driver
 	createDriver();
@@ -453,8 +531,111 @@ void CIrrDeviceSDL::logAttributes()
 	os::Printer::log(sdl_attr.c_str());
 }
 
+#ifdef __EMSCRIPTEN__
+// The default SDL_CreateWindowAndRenderer does not allow setting
+// renderer flags. The VSYNC flag is needed to not break
+// requestAnimationFrame for the main loop on Emscripten.
+static int
+SDL_CreateWindowAndRendererFixed(int width, int height, Uint32 window_flags,
+                                 SDL_Window **window, SDL_Renderer **renderer)
+{
+    *window = SDL_CreateWindow(NULL, SDL_WINDOWPOS_UNDEFINED,
+                                     SDL_WINDOWPOS_UNDEFINED,
+                                     width, height, window_flags);
+    if (!*window) {
+        *renderer = NULL;
+        return -1;
+    }
+
+    // TODO(paradust):
+    //
+    // SDL_RENDERER_PRESENTVSYNC is equivalent to:
+    //
+    //   emscripten_set_main_loop_timing(1, 1);  // use requestAnimationFrame instead of setTimeout
+    //
+    // which is the recommended setting for rendering performance.
+    //
+    // However, major performance issues occur in other threads (especially the server thread)
+    // when this is enabled. It appears something is being done in other threads that
+    // requires periodic messaging to the main thread. If the main thread is too busy, other
+    // threads stall. This dependency should be found and removed, so that vsync can
+    // be enabled.
+    //
+    *renderer = SDL_CreateRenderer(*window, -1, 0); //SDL_RENDERER_PRESENTVSYNC);
+    if (!*renderer) {
+        return -1;
+    }
+
+    return 0;
+}
+#endif
+
 bool CIrrDeviceSDL::createWindow()
 {
+
+#ifdef _IRR_EMSCRIPTEN_PLATFORM_
+
+	if (CreationParams.Fullscreen) {
+#ifdef _IRR_EMSCRIPTEN_PLATFORM_
+		SDL_Flags |= SDL_WINDOW_FULLSCREEN;
+#else
+		SDL_Flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+#endif
+	}
+#ifndef _IRR_EMSCRIPTEN_PLATFORM_
+	if (Resizable)
+		SDL_Flags |= SDL_WINDOW_RESIZABLE;
+	if (CreationParams.WindowMaximized)
+		SDL_Flags |= SDL_WINDOW_MAXIMIZED;
+#endif
+	SDL_Flags |= SDL_WINDOW_OPENGL;
+
+	if ( Width != 0 || Height != 0 ) {
+		printf("SETTING CANVAS SIZE: WIDTH=%d, HEIGHT=%d\n", Width, Height);
+		emscripten_set_canvas_size( Width, Height);
+	} else
+	{
+		int w, h, fs;
+		emscripten_get_canvas_size(&w, &h, &fs);
+		Width = w;
+		Height = h;
+		printf("GOT FROM EMSCRIPTEN: WIDTH=%d, HEIGHT=%d\n", Width, Height);
+	}
+
+	SDL_GL_SetAttribute( SDL_GL_RED_SIZE, 8 );
+	SDL_GL_SetAttribute( SDL_GL_GREEN_SIZE, 8 );
+	SDL_GL_SetAttribute( SDL_GL_BLUE_SIZE, 8 );
+	SDL_GL_SetAttribute( SDL_GL_ALPHA_SIZE, CreationParams.WithAlphaChannel?8:0 );
+
+	SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, CreationParams.ZBufferBits);
+	SDL_GL_SetAttribute( SDL_GL_STENCIL_SIZE, CreationParams.Stencilbuffer ? 8 : 0);
+	SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, CreationParams.Doublebuffer ? 1 : 0);
+
+	if (CreationParams.AntiAlias>1)
+	{
+		SDL_GL_SetAttribute( SDL_GL_MULTISAMPLEBUFFERS, 1 );
+		SDL_GL_SetAttribute( SDL_GL_MULTISAMPLESAMPLES, CreationParams.AntiAlias );
+	}
+	else
+	{
+		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
+		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
+	}
+
+	SDL_CreateWindowAndRendererFixed(Width, Height, SDL_Flags, &Window, &Renderer); // 0,0 will use the canvas size
+
+	logAttributes();
+
+	// "#canvas" is for the opengl context
+	emscripten_set_mousedown_callback("#canvas", (void*)this, true, MouseUpDownCallback);
+    emscripten_set_mouseup_callback("#canvas", (void*)this, true, MouseUpDownCallback);
+    emscripten_set_mouseenter_callback("#canvas", (void*)this, false, MouseEnterCallback);
+    emscripten_set_mouseleave_callback("#canvas", (void*)this, false, MouseLeaveCallback);
+
+	return true;
+#else // !_IRR_EMSCRIPTEN_PLATFORM_
+
+
 	if (Close)
 		return false;
 
@@ -530,6 +711,7 @@ bool CIrrDeviceSDL::createWindow()
 
 	os::Printer::log("Could not create window and context!", ELL_ERROR);
 	return false;
+#endif
 }
 
 bool CIrrDeviceSDL::createWindowWithContext()
@@ -573,7 +755,7 @@ bool CIrrDeviceSDL::createWindowWithContext()
 		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
 	}
 
-	SDL_CreateWindowAndRenderer(0, 0, SDL_Flags, &Window, &Renderer); // 0,0 will use the canvas size
+	SDL_CreateWindowAndRendererFixed(Width, Height, SDL_Flags, &Window, &Renderer); // 0,0 will use the canvas size
 
 	logAttributes();
 
@@ -703,13 +885,70 @@ static int wrap_PollEvent(SDL_Event *ev)
 	return ret;
 }
 
+// This only handles single, printable, ascii characters.
+static char KeyAsText(const SDL_Keysym *keysym) {
+	if (keysym->mod & KMOD_CTRL)
+	{
+		return 0;
+	}
+	bool printable = keysym->sym >= 32 && keysym->sym < 127;
+	if (!printable)
+	{
+		return 0;
+	}
+	bool shiftSymbols = !!(keysym->mod & KMOD_SHIFT);
+	bool shiftLetters = shiftSymbols != !!(keysym->mod & KMOD_CAPS);
+	if (shiftLetters && keysym->sym >= 'a' && keysym->sym <= 'z')
+	{
+		return keysym->sym - 32;
+	}
+	if (shiftSymbols)
+	{
+		switch (keysym->sym)
+		{
+		case '`': return '~';
+		case '1': return '!';
+		case '2': return '@';
+		case '3': return '#';
+		case '4': return '$';
+		case '5': return '%';
+		case '6': return '^';
+		case '7': return '&';
+		case '8': return '*';
+		case '9': return '(';
+		case '0': return ')';
+		case '-': return '_';
+		case '=': return '+';
+		case '[': return '{';
+		case ']': return '}';
+		case '\\': return '|';
+		case ';': return ':';
+		case '\'': return '"';
+		case ',': return '<';
+		case '.': return '>';
+		case '/': return '?';
+		}
+	}
+	return keysym->sym;
+}
+
 //! runs the device. Returns false if device wants to be deleted
 bool CIrrDeviceSDL::run()
 {
 	os::Timer::tick();
 
-	SEvent irrevent;
+	SEvent irrevent{};
 	SDL_Event SDL_event;
+
+	// TODO(paradust):
+	//
+	// SDL/emscripten doesn't generate SDL_WINDOWEVENT_RESIZED or SDL_WINDOWEVENT_SIZE_CHANGED
+	// events when the canvas is resized externally (using the js api). It isn't clear why.
+	// This would match the behavior of other platforms. Until fixed, trigger the update manually.
+	if (canvas_updated && (Width != canvas_width || Height != canvas_height)) {
+		SDL_SetWindowSize(Window, canvas_width, canvas_height);
+		canvas_updated = false;
+	}
 
 	while (!Close && wrap_PollEvent(&SDL_event)) {
 		// os::Printer::log("event: ", core::stringc((int)SDL_event.type).c_str(),   ELL_INFORMATION);	// just for debugging
@@ -772,6 +1011,8 @@ bool CIrrDeviceSDL::run()
 
 			irrevent.MouseInput.Event = irr::EMIE_MOUSE_MOVED;
 
+			/* // Handled by javascript instead.
+
 #ifdef _IRR_EMSCRIPTEN_PLATFORM_
 			// Handle mouselocking in emscripten in Windowed mode.
 			// In fullscreen SDL will handle it.
@@ -792,6 +1033,7 @@ bool CIrrDeviceSDL::run()
 				}
 			}
 #endif
+			*/
 
 			auto button = SDL_event.button.button;
 #ifdef __ANDROID__
@@ -855,6 +1097,15 @@ bool CIrrDeviceSDL::run()
 		}
 
 		case SDL_TEXTINPUT: {
+			// A single key press generates three SDL events: SDL_KEYDOWN, SDL_TEXTINPUT, and SDL_KEYUP.
+			// If the SDL_KEYDOWN handler emitted an EET_KEY_INPUT_EVENT that carries the character code,
+			// don't also generate EET_STRING_INPUT_EVENT. Doing so would duplicate the character.
+			if (KeySuppress && SDL_event.text.text[1] == 0) {
+				KeySuppress = false;
+				break;
+			}
+			KeySuppress = false;
+
 			irrevent.EventType = irr::EET_STRING_INPUT_EVENT;
 			irrevent.StringInput.Str = new core::stringw();
 			irr::core::utf8ToWString(*irrevent.StringInput.Str, SDL_event.text.text);
@@ -887,8 +1138,12 @@ bool CIrrDeviceSDL::run()
 			irrevent.KeyInput.PressedDown = (SDL_event.type == SDL_KEYDOWN);
 			irrevent.KeyInput.Shift = (SDL_event.key.keysym.mod & KMOD_SHIFT) != 0;
 			irrevent.KeyInput.Control = (SDL_event.key.keysym.mod & KMOD_CTRL) != 0;
+/*
 			irrevent.KeyInput.Char = findCharToPassToIrrlicht(mp.SDLKey, key,
 					(SDL_event.key.keysym.mod & KMOD_NUM) != 0);
+*/
+			irrevent.KeyInput.Char = (SDL_event.type == SDL_KEYDOWN) ? KeyAsText(&SDL_event.key.keysym) : 0;
+			KeySuppress = (irrevent.KeyInput.Char != 0);
 			postEventFromUser(irrevent);
 		} break;
 
@@ -903,6 +1158,7 @@ bool CIrrDeviceSDL::run()
 #if SDL_VERSION_ATLEAST(2, 0, 18)
 			case SDL_WINDOWEVENT_DISPLAY_CHANGED:
 #endif
+				std::cout << "RESIZE: w=" << SDL_event.window.data1 << ", h=" << SDL_event.window.data2 << std::endl;
 				u32 old_w = Width, old_h = Height;
 				f32 old_scale_x = ScaleX, old_scale_y = ScaleY;
 				updateSizeAndScale();
@@ -1002,6 +1258,7 @@ bool CIrrDeviceSDL::run()
 	SDL_JoystickUpdate();
 	// we'll always send joystick input events...
 	SEvent joyevent;
+	memset(&joyevent, 0, sizeof(SEvent));
 	joyevent.EventType = EET_JOYSTICK_INPUT_EVENT;
 	for (u32 i = 0; i < Joysticks.size(); ++i) {
 		SDL_Joystick *joystick = Joysticks[i];
@@ -1353,9 +1610,16 @@ void CIrrDeviceSDL::createKeyMap()
 	// the lookuptable, but I'll leave it like that until
 	// I find a better version.
 
-	KeyMap.reallocate(105);
+	//KeyMap.reallocate(200);
 
 	// buttons missing
+	KeyMap.push_back(SKeyMap(SDLK_SEMICOLON, KEY_OEM_1));
+	KeyMap.push_back(SKeyMap(SDLK_SLASH, KEY_OEM_2));
+	KeyMap.push_back(SKeyMap(SDLK_BACKQUOTE, KEY_OEM_3));
+	KeyMap.push_back(SKeyMap(SDLK_LEFTBRACKET, KEY_OEM_4));
+	KeyMap.push_back(SKeyMap(SDLK_BACKSLASH, KEY_OEM_5));
+	KeyMap.push_back(SKeyMap(SDLK_RIGHTBRACKET, KEY_OEM_6));
+	KeyMap.push_back(SKeyMap(SDLK_QUOTE, KEY_OEM_7));
 
 	// Android back button = ESC
 	KeyMap.push_back(SKeyMap(SDLK_AC_BACK, KEY_ESCAPE));
@@ -1393,7 +1657,8 @@ void CIrrDeviceSDL::createKeyMap()
 
 	KeyMap.push_back(SKeyMap(SDLK_INSERT, KEY_INSERT));
 	KeyMap.push_back(SKeyMap(SDLK_DELETE, KEY_DELETE));
-	KeyMap.push_back(SKeyMap(SDLK_HELP, KEY_HELP));
+	// interferes with slash
+	//KeyMap.push_back(SKeyMap(SDLK_HELP, KEY_HELP));
 
 	KeyMap.push_back(SKeyMap(SDLK_0, KEY_KEY_0));
 	KeyMap.push_back(SKeyMap(SDLK_1, KEY_KEY_1));
@@ -1481,7 +1746,8 @@ void CIrrDeviceSDL::createKeyMap()
 	KeyMap.push_back(SKeyMap(SDLK_LALT, KEY_LMENU));
 	KeyMap.push_back(SKeyMap(SDLK_RALT, KEY_RMENU));
 
-	KeyMap.push_back(SKeyMap(SDLK_PLUS, KEY_PLUS));
+	//KeyMap.push_back(SKeyMap(SDLK_PLUS, KEY_PLUS));
+	KeyMap.push_back(SKeyMap(SDLK_EQUALS, KEY_PLUS));
 	KeyMap.push_back(SKeyMap(SDLK_COMMA, KEY_COMMA));
 	KeyMap.push_back(SKeyMap(SDLK_MINUS, KEY_MINUS));
 	KeyMap.push_back(SKeyMap(SDLK_PERIOD, KEY_PERIOD));
