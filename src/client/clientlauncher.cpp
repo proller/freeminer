@@ -1,41 +1,33 @@
-/*
-Minetest
-Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
-
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Lesser General Public License for more details.
-
-You should have received a copy of the GNU Lesser General Public License along
-with this program; if not, write to the Free Software Foundation, Inc.,
-51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-*/
+// Luanti
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
 #include <functional>
 #include "mainloop.h"
+#include "../server/serverlist.h"
+
+#include "IAttributes.h"
 #include "gui/mainmenumanager.h"
 #include "clouds.h"
-#include "server.h"
+#include "gui/touchcontrols.h"
 #include "filesys.h"
 #include "gui/guiMainMenu.h"
 #include "game.h"
 #include "player.h"
 #include "chat.h"
 #include "gettext.h"
+#include "inputhandler.h"
 #include "profiler.h"
-#include "serverlist.h"
 #include "gui/guiEngine.h"
 #include "fontengine.h"
 #include "clientlauncher.h"
 #include "version.h"
 #include "renderingengine.h"
-#include "network/networkexceptions.h"
+#include "settings.h"
+#include "util/tracy_wrapper.h"
+#include <IGUISpriteBank.h>
+#include <ICameraSceneNode.h>
+#include <unordered_map>
 
 #if USE_SOUND
 	#include "sound/sound_openal.h"
@@ -48,11 +40,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 gui::IGUIEnvironment *guienv = nullptr;
 gui::IGUIStaticText *guiroot = nullptr;
 MainMenuManager g_menumgr;
-
-bool isMenuActive()
-{
-	return g_menumgr.menuCount() != 0;
-}
 
 // Passed to menus to allow disconnecting and exiting
 MainGameCallback *g_gamecallback = nullptr;
@@ -76,12 +63,21 @@ ClientLauncher::~ClientLauncher()
 {
 	delete input;
 
-	delete receiver;
+	g_settings->deregisterAllChangedCallbacks(this);
 
 	delete g_fontengine;
+	g_fontengine = nullptr;
 	delete g_gamecallback;
+	g_gamecallback = nullptr;
+
+	guiroot = nullptr;
+	guienv = nullptr;
+	assert(g_menumgr.menuCount() == 0);
 
 	delete m_rendering_engine;
+
+	// delete event receiver only after all Irrlicht stuff is gone
+	delete receiver;
 
 #if USE_SOUND
 	g_sound_manager_singleton.reset();
@@ -134,31 +130,17 @@ void ClientLauncher::run(std::function<void(bool)> resolve)
 //		g_sound_manager_singleton = createSoundManagerSingleton();
 //#endif
 
-	if (!init_engine()) {
-		errorstream << "Could not initialize game engine." << std::endl;
+	if (!init_engine())
 		resolve(false); return;
-	}
 
-	// Speed tests (done after irrlicht is loaded to get timer)
-	if (cmd_args.getFlag("speedtests")) {
-		dstream << "Running speed tests" << std::endl;
-		speed_tests();
-		resolve(true); return;
-	}
-
-	if (m_rendering_engine->get_video_driver() == NULL) {
+	if (!m_rendering_engine->get_video_driver()) {
 		errorstream << "Could not initialize video driver." << std::endl;
 		resolve(false); return;
 	}
 
 	m_rendering_engine->setupTopLevelWindow();
 
-	/*
-		This changes the minimum allowed number of vertices in a VBO.
-		Default is 500.
-	*/
-	//driver->setMinHardwareBufferVertexCount(50);
-	m_rendering_engine->getVideoDriver()->setMinHardwareBufferVertexCount(100);
+	//m_rendering_engine->getVideoDriver()->setMinHardwareBufferVertexCount(100);
 
 	// Create game callback for menus
 	g_gamecallback = new MainGameCallback();
@@ -171,51 +153,20 @@ void ClientLauncher::run(std::function<void(bool)> resolve)
 		setAttribute(scene::ALLOW_ZWRITE_ON_TRANSPARENT, true);
 
 	guienv = m_rendering_engine->get_gui_env();
-	skin = guienv->getSkin();
-	skin->setColor(gui::EGDC_WINDOW_SYMBOL, video::SColor(255, 255, 255, 255));
-	skin->setColor(gui::EGDC_BUTTON_TEXT, video::SColor(255, 255, 255, 255));
-	skin->setColor(gui::EGDC_3D_LIGHT, video::SColor(0, 0, 0, 0));
-	skin->setColor(gui::EGDC_3D_HIGH_LIGHT, video::SColor(255, 30, 30, 30));
-	skin->setColor(gui::EGDC_3D_SHADOW, video::SColor(255, 0, 0, 0));
-	skin->setColor(gui::EGDC_HIGH_LIGHT, video::SColor(255, 56, 121, 65));
-	skin->setColor(gui::EGDC_HIGH_LIGHT_TEXT, video::SColor(255, 255, 255, 255));
-
-	float density = rangelim(g_settings->getFloat("gui_scaling"), 0.5, 20) *
-		RenderingEngine::getDisplayDensity();
-	skin->setSize(gui::EGDS_CHECK_BOX_WIDTH, (s32)(17.0f * density));
-	skin->setSize(gui::EGDS_SCROLLBAR_SIZE, (s32)(14.0f * density));
-	skin->setSize(gui::EGDS_WINDOW_BUTTON_WIDTH, (s32)(15.0f * density));
-	if (density > 1.5f) {
-		std::string sprite_path = porting::path_share + "/textures/base/pack/";
-		if (density > 3.5f)
-			sprite_path.append("checkbox_64.png");
-		else if (density > 2.0f)
-			sprite_path.append("checkbox_32.png");
-		else
-			sprite_path.append("checkbox_16.png");
-		// Texture dimensions should be a power of 2
-		gui::IGUISpriteBank *sprites = skin->getSpriteBank();
-		video::IVideoDriver *driver = m_rendering_engine->get_video_driver();
-		video::ITexture *sprite_texture = driver->getTexture(sprite_path.c_str());
-		if (sprite_texture) {
-			s32 sprite_id = sprites->addTextureAsSprite(sprite_texture);
-			if (sprite_id != -1)
-				skin->setIcon(gui::EGDI_CHECK_BOX_CHECKED, sprite_id);
-		}
-	}
+	config_guienv();
+	g_settings->registerChangedCallback("dpi_change_notifier", setting_changed_callback, this);
+	g_settings->registerChangedCallback("display_density_factor", setting_changed_callback, this);
+	g_settings->registerChangedCallback("gui_scaling", setting_changed_callback, this);
 
 	g_fontengine = new FontEngine(guienv);
-	FATAL_ERROR_IF(g_fontengine == NULL, "Font engine creation failed.");
-
-	// Irrlicht 1.8 input colours
-	skin->setColor(gui::EGDC_EDITABLE, video::SColor(255, 128, 128, 128));
-	skin->setColor(gui::EGDC_FOCUSED_EDITABLE, video::SColor(255, 97, 173, 109));
 
 	// Create the menu clouds
-	if (!g_menucloudsmgr)
-		g_menucloudsmgr = m_rendering_engine->get_scene_manager()->createNewSceneManager();
-	if (!g_menuclouds)
-		g_menuclouds = new Clouds(g_menucloudsmgr, -1, rand());
+	// This is only global so it can be used by RenderingEngine::draw_load_screen().
+	assert(!g_menucloudsmgr && !g_menuclouds);
+	std::unique_ptr<IWritableShaderSource> ssrc(createShaderSource());
+	ssrc->addShaderConstantSetterFactory(new FogShaderConstantSetterFactory());
+	g_menucloudsmgr = m_rendering_engine->get_scene_manager()->createNewSceneManager();
+	g_menuclouds = new Clouds(g_menucloudsmgr, ssrc.get(), -1, rand());
 	g_menuclouds->setHeight(100.0f);
 	g_menuclouds->update(v3f(0, 0, 0), video::SColor(255, 240, 240, 255));
 	scene::ICameraSceneNode* camera;
@@ -260,23 +211,25 @@ void ClientLauncher::run_loop(std::function<void(bool)> resolve) {
 		}
 
 		// Set the window caption
+		auto driver_name = m_rendering_engine->getVideoDriver()->getName();
+		std::string caption = std::string(PROJECT_NAME_C) +
+			" " + g_version_hash +
+			" [" + gettext("Main Menu") + "]" +
+			" [" + driver_name + "]";
+
 		m_rendering_engine->get_raw_device()->
-			setWindowCaption((utf8_to_wide(PROJECT_NAME_C) +
-			L" " + utf8_to_wide(g_version_hash) +
-			L" [" + wstrgettext("Main Menu") + L"]").c_str());
+			setWindowCaption(utf8_to_wide(caption).c_str());
 
-		// EXTRA INDENT
-		m_rendering_engine->get_gui_env()->clear();
-
-		/*
-			We need some kind of a root node to be able to add
-			custom gui elements directly on the screen.
-			Otherwise they won't be automatically drawn.
-		*/
-		guiroot = m_rendering_engine->get_gui_env()->addStaticText(L"",
-			core::rect<s32>(0, 0, 10000, 10000));
+#ifdef NDEBUG
+		//try {
+#endif
+			m_rendering_engine->get_gui_env()->clear();
 
 		launch_game([this, resolve](bool game_has_run) { run_after_launch_game(resolve, game_has_run); });
+/*
+			bool should_run_game = launch_game(error_message, reconnect_requested,
+				start_data, cmd_args);
+*/
 }
 
 void ClientLauncher::run_after_launch_game(std::function<void(bool)> resolve, bool game_has_run) {
@@ -286,38 +239,37 @@ void ClientLauncher::run_after_launch_game(std::function<void(bool)> resolve, bo
 			reconnect_requested = false;
 
 			// If skip_main_menu, we only want to startup once
-			if (skip_main_menu && !first_loop) {
+			if (skip_main_menu && !first_loop)
+			{
 				run_cleanup(resolve);
 				return;
+				// break;
 			}
 
 			first_loop = false;
 
-			if (!game_has_run) {
-				if (skip_main_menu) {
+			if (!should_run_game) {
+				if (skip_main_menu)
+				{
 					run_cleanup(resolve);
 					return;
+					// break;
 				}
 
+				// continue;
 				MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
 				return;
+
 			}
 
 			// Break out of menu-game loop to shut down cleanly
-			if (!m_rendering_engine->run() || *kill) {
-				if (!g_settings_path.empty())
-					g_settings->updateConfigFile(g_settings_path.c_str());
-				run_cleanup(resolve);
-				return;
+			if (!m_rendering_engine->run() || *kill)
+			{
+					run_cleanup(resolve);
+					return;
+					// break;
 			}
 
-			m_rendering_engine->get_video_driver()->setTextureCreationFlag(
-					video::ETCF_CREATE_MIP_MAPS, g_settings->getBool("mip_map"));
-
-#ifdef HAVE_TOUCHSCREENGUI
-			receiver->m_touchscreengui = new TouchScreenGUI(m_rendering_engine->get_raw_device(), receiver);
-			g_touchscreengui = receiver->m_touchscreengui;
-#endif
 			int tries = start_data.isSinglePlayer() ? 1 : g_settings->getU16("reconnects");
 			int n = 0;
 
@@ -339,13 +291,8 @@ void ClientLauncher::run_after_launch_game(std::function<void(bool)> resolve, bo
 			}
 
 		/*} //try
-		catch (con::PeerNotFoundException &e) {
-			error_message = _("Connection error (timed out?)");
-			errorstream << error_message << std::endl;
-		}
-
-#if !EXCEPTION_DEBUG
-		catch (std::exception &e) {
+#if NDEBUG && !EXCEPTION_DEBUG
+		} catch (std::exception &e) {
 			error_message = "Some exception: ";
 			error_message.append(debug_describe_exc(e));
 			errorstream << error_message << std::endl;
@@ -356,33 +303,53 @@ void ClientLauncher::run_after_launch_game(std::function<void(bool)> resolve, bo
 		m_rendering_engine->get_scene_manager()->clear();
 }				
 
+
 void ClientLauncher::after_the_game(std::function<void(bool)> resolve) {
 	// EXTRANEOUS INDENT
 					// AFTER TRY
 					m_rendering_engine->get_scene_manager()->clear();
-#ifdef HAVE_TOUCHSCREENGUI
-					delete g_touchscreengui;
-					g_touchscreengui = NULL;
-					receiver->m_touchscreengui = NULL;
-#endif
 
-					// If no main menu, show error and exit
-					if (skip_main_menu) {
-						if (!error_message.empty()) {
-							verbosestream << "error_message = "
-							              << error_message << std::endl;
-							retval = false;
-						}
-						run_cleanup(resolve);
-						return;
-					}
-					MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
-					return;
-}
+		if (g_touchcontrols) {
+			delete g_touchcontrols;
+			g_touchcontrols = NULL;
+		}
+
+		/* Save the settings when leaving the game.
+		 * This makes sure that setting changes made in-game are persisted even
+		 * in case of a later unclean exit from the mainmenu.
+		 * This is especially useful on Android because closing the app from the
+		 * "Recents screen" results in an unclean exit.
+		 * Caveat: This means that the settings are saved twice when exiting Minetest.
+		 */
+		if (!g_settings_path.empty())
+			g_settings->updateConfigFile(g_settings_path.c_str());
+
+		// If no main menu, show error and exit
+		if (skip_main_menu) {
+			if (!error_message.empty())
+				retval = false;
+			//break;
+            run_cleanup(resolve);
+			return;
+		}
+		MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
+		return;
+	} // Menu-game loop
 
 void ClientLauncher::run_cleanup(std::function<void(bool)> resolve) {
+	// If profiler was enabled print it one last time
+	if (g_settings->getFloat("profiler_print_interval") > 0) {
+		infostream << "Profiler:" << std::endl;
+		g_profiler->print(infostream);
+		g_profiler->clear();
+	}
+
+	assert(g_menucloudsmgr->getReferenceCount() == 1);
+	g_menucloudsmgr->drop();
+	g_menucloudsmgr = nullptr;
+	assert(g_menuclouds->getReferenceCount() == 1);
 	g_menuclouds->drop();
-	resolve(retval);
+	g_menuclouds = nullptr;
 
 #ifdef _IRR_COMPILE_WITH_LEAK_HUNTER_
 	auto objects = LeakHunter::getReferenceCountedObjects();
@@ -394,6 +361,7 @@ void ClientLauncher::run_cleanup(std::function<void(bool)> resolve) {
 	}
 #endif
 
+	resolve(retval);
 	return;
 }
 
@@ -427,8 +395,12 @@ void ClientLauncher::init_args(GameStartData &start_data, const Settings &cmd_ar
 bool ClientLauncher::init_engine()
 {
 	receiver = new MyEventReceiver();
-	m_rendering_engine = new RenderingEngine(receiver);
-	return m_rendering_engine->get_raw_device() != nullptr;
+	try {
+		m_rendering_engine = new RenderingEngine(receiver);
+	} catch (std::exception &e) {
+		errorstream << e.what() << std::endl;
+	}
+	return !!m_rendering_engine;
 }
 
 void ClientLauncher::init_input()
@@ -458,7 +430,71 @@ void ClientLauncher::init_input()
 	}
 }
 
+void ClientLauncher::setting_changed_callback(const std::string &name, void *data)
+{
+	static_cast<ClientLauncher*>(data)->config_guienv();
+}
+
+void ClientLauncher::config_guienv()
+{
+	gui::IGUISkin *skin = guienv->getSkin();
+
+	skin->setColor(gui::EGDC_WINDOW_SYMBOL, video::SColor(255, 255, 255, 255));
+	skin->setColor(gui::EGDC_BUTTON_TEXT, video::SColor(255, 255, 255, 255));
+	skin->setColor(gui::EGDC_3D_LIGHT, video::SColor(0, 0, 0, 0));
+	skin->setColor(gui::EGDC_3D_HIGH_LIGHT, video::SColor(255, 30, 30, 30));
+	skin->setColor(gui::EGDC_3D_SHADOW, video::SColor(255, 0, 0, 0));
+	//skin->setColor(gui::EGDC_HIGH_LIGHT, video::SColor(255, 70, 120, 50));
+	skin->setColor(gui::EGDC_HIGH_LIGHT, video::SColor(255, 56, 121, 65));
+	skin->setColor(gui::EGDC_HIGH_LIGHT_TEXT, video::SColor(255, 255, 255, 255));
+	skin->setColor(gui::EGDC_EDITABLE, video::SColor(255, 128, 128, 128));
+	//skin->setColor(gui::EGDC_FOCUSED_EDITABLE, video::SColor(255, 96, 134, 49));
+	skin->setColor(gui::EGDC_FOCUSED_EDITABLE, video::SColor(255, 97, 173, 109));
+
+	float density = rangelim(g_settings->getFloat("gui_scaling"), 0.5f, 20) *
+		RenderingEngine::getDisplayDensity();
+	skin->setScale(density);
+	skin->setSize(gui::EGDS_CHECK_BOX_WIDTH, (s32)(17.0f * density));
+	skin->setSize(gui::EGDS_SCROLLBAR_SIZE, (s32)(21.0f * density));
+	skin->setSize(gui::EGDS_WINDOW_BUTTON_WIDTH, (s32)(15.0f * density));
+
+	static u32 orig_sprite_id = skin->getIcon(gui::EGDI_CHECK_BOX_CHECKED);
+	static std::unordered_map<std::string, u32> sprite_ids;
+
+	if (density > 1.5f) {
+		// Texture dimensions should be a power of 2
+		std::string path = porting::path_share + "/textures/base/pack/";
+		if (density > 3.5f)
+			path.append("checkbox_64.png");
+		else if (density > 2.0f)
+			path.append("checkbox_32.png");
+		else
+			path.append("checkbox_16.png");
+
+		auto cached_id = sprite_ids.find(path);
+		if (cached_id != sprite_ids.end()) {
+			skin->setIcon(gui::EGDI_CHECK_BOX_CHECKED, cached_id->second);
+		} else {
+			gui::IGUISpriteBank *sprites = skin->getSpriteBank();
+			video::IVideoDriver *driver = m_rendering_engine->get_video_driver();
+			video::ITexture *texture = driver->getTexture(path.c_str());
+			s32 id = sprites->addTextureAsSprite(texture);
+			if (id != -1) {
+				skin->setIcon(gui::EGDI_CHECK_BOX_CHECKED, id);
+				sprite_ids.emplace(path, id);
+			}
+		}
+	} else {
+		skin->setIcon(gui::EGDI_CHECK_BOX_CHECKED, orig_sprite_id);
+	}
+}
+
 void ClientLauncher::launch_game(std::function<void(bool)> resolve)
+/*
+bool ClientLauncher::launch_game(std::string &error_message,
+		bool reconnect_requested, GameStartData &start_data,
+		const Settings &cmd_args)
+*/
 {
 	// Prepare and check the start data to launch a game
 	std::string error_message_lua = error_message;
@@ -470,7 +506,7 @@ void ClientLauncher::launch_game(std::function<void(bool)> resolve)
 	if (cmd_args.exists("password-file")) {
 		std::ifstream passfile(cmd_args.get("password-file"));
 		if (passfile.good()) {
-			getline(passfile, start_data.password);
+			std::getline(passfile, start_data.password);
 		} else {
 			error_message = gettext("Provided password file "
 					"failed to open: ")
@@ -541,8 +577,6 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 
 		int world_index = menudata.selected_world;
 		if (world_index >= 0 && world_index < (int)worldspecs.size()) {
-			g_settings->set("selected_world_path",
-					worldspecs[world_index].path);
 			start_data.world_spec = worldspecs[world_index];
 		}
 
@@ -640,16 +674,7 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 			resolve(false); return;
 		}
 
-		if (porting::signal_handler_killstatus()) {
-			resolve(true); return;
-		}
-
-		if (!start_data.game_spec.isValid()) {
-			error_message = _("Invalid gamespec.");
-			error_message += " (world.gameid=" + worldspec.gameid + ")";
-			errorstream << error_message << std::endl;
-			resolve(false); return;
-		}
+		resolve(true); return;
 	}
 	start_data.world_path = start_data.world_spec.path;
 	resolve(true); return;
@@ -659,6 +684,14 @@ void ClientLauncher::main_menu(std::function<void()> resolve)
 {
 	ServerList::lan_get();
 	infostream << "Waiting for other menus" << std::endl;
+	auto framemarker = FrameMarker("ClientLauncher::main_menu()-wait-frame").started();
+
+/*
+	while (m_rendering_engine->run() && !*kill) {
+		if (!isMenuActive())
+			break;
+*/
+
 	main_menu_loop(resolve);
 }
 
@@ -670,24 +703,29 @@ void ClientLauncher::main_menu_loop(std::function<void()> resolve) {
 			return;
 		}
 		video::IVideoDriver *driver = m_rendering_engine->get_video_driver();
+
 		driver->beginScene(true, true, video::SColor(255, 128, 128, 128));
 		m_rendering_engine->get_gui_env()->drawAll();
 		driver->endScene();
+		framemarker.end();
 		// On some computers framerate doesn't seem to be automatically limited
 		//sleep_ms(25);
+		framemarker.start();
 		MainLoop::NextFrame([this, resolve]() { main_menu_loop(resolve); });
 }
 
 void ClientLauncher::main_menu_after_loop(std::function<void()> resolve) {
+	}
+	framemarker.end();
 	infostream << "Waited for other menus" << std::endl;
 
-#ifndef ANDROID
-	// Cursor can be non-visible when coming from the game
-	m_rendering_engine->get_raw_device()->getCursorControl()->setVisible(true);
-
-	// Set absolute mouse mode
-	m_rendering_engine->get_raw_device()->getCursorControl()->setRelativeMode(false);
-#endif
+	auto *cur_control = m_rendering_engine->get_raw_device()->getCursorControl();
+	if (cur_control) {
+		// Cursor can be non-visible when coming from the game
+		cur_control->setVisible(true);
+		// Set absolute mouse mode
+		cur_control->setRelativeMode(false);
+	}
 
 	/* show main menu */
 	new GUIEngine(&input->joystick, guiroot, m_rendering_engine, &g_menumgr, menudata_addr, *kill, [this, resolve]() {
@@ -702,108 +740,16 @@ void ClientLauncher::main_menu_after_guiengine(std::function<void()> resolve) {
 
 	ServerList::lan_adv_client.stop();
 	resolve();
-}
 
-void ClientLauncher::speed_tests()
-{
-	// volatile to avoid some potential compiler optimisations
-	volatile static s16 temp16;
-	volatile static f32 tempf;
-	// Silence compiler warning
-	(void)temp16;
-	static v3f tempv3f1;
-	static v3f tempv3f2;
-	static std::string tempstring;
-	static std::string tempstring2;
-
-	tempv3f1 = v3f();
-	tempv3f2 = v3f();
-	tempstring.clear();
-	tempstring2.clear();
-
-	{
-		infostream << "The following test should take around 20ms." << std::endl;
-		TimeTaker timer("Testing std::string speed");
-		const u32 jj = 10000;
-		for (u32 j = 0; j < jj; j++) {
-			tempstring.clear();
-			tempstring2.clear();
-			const u32 ii = 10;
-			for (u32 i = 0; i < ii; i++) {
-				tempstring2 += "asd";
-			}
-			for (u32 i = 0; i < ii+1; i++) {
-				tempstring += "asd";
-				if (tempstring == tempstring2)
-					break;
-			}
-		}
-	}
-
-	infostream << "All of the following tests should take around 100ms each."
-	           << std::endl;
-
-	{
-		TimeTaker timer("Testing floating-point conversion speed");
-		tempf = 0.001;
-		for (u32 i = 0; i < 4000000; i++) {
-			temp16 += tempf;
-			tempf += 0.001;
-		}
-	}
-
-	{
-		TimeTaker timer("Testing floating-point vector speed");
-
-		tempv3f1 = v3f(1, 2, 3);
-		tempv3f2 = v3f(4, 5, 6);
-		for (u32 i = 0; i < 10000000; i++) {
-			tempf += tempv3f1.dotProduct(tempv3f2);
-			tempv3f2 += v3f(7, 8, 9);
-		}
-	}
-
-	{
-		TimeTaker timer("Testing std::map speed");
-
-		std::map<v2s16, f32> map1;
-		tempf = -324;
-		const s16 ii = 300;
-		for (s16 y = 0; y < ii; y++) {
-			for (s16 x = 0; x < ii; x++) {
-				map1[v2s16(x, y)] =  tempf;
-				tempf += 1;
-			}
-		}
-		for (s16 y = ii - 1; y >= 0; y--) {
-			for (s16 x = 0; x < ii; x++) {
-				tempf = map1[v2s16(x, y)];
-			}
-		}
-	}
-
-	{
-		infostream << "Around 5000/ms should do well here." << std::endl;
-		TimeTaker timer("Testing mutex speed");
-		timer.start();
-		
-		std::mutex m;
-		u32 n = 0;
-		u32 i = 0;
-		do {
-			n += 10000;
-			for (; i < n; i++) {
-				m.lock();
-				m.unlock();
-			}
-		}
-		// Do at least 10ms
-		while(timer.getTimerTime() < 10);
-
-		u32 dtime = timer.stop();
-		u32 per_ms = n / dtime;
-		infostream << "Done. " << dtime << "ms, " << per_ms << "/ms" << std::endl;
-	}
+	/* Save the settings when leaving the mainmenu.
+	 * This makes sure that setting changes made in the mainmenu are persisted
+	 * even in case of a later unclean exit from the game.
+	 * This is especially useful on Android because closing the app from the
+	 * "Recents screen" results in an unclean exit.
+	 * Caveat: This means that the settings are saved twice when exiting Minetest.
+	 */
+	if (!g_settings_path.empty())
+		g_settings->updateConfigFile(g_settings_path.c_str());
 }
 
 //freeminer:

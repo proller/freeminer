@@ -1,6 +1,4 @@
-#include <cstdint>
-#include "clientiface.h"
-#include "constants.h"
+#include "server/clientiface.h"
 #include "irr_v3d.h"
 #include "irrlichttypes.h"
 #include "map.h"
@@ -15,6 +13,8 @@
 #include "threading/lock.h"
 #include "util/directiontables.h"
 #include "util/numeric.h"
+#include "util/unordered_map_hash.h"
+
 
 int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 		float dtime, std::vector<PrioritySortedBlockTransfer> &dest, double m_uptime,
@@ -117,7 +117,7 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 	}
 
 	// s16 last_nearest_unsent_d = m_nearest_unsent_d;
-	auto d_start = m_nearest_unsent_d.load();
+	short d_start = m_nearest_unsent_d;//.load();
 
 	// infostream<<"d_start="<<d_start<<std::endl;
 
@@ -358,7 +358,7 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 							MAP_BLOCKSIZE / 2, MAP_BLOCKSIZE / 2, MAP_BLOCKSIZE / 2);
 
 					v3pos_t spn = cam_pos_nodes + v3pos_t(0, 0, 0);
-					if (env->getServerMap().isBlockOccluded(p * MAP_BLOCKSIZE, spn)) {
+					if (env->getMap().isBlockOccluded(p * MAP_BLOCKSIZE, spn)) {
 						g_profiler->add("SMap: Occlusion skip", 1);
 						++blocks_occlusion_culled;
 						return false;
@@ -569,7 +569,7 @@ uint32_t RemoteClient::SendFarBlocks()
 	uint16_t sent_cnt{};
 	TRY_UNIQUE_LOCK(far_blocks_requested_mutex)
 	{
-		std::multimap<int32_t, MapBlockP> ordered;
+		std::multimap<int32_t, MapBlockPtr> ordered;
 		constexpr uint16_t send_max{50};
 		for (auto &far_blocks : far_blocks_requested) {
 			for (auto &[bpos, step_sent] : far_blocks) {
@@ -581,13 +581,13 @@ uint32_t RemoteClient::SendFarBlocks()
 					sent_ts = -1;
 					continue;
 				}
-				const auto dbase = GetFarDatabase(m_env->m_map->dbase,
+				const auto dbase = GetFarDatabase(m_env->m_map->m_db.dbase,
 						m_env->m_server->far_dbases, m_env->m_map->m_savedir, step);
 				if (!dbase) {
 					sent_ts = -1;
 					continue;
 				}
-				const auto block = loadBlockNoStore(m_env->m_map, dbase, bpos);
+				const auto block = loadBlockNoStore(m_env->m_map.get(), dbase, bpos);
 				if (!block) {
 					sent_ts = -1;
 					continue;
@@ -615,7 +615,7 @@ uint32_t RemoteClient::SendFarBlocks()
 	}
 	return sent_cnt;
 }
-
+/*
 RemoteClientVector ClientInterface::getClientList()
 {
 	auto lock = m_clients.lock_unique_rec();
@@ -628,3 +628,4 @@ RemoteClientVector ClientInterface::getClientList()
 	}
 	return clients;
 }
+*/

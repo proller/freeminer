@@ -43,12 +43,17 @@ include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(msgpack DEFAULT_MSG MSGPACK_LIBRARY MSGPACK_INCLUDE_DIR)
 
 elseif(NOT MSGPACK_LIBRARY)
+	set(MSGPACK_CXX14 1 CACHE INTERNAL "")
 	set(MSGPACK_CXX17 1 CACHE INTERNAL "")
+	set(MSGPACK_CXX20 1 CACHE INTERNAL "")
+
 	set(MSGPACK_BUILD_EXAMPLES OFF CACHE INTERNAL "")
 	set(MSGPACK_BUILD_TESTS OFF CACHE INTERNAL "")
 	set(MSGPACK_USE_BOOST 0 CACHE INTERNAL "")
 	set(MSGPACK_USE_STATIC_BOOST 1 CACHE INTERNAL "")
 	set(MSGPACK_BUILD_DOCS 0 CACHE INTERNAL "")
+
+	add_compile_definitions(MSGPACK_NO_BOOST) # should be defined for includes
 
 	if(MSVC)
 		set(MSGPACK_ENABLE_SHARED OFF CACHE INTERNAL "")
@@ -56,6 +61,6 @@ elseif(NOT MSGPACK_LIBRARY)
 	endif()
 	add_subdirectory(${PROJECT_SOURCE_DIR}/external/msgpack-c)
 	set(MSGPACK_LIBRARY msgpack-cxx)
-	set(MSGPACK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/src/external/msgpack-c/include)
+	set(MSGPACK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/external/msgpack-c/include)
 	message(STATUS "Using bundled msgpack ${MSGPACK_INCLUDE_DIR} ${MSGPACK_LIBRARY}")
 endif()
