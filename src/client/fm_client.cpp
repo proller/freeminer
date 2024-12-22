@@ -3,7 +3,7 @@
 #include <future>
 #include <memory>
 #include "client.h"
-#include "client/fm_far_calc.h"
+#include "fm_far_calc.h"
 #include "client/mapblock_mesh.h"
 #include "clientmap.h"
 #include "emerge.h"
@@ -252,8 +252,9 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 	} else {
 		static thread_local const auto farmesh_server =
 				g_settings->getU16("farmesh_server");
-		if (!farmesh_server)
+		if (!farmesh_server) {
 			return;
+		}
 
 		auto &far_blocks_storage = getEnv().getClientMap().far_blocks_storage[step];
 		{
@@ -336,4 +337,23 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 			}
 #endif
 	}
+}
+
+void Client::sendDrawControl()
+{
+	MSGPACK_PACKET_INIT((int)TOSERVER_DRAWCONTROL, 4);
+	const auto &draw_control = m_env.getClientMap().getControl();
+	PACK(TOSERVER_DRAWCONTROL_WANTED_RANGE, (int32_t)draw_control.wanted_range);
+	//PACK(TOSERVER_DRAWCONTROL_RANGE_ALL, draw_control.range_all);
+	PACK(TOSERVER_DRAWCONTROL_FARMESH, draw_control.farmesh);
+	//PACK(TOSERVER_DRAWCONTROL_LODMESH, draw_control.lodmesh);
+	//PACK(TOSERVER_DRAWCONTROL_FOV, draw_control.fov);
+	//PACK(TOSERVER_DRAWCONTROL_BLOCK_OVERFLOW, false /*draw_control.block_overflow*/);
+	//PACK(TOSERVER_DRAWCONTROL_LODMESH, draw_control.lodmesh);
+	PACK(TOSERVER_DRAWCONTROL_FARMESH_QUALITY, draw_control.farmesh_quality);
+	PACK(TOSERVER_DRAWCONTROL_FARMESH_ALL_CHANGED, draw_control.farmesh_all_changed);
+
+	NetworkPacket pkt(TOSERVER_DRAWCONTROL, buffer.size());
+	pkt.putLongString({buffer.data(), buffer.size()});
+	Send(&pkt);
 }

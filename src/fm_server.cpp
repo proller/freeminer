@@ -30,6 +30,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "database/database.h"
 #include "emerge.h"
 #include "filesys.h"
+#include "irrlichttypes.h"
+#include "porting.h"
 #include "fm_world_merge.h"
 #include "irrTypes.h"
 #include "irr_v3d.h"
@@ -517,6 +519,62 @@ void Server::handleCommand_InitFm(NetworkPacket *pkt)
 
 void Server::handleCommand_Drawcontrol(NetworkPacket *pkt)
 {
+	const auto peer_id = pkt->getPeerId();
+	if (!pkt->packet) {
+		if (!pkt->packet_unpack()) {
+			return;
+		}
+	}
+	auto &packet = *(pkt->packet);
+	/*
+	auto player = m_env->getPlayer(pkt->getPeerId());
+	if (!player) {
+		//m_con->DisconnectPeer(pkt->getPeerId());
+		return;
+	}
+	*/
+
+	//auto playersao = player->getPlayerSAO();
+	/*
+	if (!playersao) {
+		m_con.DisconnectPeer(pkt->getPeerId());
+		return;
+	}*/
+
+	auto client = getClientNoEx(peer_id, CS_Created);
+	if (!client) {
+		return;
+	}
+	{
+		const auto lock = client->lock_unique_rec();
+		if (packet.contains(TOSERVER_DRAWCONTROL_WANTED_RANGE))
+			client->wanted_range =
+					packet[TOSERVER_DRAWCONTROL_WANTED_RANGE].as<uint32_t>();
+		if (packet.contains(TOSERVER_DRAWCONTROL_RANGE_ALL))
+			client->range_all = packet[TOSERVER_DRAWCONTROL_RANGE_ALL].as<bool>();
+		if (packet.contains(TOSERVER_DRAWCONTROL_FARMESH))
+			client->farmesh = packet[TOSERVER_DRAWCONTROL_FARMESH].as<uint32_t>();
+		//client->lodmesh = packet[TOSERVER_DRAWCONTROL_LODMESH].as<u32>();
+		if (packet.contains(TOSERVER_DRAWCONTROL_FARMESH_QUALITY)) {
+			client->farmesh_quality =
+					packet[TOSERVER_DRAWCONTROL_FARMESH_QUALITY].as<uint8_t>();
+			client->have_farmesh_quality = true;
+		}
+		if (packet.contains(TOSERVER_DRAWCONTROL_FARMESH_ALL_CHANGED)) {
+			client->farmesh_all_changed =
+					packet[TOSERVER_DRAWCONTROL_FARMESH_ALL_CHANGED].as<pos_t>();
+		}
+	}
+	//client->block_overflow = packet[TOSERVER_DRAWCONTROL_BLOCK_OVERFLOW].as<bool>();
+
+	// minetest compat, fmtodo: make one place
+	/*
+	if (playersao) {
+		playersao->setFov(client->fov);
+		playersao->setWantedRange(client->wanted_range/MAPBLOCK_SIZE);
+	
+	}
+	*/
 }
 
 void Server::handleCommand_GetBlocks(NetworkPacket *pkt)
