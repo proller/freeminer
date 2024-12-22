@@ -138,8 +138,8 @@ public:
 			else {
 				SDL_ShowCursor(SDL_DISABLE);
 			}
-		}
 #endif
+		}
 
 		//! Returns if the cursor is currently visible.
 		bool isVisible() const override

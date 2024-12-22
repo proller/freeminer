@@ -355,7 +355,7 @@ void Clouds::updateMesh()
 
 			for (video::S3DVertex &vertex : v) {
 				vertex.Pos += pos;
-				Vertices.push_back(vertex);
+				vertices.push_back(vertex);
 			}
 		}
 	}

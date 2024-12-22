@@ -63,10 +63,6 @@ private:
 	InputHandler *input = nullptr;
 	MyEventReceiver *receiver = nullptr;
 
-	//freminer:
-	void wait_data();
-	unsigned int autoexit;
-
 	ChatBackend *chat_backend = nullptr;
 	std::string error_message;
 	bool reconnect_requested = false;
