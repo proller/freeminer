@@ -1321,7 +1321,7 @@ void Client::interact(InteractAction action, const PointedThing& pointed)
 	*/
 
 	NetworkPacket pkt(TOSERVER_INTERACT, 1 + 2 + 0);
-    pkt.setProtoVer(m_proto_ver);
+	pkt.setProtoVer(m_proto_ver);
 
 	pkt << (u8)action;
 	pkt << myplayer->getWieldIndex();
@@ -1661,8 +1661,8 @@ void Client::sendPlayerPos()
 	player->last_camera_inverted = camera_inverted;
 	player->last_wanted_range    = wanted_range;
 
-	NetworkPacket pkt(TOSERVER_PLAYERPOS, 12 + 12 + 4 + 4 + 4 + 1 + 1 + 1);
-    pkt.setProtoVer(m_proto_ver);
+	NetworkPacket pkt(TOSERVER_PLAYERPOS, 12 + 12 + 4 + 4 + 4 + 1 + 1 + 1 + 4 + 4);
+	pkt.setProtoVer(m_proto_ver);
 
 	writePlayerPos(player, &map, &pkt, camera_inverted);
 
