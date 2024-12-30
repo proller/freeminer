@@ -1272,6 +1272,9 @@ void writePlayerPos(LocalPlayer *myplayer, ClientMap *clientMap, NetworkPacket *
 	v3s32 position(pf.X, pf.Y, pf.Z);
 	v3s32 speed(sf.X, sf.Y, sf.Z);
 
+    f32 movement_speed = myplayer->control.movement_speed;
+	f32 movement_dir = myplayer->control.movement_direction;
+
 	/*
 		Format:
 		[0] v3s32 position*100
@@ -1288,6 +1291,10 @@ void writePlayerPos(LocalPlayer *myplayer, ClientMap *clientMap, NetworkPacket *
 	*pkt << pitch << yaw << keyPressed;
 	*pkt << fov << wanted_range;
 	*pkt << camera_inverted;
+	*pkt << movement_speed << movement_dir;
+	if (pkt->getProtoVer() >= PROTOCOL_VERSION_32BIT) {
+		*pkt << myplayer->getPosition();
+	}
 }
 
 #if MINETEST_PROTO
@@ -1314,6 +1321,7 @@ void Client::interact(InteractAction action, const PointedThing& pointed)
 	*/
 
 	NetworkPacket pkt(TOSERVER_INTERACT, 1 + 2 + 0);
+    pkt.setProtoVer(m_proto_ver);
 
 	pkt << (u8)action;
 	pkt << myplayer->getWieldIndex();
@@ -1654,6 +1662,7 @@ void Client::sendPlayerPos()
 	player->last_wanted_range    = wanted_range;
 
 	NetworkPacket pkt(TOSERVER_PLAYERPOS, 12 + 12 + 4 + 4 + 4 + 1 + 1 + 1);
+    pkt.setProtoVer(m_proto_ver);
 
 	writePlayerPos(player, &map, &pkt, camera_inverted);
 
