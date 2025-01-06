@@ -575,6 +575,8 @@ bool CIrrDeviceSDL::createWindow()
 
 #ifdef _IRR_EMSCRIPTEN_PLATFORM_
 
+	u32 SDL_Flags = 0;
+
 	if (CreationParams.Fullscreen) {
 #ifdef _IRR_EMSCRIPTEN_PLATFORM_
 		SDL_Flags |= SDL_WINDOW_FULLSCREEN;

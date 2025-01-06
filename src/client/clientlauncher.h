@@ -35,6 +35,7 @@ private:
 	// freminer:
 	void wait_data();
 	unsigned int autoexit {};
+	bool should_run_game {};
 	// == 
 
 	void init_args(GameStartData &start_data, const Settings &cmd_args);
@@ -46,7 +47,7 @@ private:
 
 	//bool launch_game(std::string &error_message, bool reconnect_requested,
 	//	GameStartData &start_data, const Settings &cmd_args);
-	void launch_game(std::function<void(bool)> resolve);
+	bool launch_game(std::function<void(bool)> resolve);
 	void after_main_menu(std::function<void(bool)> resolve);
 
 	void main_menu(std::function<void()> resolve);

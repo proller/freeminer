@@ -44,13 +44,8 @@ static void draw_with_buffer(
 	if (!mb) {
 		mb.reset(new scene::SMeshBuffer());
 	}
-	mb->Vertices.set_used(nvertices);
-	memcpy(mb->Vertices.pointer(), vertices, nvertices * sizeof(video::S3DVertex));
-
-	mb->Indices.set_used(3 * ntriangles);
-	memcpy(mb->Indices.pointer(), indices, 3 * ntriangles * sizeof(u16));
-
-	mb->setDirty();
+	
+	mb->append(vertices, nvertices, indices, 3 * ntriangles);
 	driver->drawMeshBuffer(mb.get());
 }
 

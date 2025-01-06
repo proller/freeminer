@@ -130,8 +130,9 @@ void ClientLauncher::run(std::function<void(bool)> resolve)
 //		g_sound_manager_singleton = createSoundManagerSingleton();
 //#endif
 
-	if (!init_engine())
+	if (!init_engine()) {
 		resolve(false); return;
+	}
 
 	if (!m_rendering_engine->get_video_driver()) {
 		errorstream << "Could not initialize video driver." << std::endl;
@@ -225,6 +226,7 @@ void ClientLauncher::run_loop(std::function<void(bool)> resolve) {
 #endif
 			m_rendering_engine->get_gui_env()->clear();
 
+        should_run_game =
 		launch_game([this, resolve](bool game_has_run) { run_after_launch_game(resolve, game_has_run); });
 /*
 			bool should_run_game = launch_game(error_message, reconnect_requested,
@@ -489,7 +491,7 @@ void ClientLauncher::config_guienv()
 	}
 }
 
-void ClientLauncher::launch_game(std::function<void(bool)> resolve)
+bool ClientLauncher::launch_game(std::function<void(bool)> resolve)
 /*
 bool ClientLauncher::launch_game(std::string &error_message,
 		bool reconnect_requested, GameStartData &start_data,
@@ -512,7 +514,7 @@ bool ClientLauncher::launch_game(std::string &error_message,
 					"failed to open: ")
 					+ cmd_args.get("password-file");
 			errorstream << error_message << std::endl;
-			resolve(false); return;
+			resolve(false); return false;
 		}
 	}
 
@@ -547,6 +549,7 @@ bool ClientLauncher::launch_game(std::string &error_message,
 	} else {
 		after_main_menu(resolve);
 	}
+	return true;
 }
 
 void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
@@ -615,7 +618,7 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 		//resolve(false);
 		//return;
 #else
-		return false;
+		return;
 #endif
 	}
 
@@ -684,7 +687,6 @@ void ClientLauncher::main_menu(std::function<void()> resolve)
 {
 	ServerList::lan_get();
 	infostream << "Waiting for other menus" << std::endl;
-	auto framemarker = FrameMarker("ClientLauncher::main_menu()-wait-frame").started();
 
 /*
 	while (m_rendering_engine->run() && !*kill) {
@@ -696,6 +698,7 @@ void ClientLauncher::main_menu(std::function<void()> resolve)
 }
 
 void ClientLauncher::main_menu_loop(std::function<void()> resolve) {
+	auto framemarker = FrameMarker("ClientLauncher::main_menu()-wait-frame").started();
 	// EXTRANEOUS INDENT
 		bool keep_going = m_rendering_engine->run() && !*kill;
 		if (!keep_going || !isMenuActive()) {
@@ -715,8 +718,8 @@ void ClientLauncher::main_menu_loop(std::function<void()> resolve) {
 }
 
 void ClientLauncher::main_menu_after_loop(std::function<void()> resolve) {
-	}
-	framemarker.end();
+	//}
+	//framemarker.end();
 	infostream << "Waited for other menus" << std::endl;
 
 	auto *cur_control = m_rendering_engine->get_raw_device()->getCursorControl();

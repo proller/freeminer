@@ -901,6 +901,8 @@ private:
 	bool m_cinematic = false;
 	std::unique_ptr<RaycastState> pointedRaycastState;
 	PointedThing pointed;
+	std::string address_name;
+	Address fallback_address;
 	// ==:
 
 
@@ -1277,7 +1279,7 @@ void Game::run(std::function<void(BaseException*)> resolve)
 	initial_window_maximized = !g_settings->getBool("fullscreen") &&
 			g_settings->getBool("window_maximized");
 
-	auto framemarker = FrameMarker("Game::run()-frame").started();
+	//auto framemarker = FrameMarker("Game::run()-frame").started();
 
     run_loop([this, resolve](BaseException* exc) {
             RenderingEngine::autosaveScreensizeAndCo(initial_screen_size, initial_window_maximized);
@@ -1288,6 +1290,8 @@ void Game::run(std::function<void(BaseException*)> resolve)
 
 void Game::run_loop(std::function<void(BaseException*)> resolve) {
 	double run_time = 0;
+
+	auto framemarker = FrameMarker("Game::run()-frame").started();
 
 	try { // CATCHALL
 
@@ -1654,7 +1658,7 @@ void Game::copyServerClientCache()
 
 void Game::createClient(const GameStartData *start_data, std::function<void(bool,BaseException*)> resolve)
 {
-	try { // CATCHALL
+	//try { // CATCHALL
 
 	showOverlayMessage(N_("Creating client..."), 0, 10);
 
@@ -1858,12 +1862,13 @@ void Game::connectToServer(const GameStartData *start_data, std::function<void(b
 	could_connect = false;	// Let's not be overly optimistic
 	connect_aborted = false;
 	local_server_mode = false;
-	const auto &address_name = start_data.address;
+	//const auto &address_name = start_data->address;
+	address_name = start_data->address;
 
 	showOverlayMessage(N_("Resolving address..."), 0, 15);
 
 	//Address connect_address(0, 0, 0, 0, start_data.socket_port);
-	Address fallback_address;
+	//Address fallback_address;
 
 	connect_address.setAddress(0, 0, 0, 0);
 	connect_address.setPort(start_data->socket_port);
@@ -1995,7 +2000,7 @@ void Game::connectToServer_after_dns(const GameStartData *start_data, std::funct
 		*/
 		//f32 
 		wait_time = 0; // in seconds
-		bool did_fallback = false;
+		//bool did_fallback = false;
 
 		fps_control.reset();
 	// CATCHALL
@@ -2004,13 +2009,15 @@ void Game::connectToServer_after_dns(const GameStartData *start_data, std::funct
 		return;
 	}
 
-	auto framemarker = FrameMarker("Game::connectToServer()-frame").started();
 
 	connectToServer_loop(start_data, resolve);
 }
 
 void Game::connectToServer_loop(const GameStartData *start_data, std::function<void(bool,BaseException*)> resolve) {
 	try { // CATCHALL
+		bool did_fallback = false;
+		auto framemarker = FrameMarker("Game::connectToServer()-frame").started();
+	{
 	// EXTRANEOUS INDENT
 			if (!m_rendering_engine->run()) {
 				resolve(true, nullptr);
@@ -2118,13 +2125,15 @@ void Game::getServerContent(std::function<void(bool,BaseException*)> resolve)
 		return;
 	}
 
-	auto framemarker = FrameMarker("Game::getServerContent()-frame").started();
 	getServerContent_loop(resolve);
 }
 
 //	while (m_rendering_engine->run()) {
 
 void Game::getServerContent_loop(std::function<void(bool,BaseException*)> resolve) {
+
+	auto framemarker = FrameMarker("Game::getServerContent()-frame").started();
+
 	try { // CATCHALL
 	// EXTRANOUS INDENT
 		if (!m_rendering_engine->run()) {
@@ -2231,7 +2240,7 @@ void Game::getServerContent_loop(std::function<void(bool,BaseException*)> resolv
 	}
 	framemarker.end();
 
-	*aborted = true;
+	//*aborted = true;
 	infostream << "Connect aborted [device]" << std::endl;
 	MainLoop::NextFrame([this, resolve]() { getServerContent_loop(resolve); });
 	//return false;
@@ -5055,7 +5064,7 @@ void Game::updateFrame(f32 dtime,
 	*/
 	if (!runData.headless_optimize)
 	if (device->isWindowVisible())
-		drawScene(graph, stats);
+		drawScene(&graph, &stats);
 	/*
 		==================== End scene ====================
 	*/

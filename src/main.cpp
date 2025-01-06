@@ -157,7 +157,7 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 #if USE_ENET
 	if (enet_initialize() != 0) {
 		std::cerr << "enet failed to initialize\n";
-		return EXIT_FAILURE;
+		resolve(EXIT_FAILURE); return;
 	}
 	atexit(enet_deinitialize);
 #endif
@@ -185,14 +185,15 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 	if (cmd_args.getFlag("version")) {
 		porting::attachOrCreateConsole();
 		print_version(std::cout);
-		resolve(0); return 0;
+		resolve(0); return;
 	}
 
 	// Debug handler
 	BEGIN_DEBUG_EXCEPTION_HANDLER
 
-	if (!setup_log_params(cmd_args))
-		resolve(1); return 1;
+	if (!setup_log_params(cmd_args)) {
+		resolve(1); return;
+	}
 
 	if (cmd_args.getFlag("debugger")) {
 		if (!use_debugger(argc, argv))
@@ -332,15 +333,16 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 		run_dedicated_server(game_params, cmd_args);
 	}
 
+
 #ifdef __EMSCRIPTEN__
 	if (cmd_args.getFlag("warm")) {
 		// Create a dummy server to initialize but then delete.
 		// This lets us grab the media list.
 		Address bind_addr(0, 0, 0, 0, 65535);
-		Server *server = new Server(game_params.world_path, game_params.game_spec, false, bind_addr, true);
-		warmup_media = server->getMedia();
-		delete server;
-        }
+		Server server(game_params.world_path, game_params.game_spec, false, bind_addr, true);
+		warmup_media = server.getMedia();
+		//delete server;
+    }
 #endif		
 
 #if CHECK_CLIENT_BUILD()
@@ -360,7 +362,10 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 #else
 	resolve(0);
 #endif
+
+    END_DEBUG_EXCEPTION_HANDLER
 }
+
 
 #ifndef __EMSCRIPTEN__
 int main(int argc, char *argv[])

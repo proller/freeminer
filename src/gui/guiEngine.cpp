@@ -334,15 +334,6 @@ void GUIEngine::run(std::function<void()> resolve)
 	//const bool 
 	initial_window_maximized = !g_settings->getBool("fullscreen") &&
 			g_settings->getBool("window_maximized");
-	auto last_window_info = ClientDynamicInfo::getCurrent();
-
-	FpsControl fps_control;
-	//f32 
-	dtime = 0.0f;
-
-	fps_control.reset();
-
-	auto framemarker = FrameMarker("GUIEngine::run()-frame").started();
 
     run_loop(resolve);
 }
@@ -351,6 +342,19 @@ void GUIEngine::run(std::function<void()> resolve)
 	while (m_rendering_engine->run() && !m_startgame && !m_kill) {
 */
 void GUIEngine::run_loop(std::function<void()> resolve) {
+
+	IrrlichtDevice *device = m_rendering_engine->get_raw_device();
+
+	auto last_window_info = ClientDynamicInfo::getCurrent();
+
+	FpsControl fps_control;
+	//f32 
+	dtime = 0.0f;
+
+	fps_control.reset();
+	
+	auto framemarker = FrameMarker("GUIEngine::run()-frame").started();
+    {
     // EXTRANEOUS INDENT
            bool keep_going = m_rendering_engine->run() && (!m_startgame) && (!m_kill);
            if (!keep_going) {
