@@ -150,7 +150,7 @@ void FarMesh::makeFarBlocks(const v3bpos_t &blockpos, block_step_t step)
 		const auto &control = m_client->getEnv().getClientMap().getControl();
 		const auto bpos = getFarActual(
 				bpos_dir, getNodeBlockPos(m_camera_pos_aligned), step, control);
-		auto block_step_correct =
+		const auto block_step_correct =
 				getFarStep(control, getNodeBlockPos(m_camera_pos_aligned), bpos);
 		makeFarBlock(bpos, block_step_correct);
 	}
@@ -278,6 +278,10 @@ int FarMesh::go_container()
 			[this, &cbpos](const v3bpos_t &bpos, const bpos_t &size) -> bool {
 				const block_step_t step = log(size) / log(2);
 
+				if (step >= FARMESH_STEP_MAX) {
+					return false;
+				}
+
 				// TODO: use block center
 				const auto bdist = radius_box(cbpos, bpos);
 				if ((bdist << MAP_BLOCKP) > farmesh_all_changed) {
@@ -328,8 +332,11 @@ int FarMesh::go_flat()
 												 (bpos_new.Z << MAP_BLOCKP) - 1)) >>
 								 MAP_BLOCKP;
 
-					auto step_new = getFarStep(draw_control,
+					const auto step_new = getFarStep(draw_control,
 							getNodeBlockPos(m_camera_pos_aligned), bpos_new);
+
+					if (step_new >= FARMESH_STEP_MAX)
+						continue;
 					blocks[step_new].emplace(bpos_new);
 				}
 				return false;
