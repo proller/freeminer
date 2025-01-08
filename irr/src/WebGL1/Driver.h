@@ -37,12 +37,13 @@ namespace video
 		E_DRIVER_TYPE getDriverType() const override;
 
 		//! Is VBO recommended on this mesh?
+/*
 		bool isHardwareBufferRecommend(const scene::IMeshBuffer* mb) override
 		{
 			// All buffers must be bound, WebGL doesn't allow sending unbound buffers at all.
 			return true;
 		}
-
+*/
 		//! draws a vertex primitive list
 		virtual void drawVertexPrimitiveList(const void* vertices, u32 vertexCount,
 				const void* indexList, u32 primitiveCount,
@@ -63,6 +64,7 @@ namespace video
 		// internally used
 		void draw2DImage(const video::ITexture* texture, u32 layer, bool flip)  override;
 
+/*
 		//! draws a set of 2d images
 		virtual void draw2DImageBatch(const video::ITexture* texture,
 				const core::position2d<s32>& pos,
@@ -71,6 +73,13 @@ namespace video
 				const core::rect<s32>* clipRect = 0,
 				SColor color = SColor(255, 255, 255, 255),
 				bool useAlphaChannelOfTexture = false) override;
+*/
+//		virtual void draw2DImageBatch(const video::ITexture *texture,
+//				const core::array<core::position2d<s32>> &positions,
+//				const core::array<core::rect<s32>> &sourceRects,
+//				const core::rect<s32> *clipRect = 0,
+//				SColor color = SColor(255, 255, 255, 255),
+//				bool useAlphaChannelOfTexture = false) = 0;
 
 		void draw2DImageBatch(const video::ITexture* texture,
 				const core::array<core::position2d<s32> >& positions,
@@ -94,7 +103,7 @@ namespace video
 				SColor color = SColor(255, 255, 255, 255)) override;
 
 		//! Draws a single pixel
-		void drawPixel(u32 x, u32 y, const SColor & color) override;
+		void drawPixel(u32 x, u32 y, const SColor & color); // override;
 
 		//! Draws a 3d line.
 		virtual void draw3DLine(const core::vector3df& start,
@@ -102,17 +111,19 @@ namespace video
 				SColor color = SColor(255, 255, 255, 255)) override;
 
 		//! Draws a shadow volume into the stencil buffer.
-		void drawStencilShadowVolume(const core::array<core::vector3df>& triangles, bool zfail, u32 debugDataVisible=0) override;
+		//void drawStencilShadowVolume(const core::array<core::vector3df>& triangles, bool zfail, u32 debugDataVisible=0) override;
 
+#if 0
 		//! Fills the stencil shadow with color.
 		virtual void drawStencilShadow(bool clearStencilBuffer=false,
 			video::SColor leftUpEdge = video::SColor(0,0,0,0),
 			video::SColor rightUpEdge = video::SColor(0,0,0,0),
 			video::SColor leftDownEdge = video::SColor(0,0,0,0),
 			video::SColor rightDownEdge = video::SColor(0,0,0,0)) override;
+#endif
 
 		//! Get ZBuffer bits.
-		GLenum getZBufferBits() const override;
+		//GLenum getZBufferBits() const override;
 
 		virtual bool getColorFormatParameters(ECOLOR_FORMAT format, GLint& internalFormat, GLenum& pixelFormat,
 			GLenum& pixelType, void(**converter)(const void*, s32, void*)) const override;
