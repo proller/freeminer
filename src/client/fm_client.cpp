@@ -250,9 +250,10 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 				addUpdateMeshTaskWithEdge(bpos);
 		}
 	} else {
-		static thread_local const auto farmesh_server =
+		static thread_local const auto settings_farmesh_server =
 				g_settings->getU16("farmesh_server");
-		if (!farmesh_server)
+		static thread_local const auto settings_farmesh = g_settings->getU16("farmesh");
+		if (!settings_farmesh_server || !settings_farmesh || !farmesh) {
 			return;
 
 		auto &far_blocks_storage = getEnv().getClientMap().far_blocks_storage[step];
