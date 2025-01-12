@@ -18,6 +18,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -28,7 +29,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "client/client.h"
 #include "client/clientmap.h"
-#include "client/fm_far_calc.h"
+#include "fm_far_calc.h"
 #include "client/mapblock_mesh.h"
 #include "constants.h"
 #include "emerge.h"
@@ -149,7 +150,7 @@ void FarMesh::makeFarBlocks(const v3bpos_t &blockpos, block_step_t step)
 		const auto &control = m_client->getEnv().getClientMap().getControl();
 		const auto bpos = getFarActual(
 				bpos_dir, getNodeBlockPos(m_camera_pos_aligned), step, control);
-		auto block_step_correct =
+		const auto block_step_correct =
 				getFarStep(control, getNodeBlockPos(m_camera_pos_aligned), bpos);
 		makeFarBlock(bpos, block_step_correct);
 	}
@@ -264,6 +265,43 @@ auto align_shift(auto pos, const auto amount)
 	(pos.Z >>= amount) <<= amount;
 	return pos;
 }
+
+int FarMesh::go_container()
+{
+	const auto &draw_control = m_client->getEnv().getClientMap().getControl();
+	const auto cbpos = getNodeBlockPos(m_camera_pos_aligned);
+
+	thread_local static const s16 farmesh_all_changed =
+			g_settings->getU32("farmesh_all_changed");
+
+	runFarAll(cbpos, draw_control.cell_size_pow, draw_control.farmesh_quality, 0,
+			[this, &cbpos](const v3bpos_t &bpos, const bpos_t &size) -> bool {
+				const block_step_t step = log(size) / log(2);
+
+				if (step >= FARMESH_STEP_MAX) {
+					return false;
+				}
+
+				// TODO: use block center
+				const auto bdist = radius_box(cbpos, bpos);
+				if ((bdist << MAP_BLOCKP) > farmesh_all_changed) {
+					return false;
+				}
+
+				const auto contains = m_client->getEnv()
+											  .getClientMap()
+											  .far_blocks_storage[step]
+											  .contains(bpos);
+
+				if (contains) {
+					makeFarBlock(bpos, step);
+				}
+
+				return false;
+			});
+	return 0;
+}
+
 int FarMesh::go_flat()
 {
 	const auto &draw_control = m_client->getEnv().getClientMap().getControl();
@@ -279,7 +317,8 @@ int FarMesh::go_flat()
 
 	// todo: maybe save blocks while cam pos not changed
 	std::array<std::unordered_set<v3bpos_t>, FARMESH_STEP_MAX> blocks;
-	runFarAll(draw_control, cbpos, draw_control.cell_size_pow, cbpos.Y ?: 1,
+	runFarAll(cbpos, draw_control.cell_size_pow, draw_control.farmesh_quality,
+			cbpos.Y ?: 1,
 			[this, &draw_control, &blocks](
 					const v3bpos_t &bpos, const bpos_t &size) -> bool {
 				for (const auto &add : {
@@ -296,8 +335,11 @@ int FarMesh::go_flat()
 												 (bpos_new.Z << MAP_BLOCKP) - 1)) >>
 								 MAP_BLOCKP;
 
-					auto step_new = getFarStep(draw_control,
+					const auto step_new = getFarStep(draw_control,
 							getNodeBlockPos(m_camera_pos_aligned), bpos_new);
+
+					if (step_new >= FARMESH_STEP_MAX)
+						continue;
 					blocks[step_new].emplace(bpos_new);
 				}
 				return false;
@@ -569,12 +611,16 @@ uint8_t FarMesh::update(v3opos_t camera_pos,
 				if (!plane_processed[i].processed) {
 					continue;
 				}
+
 				++planes_processed;
 				async[i].step([this, i = i]() {
 					plane_processed[i].processed = go_direction(i);
 				});
 			}
 		}
+
+		go_container();
+
 		planes_processed_last = planes_processed;
 
 		if (planes_processed) {

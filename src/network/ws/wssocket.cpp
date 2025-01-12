@@ -223,7 +223,9 @@ void WSSocket::on_message(const websocketpp::connection_hdl &hdl, const message_
 	}
 
 	std::string s{msg->get_payload().data(), msg->get_payload().size()};
+#if !NDEBUG
 	cs << "A message: " << msg->get_payload().size() << " " << msg->get_payload() << '\n';
+#endif
 
 	incoming_queue.emplace_back(queue_item{a, std::move(s)});
 }
@@ -235,6 +237,7 @@ WSSocket::WSSocket(bool ipv6)
 
 bool WSSocket::init(bool ipv6, bool noExceptions)
 {
+	setTimeoutMs(0);
 
 /*	if (socket_enable_debug_output /*con_debug* /) {
 		server.set_error_channels(websocketpp::log::elevel::all);

@@ -83,15 +83,17 @@ height::height_t hgts::get(height_hgt::ll_t lat, height_hgt::ll_t lon)
 		}
 	}
 
+	/*
 	const auto lat90 = height_gebco_tif::lat90_start(lat); // + 90 % 180;
 	const auto lon90 = height_gebco_tif::lon90_start(lon);
 	if (map90[lat90].contains(lon90)) {
 		const auto h = map90[lat90][lon90]->get(lat, lon);
 		return std::min(h, prev_layer_height);
 	}
+*/
 
 	//DUMP((long)this, "notfound, will load", lat, lon, lat1, lon1, lat90, lon90, map1[lat1].contains(lon1), prev_layer_height);
-	auto lock = std::unique_lock(mutex);
+	const auto lock = std::unique_lock(mutex);
 
 	if (map1[lat1].contains(lon1)) {
 		prev_layer_height = map1[lat1][lon1]->get(lat, lon);
@@ -103,10 +105,27 @@ height::height_t hgts::get(height_hgt::ll_t lat, height_hgt::ll_t lon)
 			return prev_layer_height;
 		}
 	}
+	/*
 	if (map90[lat90].contains(lon90)) {
 		//DUMP("g2");
 		return std::min(prev_layer_height, map90[lat90][lon90]->get(lat, lon));
 	}
+*/
+
+	const auto place_dummy = [&](const auto &lat_dec, const auto &lon_dec) {
+		const static auto hgt_dummy = std::make_shared<height_dummy>();
+		//DUMP("place dummy", lat, lon, lat_dec, lon_dec, map1[lat_dec].contains(lon_dec));
+		if (!map1[lat_dec].contains(lon_dec))
+			map1[lat_dec][lon_dec] = hgt_dummy;
+		return map1[lat_dec][lon_dec]->get(lat, lon);
+	};
+	const auto place_dummy90 = [&](const auto &lat90, const auto &lon90) {
+		const static auto hgt_dummy = std::make_shared<height_dummy>();
+		//DUMP("place dummy", lat, lon, map90[lat90].contains(lon90));
+		if (!map90[lat90].contains(lon90))
+			map90[lat90][lon90] = hgt_dummy;
+		return map90[lat90][lon90]->get(lat, lon);
+	};
 
 	if (lat <= 90 && lat >= -90 && lon <= 180 && lon >= -180) {
 		// DUMP("insert", (long)this, lat, lon, folder, map1.size(), map1[lat1].size());
@@ -127,6 +146,7 @@ height::height_t hgts::get(height_hgt::ll_t lat, height_hgt::ll_t lon)
 					return prev_layer_height;
 				}
 			}
+			place_dummy(lat1, lon1);
 		}
 		if (0) {
 			// WRONG, todo
@@ -143,6 +163,15 @@ height::height_t hgts::get(height_hgt::ll_t lat, height_hgt::ll_t lon)
 				return map1[lat_dec][lon_dec]->get(lat, lon);
 			}
 		}
+	}
+	const auto lat90 = height_gebco_tif::lat90_start(lat); // + 90 % 180;
+	const auto lon90 = height_gebco_tif::lon90_start(lon);
+	if (lat <= 90 && lat >= -90 && lon <= 180 && lon >= -180) {
+
+		if (map90[lat90].contains(lon90)) {
+			return std::min(prev_layer_height, map90[lat90][lon90]->get(lat, lon));
+		}
+
 		if (!map90[lat90].contains(lon90)) {
 			// DUMP("isloaded?", map90[lat90].contains(lon90));
 			auto hgt = std::make_shared<height_gebco_tif>(folder, lat, lon);
@@ -156,17 +185,10 @@ height::height_t hgts::get(height_hgt::ll_t lat, height_hgt::ll_t lon)
 			}
 		}
 	}
-	{
-		const static auto hgt_dummy = std::make_shared<height_dummy>();
-		const auto lat_dec = hgt_dummy->lat_start(lat);
-		const auto lon_dec = hgt_dummy->lon_start(lon);
-		DUMP("place dummy", lat, lon, lat_dec, lon_dec, map1[lat_dec].contains(lon_dec));
-		if (!map1[lat_dec].contains(lon_dec))
-			map1[lat_dec][lon_dec] = hgt_dummy;
-		if (!map90[lat90].contains(lon90))
-			map90[lat90][lon90] = hgt_dummy;
-		return map1[lat_dec][lon_dec]->get(lat, lon);
+	if (!map90[lat90].contains(lon90)) {
+		place_dummy90(lat90, lon90);
 	}
+	return map90[lat90][lon90]->get(lat, lon);
 }
 
 std::mutex height::mutex;
@@ -226,15 +248,18 @@ const auto http_to_file = [](const std::string &url, const std::string &zipfull)
 
 	actionstream << req.url << " " << res.succeeded << " " << res.response_code << " "
 				 << res.data.size() << "\n";
-	if (!res.succeeded || res.response_code >= 300)
+	if (!res.succeeded || res.response_code >= 300) {
 		return uintmax_t{0};
+	}
 
-	if (!res.data.size())
+	if (!res.data.size()) {
 		return uintmax_t{0};
+	}
 
-	std::ofstream(zipfull) << res.data;
-	if (!std::filesystem::exists(zipfull))
+	std::ofstream(zipfull, std::ios_base::binary) << res.data;
+	if (!std::filesystem::exists(zipfull)) {
 		return uintmax_t{0};
+	}
 	return std::filesystem::file_size(zipfull);
 };
 
@@ -242,16 +267,20 @@ const auto multi_http_to_file = [](const auto &zipfile,
 										const std::vector<std::string> &links,
 										const auto &zipfull) {
 	static concurrent_set<std::string> http_failed;
-	if (http_failed.contains(zipfile))
+	if (http_failed.contains(zipfile)) {
 		return std::filesystem::file_size(zipfull);
+	}
 
-	if (std::filesystem::exists(zipfull))
+	if (std::filesystem::exists(zipfull)) {
 		return std::filesystem::file_size(zipfull);
+	}
 
 	for (const auto &uri : links) {
-		if (http_to_file(uri, zipfull))
+		if (http_to_file(uri, zipfull)) {
 			return std::filesystem::file_size(zipfull);
+		}
 	}
+
 	http_failed.insert(zipfile);
 
 	errorstream
@@ -263,7 +292,7 @@ const auto multi_http_to_file = [](const auto &zipfile,
 			//<< " || " << "curl -o " << zipfull << " https://viewfinderpanoramas.org/dem3/" << zipfile
 			<< "\n";
 
-	std::ofstream(zipfull) << ""; // create zero file
+	std::ofstream(zipfull, std::ios_base::binary) << ""; // create zero file
 	return std::filesystem::file_size(zipfull);
 };
 
@@ -301,7 +330,7 @@ const auto gen_zip_name = [](int lat_dec, int lon_dec) {
 		zipname += 'S';
 		zipname += char('A' + abs(ceil(lat_dec / 90.0 * 23)));
 	} else {
-		zipname += char('A' + abs(floor(lat_dec / 90.0 * 23)));
+		zipname += char('A' + abs(round(lat_dec / 90.0 * 21)));
 	}
 	zipname += std::to_string(int(floor((((lon_dec + 180) / 360.0)) * 60) + 1));
 	return zipname;
@@ -316,7 +345,7 @@ bool height_hgt::load(ll_t lat, ll_t lon)
 	if (ok(lat_dec, lon_dec)) {
 		return true;
 	}
-	auto lock = std::unique_lock(mutex);
+	const auto lock = std::unique_lock(mutex);
 	//DUMP(lat_dec, lon_dec);
 	if (ok(lat_dec, lon_dec)) {
 		return true;
@@ -325,12 +354,14 @@ bool height_hgt::load(ll_t lat, ll_t lon)
 		//DUMP(lat_dec, lon_dec);
 		return false;
 	}
-	DUMP((long long)this, lat_dec, lon_dec, lat_loading, lon_loading, lat_loaded, lon_loaded);
+	DUMP((long long)this, lat_dec, lon_dec, lat_loading, lon_loading, lat_loaded,
+			lon_loaded);
 	TimeTaker timer("hgt load");
 
 	lat_loading = lat_dec;
 	lon_loading = lon_dec;
 
+//#define GEN_TEST 1
 #if GEN_TEST
 	{
 		size_t fails = 0;
@@ -344,6 +375,9 @@ bool height_hgt::load(ll_t lat, ll_t lon)
 					 std::pair{std::pair{83, 30}, "U26"},
 					 std::pair{std::pair{68, 163}, "R03"}, // TODO!!!
 					 std::pair{std::pair{70, 164}, "R03"},
+					 std::pair{std::pair{47, 5}, "L31"},
+					 std::pair{std::pair{43, 5}, "K31"},
+					 std::pair{std::pair{44, 5}, "L31"},
 			 }) {
 			std::string r;
 			if (r = gen_zip_name(t.first.first, t.first.second); t.second != r) {
@@ -360,9 +394,11 @@ bool height_hgt::load(ll_t lat, ll_t lon)
 	std::string zipfile = zipname + ".zip";
 	std::string zipfull = folder + "/" + zipfile;
 
-	std::string filename(255, 0);
-	sprintf(filename.data(), "%c%02d%c%03d.hgt", lat_dec > 0 ? 'N' : 'S', abs(lat_dec),
-			lon_dec > 0 ? 'E' : 'W', abs(lon_dec));
+	char buff[100];
+	std::snprintf(buff, sizeof(buff), "%c%02d%c%03d.hgt", lat_dec >= 0 ? 'N' : 'S',
+			abs(lat_dec), lon_dec >= 0 ? 'E' : 'W', abs(lon_dec));
+	std::string filename = buff;
+
 	std::string filefull = folder + "/" + filename;
 	// DUMP(lat_dec, lon_dec, filename, zipname, zipfull);
 
@@ -378,11 +414,49 @@ bool height_hgt::load(ll_t lat, ll_t lon)
 		seconds_per_px_x =
 				tile_deg_x * 3600 / (float)(side_length_x - side_length_x_extra);
 		seconds_per_px_y = ceil(tile_deg_y * 3600 / (float)(side_length_y));
-		DUMP(tile_deg_y * 3600 / (float)(side_length_y));
-		DUMP("sides", side_length_x, side_length_y, seconds_per_px_x, seconds_per_px_y);
+		//DUMP(tile_deg_y * 3600 / (float)(side_length_y));
+		//DUMP("sides", side_length_x, side_length_y, seconds_per_px_x, seconds_per_px_y);
 	};
 
+	// zst fastest
+	if (srtmTile.empty()) {
+		char buff[100];
+		std::snprintf(
+				buff, sizeof(buff), "%c%02d", lat_dec >= 0 ? 'N' : 'S', abs(lat_dec));
+		std::string zipname = buff;
+
+		const auto zstfile = zipname + "/" + filename + ".zst";
+		std::string ffolder = folder + "/" + zipname;
+		std::string zstdfull = folder + "/" + zstfile;
+		fs::CreateAllDirs(ffolder);
+		multi_http_to_file(zstfile,
+				{
+#if defined(__EMSCRIPTEN__)
+						"/"
+#else
+						"http://cdn.freeminer.org/"
+#endif
+						"earth/" +
+								zstfile,
+				},
+				zstdfull);
+		if (std::filesystem::exists(zstdfull) && std::filesystem::file_size(zstdfull)) {
+
+			// FIXME: zero copy possible in c++26 or with custom rdbuf
+			std::ifstream is(zstdfull, std::ios_base::binary);
+			std::ostringstream os(std::ios_base::binary);
+
+			decompressZstd(is, os);
+			srtmTile = os.str();
+			filesize = srtmTile.size();
+			if (filesize) {
+				set_ratio(filesize);
+			}
+		}
+	}
+
 	// bz2 has best compression
+	/* use zstd
 	if (srtmTile.empty()) {
 		const auto bzipfile = zipname + ".tar.bz2";
 		std::string bzipfull = folder + "/" + bzipfile;
@@ -401,11 +475,9 @@ bool height_hgt::load(ll_t lat, ll_t lon)
 			}
 		}
 	}
-
-	// TODO: because unzip
-	//#if 1 //!defined(_WIN32)
-	// DUMP(filefull, zipfull);
-
+*/
+#if 0
+//#if !defined(_WIN32) && !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
 	if (srtmTile.empty() && !std::filesystem::exists(filefull)) {
 
 		// TODO: https://viewfinderpanoramas.org/Coverage%20map%20viewfinderpanoramas_org15.htm
@@ -434,7 +506,7 @@ bool height_hgt::load(ll_t lat, ll_t lon)
 			set_ratio(filesize);
 		}
 	}
-	//#endif
+#endif
 
 	// TODO: first try load unpached file, then unpack zip
 	if (srtmTile.empty()) {
@@ -482,9 +554,9 @@ bool height_hgt::load(ll_t lat, ll_t lon)
 	}
 	lat_loaded = lat_dec;
 	lon_loaded = lon_dec;
-	DUMP("loadok", (long long)this, heights.size(), lat_loaded, lon_loaded, filesize, zipname,
-			filename, seconds_per_px_x, get(lat_dec, lon_dec), heights[0], heights.back(),
-			heights[side_length_x]);
+	DUMP("loadok", (long long)this, heights.size(), lat_loaded, lon_loaded, filesize,
+			zipname, filename, seconds_per_px_x, get(lat_dec, lon_dec), heights[0],
+			heights.back(), heights[side_length_x]);
 	return true;
 }
 
@@ -515,7 +587,7 @@ bool height_tif::load(ll_t lat, ll_t lon)
 	if (ok(lat, lon)) {
 		return true;
 	}
-	auto lock = std::unique_lock(mutex);
+	const auto lock = std::unique_lock(mutex);
 
 	if (lat >= 90 || lat <= -90 || lon >= 180 || lon <= -180)
 		return false;
@@ -529,7 +601,8 @@ bool height_tif::load(ll_t lat, ll_t lon)
 		//DUMP(lat_dec, lon_dec);
 		return false;
 	}
-	DUMP((long long)this, lat_dec, lon_dec, lat_loading, lon_loading, lat_loaded, lon_loaded);
+	DUMP((long long)this, lat_dec, lon_dec, lat_loading, lon_loading, lat_loaded,
+			lon_loaded);
 	TimeTaker timer("hgt load");
 
 	lat_loading = lat_dec;
@@ -617,8 +690,9 @@ bool height_tif::load(ll_t lat, ll_t lon)
 					pixel_per_deg_x = (ll_t)side_length_x / tile_deg_x;
 					pixel_per_deg_y = (ll_t)side_length_y / tile_deg_y;
 
-					DUMP("loadok", (long long)this, heights.size(), lat_loaded, lon_loaded,
-							zipname, tifname, seconds_per_px_x, get(lat_dec, lon_dec));
+					DUMP("loadok", (long long)this, heights.size(), lat_loaded,
+							lon_loaded, zipname, tifname, seconds_per_px_x,
+							get(lat_dec, lon_dec));
 					DUMP("ppd", pixel_per_deg_x, pixel_per_deg_y);
 
 					return true;
@@ -702,7 +776,7 @@ gebco_2023_sub_ice_n0.0_s-90.0_w90.0_e180.0.tif   8 australia
 	const auto w_end = w_start + 90;
 	name += std::to_string(w_end);
 	name += ".0";
-	DUMP(lat, lon, name, h_start, h_end, w_start, w_end);
+	// DUMP(lat, lon, name, h_start, h_end, w_start, w_end);
 	return name;
 }
 
@@ -710,7 +784,6 @@ bool height_gebco_tif::load(ll_t lat, ll_t lon)
 {
 	const auto lat_dec = lat90_start(lat);
 	const auto lon_dec = lon90_start(lon);
-
 #if TEST
 	static int once = 0;
 	if (!once++)
@@ -738,7 +811,7 @@ bool height_gebco_tif::load(ll_t lat, ll_t lon)
 	if (ok(lat, lon)) {
 		return true;
 	}
-	auto lock = std::unique_lock(mutex);
+	const auto lock = std::unique_lock(mutex);
 	//DUMP(lat_dec, lon_dec);
 	if (ok(lat, lon)) {
 		return true;
@@ -747,8 +820,7 @@ bool height_gebco_tif::load(ll_t lat, ll_t lon)
 		//DUMP(lat_dec, lon_dec);
 		return false;
 	}
-	DUMP("loadstart", (long long)this, lat_dec, lon_dec, lat_loading, lon_loading, lat_loaded,
-			lon_loaded);
+	//DUMP("loadstart", (long long)this, lat, lon, lat_dec, lon_dec, lat_loading, lon_loading, lat_loaded, lon_loaded, floor(lat / 90.0 + 1) * 90);
 	TimeTaker timer("tiff load");
 
 	lat_loading = lat_dec;
@@ -757,7 +829,7 @@ bool height_gebco_tif::load(ll_t lat, ll_t lon)
 	{
 		const auto name = file_name(lat, lon);
 		auto tifname = folder + "/" + "gebco_2023_sub_ice_" + name + ".tif";
-		DUMP(name, tifname);
+		//DUMP(name, tifname);
 		if (0) // too big zips
 		{
 			std::string zipfile = "gebco_2023_sub_ice_topo_geotiff.zip";
@@ -788,7 +860,7 @@ bool height_gebco_tif::load(ll_t lat, ll_t lon)
 					<< "https://www.bodc.ac.uk/data/open_download/gebco/gebco_2023_sub_ice_topo/geotiff/"
 					<< " or "
 					<< "https://www.bodc.ac.uk/data/open_download/gebco/gebco_2023_tid/geotiff/"
-					<< "\n";
+					<< " in " << porting::path_cache + DIR_DELIM + "earth" << "\n";
 		}
 
 		//DUMP(tifname, std::filesystem::exists(tifname));
@@ -889,7 +961,7 @@ bool height_gebco_tif::load(ll_t lat, ll_t lon)
 
 #endif
 
-	DUMP("load not ok", (long long)this, heights.size(), lat_loaded, lon_loaded,	seconds_per_px_x, get(lat_dec, lon_dec));
+	// DUMP("load not ok", (long long)this, heights.size(), lat_loaded, lon_loaded, seconds_per_px_x, get(lat_dec, lon_dec));
 	return false;
 }
 

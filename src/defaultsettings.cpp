@@ -85,7 +85,7 @@ constexpr bool emscripten =
 #endif
 ;
 
-const bool slow = debug || android || emscripten;
+const bool slow = debug || emscripten; // || android
 
 void fm_set_default_settings(Settings *settings) {
 
@@ -137,7 +137,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("reconnects", win ? "1" : "10"); // TODO: wix windows
 
 	// Map generation
-	settings->setDefault("mg_name", "indev"); // "v6"
+	//settings->setDefault("mg_name", "indev"); // "v6"
 	//settings->setDefault("mg_flags", "trees, caves, dungeons"); // "dungeons"
 	//settings->setDefault("mgv6_spflags", "jungles, biome_blend, snowbiomes"); // "jungles, snowbiomes"
 	settings->setDefault("mg_math", ""); // configuration in json struct
@@ -166,6 +166,8 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("farmesh_quality", slow ? "1" : "2"); //depends on client_mesh_chunk
 	settings->setDefault("farmesh_stable", "0");
 	settings->setDefault("farmesh_server", "1");
+	settings->setDefault("farmesh_all_changed", slow ? "1000" : "10000");
+
 	settings->setDefault("headless_optimize", "false");
 	//settings->setDefault("node_highlighting", "halo");
 	//settings->setDefault("enable_vbo", win ? "false" : "true");
@@ -177,6 +179,10 @@ void fm_set_default_settings(Settings *settings) {
 	}
 	//settings->setDefault("client_mesh_chunk", std::to_string(std::max<int>(1, Thread::getNumberOfProcessors() / 4)));
 	settings->setDefault("client_mesh_chunk","1");
+
+	if (slow || android) {
+		settings->setDefault("translucent_liquids", "false");
+	}
 
 	// Liquid
 	settings->setDefault("liquid_real", "true");
@@ -243,6 +249,8 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("save_generated_block", "true");
 	settings->setDefault("save_changed_block", "true");
 	settings->setDefault("block_delete_time", debug || slow ? "60" : threads ? "30" : "10");
+	settings->setDefault("fix_not_generated", "false");
+	
 
 #if (ENET_IPV6 || MINETEST_TRANSPORT || USE_SCTP)
 	//settings->setDefault("enable_ipv6", "true");

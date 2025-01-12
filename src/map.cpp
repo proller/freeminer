@@ -30,13 +30,12 @@ Map::Map(IGameDef *gamedef):
 	m_gamedef(gamedef),
 	m_nodedef(gamedef->ndef())
 {
-	time_life = 0;
 	getBlockCacheFlush();
 }
 
 Map::~Map()
 {
-	auto lock = m_blocks.lock_unique_rec();
+	const auto lock = m_blocks.lock_unique_rec();
 /*
 	for (auto & ir : m_blocks_delete_1)
 		delete ir.first;
@@ -841,7 +840,7 @@ void MMVManip::initialEmerge(v3s16 blockpos_min, v3s16 blockpos_max,
 	for(s32 x=p_min.X; x<=p_max.X; x++)
 	{
 		u8 flags = 0;
-		MapBlock *block;
+		MapBlockPtr block;
 		v3s16 p(x,y,z);
 		if (m_loaded_blocks.count(p) > 0)
 			continue;
@@ -850,7 +849,7 @@ void MMVManip::initialEmerge(v3s16 blockpos_min, v3s16 blockpos_max,
 		{
 			TimeTaker timer2("emerge load");
 
-			block = m_map->getBlockNoCreateNoEx(p, false, true);
+			block = m_map->getBlock(p, false, true);
 			if (!block)
 				block_data_inexistent = true;
 			else
@@ -861,9 +860,11 @@ void MMVManip::initialEmerge(v3s16 blockpos_min, v3s16 blockpos_max,
 		{
 
 			if (load_if_inexistent && !blockpos_over_max_limit(p)) {
-				block = m_map->emergeBlock(p, true);
+				block = m_map->emergeBlockPtr(p, true);
+			   if (block)
 				block->copyTo(*this);
-			} else {
+			} 
+			if (!block) {
 				flags |= VMANIP_BLOCK_DATA_INEXIST;
 
 				// Mark area inexistent
@@ -905,7 +906,7 @@ void MMVManip::blitBackAll(std::map<v3s16, MapBlock*> *modified_blocks,
 		block->copyFrom(*this);
 
    	  if (save_generated_block)
-		block->raiseModified(MOD_STATE_WRITE_NEEDED, MOD_REASON_VMANIP);
+		block->raiseModified(MOD_STATE_WRITE_NEEDED, MOD_REASON_VMANIP, false);
 		block->expireIsAirCache();
 
 		if(modified_blocks)

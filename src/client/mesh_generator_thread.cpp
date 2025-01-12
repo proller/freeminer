@@ -4,7 +4,7 @@
 
 #include "mesh_generator_thread.h"
 #include "client/clientmap.h"
-#include "client/fm_far_calc.h"
+#include "fm_far_calc.h"
 #include "client/mapblock_mesh.h"
 #include "settings.h"
 #include "profiler.h"
@@ -197,7 +197,7 @@ void MeshUpdateQueue::fillDataFromMapBlocks(QueuedMeshUpdate *q)
 	for (pos.Y = q->p.Y - 1; pos.Y <= q->p.Y + mesh_grid.cell_size; pos.Y++) {
 		auto block = q->map_blocks[i++];
 		if (block) {
-			auto lock = block->lock_shared_rec();
+			const auto lock = block->lock_shared_rec();
 			data->fillBlockData(pos, block->getData());
 
 			if (const auto bts = block->getTimestamp();

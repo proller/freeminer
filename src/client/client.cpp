@@ -82,7 +82,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "server.h"
 #include "emerge.h"
 #include "fm_world_merge.h"
-
 #if !MINETEST_PROTO
 #include "network/fm_clientpacketsender.cpp"
 #endif
@@ -185,6 +184,7 @@ Client::Client(
 	control.farmesh_quality = g_settings->getU16("farmesh_quality");
 	control.farmesh_quality_pow = log(control.farmesh_quality) / log(2);
 	control.farmesh_stable = g_settings->getU16("farmesh_stable");
+	control.farmesh_all_changed = g_settings->getPos("farmesh_all_changed");
 }
 
 void Client::migrateModStorage()
@@ -401,6 +401,10 @@ Client::~Client()
 	m_mesh_update_manager->stop();
 	m_mesh_update_manager->wait();
 
+	farmesh_async.wait();
+	updateDrawList_async.wait();
+	update_shadows_async.wait();
+
 /*	
 	MeshUpdateResult r;
 	while (m_mesh_update_manager->getNextResult(r)) {
@@ -513,6 +517,7 @@ void Client::step(float dtime)
 			sendInit(myplayer->getName());
 
 			sendInitFm();
+			sendDrawControl();
 		}
 
 		// Not connected, return
@@ -1633,7 +1638,7 @@ void Client::sendReady()
 void Client::sendPlayerPos()
 {
 	LocalPlayer *player = m_env.getLocalPlayer();
-	if (!player || !player->getCAO())
+	if (!player)
 		return;
 
 	// Save bandwidth by only updating position when
@@ -1710,7 +1715,6 @@ void Client::sendUpdateClientInfo(const ClientDynamicInfo& info)
 	Send(&pkt);
 }
 
-void Client::sendDrawControl() { }
 #endif
 
 void Client::removeNode(v3pos_t p, int fast)

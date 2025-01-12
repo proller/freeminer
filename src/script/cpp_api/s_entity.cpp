@@ -96,7 +96,9 @@ void ScriptApiEntity::luaentity_Deactivate(u16 id, bool removal)
 	luaentity_get(L, id);
 
 	if (const auto type = lua_type(L, -1); type != LUA_TTABLE) {
-		verbosestream << "ScriptApiEntity::luaentity_GetStaticdata(" << id << "): Wrong type=" << type << std::endl;
+#if !NDEBUG
+		verbosestream << "ScriptApiEntity::luaentity_Deactivate(" << id << "): Wrong type=" << type << std::endl;
+#endif
 		return;
 	}
 
@@ -144,7 +146,9 @@ std::string ScriptApiEntity::luaentity_GetStaticdata(u16 id)
 	luaentity_get(L, id);
 
 	if (const auto type = lua_type(L, -1); type != LUA_TTABLE) {
+#if !NDEBUG
 		verbosestream << "ScriptApiEntity::luaentity_GetStaticdata(" << id << "): Wrong type=" << type << std::endl;
+#endif
 		return {};
 	}
 
@@ -226,11 +230,7 @@ void ScriptApiEntity::luaentity_GetProperties(u16 id,
 bool ScriptApiEntity::luaentity_Step(u16 id, float dtime,
 	const collisionMoveResult *moveresult)
 {
-	/*RecursiveMutexAutoLock testscriptlock(m_luastackmutex, std::try_to_lock);
-	if (!testscriptlock.owns_lock())
-		return true;*/
-
-	SCRIPTAPI_PRECHECKHEADER
+	TRY_SCRIPTAPI_PRECHECKHEADER(true)
 
 	int error_handler = PUSH_ERROR_HANDLER(L);
 

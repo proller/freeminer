@@ -31,8 +31,8 @@ namespace con
 {
 
 // very ugly windows hack
- 
-#if (defined(_MSC_VER)) && defined(ENET_IPV6)  // || defined(__MINGW32__)
+
+#if (defined(_MSC_VER)) && defined(ENET_IPV6) // || defined(__MINGW32__)
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -241,6 +241,7 @@ int ConnectionEnet::receive()
 
 			/* Reset the peer's client information. */
 			delete (u16 *)event.peer->data;
+			event.peer->data = nullptr;
 
 			break;
 		case ENET_EVENT_TYPE_NONE:
@@ -368,7 +369,7 @@ void ConnectionEnet::connect(Address address)
 void ConnectionEnet::disconnect()
 {
 	// MutexAutoLock peerlock(m_peers_mutex);
-	auto lock = m_peers.lock_unique_rec();
+	const auto lock = m_peers.lock_unique_rec();
 	for (auto i = m_peers.begin(); i != m_peers.end(); ++i)
 		enet_peer_disconnect(i->second, 0);
 	m_peers.clear();
@@ -457,6 +458,10 @@ size_t ConnectionEnet::events_size()
 
 ConnectionEventPtr ConnectionEnet::waitEvent(u32 timeout_ms)
 {
+	if (!timeout_ms && m_event_queue.empty()) {
+		return ConnectionEvent::create(CONNEVENT_NONE);
+	}
+	
 	try {
 		return m_event_queue.pop_front(timeout_ms);
 	} catch (const ItemNotFoundException &ex) {
@@ -584,7 +589,7 @@ void ConnectionEnet::Send(
 
 Address ConnectionEnet::GetPeerAddress(session_t peer_id)
 {
-	auto lock = m_peers_address.lock_unique_rec();
+	const auto lock = m_peers_address.lock_unique_rec();
 	if (!m_peers_address.count(peer_id))
 		return Address();
 	return m_peers_address.get(peer_id);

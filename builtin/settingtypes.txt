@@ -114,6 +114,9 @@ farmesh_quality () int 2
 # Farmesh map data from server
 farmesh_server () bool true
 
+# Use all changed blocks in radius
+farmesh_all_changed () int 10000
+
 # Set to true to disable wield light (enabled by default, requires shaders)
 disable_wieldlight () bool false
 
@@ -181,6 +184,9 @@ save_generated_block () bool true
 
 # Save blocks changed by game
 save_changed_block () bool true
+
+# Load maps with not_generated blocks
+fix_not_generated () bool false
 
 # Cpu-eating debug timing tool (also automatically enabled with debug_log_level>=3)
 time_taker_enabled () int 0

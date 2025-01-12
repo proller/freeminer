@@ -632,7 +632,7 @@ ServerEnvironment::~ServerEnvironment()
 
 	m_abms.clear();
 	{
-		auto lock = m_players.lock_shared_rec();
+		const auto lock = m_players.lock_shared_rec();
 
 	// Deallocate players
 	for (RemotePlayer *m_player : m_players) {
@@ -657,7 +657,7 @@ ServerMap & ServerEnvironment::getServerMap()
 
 RemotePlayer *ServerEnvironment::getPlayer(const session_t peer_id)
 {
-	auto lock = m_players.lock_shared_rec();
+	const auto lock = m_players.lock_shared_rec();
 	for (RemotePlayer *player : m_players) {
 		if (player->getPeerId() == peer_id)
 			return player;
@@ -667,7 +667,7 @@ RemotePlayer *ServerEnvironment::getPlayer(const session_t peer_id)
 
 RemotePlayer *ServerEnvironment::getPlayer(const std::string &name, bool match_invalid_peer)
 {
-	auto lock = m_players.lock_shared_rec();
+	const auto lock = m_players.lock_shared_rec();
 	for (RemotePlayer *player : m_players) {
 		if (player->getName() != name)
 			continue;
@@ -697,7 +697,7 @@ void ServerEnvironment::addPlayer(RemotePlayer *player)
 
 void ServerEnvironment::removePlayer(RemotePlayer *player)
 {
-	auto lock = m_players.lock_unique_rec();
+	const auto lock = m_players.lock_unique_rec();
 
 	for (std::vector<RemotePlayer *>::iterator it = m_players.begin();
 		it != m_players.end(); ++it) {
@@ -1215,8 +1215,9 @@ bool ServerEnvironment::setNode(v3pos_t p, const MapNode &n, s16 fast, bool impo
 
 	// Call destructor
 	if (cf_old.has_on_destruct)
+	   m_script->postponed.emplace_back([=, this]() {
 		m_script->node_on_destruct(p, n_old);
-
+	   });
 	// Replace node
 	if (fast) {
 		try {
@@ -1242,7 +1243,9 @@ bool ServerEnvironment::setNode(v3pos_t p, const MapNode &n, s16 fast, bool impo
 
 	// Call post-destructor
 	if (cf_old.has_after_destruct)
+	   m_script->postponed.emplace_back([=, this]() {
 		m_script->node_after_destruct(p, n_old);
+	   });
 
 	// Retrieve node content features
 	// if new node is same as old, reuse old definition to prevent a lookup
@@ -1250,8 +1253,9 @@ bool ServerEnvironment::setNode(v3pos_t p, const MapNode &n, s16 fast, bool impo
 
 	// Call constructor
 	if (cf_new.has_on_construct)
+	   m_script->postponed.emplace_back([=, this]() {
 		m_script->node_on_construct(p, n);
-
+	   });
 	return true;
 }
 
@@ -1262,7 +1266,9 @@ bool ServerEnvironment::removeNode(v3pos_t p, s16 fast, bool important)
 
 	// Call destructor
 	if (ndef->get(n_old).has_on_destruct)
+	   m_script->postponed.emplace_back([=, this]() {
 		m_script->node_on_destruct(p, n_old);
+	   });
 
 	// Replace with air
 	// This is slightly optimized compared to addNodeWithEvent(air)
@@ -1286,8 +1292,9 @@ bool ServerEnvironment::removeNode(v3pos_t p, s16 fast, bool important)
 
 	// Call post-destructor
 	if (ndef->get(n_old).has_after_destruct)
+	   m_script->postponed.emplace_back([=, this]() {
 		m_script->node_after_destruct(p, n_old);
-
+	   });
 	// Air doesn't require constructor
 	return true;
 }
@@ -1424,7 +1431,7 @@ void ServerEnvironment::clearObjects(ClearObjectsMode mode)
 		if (obj->m_known_by_count > 0)
 			return false;
 
-		processActiveObjectRemove(obj.get());
+		processActiveObjectRemove(obj);
 
 		// Delete active object
 		return true;
@@ -1553,6 +1560,23 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 	g_profiler->avg("SMap: Blocks", getMap().m_blocks.size());
 #endif
 
+	{
+		getScriptIface()->player_event_process();
+	}
+
+	{
+		decltype(m_script->postponed)::full_type events;
+		{
+			const auto lock = m_script->postponed.try_lock_unique_rec();
+			if (lock->owns_lock()) {
+				std::swap(m_script->postponed, events);
+			}
+		}
+		for (const auto &e : events) {
+			e();
+		}
+	}
+
 	/*
 		Handle players
 	*/
@@ -1560,7 +1584,7 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 #if !NDEBUG
 		ScopeProfiler sp(g_profiler, "ServerEnv: move players", SPT_AVG);
 #endif
-		auto lock = m_players.lock_shared_rec();
+		const auto lock = m_players.lock_shared_rec();
 		for (RemotePlayer *player : m_players) {
 			// Ignore disconnected players
 			if (!player || player->getPeerId() == PEER_ID_INEXISTENT)
@@ -1612,7 +1636,7 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 /* TODO use ao manager
 		if (!m_blocks_added_last && g_settings->getBool("enable_force_load")) {
 			//TimeTaker timer_s2("force load");
-			auto lock = m_active_objects.try_lock_shared_rec();
+			const auto lock = m_active_objects.try_lock_shared_rec();
 			if (lock->owns_lock())
 			for(auto
 				i = m_active_objects.begin();
@@ -1735,7 +1759,7 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 */
 		u32 n = 0, calls = 0;
 		const auto end_ms = porting::getTimeMs() + max_cycle_ms;
-		auto lock = m_active_blocks.m_list.lock_shared_rec();
+		const auto lock = m_active_blocks.m_list.lock_shared_rec();
 
 		for (const auto &p: m_active_blocks.m_list) {
 			if (n++ < m_active_block_timer_last)
@@ -1803,7 +1827,7 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 		std::vector<v3s16> output(m_active_blocks.m_abm_list.size());
 
        {
-		auto lock = m_active_blocks.m_list.lock_shared_rec();
+		const auto lock = m_active_blocks.m_list.lock_shared_rec();
 		// Shuffle the active blocks so that each block gets an equal chance
 		// of having its ABMs run.
 		std::copy(m_active_blocks.m_abm_list.begin(), m_active_blocks.m_abm_list.end(), output.begin());
@@ -1954,7 +1978,7 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 	std::vector<RemotePlayer*> send_inventory;
 
    {
-	auto lock = m_players.try_lock_shared_rec();
+	const auto lock = m_players.try_lock_shared_rec();
 	if (lock->owns_lock())
 
 	// Send outdated player inventories
@@ -2077,7 +2101,7 @@ void ServerEnvironment::getAddedActiveObjects(PlayerSAO *playersao, s16 radius,
 	if (!playersao->isEffectivelyObservedBy(playersao->getPlayer()->getName()))
 		throw ModError("Player does not observe itself");
 
-	auto lock = current_objects.try_lock_shared_rec();
+	const auto lock = current_objects.try_lock_shared_rec();
 	if (!lock->owns_lock())
 		return;
 
@@ -2303,7 +2327,7 @@ u16 ServerEnvironment::addActiveObjectRaw(std::shared_ptr<ServerActiveObject> ob
 		if (block) {
 			block->m_static_objects.setActive(object->getId(), s_obj);
 			{
-			auto lock = object->lock_unique_rec();
+			const auto lock = object->lock_unique_rec();
 			object->m_static_exists = true;
 			object->m_static_block = blockpos;
 			}
@@ -2317,7 +2341,7 @@ u16 ServerEnvironment::addActiveObjectRaw(std::shared_ptr<ServerActiveObject> ob
 				<< object->getId() << " statically" << std::endl;
 			// clean in case of error
 			object->markForRemoval();
-			processActiveObjectRemove(object);
+			processActiveObjectRemove(object_u);
 			m_ao_manager.removeObject(object->getId());
 			return 0;
 		}
@@ -2378,7 +2402,7 @@ void ServerEnvironment::removeRemovedObjects(u32 max_cycle_ms)
 			}
 		}
 
-		processActiveObjectRemove(obj.get());
+		processActiveObjectRemove(obj);
 
 		// Delete
 		return true;
@@ -2548,7 +2572,7 @@ void ServerEnvironment::deactivateFarObjects(const bool _force_delete)
 
 		v3pos_t static_block;
 		{
-			auto lock = obj->try_lock_shared();
+			const auto lock = obj->try_lock_shared();
 			if (!lock->owns_lock())
 				return false;
 			static_block = obj->m_static_block;
@@ -2659,7 +2683,7 @@ void ServerEnvironment::deactivateFarObjects(const bool _force_delete)
 			return false;
 		}
 
-		processActiveObjectRemove(obj);
+		processActiveObjectRemove(objp);
 
 		// Delete active object
 		return true;
@@ -2722,7 +2746,7 @@ bool ServerEnvironment::saveStaticToBlock(
 	return true;
 }
 
-void ServerEnvironment::processActiveObjectRemove(ServerActiveObject *obj)
+void ServerEnvironment::processActiveObjectRemove(ServerActiveObjectPtr obj)
 {
 	// markForRemoval or markForDeactivation should have been called before
 	// Not because it's strictly necessary but because the Lua callback is
@@ -2732,7 +2756,9 @@ void ServerEnvironment::processActiveObjectRemove(ServerActiveObject *obj)
 	// Tell the object about removal
 	obj->removingFromEnvironment();
 	// Deregister in scripting api
-	m_script->removeObjectReference(obj);
+   m_script->postponed.emplace_back([=, this]() {
+	m_script->removeObjectReference(obj.get());
+   });
 }
 
 PlayerDatabase *ServerEnvironment::openPlayerDatabase(const std::string &name,
@@ -2783,7 +2809,7 @@ bool ServerEnvironment::migratePlayersDatabase(const GameParams &game_params,
 	if (!world_mt.exists("player_backend")) {
 		errorstream << "Please specify your current backend in world.mt:"
 			<< std::endl
-			<< "	player_backend = {files|sqlite3|leveldb|postgresql}"
+			<< "	player_backend = {files|sqlite3|leveldb|leveldbfm|postgresql}"
 			<< std::endl;
 		return false;
 	}

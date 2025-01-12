@@ -48,7 +48,7 @@
 
 #if USE_ENET
 // todo: move to connection
-#include "enet/enet.h"
+#include <enet/enet.h>
 #endif
 
 
@@ -76,8 +76,8 @@ extern "C" {
 #endif
 
 // TODO: luanti.conf with migration
-#define CONFIGFILE "freeminer.conf"
-#define CONFIGFILE_COMPAT "minetest.conf"
+#define CONFIGFILE "freeminer"
+#define CONFIGFILE_COMPAT "minetest"
 #define DEBUGFILE "debug.txt"
 #define DEFAULT_SERVER_PORT 30000
 

@@ -223,7 +223,7 @@ bool ServerMap::initBlockMake(v3s16 blockpos, BlockMakeData *data)
 
 // fm:
 	{
-		auto lock = m_mapgen_process.lock_unique_rec();
+		const auto lock = m_mapgen_process.lock_unique_rec();
 		auto gen = m_mapgen_process.get(bpmin);
 		auto now = porting::getTimeMs();
 		if (gen > now - 60000 ) {
@@ -262,7 +262,7 @@ bool ServerMap::initBlockMake(v3s16 blockpos, BlockMakeData *data)
 		for (s16 y = full_bpmin.Y; y <= full_bpmax.Y; y++) {
 			v3s16 p(x, y, z);
 
-			auto block = emergeBlockP(p, false);
+			auto block = emergeBlockPtr(p, false);
 			if (block == NULL) {
 				block = createBlock(p);
 
@@ -332,7 +332,7 @@ void ServerMap::finishBlockMake(BlockMakeData *data,
 		*/
 	   if (save_generated_block)		
 		block->raiseModified(MOD_STATE_WRITE_NEEDED,
-			MOD_REASON_EXPIRE_IS_AIR);
+			MOD_REASON_EXPIRE_IS_AIR, false);
        else
         block->setLightingComplete(0);
 	}
@@ -454,10 +454,10 @@ MapBlock * ServerMap::createBlock(v3s16 p)
 
 MapBlock * ServerMap::emergeBlock(v3s16 p, bool create_blank)
 {
-	return emergeBlockP(p, create_blank).get();
+	return emergeBlockPtr(p, create_blank).get();
 }
 
-MapBlockPtr ServerMap::emergeBlockP(v3s16 p, bool create_blank)
+MapBlockPtr ServerMap::emergeBlockPtr(v3s16 p, bool create_blank)
 {
 	TimeTaker timer("generateBlock");
 	MAP_NOTHREAD_LOCK(this);
@@ -468,11 +468,8 @@ MapBlockPtr ServerMap::emergeBlockP(v3s16 p, bool create_blank)
 			return block;
 	}
 
-	if (!m_map_loading_enabled)
-		return {};
-
 	{
-		auto block = loadBlockP(p);
+		auto block = loadBlock(p);
 		if(block)
 			return block;
 	}
@@ -765,7 +762,7 @@ MapBlockPtr ServerMap::loadBlock(const std::string &blob, v3bpos_t p3d, bool sav
 	try {
 		//v2s16 p2d(p3d.X, p3d.Z);
 		//MapSector *sector = createSector(p2d);
-		auto * sector= this;
+		auto * sector = this;
 
 		MapBlockPtr block_created_new;
 		block = sector->getBlock(p3d);
@@ -827,23 +824,26 @@ MapBlockPtr ServerMap::loadBlock(const std::string &blob, v3bpos_t p3d, bool sav
 	return block;
 }
 
-#if 0
-
-MapBlock* ServerMap::loadBlock(v3s16 blockpos)
+MapBlockPtr ServerMap::loadBlock(v3s16 blockpos)
 {
 	std::string data;
+
+	if (m_map_loading_enabled)
 	{
 		ScopeProfiler sp(g_profiler, "ServerMap: load block - sync (sum)");
 		MutexAutoLock dblock(m_db.mutex);
 		m_db.loadBlock(blockpos, data);
 	}
 
+    if (data.empty() && m_db.dbase_ro) {
+		m_db.dbase_ro->loadBlock(blockpos, &data);
+	}
+
 	if (!data.empty())
 		return loadBlock(data, blockpos);
-	return getBlockNoCreateNoEx(blockpos);
+	return getBlock(blockpos);
 }
 
-#endif
 
 bool ServerMap::deleteBlock(v3s16 blockpos)
 {

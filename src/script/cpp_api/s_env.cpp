@@ -4,6 +4,7 @@
 
 #include "cpp_api/s_env.h"
 #include <cstdint>
+#include <utility>
 #include "cpp_api/s_internal.h"
 #include "common/c_converter.h"
 #include "log.h"
@@ -139,7 +140,7 @@ void ScriptApiEnv::environment_OnGenerated(v3s16 minp, v3s16 maxp,
 
 void ScriptApiEnv::environment_Step(float dtime)
 {
-	SCRIPTAPI_PRECHECKHEADER
+	TRY_SCRIPTAPI_PRECHECKHEADER()
 
 	// Get core.registered_globalsteps
 	lua_getglobal(L, "core");
@@ -150,6 +151,26 @@ void ScriptApiEnv::environment_Step(float dtime)
 }
 
 void ScriptApiEnv::player_event(ServerActiveObject *player, const std::string &type)
+{
+	player_events.emplace_back(player, type);
+}
+
+void ScriptApiEnv::player_event_process()
+{
+	std::vector<pevent> events;
+	{
+		const auto lock = player_events.try_lock_unique_rec();
+		if (!lock->owns_lock())
+			return;
+		std::swap(events, player_events);
+	}
+
+	for (const auto &e : events) {
+		player_event_real(e.player, e.type);
+	}
+}
+
+void ScriptApiEnv::player_event_real(ServerActiveObject *player, const std::string &type)
 {
 	SCRIPTAPI_PRECHECKHEADER
 
@@ -240,7 +261,7 @@ void ScriptApiEnv::readABMs()
 		int trigger_chance = 50;
 		getintfield(L, current_abm, "chance", trigger_chance);
 
-		int neighbors_range = 1;
+		uint16_t neighbors_range = 1;
 		getintfield(L, current_abm, "neighbors_range", neighbors_range);
 
 		bool simple_catch_up = true;
@@ -466,7 +487,7 @@ void ScriptApiEnv::triggerABM(int id, v3s16 p, MapNode n,
 	pushnode(L, neighbor);
 	lua_pushnumber(L, activate);
 
-	int result = lua_pcall(L, 6, 0, error_handler);
+	int result = lua_pcall(L, 4 + 2, 0, error_handler);
 	if (result)
 		scriptError(result, "LuaABM::trigger");
 

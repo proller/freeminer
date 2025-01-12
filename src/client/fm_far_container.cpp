@@ -1,8 +1,8 @@
 #include "fm_far_container.h"
 #include "client.h"
 #include "client/clientmap.h"
-#include "client/fm_far_calc.h"
 #include "database/database.h"
+#include "fm_far_calc.h"
 #include "irr_v3d.h"
 #include "mapblock.h"
 #include "mapgen/mapgen.h"
@@ -48,7 +48,7 @@ const MapNode &FarContainer::getNodeRefUnsafe(const v3pos_t &pos)
 		if (!dbase) {
 			return {};
 		}
-		MapBlockPtr block{m_client->getEnv().getClientMap().createBlankBlockNoInsert(bpos)};
+		MapBlockPtr block = m_client->getEnv().getClientMap().createBlankBlockNoInsert(bpos);
 
 		std::string blob;
 		dbase->loadBlock(bpos, &blob);

@@ -1237,7 +1237,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 
 		const auto end_ms = porting::getTimeMs() + max_cycle_ms;
 #if !ENABLE_THREADS
-		auto lock = m_env->getMap().m_nothread_locker.lock_shared_rec();
+		const auto lock = m_env->getMap().m_nothread_locker.lock_shared_rec();
 		if (lock->owns_lock())
 #endif
 		while (!m_unsent_map_edit_queue.empty()) {
@@ -2501,6 +2501,7 @@ void Server::SendActiveObjectRemoveAdd(RemoteClient *client, PlayerSAO *playersa
 	}
 
 #if MINETEST_PROTO
+	Send(&pkt);
 #else
 	MSGPACK_PACKET_INIT(TOCLIENT_ACTIVE_OBJECT_REMOVE_ADD, 2);
 	PACK(TOCLIENT_ACTIVE_OBJECT_REMOVE_ADD_REMOVE, removed_objects_data);
@@ -2874,7 +2875,7 @@ int Server::SendBlocks(float dtime)
 			break;
 */
 #if !ENABLE_THREADS
-		auto lock = m_env->getServerMap().m_nothread_locker.lock_shared_rec();
+		const auto lock = m_env->getServerMap().m_nothread_locker.lock_shared_rec();
 #endif
 
 		MapBlock *block = map.getBlockNoCreateNoEx(block_to_send.pos);
@@ -2887,7 +2888,7 @@ int Server::SendBlocks(float dtime)
 			continue;
 
 		{
-		auto lock = block->try_lock_shared_rec();
+		const auto lock = block->try_lock_shared_rec();
 		if (!lock->owns_lock())
 			continue;
 

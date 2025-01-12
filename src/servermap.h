@@ -103,7 +103,7 @@ public:
 
 	MapBlockPtr loadBlockNoStore(const v3bpos_t &p3d);
 
-	bool m_map_loading_enabled;
+	bool m_map_loading_enabled {true};
 	concurrent_shared_unordered_map<v3pos_t, unsigned int, v3posHash, v3posEqual> m_mapgen_process;
 
 	// Carries out any initialization necessary before block is sent
@@ -111,7 +111,9 @@ public:
 
 	// Helper for placing objects on ground level
 	s16 findGroundLevel(v2pos_t p2d, bool cacheBlocks);
-	MapBlockPtr emergeBlockP(v3bpos_t p, bool create_blank=false) override;
+	MapBlockPtr emergeBlockPtr(v3bpos_t p, bool create_blank=false) override;
+
+	static std::atomic_uint time_life;
 
 	// == end of freeminer
 
@@ -196,8 +198,7 @@ public:
 	static bool saveBlock(MapBlock *block, MapDatabase *db, int compression_level = -1);
 
 	// Load block in a synchronous fashion
-	MapBlock *loadBlock(v3s16 p) {return loadBlockP(p).get(); };
-	MapBlockPtr loadBlockP(v3bpos_t p);
+	MapBlockPtr loadBlock(v3bpos_t p);
 	/// Load a block that was already read from disk. Used by EmergeManager.
 	/// @return non-null block (but can be blank)
 	MapBlockPtr loadBlock(const std::string &blob, v3bpos_t p, bool save_after_load=false);

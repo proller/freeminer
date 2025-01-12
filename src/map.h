@@ -306,8 +306,6 @@ protected:
 	u32 m_blocks_save_last{};
 
 public:
-	std::atomic_uint time_life{};
-
 	inline MapNode getNodeNoEx(const v3pos_t &p) override { return getNodeTry(p); };
 	inline MapNode getNodeNoExNoEmerge(const v3pos_t &p) override
 	{
@@ -320,7 +318,7 @@ public:
 	concurrent_unordered_set<v3bpos_t> changed_blocks_for_merge;
 	using far_dbases_t = std::array<std::shared_ptr<MapDatabase>, FARMESH_STEP_MAX>;
 
-	virtual MapBlockPtr emergeBlockP(v3bpos_t p, bool create_blank=false)
+	virtual MapBlockPtr emergeBlockPtr(v3bpos_t p, bool create_blank=false)
 	{ return getBlock(p); }
 
 	//end of freeminer

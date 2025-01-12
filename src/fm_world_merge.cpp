@@ -186,7 +186,7 @@ void WorldMerger::merge_one_block(MapDatabase *dbase, MapDatabase *dbase_up,
 					if (top_c.empty()) {
 						if (maybe_air) {
 							++not_empty_nodes;
-							block_up->setNodeNoLock(npos, air);
+							block_up->setNodeNoLock(npos, air, true);
 						}
 						continue;
 					}
@@ -206,7 +206,7 @@ void WorldMerger::merge_one_block(MapDatabase *dbase, MapDatabase *dbase_up,
 					// TODO better check
 					++not_empty_nodes;
 
-					block_up->setNodeNoLock(npos, n);
+					block_up->setNodeNoLock(npos, n, true);
 				}
 	}
 	// TODO: skip full air;
@@ -328,7 +328,7 @@ bool WorldMerger::merge_one_step(
 
 	printstat();
 
-	return false;
+	return !processed;
 }
 
 bool WorldMerger::merge_list(std::unordered_set<v3bpos_t> &blocks_todo)
@@ -358,10 +358,15 @@ bool WorldMerger::merge_changed()
 }
 
 bool WorldMerger::merge_server_diff(
-		concurrent_unordered_set<v3bpos_t> &smap_changed_blocks_for_merge)
+		concurrent_unordered_set<v3bpos_t> &smap_changed_blocks_for_merge,
+		size_t min_blocks)
 {
 	{
 		const auto lock = smap_changed_blocks_for_merge.try_lock_unique_rec();
+		if (smap_changed_blocks_for_merge.size() < min_blocks) {
+			return false;
+		}
+
 		changed_blocks_for_merge = smap_changed_blocks_for_merge;
 		smap_changed_blocks_for_merge.clear();
 	}

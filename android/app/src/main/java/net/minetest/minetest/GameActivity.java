@@ -18,7 +18,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 */
 
-package net.minetest.minetest;
+package org.freeminer.freeminer;
 
 import org.libsdl.app.SDLActivity;
 
@@ -52,7 +52,7 @@ import java.util.Objects;
 public class GameActivity extends SDLActivity {
 	@Override
 	protected String getMainSharedObject() {
-		return getContext().getApplicationInfo().nativeLibraryDir + "/libluanti.so";
+		return getContext().getApplicationInfo().nativeLibraryDir + "/libfreeminer.so";
 	}
 
 	@Override
@@ -63,7 +63,7 @@ public class GameActivity extends SDLActivity {
 	@Override
 	protected String[] getLibraries() {
 		return new String[] {
-			"luanti"
+			"freeminer"
 		};
 	}
 
@@ -225,7 +225,7 @@ public class GameActivity extends SDLActivity {
 			return;
 		}
 
-		Uri fileUri = FileProvider.getUriForFile(this, "net.minetest.minetest.fileprovider", file);
+		Uri fileUri = FileProvider.getUriForFile(this, "org.freeminer.freeminer.fileprovider", file);
 
 		Intent intent = new Intent(Intent.ACTION_SEND, fileUri);
 		intent.setDataAndType(fileUri, getContentResolver().getType(fileUri));

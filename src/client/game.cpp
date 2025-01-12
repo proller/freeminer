@@ -661,7 +661,7 @@ struct GameRunData {
 	bool show_block_boundaries = false;
 	bool connected = false;
 	bool reconnect = false;
-	bool enable_fog = false;
+	bool enable_fog = g_settings->getBool("enable_fog");
     //==
 
 
@@ -896,9 +896,9 @@ private:
 
 
 	// fm:
-	GUITable *playerlist = nullptr;
+	GUITable *playerlist {};
 	video::SColor console_bg {};
-	bool m_cinematic = false;
+	bool m_cinematic {};
 	std::unique_ptr<RaycastState> pointedRaycastState;
 	PointedThing pointed;
 	std::string address_name;
@@ -1340,9 +1340,9 @@ void Game::run_loop(std::function<void(BaseException*)> resolve) {
 				}
 			}
 
-		run_time += dtime;
-		if (runData.autoexit && run_time > runData.autoexit)
-			g_gamecallback->shutdown_requested = 1;
+			run_time += dtime;
+			if (runData.autoexit && run_time > runData.autoexit)
+				g_gamecallback->shutdown_requested = 1;
 		}
 
 		// Prepare render data for next iteration
@@ -2829,7 +2829,7 @@ void Game::openInventory()
 	 */
 
 	LocalPlayer *player = client->getEnv().getLocalPlayer();
-	if (!player || !player->getCAO())
+	if (!player)
 		return;
 
 	infostream << "Game: Launching inventory" << std::endl;
@@ -4819,35 +4819,27 @@ void Game::updateFrame(f32 dtime,
 
 	if (draw_control->range_all && sky->getFogDistance() < 0) {
 		runData.fog_range = FOG_RANGE_ALL;
-	} else if (!runData.headless_optimize) {
-		runData.fog_range = draw_control->wanted_range * BS
-				+ 0.0 * MAP_BLOCKSIZE * BS;
-
-		thread_local static const auto farmesh_bs = g_settings->getS32("farmesh") * BS;
-		if (runData.fog_range < farmesh_bs) {
-			runData.fog_range = farmesh_bs ;
-		}
-
-		if (client->use_weather) {
-			auto humidity = client->getEnv().getClientMap().getHumidity(pos_i, 1);
-			runData.fog_range *= (1.55 - 1.4*(float)humidity/100);
-		}
-
-		if (!runData.enable_fog)
-			runData.fog_range = FOG_RANGE_ALL;
-		else
-		runData.fog_range = MYMIN(
-				runData.fog_range,
-				//(draw_control->farthest_drawn + 20)
-				draw_control->wanted_range * BS);
-		runData.fog_range *= 0.9;
-
-		runData.fog_range = fog_was + (runData.fog_range-fog_was)/50;
-
-/*
 	} else {
+/*
 		runData.fog_range = draw_control->wanted_range * BS;
 */
+		if (!runData.enable_fog) {
+			runData.fog_range = FOG_RANGE_ALL;
+		} else {
+			runData.fog_range = draw_control->wanted_range * BS + 0.0 * MAP_BLOCKSIZE * BS;
+			thread_local static const auto farmesh_bs = g_settings->getS32("farmesh") * BS;
+			if (runData.fog_range < farmesh_bs) {
+				runData.fog_range = farmesh_bs;
+			}
+
+			if (client->use_weather) {
+				const auto humidity = client->getEnv().getClientMap().getHumidity(pos_i, 1);
+				const auto mul = (100 - humidity) / 100.0;
+				runData.fog_range *= mul * mul * mul * mul;
+				runData.fog_range += 50 * BS;
+			}
+		}
+		runData.fog_range = fog_was + (runData.fog_range - fog_was) / 50;
 	}
 
 	client->fog_range = runData.fog_range;

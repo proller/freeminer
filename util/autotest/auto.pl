@@ -157,6 +157,7 @@ sub init_config () {
         cmake_nothreads   => '-DENABLE_THREADS=0 -DHAVE_THREAD_LOCAL=0 -DHAVE_FUTURE=0',
         cmake_nothreads_a => '-DENABLE_THREADS=0 -DHAVE_THREAD_LOCAL=1 -DHAVE_FUTURE=0',
         cmake_opts        => [qw(CMAKE_C_COMPILER CMAKE_CXX_COMPILER CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER)],
+        cmake_san_debug   => 1,
         config            => $script_path . 'auto.json',
         date              => $g->{date},
         env               => 'OPENSSL_armcap=0',
@@ -307,6 +308,13 @@ our $options = {
         static_spawnpoint => '(-70,20020,-190)',
         mg_flags          => '',                                                                                          # "trees",
     },
+    fall3 => {
+        '--world'         => $script_path . 'world_fall3',
+        mg_name           => 'math',
+        mg_math           => {"generator" => "aexion", "N" => 11,"cadd" => -1.0002,"size" => 30000 },
+        water_level       => -30000,
+        static_spawnpoint => '(10,10,10)',
+    },
     far => {
         max_block_generate_distance => 50,
         max_block_send_distance     => 50,
@@ -417,10 +425,10 @@ $commands = {
         return $r if $r;
         my %D;
         #$D{CMAKE_RUNTIME_OUTPUT_DIRECTORY} = "`pwd`";
-    	local $config->{cmake_debug} = 1, $D{SANITIZE_THREAD}  = 1, if $config->{cmake_tsan};
-	    local $config->{cmake_debug} = 1, $D{SANITIZE_ADDRESS} = 1, if $config->{cmake_asan};
-	    local $config->{cmake_debug} = 1, $D{SANITIZE_MEMORY}  = 1, if $config->{cmake_msan};
-	    local $config->{cmake_debug} = 1, local $config->{keep_luajit} = 1, $D{SANITIZE_UNDEFINED} = 1,
+    	local $config->{cmake_debug} = $config->{cmake_san_debug}, $D{SANITIZE_THREAD}  = 1, if $config->{cmake_tsan};
+	    local $config->{cmake_debug} = $config->{cmake_san_debug}, $D{SANITIZE_ADDRESS} = 1, if $config->{cmake_asan};
+	    local $config->{cmake_debug} = $config->{cmake_san_debug}, $D{SANITIZE_MEMORY}  = 1, if $config->{cmake_msan};
+	    local $config->{cmake_debug} = $config->{cmake_san_debug}, local $config->{keep_luajit} = 1, $D{SANITIZE_UNDEFINED} = 1,
           if $config->{cmake_usan};
 
         $D{ENABLE_LUAJIT}     = 0                                if $config->{cmake_debug} and !$config->{keep_luajit};

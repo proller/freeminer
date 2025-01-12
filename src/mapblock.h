@@ -127,7 +127,7 @@ public:
 	////
 	//// Modification tracking methods
 	////
-	void raiseModified(u32 mod, u32 reason=MOD_REASON_UNKNOWN, bool important = false)
+	void raiseModified(u32 mod, u32 reason=MOD_REASON_UNKNOWN, bool important = true)
 	{
 		raiseModified(mod, modified_light_no, important);
 #ifdef WTFdebug
@@ -288,7 +288,7 @@ public:
 		if (!*valid_position)
 			return ignoreNode;
 
-		auto lock = lock_shared_rec();
+		const auto lock = lock_shared_rec();
 		return data[p.Z * zstride + p.Y * ystride + p.X];
 	}
 
@@ -323,7 +323,7 @@ public:
 
 	inline MapNode getNodeNoCheck(s16 x, s16 y, s16 z)
 	{
-		auto lock = lock_shared_rec();
+		const auto lock = lock_shared_rec();
 		return data[z * zstride + y * ystride + x];
 	}
 
@@ -334,15 +334,15 @@ public:
 
 	inline void setNodeNoCheck(s16 x, s16 y, s16 z, MapNode n)
 	{
-        auto lock = lock_unique_rec();
+        const auto lock = lock_unique_rec();
 
 		data[z * zstride + y * ystride + x] = n;
-		raiseModified(MOD_STATE_WRITE_NEEDED, MOD_REASON_SET_NODE);
+		raiseModified(MOD_STATE_WRITE_NEEDED, MOD_REASON_SET_NODE, false);
 	}
 
 	inline void setNodeNoCheck(v3pos_t p, MapNode n, bool important = false)
 	{
-		auto lock = lock_unique_rec();
+		const auto lock = lock_unique_rec();
 
 		data[p.Z * zstride + p.Y * ystride + p.X] = n;
 		raiseModified(MOD_STATE_WRITE_NEEDED, MOD_REASON_SET_NODE, important);
@@ -564,34 +564,18 @@ public:
 
 	std::atomic_bool m_lighting_expired {false};
 
-	inline MapNode getNodeTry(const v3pos_t &p)
-	{
-		auto lock = try_lock_shared_rec();
-		if (!lock->owns_lock())
-			return ignoreNode;
-		return getNodeNoLock(p);
-	}
+	MapNode getNodeTry(const v3pos_t &p);
 
-	inline MapNode& getNodeRef(const v3pos_t &p)
-	{
-		auto lock = try_lock_shared_rec();
-		if (!lock->owns_lock())
-			return ignoreNode;
-		return getNodeNoLock(p);
-	}
+	MapNode &getNodeRef(const v3pos_t &p);
 
 	MapNode &getNodeNoLock(v3pos_t p)
 	{
 		return data[p.Z*zstride + p.Y*ystride + p.X];
 	}
 
-	inline void setNodeNoLock(v3pos_t p, MapNode n, bool important = false)
-	{
-		data[p.Z * zstride + p.Y * ystride + p.X] = n;
-		raiseModified(MOD_STATE_WRITE_NEEDED, MOD_REASON_SET_NODE, important);
-	}
+	void setNodeNoLock(v3pos_t p, MapNode n, bool important = false);
 
-//===
+	//===
 
 	bool storeActiveObject(u16 id);
 	// clearObject and return removed objects count
