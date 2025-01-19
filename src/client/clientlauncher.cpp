@@ -226,7 +226,6 @@ void ClientLauncher::run_loop(std::function<void(bool)> resolve) {
 #endif
 			m_rendering_engine->get_gui_env()->clear();
 
-        should_run_game =
 		launch_game([this, resolve](bool game_has_run) { run_after_launch_game(resolve, game_has_run); });
 /*
 			bool should_run_game = launch_game(error_message, reconnect_requested,
@@ -528,6 +527,8 @@ bool ClientLauncher::launch_game(std::string &error_message,
 		spec.name = _("[--world parameter]");
 	}
 
+ 	should_run_game = true;
+
 	/* Show the GUI menu
 	 */
 	server_name = "";
@@ -549,6 +550,7 @@ bool ClientLauncher::launch_game(std::string &error_message,
 	} else {
 		after_main_menu(resolve);
 	}
+	resolve(true);
 	return true;
 }
 
