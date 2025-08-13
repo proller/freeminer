@@ -231,9 +231,8 @@ if(ENABLE_LEVELDB)
 	message (STATUS "Snappy library: ${SNAPPY_LIBRARY} : ${SNAPPY_INCLUDE_DIR}")
 	message (STATUS "Leveldb library: ${LEVELDB_LIBRARY} : ${LEVELDB_INCLUDE_DIR}")
 
-	if (NOT SNAPPY_INCLUDE_DIR OR NOT SNAPPY_LIBRARY)
-		find_path(SNAPPY_INCLUDE_DIR snappy.h PATHS ${PROJECT_SOURCE_DIR}/external/snappy NO_DEFAULT_PATH)
-	  if (SNAPPY_INCLUDE_DIR)
+	if ((NOT SNAPPY_INCLUDE_DIR OR NOT SNAPPY_LIBRARY) AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/snappy/snappy.h)
+		set(SNAPPY_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/snappy)
 		# Snappy have no cmake by default,
 		# git clone --recursive --depth 1 https://github.com/google/snappy src/external/snappy
 		# But we can collect something from pulls
@@ -243,16 +242,14 @@ if(ENABLE_LEVELDB)
 		set(SNAPPY_INSTALL 0 CACHE INTERNAL "")
 		set(HAVE_TCMALLOC 0 CACHE INTERNAL "")
 
-		add_subdirectory(${PROJECT_SOURCE_DIR}/external/snappy)
+		add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/snappy)
 		set(SNAPPY_LIBRARY snappy)
 		set(HAVE_SNAPPY 1 CACHE INTERNAL "")
 		message(STATUS "Using bundled snappy ${SNAPPY_LIBRARY} : ${SNAPPY_INCLUDE_DIR}")
-	  endif()
 	endif()
 
-	if (NOT LEVELDB_INCLUDE_DIR OR NOT LEVELDB_LIBRARY)
-		find_path(LEVELDB_INCLUDE_DIR NAMES leveldb/db.h PATHS ${PROJECT_SOURCE_DIR}/external/leveldb/include NO_DEFAULT_PATH)
-		if (LEVELDB_INCLUDE_DIR)
+	if ((NOT LEVELDB_INCLUDE_DIR OR NOT LEVELDB_LIBRARY) AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/leveldb/include/leveldb/db.h)
+		set(LEVELDB_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/leveldb/include)
 		# bad try direct make build 
 		#find_path(LEVELDB_MAKEFILE_DIR Makefile ${PROJECT_SOURCE_DIR}/external/leveldb NO_DEFAULT_PATH)
 		#if (LEVELDB_MAKEFILE_DIR)
@@ -270,10 +267,9 @@ if(ENABLE_LEVELDB)
 		set(LEVELDB_BUILD_BENCHMARKS 0 CACHE INTERNAL "")
 		set(LEVELDB_INSTALL 0 CACHE INTERNAL "")
 		set(HAVE_CLANG_THREAD_SAFETY 0 CACHE INTERNAL "") # -Werror remove
-		add_subdirectory(${PROJECT_SOURCE_DIR}/external/leveldb)
+		add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/leveldb)
 		set(LEVELDB_LIBRARY leveldb)
 		message(STATUS "Using bundled leveldb ${LEVELDB_INCLUDE_DIR} ${LEVELDB_LIBRARY}")
-	  endif()
 	endif()
 
 	if(SNAPPY_LIBRARY AND SNAPPY_INCLUDE_DIR)
@@ -583,7 +579,7 @@ endif()
 if(ENABLE_ENET)
 	if(NOT ENABLE_SYSTEM_ENET AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/enet/include/enet/enet.h)
 		add_subdirectory(external/enet)
-		set(ENET_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/external/enet/include)
+		set(ENET_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/enet/include)
 		set(ENET_LIBRARY enet)
 	endif()
 	if(NOT ENET_LIBRARY)
@@ -614,37 +610,49 @@ if(ENABLE_TIFF AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/libtiff/CMakeList
 	set(USE_TIFF 1)
 endif()
 
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/libosmium/CMakeLists.txt)
-	set(BUILD_TESTING 0 CACHE INTERNAL "")
-	set(BUILD_DATA_TESTS 0 CACHE INTERNAL "")
-	set(BUILD_EXAMPLES 0 CACHE INTERNAL "")
-	set(BUILD_BENCHMARKS 0 CACHE INTERNAL "")
-	add_subdirectory(external/libosmium)
-	set(OSMIUM_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/libosmium/include)
-	include_directories(BEFORE SYSTEM ${OSMIUM_INCLUDE_DIR})
-	find_package(BZip2)
-	if(BZIP2_FOUND)
-		set (OSMIUM_LIRARY ${OSMIUM_LIRARY} BZip2::BZip2)
+option(ENABLE_OSMIUM "Enable Osmium" 1)
+
+if (ENABLE_OSMIUM)
+	find_path(OSMIUM_INCLUDE_DIR osmium/osm.hpp)
+endif()
+
+if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/libosmium/CMakeLists.txt))
+	find_package(Boost)
+	if(Boost_FOUND)
+		set(BUILD_TESTING 0 CACHE INTERNAL "")
+		set(BUILD_DATA_TESTS 0 CACHE INTERNAL "")
+		set(BUILD_EXAMPLES 0 CACHE INTERNAL "")
+		set(BUILD_BENCHMARKS 0 CACHE INTERNAL "")
+
+		if (NOT OSMIUM_INCLUDE_DIR)
+			add_subdirectory(external/libosmium)
+			set(OSMIUM_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/libosmium/include)
+			include_directories(BEFORE SYSTEM ${OSMIUM_INCLUDE_DIR})
+		endif()
+		find_package(BZip2)
+		if(BZIP2_FOUND)
+			set (OSMIUM_LIRARY ${OSMIUM_LIRARY} BZip2::BZip2)
+		endif()
+		find_package(EXPAT)
+		if(EXPAT_FOUND)
+			set (OSMIUM_LIRARY ${OSMIUM_LIRARY} EXPAT::EXPAT)
+		endif()
+		set(USE_OSMIUM 1)
+		message(STATUS "Using osmium: ${OSMIUM_INCLUDE_DIR} : ${OSMIUM_LIRARY}")
 	endif()
-	find_package(EXPAT)
-	if(EXPAT_FOUND)
-		set (OSMIUM_LIRARY ${OSMIUM_LIRARY} EXPAT::EXPAT)
-	endif()
-	set(USE_OSMIUM 1)
-	message(STATUS "Using osmium: ${OSMIUM_INCLUDE_DIR} : ${OSMIUM_LIRARY}")
 endif()
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND ${CMAKE_VERSION} VERSION_GREATER "3.11.0")
-    set(USE_DEBUG_HELPERS ON CACHE BOOL "")
+    set(USE_DEBUG_DUMP ON CACHE BOOL "")
 endif()
 
-if (USE_DEBUG_HELPERS)
+if (USE_DEBUG_DUMP)
     #get_target_property(MAGIC_ENUM_INCLUDE_DIR ch_contrib::magic_enum INTERFACE_INCLUDE_DIRECTORIES)
     # CMake generator expression will do insane quoting when it encounters special character like quotes, spaces, etc.
     # Prefixing "SHELL:" will force it to use the original text.
-    #set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${MAGIC_ENUM_INCLUDE_DIR}\" -include \"${ClickHouse_SOURCE_DIR}/base/base/iostream_debug_helpers.h\"")
-    set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${CMAKE_CURRENT_SOURCE_DIR}/debug/\" -include \"${CMAKE_CURRENT_SOURCE_DIR}/debug/iostream_debug_helpers.h\"")
-    #set (INCLUDE_DEBUG_HELPERS "SHELL:-include \"${CMAKE_CURRENT_SOURCE_DIR}/util/iostream_debug_helpers.h\"")
+    #set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${MAGIC_ENUM_INCLUDE_DIR}\" -include \"${ClickHouse_SOURCE_DIR}/base/base/dump.h\"")
+    set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${CMAKE_CURRENT_SOURCE_DIR}/debug/\" -include \"${CMAKE_CURRENT_SOURCE_DIR}/debug/dump.h\"")
+    #set (INCLUDE_DEBUG_HELPERS "SHELL:-include \"${CMAKE_CURRENT_SOURCE_DIR}/util/dump.h\"")
     # Use generator expression as we don't want to pollute CMAKE_CXX_FLAGS, which will interfere with CMake check system.
     add_compile_options($<$<COMPILE_LANGUAGE:CXX>:${INCLUDE_DEBUG_HELPERS}>)
 	if (CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -668,11 +676,11 @@ set(FMcommon_SRCS ${FMcommon_SRCS}
 	key_value_storage.cpp
 	log_types.cpp
 	stat.cpp
-    content_abm_grow_tree.cpp
-    content_abm.cpp
-    fm_abm.cpp
-    fm_clientiface.cpp
-    fm_serverenvironment.cpp
+	content_abm_grow_tree.cpp
+	content_abm.cpp
+	fm_abm.cpp
+	fm_clientiface.cpp
+	fm_serverenvironment.cpp
 	)
 # == end freeminer:
 

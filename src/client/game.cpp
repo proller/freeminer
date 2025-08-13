@@ -661,7 +661,6 @@ struct GameRunData {
 	bool show_block_boundaries = false;
 	bool connected = false;
 	bool reconnect = false;
-	bool enable_fog = g_settings->getBool("enable_fog");
     //==
 
 
@@ -1460,6 +1459,8 @@ void Game::shutdown()
 			sleep_ms(100);
 	}
 
+	runData.selected_object.reset();
+
 	delete client;
 	client = nullptr;
 	delete soundmaker;
@@ -1667,6 +1668,8 @@ void Game::createClient(const GameStartData *start_data, std::function<void(bool
 		resolve(false, nullptr);
 		return;
 	}
+
+	draw_control->enable_fog = m_cache_enable_fog;
 
 	/*
 	bool could_connect, connect_aborted;
@@ -3120,7 +3123,9 @@ void Game::toggleFog()
 	else
 		m_game_ui->showTranslatedStatusText("Fog disabled");
 
-	runData.enable_fog = allowed && flag;
+	if (draw_control) {
+		draw_control->enable_fog = allowed && flag;
+	}
 }
 
 
@@ -3583,6 +3588,22 @@ void Game::handleClientEvent_DeathscreenLegacy(ClientEvent *event, CameraOrienta
 
 void Game::handleClientEvent_ShowFormSpec(ClientEvent *event, CameraOrientation *cam)
 {
+
+	if (event->show_formspec.formname &&
+			*event->show_formspec.formname == "__builtin:death" &&
+			g_settings->getBool("respawn_auto")) {
+		client->sendRespawnLegacy();
+
+		StringMap fields;
+		fields["quit"] = "1";
+		client->sendInventoryFields(*event->show_formspec.formname, fields);
+
+		//client->sendRespawn();
+		delete event->show_formspec.formspec;
+		delete event->show_formspec.formname;
+		return;
+	}
+
 	if (event->show_formspec.formspec->empty()) {
 		auto formspec = m_game_ui->getFormspecGUI();
 		if (formspec && (event->show_formspec.formname->empty()
@@ -4823,7 +4844,7 @@ void Game::updateFrame(f32 dtime,
 /*
 		runData.fog_range = draw_control->wanted_range * BS;
 */
-		if (!runData.enable_fog) {
+		if (!draw_control->enable_fog) {
 			runData.fog_range = FOG_RANGE_ALL;
 		} else {
 			runData.fog_range = draw_control->wanted_range * BS + 0.0 * MAP_BLOCKSIZE * BS;
@@ -4839,8 +4860,10 @@ void Game::updateFrame(f32 dtime,
 				runData.fog_range += 50 * BS;
 			}
 		}
-		runData.fog_range = fog_was + (runData.fog_range - fog_was) / 50;
 	}
+
+	runData.fog_range = std::min<f32>(client->getCamera()->getCameraNode()->getFarValue()/1.2,
+			fog_was + (runData.fog_range - fog_was) / 50);
 
 	client->fog_range = runData.fog_range;
 
@@ -5293,7 +5316,9 @@ void Game::readSettings()
 
 	m_does_lost_focus_pause_game = g_settings->getBool("pause_on_lost_focus");
 
-	runData.enable_fog = m_cache_enable_fog;
+	if (draw_control) {
+		draw_control->enable_fog = m_cache_enable_fog;
+	}
 }
 
 /****************************************************************************/
