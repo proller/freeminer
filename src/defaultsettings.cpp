@@ -85,6 +85,11 @@ constexpr bool emscripten =
 #endif
 ;
 
+#ifdef __EMSCRIPTEN__
+#undef ENABLE_UPDATE_CHECKER
+#endif
+
+
 const bool slow = debug || emscripten; // || android
 
 void fm_set_default_settings(Settings *settings) {

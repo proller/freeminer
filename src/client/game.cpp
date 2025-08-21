@@ -1269,7 +1269,6 @@ void Game::run(std::function<void(BaseException*)> resolve)
 	m_touch_simulate_aux1 = g_settings->getBool("fast_move")
 			&& client->checkPrivilege("fast");
 
-	//const irr::core::dimension2du 
 	initial_screen_size = irr::core::dimension2du(
 			g_settings->getU16("screen_w"),
 			g_settings->getU16("screen_h")

@@ -376,6 +376,40 @@ bool IsDirDelimiter(char c)
 	return c == '/';
 }
 
+// Copied from the windows block and modified
+bool RecursiveDelete(const std::string &path)
+{
+	infostream << "Recursively deleting \"" << path << "\"" << std::endl;
+	if (!IsDir(path)) {
+		infostream << "RecursiveDelete: Deleting file  " << path << std::endl;
+		if (!DeleteSingleFileOrEmptyDirectory(path.c_str())) {
+			errorstream << "RecursiveDelete: Failed to delete file "
+					<< path << std::endl;
+			return false;
+		}
+		return true;
+	}
+	infostream << "RecursiveDelete: Deleting content of directory "
+			<< path << std::endl;
+	std::vector<DirListNode> content = GetDirListing(path);
+	for (const DirListNode &n: content) {
+		std::string fullpath = path + DIR_DELIM + n.name;
+		if (!RecursiveDelete(fullpath)) {
+			errorstream << "RecursiveDelete: Failed to recurse to "
+					<< fullpath << std::endl;
+			return false;
+		}
+	}
+	infostream << "RecursiveDelete: Deleting directory " << path << std::endl;
+	if (!DeleteSingleFileOrEmptyDirectory(path.c_str())) {
+		errorstream << "Failed to recursively delete directory "
+				<< path << std::endl;
+		return false;
+	}
+	return true;
+}
+
+#if 0
 bool RecursiveDelete(const std::string &path)
 {
 	/*
@@ -419,6 +453,7 @@ bool RecursiveDelete(const std::string &path)
 		return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 	}
 }
+#endif
 
 bool DeleteSingleFileOrEmptyDirectory(const std::string &path)
 {

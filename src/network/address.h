@@ -16,6 +16,7 @@
 
 #include <ostream>
 #include <cstring>
+#include <functional>
 #include "irrlichttypes.h"
 #include "networkexceptions.h"
 
