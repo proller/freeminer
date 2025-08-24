@@ -19,11 +19,11 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 #ifdef HAVE_COLORIZE_URL
 
+#include <curl/urlapi.h>
 #include "log.h"
 #include "string.h"
 #include <sstream>
 #include <memory>
-#include <curl/urlapi.h>
 
 std::string colorize_url(const std::string &url)
 {

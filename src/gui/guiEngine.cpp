@@ -361,11 +361,13 @@ void GUIEngine::run_loop(std::function<void()> resolve) {
 	{
     // EXTRANEOUS INDENT
            bool keep_going = m_rendering_engine->run() && (!m_startgame) && (!m_kill);
-           if (!keep_going) {
-        RenderingEngine::autosaveScreensizeAndCo(initial_screen_size, initial_window_maximized);
-                   resolve();
-                   return;
-           }
+		   if (!keep_going) {
+			   framemarker.end();
+			   m_script->beforeClose();
+			   RenderingEngine::autosaveScreensizeAndCo(initial_screen_size, initial_window_maximized);
+			   resolve();
+				return;
+		   }
 
 		framemarker.end();
 		fps_control.limit(device, &dtime);

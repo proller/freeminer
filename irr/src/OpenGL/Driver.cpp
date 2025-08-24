@@ -1307,7 +1307,7 @@ void COpenGL3DriverBase::setBasicRenderStates(const SMaterial &material, const S
 				getGLBlend(srcAlphaFact), getGLBlend(dstAlphaFact));
 	}
 
-	// fillmode
+#ifndef __EMSCRIPTEN__
 	if (Version.Spec != OpenGLSpec::ES && // not supported in gles
 			(resetAllRenderStates ||
 			lastmaterial.Wireframe != material.Wireframe ||
@@ -1317,6 +1317,7 @@ void COpenGL3DriverBase::setBasicRenderStates(const SMaterial &material, const S
 				material.PointCloud ? GL_POINT :
 				GL_FILL);
 	}
+#endif
 
 	// Polygon Offset
 	if (resetAllRenderStates ||

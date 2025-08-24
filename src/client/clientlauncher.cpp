@@ -198,6 +198,10 @@ void ClientLauncher::run(std::function<void(bool)> resolve)
 
 void ClientLauncher::run_loop(std::function<void(bool)> resolve) {
 	// EXTRANEOUS INDENT
+#ifndef __EMSCRIPTEN__
+	while(1)
+#endif
+	{
 		bool keep_running = m_rendering_engine->run() && !*kill && !g_gamecallback->shutdown_requested;
 		if (!keep_running) {
 			run_cleanup(resolve);
@@ -224,6 +228,7 @@ void ClientLauncher::run_loop(std::function<void(bool)> resolve) {
 			bool should_run_game = launch_game(error_message, reconnect_requested,
 				start_data, cmd_args);
 */
+	}
 }
 
 void ClientLauncher::run_after_launch_game(std::function<void(bool)> resolve, bool game_has_run) {
@@ -629,7 +634,8 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 		//resolve(false);
 		//return;
 #else
-		return;
+		//resolve(false);
+		//return;
 #endif
 	}
 

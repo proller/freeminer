@@ -644,7 +644,6 @@ protected:
 	// Basic initialisation
 	bool init(const std::string &map_dir, const std::string &address,
 			u16 port, const SubgameSpec &gamespec);
-
 	bool initSound();
 	bool createServer(const std::string &map_dir,
 			const SubgameSpec &gamespec, u16 port);
@@ -1090,11 +1089,11 @@ bool Game::startup(volatile std::sig_atomic_t *kill,
 
 	g_client_translations->clear();
 
-/*
-	if (!init(start_data.world_spec.path, start_data.address,
-			start_data.socket_port, start_data.game_spec))
+#ifndef __EMSCRIPTEN__
+	if (!init(start_data->world_spec.path, start_data->address,
+			start_data->socket_port, start_data->game_spec))
 		return false;
-*/
+#endif
 
 	// CATCHALL
         } catch (BaseException &exc) {
@@ -1324,7 +1323,7 @@ void Game::run_loop(std::function<void(BaseException*)> resolve) {
 
 	framemarker.end();
 
-	#ifdef __ANDROID__
+#ifdef __ANDROID__
 	porting::setPlayingNowNotification(false);
 #endif
 
@@ -1883,7 +1882,7 @@ void Game::connectToServer_after_dns(const GameStartData *start_data, std::funct
 	try {
 		client = new Client(
 				simple_singleplayer_mode,
-				start_data->name.c_str(),
+				start_data->name,
 				start_data->password,
 				*draw_control, texture_src, shader_src,
 				itemdef_manager, nodedef_manager, sound_manager.get(), eventmgr,
@@ -1929,7 +1928,14 @@ void Game::connectToServer_after_dns(const GameStartData *start_data, std::funct
 	}
 
 
+#ifdef __EMSCRIPTEN__
 	connectToServer_loop(start_data, resolve);
+#else
+	while (m_rendering_engine->run()) {
+		connectToServer_loop(start_data, resolve);
+	}
+#endif
+
 }
 
 void Game::connectToServer_loop(const GameStartData *start_data, std::function<void(bool,BaseException*)> resolve) {
@@ -2027,7 +2033,10 @@ void Game::connectToServer_loop(const GameStartData *start_data, std::function<v
 #endif
 	}
 */
+#ifdef __EMSCRIPTEN__
 	MainLoop::NextFrame([this, start_data, resolve]() { connectToServer_loop(start_data, resolve); });
+#endif
+
 }
 
 void Game::getServerContent(std::function<void(bool,BaseException*)> resolve)
@@ -5142,16 +5151,15 @@ bool the_game(volatile std::sig_atomic_t *kill,
 	 * is created then this is updated and we don't want to change the value
 	 * passed to us by the calling function
 	 */
-
-#if 0
+#ifndef __EMSCRIPTEN__
 	try {
 
-		game.runData  = { };
-		if (game.startup(kill, input, rendering_engine, start_data,
-				error_message, reconnect_requested, &chat_backend)) {
+		game->runData  = { };
+		if (game->startup(kill, input, rendering_engine, start_data,
+				error_message, reconnect_requested, chat_backend, {})) {
 			started = true;
-			game.runData.autoexit = autoexit;
-			game.run();
+			game->runData.autoexit = autoexit;
+			game->run({});
 		}
 
 #ifdef NDEBUG
@@ -5179,10 +5187,10 @@ bool the_game(volatile std::sig_atomic_t *kill,
 #endif
 	}
 
-	game.shutdown();
+	game->shutdown();
 
-	return started && game.runData.reconnect; 
-#endif
+	return started && game->runData.reconnect; 
+#else
 	game->runData  = { };
 	game->startup(
 		kill, input, rendering_engine, start_data,
@@ -5211,6 +5219,8 @@ bool the_game(volatile std::sig_atomic_t *kill,
 			}
 		});
 	return started && game->runData.reconnect;
+#endif
+
 }
 
 
