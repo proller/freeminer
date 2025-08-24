@@ -18,10 +18,6 @@ CWebGL1Driver::CWebGL1Driver(const SIrrlichtCreationParameters& params, io::IFil
 	COpenGLES2Driver(params, io, contextManager)
 	, MBTriangleFanSize4(0), MBLinesSize2(0), MBPointsSize1(0)
 {
-#ifdef _DEBUG
-	setDebugName("CWebGL1Driver");
-#endif
-
 	// NPOT are not allowed for WebGL in most cases.
 	// One can use them when:
 	// - The TEXTURE_MIN_FILTER is linear or nearest
