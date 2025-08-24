@@ -19,10 +19,10 @@
 #include "settings.h"
 #include "log.h"
 
-#ifdef __EMSCRIPTEN__
+//#ifdef __EMSCRIPTEN__
 //#include <emsocket.h>
 #include <mainloop.h>
-#endif
+//#endif
 
 #ifdef _WIN32
 #include <windows.h>
@@ -92,7 +92,7 @@ bool Address::operator==(const Address &other) const
 }
 
 void Address::ResolveAsync(const char *name, std::function<void(BaseException*)> resolve) {
-#ifdef __EMSCRIPTEN__
+//#ifdef __EMSCRIPTEN_
         char *nameCopy = name ? strdup(name) : nullptr;
 	MainLoop::RunAsyncThenResume([this, nameCopy, resolve]() {
 		std::function<void()> ret;
@@ -108,7 +108,7 @@ void Address::ResolveAsync(const char *name, std::function<void(BaseException*)>
 		ret = [resolve]() { resolve(nullptr); };
 		return ret;
 	});
-#endif
+//#endif
 }
 
 void Address::Resolve(const char *name, Address *fallback)

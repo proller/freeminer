@@ -190,12 +190,10 @@ void ClientLauncher::run(std::function<void(bool)> resolve)
 		Menu-game loop
 	*/
 	bool retval = true;
-	volatile auto *kill = porting::signal_handler_killstatus();
+	kill = porting::signal_handler_killstatus();
 
-#ifdef __EMSCRIPTEN__
 	// HEREHERE
 	MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
-#endif
 }
 
 void ClientLauncher::run_loop(std::function<void(bool)> resolve) {
@@ -728,7 +726,10 @@ void ClientLauncher::main_menu(std::function<void()> resolve)
 
 void ClientLauncher::main_menu_loop(std::function<void()> resolve) {
 	auto framemarker = FrameMarker("ClientLauncher::main_menu()-wait-frame").started();
-	// EXTRANEOUS INDENT
+#ifndef __EMSCRIPTEN__
+	while(1)
+#endif
+	{
 		bool keep_going = m_rendering_engine->run() && !*kill;
 		if (!keep_going || !isMenuActive()) {
 			main_menu_after_loop(resolve);
@@ -743,7 +744,10 @@ void ClientLauncher::main_menu_loop(std::function<void()> resolve) {
 		// On some computers framerate doesn't seem to be automatically limited
 		//sleep_ms(25);
 		framemarker.start();
+	}
+#ifdef __EMSCRIPTEN__
 		MainLoop::NextFrame([this, resolve]() { main_menu_loop(resolve); });
+#endif
 }
 
 void ClientLauncher::main_menu_after_loop(std::function<void()> resolve) {

@@ -895,11 +895,9 @@ bool CWebGL1Driver::genericDriverInit(const core::dimension2d<u32>& screenSize, 
 	// load extensions
 	initWebGLExtensions();
 
-/*
 	// reset cache handler
 	delete CacheHandler;
-	CacheHandler = new COGLES2CacheHandler(this);
-*/
+	CacheHandler = new COpenGL3CacheHandler(this);
 
 	StencilBuffer = stencilBuffer;
 /*

@@ -1111,6 +1111,7 @@ bool Game::startup(volatile std::sig_atomic_t *kill,
         MainLoop::NextFrame([this, start_data, resolve]() {
             startup_do_init(start_data, resolve);
         });
+	return true;
 }
 
 extern void do_cache_warmup();

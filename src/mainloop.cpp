@@ -385,4 +385,53 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+#else
+
+#include "mainloop.h"
+#include <mutex>
+#include <condition_variable>
+#include <cassert>
+
+namespace emloop_private {
+    std::function<void()> next_callback;
+    bool blessed = false;
+    bool paused = false;
+    bool invokedMain = false;
+    bool busy = false; // executing main
+    bool dead = false; // Main exited, or got uncaught exception
+    int warnCount = 0;
+    pthread_t mainThreadId;
+
+    pthread_t helperThread;
+    std::mutex helperMutex;
+    std::condition_variable helperCond;
+    AsyncPayload helperTask;
+};
+
+using namespace emloop_private;
+
+
+void MainLoop::RunAsyncThenResume(AsyncPayload payload) {
+    payload();
+    return;
+
+    {
+        std::lock_guard<std::mutex> lock(helperMutex);
+        assert(!helperTask);
+        helperTask = payload;
+    }
+    helperCond.notify_all();
+}
+
+void MainLoop::NextFrame(std::function<void()> resolve) {
+    resolve();
+    return;
+
+    assert(!next_callback);
+    next_callback = resolve;
+}
+
+void MainLoop::DelayNextFrameUntilRedraw() {
+}
+
 #endif

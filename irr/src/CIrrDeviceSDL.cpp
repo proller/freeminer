@@ -28,6 +28,9 @@
 
 #ifdef _IRR_EMSCRIPTEN_PLATFORM_
 #include <emscripten.h>
+#else
+#define EMSCRIPTEN_KEEPALIVE
+#define EM_BOOL bool
 #endif
 
 #include "CSDLManager.h"

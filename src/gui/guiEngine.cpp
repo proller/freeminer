@@ -354,7 +354,11 @@ void GUIEngine::run_loop(std::function<void()> resolve) {
 	fps_control.reset();
 	
 	auto framemarker = FrameMarker("GUIEngine::run()-frame").started();
-    {
+
+#ifndef __EMSCRIPTEN__
+	while (1) //m_rendering_engine->run() && !m_startgame && !m_kill) {
+#endif
+	{
     // EXTRANEOUS INDENT
            bool keep_going = m_rendering_engine->run() && (!m_startgame) && (!m_kill);
            if (!keep_going) {
@@ -416,7 +420,9 @@ void GUIEngine::run_loop(std::function<void()> resolve) {
 
 	m_script->beforeClose();
 
-		MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
+#ifdef __EMSCRIPTEN__
+	MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
+#endif
 }
 
 /******************************************************************************/
