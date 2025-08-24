@@ -6,7 +6,7 @@
 
 #include "irrlichttypes_bloated.h"
 #include <ISceneNode.h>
-#include <SMeshBuffer.h>
+#include <CMeshBuffer.h>
 #include <array>
 #include "camera.h" // CameraMode
 #include "irr_ptr.h"
@@ -14,9 +14,10 @@
 
 #define SKY_MATERIAL_COUNT 12
 
-namespace irr::video
+namespace video
 {
 	class IVideoDriver;
+	class IImage;
 }
 
 class IShaderSource;
@@ -132,7 +133,7 @@ public:
 	}
 
 private:
-	aabb3f m_box;
+	aabb3f m_box{{0.0f, 0.0f, 0.0f}};
 	video::SMaterial m_materials[SKY_MATERIAL_COUNT];
 	// How much sun & moon transition should affect horizon color
 	float m_horizon_blend()
@@ -184,7 +185,6 @@ private:
 	bool m_clouds_enabled = true; // Initialised to true, reset only by set_sky API
 	bool m_directional_colored_fog;
 	bool m_in_clouds = true; // Prevent duplicating bools to remember old values
-	bool m_enable_shaders = false;
 
 	video::SColorf m_bgcolor_bright_f = video::SColorf(1.0f, 1.0f, 1.0f, 1.0f);
 	video::SColorf m_skycolor_bright_f = video::SColorf(1.0f, 1.0f, 1.0f, 1.0f);
@@ -212,10 +212,10 @@ private:
 	u64 m_seed = 0;
 	irr_ptr<scene::SMeshBuffer> m_stars;
 
-	video::ITexture *m_sun_texture;
-	video::ITexture *m_moon_texture;
-	video::ITexture *m_sun_tonemap;
-	video::ITexture *m_moon_tonemap;
+	video::ITexture *m_sun_texture = nullptr;
+	video::ITexture *m_moon_texture = nullptr;
+	video::IImage *m_sun_tonemap = nullptr;
+	video::IImage *m_moon_tonemap = nullptr;
 
 	irr_ptr<scene::SMeshBuffer> m_skybox[6];
 	irr_ptr<scene::SMeshBuffer> m_fog1[4];
@@ -240,7 +240,7 @@ private:
 		float horizon_position,	float day_position);
 
 public:
-	irr::scene::ISceneNode * sun_moon_light = nullptr;
+	scene::ISceneNode * sun_moon_light = nullptr;
 	v3pos_t camera_offset;
 	void sky_rotate(const scene::ICameraSceneNode* camera, SKY_ROTATE type, float wicked_time_of_day, v3f & Pos);
 private:

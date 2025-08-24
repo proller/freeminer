@@ -4,9 +4,10 @@
 
 #pragma once
 
-#include <vector>
 #include <array>
-#include "irrlichttypes_extrabloated.h"
+#include <IGUIElement.h>
+#include <IGUIEnvironment.h>
+
 
 class GUIBox : public gui::IGUIElement
 {

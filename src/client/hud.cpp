@@ -20,16 +20,16 @@
 #include "client/tile.h"
 #include "localplayer.h"
 #include "camera.h"
-#include "porting.h"
 #include "fontengine.h"
 #include "guiscalingfilter.h"
 #include "mesh.h"
-#include "wieldmesh.h"
 #include "client/renderingengine.h"
 #include "client/minimap.h"
+#include "client/texturesource.h"
 #include "gui/touchcontrols.h"
 #include "util/enriched_string.h"
 #include "irrlicht_changes/CGUITTFont.h"
+#include "gui/drawItemStack.h"
 
 #define OBJECT_CROSSHAIR_LINE_SIZE 8
 #define CROSSHAIR_LINE_SIZE 10
@@ -57,14 +57,14 @@ Hud::Hud(Client *client, LocalPlayer *player,
 
 	tsrc = client->getTextureSource();
 
-	v3f crosshair_color = g_settings->getV3F("crosshair_color");
+	v3f crosshair_color = g_settings->getV3F("crosshair_color").value_or(v3f());
 	u32 cross_r = rangelim(myround(crosshair_color.X), 0, 255);
 	u32 cross_g = rangelim(myround(crosshair_color.Y), 0, 255);
 	u32 cross_b = rangelim(myround(crosshair_color.Z), 0, 255);
 	u32 cross_a = rangelim(g_settings->getS32("crosshair_alpha"), 0, 255);
 	crosshair_argb = video::SColor(cross_a, cross_r, cross_g, cross_b);
 
-	v3f selectionbox_color = g_settings->getV3F("selectionbox_color");
+	v3f selectionbox_color = g_settings->getV3F("selectionbox_color").value_or(v3f());
 	u32 sbox_r = rangelim(myround(selectionbox_color.X), 0, 255);
 	u32 sbox_g = rangelim(myround(selectionbox_color.Y), 0, 255);
 	u32 sbox_b = rangelim(myround(selectionbox_color.Z), 0, 255);
@@ -87,15 +87,12 @@ Hud::Hud(Client *client, LocalPlayer *player,
 	}
 
 	// Initialize m_selection_material
-
-
-	if (g_settings->getBool("enable_shaders")) {
-		IShaderSource *shdrsrc = client->getShaderSource();
-		auto shader_id = shdrsrc->getShader(
-			m_mode == HIGHLIGHT_HALO ? "selection_shader" : "default_shader", TILE_MATERIAL_ALPHA);
+	IShaderSource *shdrsrc = client->getShaderSource();
+	if (m_mode == HIGHLIGHT_HALO) {
+		auto shader_id = shdrsrc->getShaderRaw("selection_shader", true);
 		m_selection_material.MaterialType = shdrsrc->getShaderInfo(shader_id).material;
 	} else {
-		m_selection_material.MaterialType = video::EMT_TRANSPARENT_ALPHA_CHANNEL;
+		m_selection_material.MaterialType = video::EMT_SOLID;
 	}
 
 	if (m_mode == HIGHLIGHT_BOX) {
@@ -109,13 +106,7 @@ Hud::Hud(Client *client, LocalPlayer *player,
 	}
 
 	// Initialize m_block_bounds_material
-	if (g_settings->getBool("enable_shaders")) {
-		IShaderSource *shdrsrc = client->getShaderSource();
-		auto shader_id = shdrsrc->getShader("default_shader", TILE_MATERIAL_ALPHA);
-		m_block_bounds_material.MaterialType = shdrsrc->getShaderInfo(shader_id).material;
-	} else {
-		m_block_bounds_material.MaterialType = video::EMT_TRANSPARENT_ALPHA_CHANNEL;
-	}
+	m_block_bounds_material.MaterialType = video::EMT_SOLID;
 	m_block_bounds_material.Thickness =
 			rangelim(g_settings->getS16("selectionbox_width"), 1, 5);
 
@@ -406,9 +397,9 @@ void Hud::drawLuaElements(const v3s16 &camera_offset)
 					(e->style & HUD_STYLE_MONO) ? FM_Mono : FM_Unspecified,
 					e->style & HUD_STYLE_BOLD, e->style & HUD_STYLE_ITALIC));
 
-				irr::gui::CGUITTFont *ttfont = nullptr;
-				if (textfont->getType() == irr::gui::EGFT_CUSTOM)
-					ttfont = static_cast<irr::gui::CGUITTFont *>(textfont);
+				gui::CGUITTFont *ttfont = nullptr;
+				if (textfont->getType() == gui::EGFT_CUSTOM)
+					ttfont = static_cast<gui::CGUITTFont *>(textfont);
 
 				video::SColor color(255, (e->number >> 16) & 0xFF,
 										 (e->number >> 8)  & 0xFF,
@@ -885,14 +876,13 @@ void Hud::drawSelectionMesh()
 {
 	if (m_mode == HIGHLIGHT_NONE || (m_mode == HIGHLIGHT_HALO && !m_selection_mesh))
 		return;
-	const video::SMaterial oldmaterial = driver->getMaterial2D();
 	driver->setMaterial(m_selection_material);
 	const core::matrix4 oldtransform = driver->getTransform(video::ETS_WORLD);
 
 	core::matrix4 translate;
 	translate.setTranslation(m_selection_pos_with_offset);
 	core::matrix4 rotation;
-	rotation.setRotationDegrees(m_selection_rotation);
+	rotation.setRotationRadians(m_selection_rotation_radians);
 	driver->setTransform(video::ETS_WORLD, translate * rotation);
 
 	if (m_mode == HIGHLIGHT_BOX) {
@@ -921,7 +911,6 @@ void Hud::drawSelectionMesh()
 			driver->drawMeshBuffer(buf);
 		}
 	}
-	driver->setMaterial(oldmaterial);
 	driver->setTransform(video::ETS_WORLD, oldtransform);
 }
 
@@ -946,7 +935,6 @@ void Hud::drawBlockBounds()
 		return;
 	}
 
-	video::SMaterial old_material = driver->getMaterial2D();
 	driver->setMaterial(m_block_bounds_material);
 
 	u16 mesh_chunk_size = std::max<u16>(1, g_settings->getU16("client_mesh_chunk"));
@@ -954,7 +942,7 @@ void Hud::drawBlockBounds()
 	v3s16 pos = player->getStandingNodePos();
 
 	if (m_block_bounds_mode == BLOCK_BOUNDS_FAR_DRAWN) {
-	    const auto offset = posToOpos(client->getCamera()->getOffset(), BS);
+		const auto offset = intToFloat(client->getCamera()->getOffset(), BS);
 
 		//s8 radius = m_block_bounds_mode == BLOCK_BOUNDS_NEAR ? 2 : 0;
 
@@ -979,7 +967,7 @@ void Hud::drawBlockBounds()
 										.m_far_blocks_last_cam_pos),
 						blockPos);
 */
-						const auto &mesh_step = block->far_step;
+				const auto &mesh_step = block->far_step;
 				int g = 0;
 
 				if (!inFarGrid(blockPos, getNodeBlockPos(
@@ -1044,7 +1032,11 @@ void Hud::drawBlockBounds()
 		for (size_t step = 0; step < far_blocks.size(); ++step) {
 			const auto &blocks = far_blocks[step];
 			const auto mesh_step = step;
-			for (const auto &[blockPos, block] : blocks) {
+			for (const auto &[blockPos, block_ts] : blocks) {
+				const auto &[block, ts] = block_ts;
+				if (!block) {
+					continue;
+				}
 				const auto has_mesh = !!block->getFarMesh(mesh_step);
 				int fscale = pow(2, mesh_step );
 				int lod_step = 0;
@@ -1062,11 +1054,7 @@ void Hud::drawBlockBounds()
 		}
 	} else {
 
-	v3s16 block_pos(
-		floorf((float) pos.X / MAP_BLOCKSIZE),
-		floorf((float) pos.Y / MAP_BLOCKSIZE),
-		floorf((float) pos.Z / MAP_BLOCKSIZE)
-	);
+	v3s16 block_pos = getContainerPos(player->getStandingNodePos(), MAP_BLOCKSIZE);
 
 	v3f cam_offset = intToFloat(client->getCamera()->getOffset(), BS);
 
@@ -1094,8 +1082,8 @@ void Hud::drawBlockBounds()
 		v3f pmax = v3f(x, y, 1 + radius) * MAP_BLOCKSIZE * BS;
 
 		driver->draw3DLine(
-			base_corner + v3f(pmin.X, pmin.Y, pmin.Z),
-			base_corner + v3f(pmax.X, pmax.Y, pmax.Z),
+			base_corner + pmin,
+			base_corner + pmax,
 			choose_color(block_pos.X, block_pos.Y)
 		);
 		driver->draw3DLine(
@@ -1109,10 +1097,7 @@ void Hud::drawBlockBounds()
 			choose_color(block_pos.Y, block_pos.Z)
 		);
 	}
-
   }
-
-	driver->setMaterial(old_material);
 }
 
 void Hud::updateSelectionMesh(const v3s16 &camera_offset)
@@ -1171,296 +1156,4 @@ void Hud::resizeHotbar() {
 		m_screensize = window_size;
 		m_displaycenter = v2s32(m_screensize.X/2,m_screensize.Y/2);
 	}
-}
-
-struct MeshTimeInfo {
-	u64 time;
-	scene::IMesh *mesh = nullptr;
-};
-
-void drawItemStack(
-		video::IVideoDriver *driver,
-		gui::IGUIFont *font,
-		const ItemStack &item,
-		const core::rect<s32> &rect,
-		const core::rect<s32> *clip,
-		Client *client,
-		ItemRotationKind rotation_kind,
-		const v3s16 &angle,
-		const v3s16 &rotation_speed)
-{
-	static MeshTimeInfo rotation_time_infos[IT_ROT_NONE];
-
-	if (item.empty()) {
-		if (rotation_kind < IT_ROT_NONE && rotation_kind != IT_ROT_OTHER) {
-			rotation_time_infos[rotation_kind].mesh = NULL;
-		}
-		return;
-	}
-
-	const bool enable_animations = g_settings->getBool("inventory_items_animations");
-
-	auto *idef = client->idef();
-	const ItemDefinition &def = item.getDefinition(idef);
-
-	bool draw_overlay = false;
-
-	const std::string inventory_image = item.getInventoryImage(idef);
-	const std::string inventory_overlay = item.getInventoryOverlay(idef);
-
-	bool has_mesh = false;
-	ItemMesh *imesh;
-
-	core::rect<s32> viewrect = rect;
-	if (clip != nullptr)
-		viewrect.clipAgainst(*clip);
-
-	// Render as mesh if animated or no inventory image
-	if ((enable_animations && rotation_kind < IT_ROT_NONE) || inventory_image.empty()) {
-		imesh = idef->getWieldMesh(item, client);
-		has_mesh = imesh && imesh->mesh;
-	}
-	if (has_mesh) {
-		scene::IMesh *mesh = imesh->mesh;
-		driver->clearBuffers(video::ECBF_DEPTH);
-		s32 delta = 0;
-		if (rotation_kind < IT_ROT_NONE) {
-			MeshTimeInfo &ti = rotation_time_infos[rotation_kind];
-			if (mesh != ti.mesh && rotation_kind != IT_ROT_OTHER) {
-				ti.mesh = mesh;
-				ti.time = porting::getTimeMs();
-			} else {
-				delta = porting::getDeltaMs(ti.time, porting::getTimeMs()) % 100000;
-			}
-		}
-		core::rect<s32> oldViewPort = driver->getViewPort();
-		core::matrix4 oldProjMat = driver->getTransform(video::ETS_PROJECTION);
-		core::matrix4 oldViewMat = driver->getTransform(video::ETS_VIEW);
-
-		core::matrix4 ProjMatrix;
-		ProjMatrix.buildProjectionMatrixOrthoLH(2.0f, 2.0f, -1.0f, 100.0f);
-
-		core::matrix4 ViewMatrix;
-		ViewMatrix.buildProjectionMatrixOrthoLH(
-			2.0f * viewrect.getWidth() / rect.getWidth(),
-			2.0f * viewrect.getHeight() / rect.getHeight(),
-			-1.0f,
-			100.0f);
-		ViewMatrix.setTranslation(core::vector3df(
-			1.0f * (rect.LowerRightCorner.X + rect.UpperLeftCorner.X -
-					viewrect.LowerRightCorner.X - viewrect.UpperLeftCorner.X) /
-					viewrect.getWidth(),
-			1.0f * (viewrect.LowerRightCorner.Y + viewrect.UpperLeftCorner.Y -
-					rect.LowerRightCorner.Y - rect.UpperLeftCorner.Y) /
-					viewrect.getHeight(),
-			0.0f));
-
-		driver->setTransform(video::ETS_PROJECTION, ProjMatrix);
-		driver->setTransform(video::ETS_VIEW, ViewMatrix);
-
-		core::matrix4 matrix;
-		matrix.makeIdentity();
-
-		if (enable_animations) {
-			float timer_f = (float) delta / 5000.f;
-			matrix.setRotationDegrees(v3f(
-				angle.X + rotation_speed.X * 3.60f * timer_f,
-				angle.Y + rotation_speed.Y * 3.60f * timer_f,
-				angle.Z + rotation_speed.Z * 3.60f * timer_f)
-			);
-		}
-
-		driver->setTransform(video::ETS_WORLD, matrix);
-		driver->setViewPort(viewrect);
-
-		video::SColor basecolor =
-			client->idef()->getItemstackColor(item, client);
-
-		const u32 mc = mesh->getMeshBufferCount();
-		if (mc > imesh->buffer_colors.size())
-			imesh->buffer_colors.resize(mc);
-		for (u32 j = 0; j < mc; ++j) {
-			scene::IMeshBuffer *buf = mesh->getMeshBuffer(j);
-			video::SColor c = basecolor;
-
-			auto &p = imesh->buffer_colors[j];
-			p.applyOverride(c);
-
-			if (p.needColorize(c)) {
-				buf->setDirty(scene::EBT_VERTEX);
-				if (imesh->needs_shading)
-					colorizeMeshBuffer(buf, &c);
-				else
-					setMeshBufferColor(buf, c);
-			}
-
-			video::SMaterial &material = buf->getMaterial();
-			material.MaterialType = video::EMT_TRANSPARENT_ALPHA_CHANNEL_REF;
-			buf->setDirty();
-			driver->setMaterial(material);
-			driver->drawMeshBuffer(buf);
-		}
-
-		driver->setTransform(video::ETS_VIEW, oldViewMat);
-		driver->setTransform(video::ETS_PROJECTION, oldProjMat);
-		driver->setViewPort(oldViewPort);
-
-		draw_overlay = def.type == ITEM_NODE && inventory_image.empty();
-	} else { // Otherwise just draw as 2D
-		video::ITexture *texture = client->idef()->getInventoryTexture(item, client);
-		video::SColor color;
-		if (texture) {
-			color = client->idef()->getItemstackColor(item, client);
-		} else {
-			color = video::SColor(255, 255, 255, 255);
-			ITextureSource *tsrc = client->getTextureSource();
-			texture = tsrc->getTexture("no_texture.png");
-			if (!texture)
-				return;
-		}
-
-		const video::SColor colors[] = { color, color, color, color };
-
-		draw2DImageFilterScaled(driver, texture, rect,
-			core::rect<s32>({0, 0}, core::dimension2di(texture->getOriginalSize())),
-			clip, colors, true);
-
-		draw_overlay = true;
-	}
-
-	// draw the inventory_overlay
-	if (!inventory_overlay.empty() && draw_overlay) {
-		ITextureSource *tsrc = client->getTextureSource();
-		video::ITexture *overlay_texture = tsrc->getTexture(inventory_overlay);
-		core::dimension2d<u32> dimens = overlay_texture->getOriginalSize();
-		core::rect<s32> srcrect(0, 0, dimens.Width, dimens.Height);
-		draw2DImageFilterScaled(driver, overlay_texture, rect, srcrect, clip, 0, true);
-	}
-
-	if (def.type == ITEM_TOOL && item.wear != 0) {
-		// Draw a progressbar
-		float barheight = static_cast<float>(rect.getHeight()) / 16;
-		float barpad_x = static_cast<float>(rect.getWidth()) / 16;
-		float barpad_y = static_cast<float>(rect.getHeight()) / 16;
-
-		core::rect<s32> progressrect(
-			rect.UpperLeftCorner.X + barpad_x,
-			rect.LowerRightCorner.Y - barpad_y - barheight,
-			rect.LowerRightCorner.X - barpad_x,
-			rect.LowerRightCorner.Y - barpad_y);
-
-		// Shrink progressrect by amount of tool damage
-		float wear = item.wear / 65535.0f;
-		int progressmid =
-			wear * progressrect.UpperLeftCorner.X +
-			(1 - wear) * progressrect.LowerRightCorner.X;
-
-		// Compute progressbar color
-		// default scheme:
-		//   wear = 0.0: green
-		//   wear = 0.5: yellow
-		//   wear = 1.0: red
-
-		video::SColor color;
-		auto barParams = item.getWearBarParams(client->idef());
-		if (barParams.has_value()) {
-			f32 durabilityPercent = 1.0 - wear;
-			color = barParams->getWearBarColor(durabilityPercent);
-		} else {
-			color = video::SColor(255, 255, 255, 255);
-			int wear_i = MYMIN(std::floor(wear * 600), 511);
-			wear_i = MYMIN(wear_i + 10, 511);
-
-			if (wear_i <= 255)
-				color.set(255, wear_i, 255, 0);
-			else
-				color.set(255, 255, 511 - wear_i, 0);
-		}
-
-		core::rect<s32> progressrect2 = progressrect;
-		progressrect2.LowerRightCorner.X = progressmid;
-		driver->draw2DRectangle(color, progressrect2, clip);
-
-		color = video::SColor(255, 0, 0, 0);
-		progressrect2 = progressrect;
-		progressrect2.UpperLeftCorner.X = progressmid;
-		driver->draw2DRectangle(color, progressrect2, clip);
-	}
-
-	const std::string &count_text = item.metadata.getString("count_meta");
-	if (font != nullptr && (item.count >= 2 || !count_text.empty())) {
-		// Get the item count as a string
-		std::string text = count_text.empty() ? itos(item.count) : count_text;
-		v2u32 dim = font->getDimension(utf8_to_wide(unescape_enriched(text)).c_str());
-		v2s32 sdim(dim.X, dim.Y);
-
-		core::rect<s32> rect2(
-			rect.LowerRightCorner - sdim,
-			rect.LowerRightCorner
-		);
-
-		// get the count alignment
-		s32 count_alignment = stoi(item.metadata.getString("count_alignment"));
-		if (count_alignment != 0) {
-			s32 a_x = count_alignment & 3;
-			s32 a_y = (count_alignment >> 2) & 3;
-
-			s32 x1, x2, y1, y2;
-			switch (a_x) {
-			case 1: // left
-				x1 = rect.UpperLeftCorner.X;
-				x2 = x1 + sdim.X;
-				break;
-			case 2: // middle
-				x1 = (rect.UpperLeftCorner.X + rect.LowerRightCorner.X - sdim.X) / 2;
-				x2 = x1 + sdim.X;
-				break;
-			case 3: // right
-				x2 = rect.LowerRightCorner.X;
-				x1 = x2 - sdim.X;
-				break;
-			default: // 0 = default
-				x1 = rect2.UpperLeftCorner.X;
-				x2 = rect2.LowerRightCorner.X;
-				break;
-			}
-
-			switch (a_y) {
-			case 1: // up
-				y1 = rect.UpperLeftCorner.Y;
-				y2 = y1 + sdim.Y;
-				break;
-			case 2: // middle
-				y1 = (rect.UpperLeftCorner.Y + rect.LowerRightCorner.Y - sdim.Y) / 2;
-				y2 = y1 + sdim.Y;
-				break;
-			case 3: // down
-				y2 = rect.LowerRightCorner.Y;
-				y1 = y2 - sdim.Y;
-				break;
-			default: // 0 = default
-				y1 = rect2.UpperLeftCorner.Y;
-				y2 = rect2.LowerRightCorner.Y;
-				break;
-			}
-
-			rect2 = core::rect<s32>(x1, y1, x2, y2);
-		}
-
-		video::SColor color(255, 255, 255, 255);
-		font->draw(utf8_to_wide(text).c_str(), rect2, color, false, false, &viewrect);
-	}
-}
-
-void drawItemStack(
-		video::IVideoDriver *driver,
-		gui::IGUIFont *font,
-		const ItemStack &item,
-		const core::rect<s32> &rect,
-		const core::rect<s32> *clip,
-		Client *client,
-		ItemRotationKind rotation_kind)
-{
-	drawItemStack(driver, font, item, rect, clip, client, rotation_kind,
-		v3s16(0, 0, 0), v3s16(0, 100, 0));
 }

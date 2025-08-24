@@ -59,9 +59,19 @@
 		Rename TOSERVER_RESPAWN to TOSERVER_RESPAWN_LEGACY
 		Support float animation frame numbers in TOCLIENT_LOCAL_PLAYER_ANIMATIONS
 		[scheduled bump for 5.10.0]
+	PROTOCOL VERSION 47
+		Add particle blend mode "clip"
+		[scheduled bump for 5.11.0]
+	PROTOCOL VERSION 48
+		Add compression to some existing packets
+		[scheduled bump for 5.12.0]
+	PROTOCOL VERSION 49
+		Support of showing a player inventory using 'core.show_formspec'
+		[scheduled bump for 5.13.0]
 */
 
-const u16 LATEST_PROTOCOL_VERSION = 46;
+// Note: Also update core.protocol_versions in builtin when bumping
+const u16 LATEST_PROTOCOL_VERSION = 49;
 
 // See also formspec [Version History] in doc/lua_api.md
-const u16 FORMSPEC_API_VERSION = 8;
+const u16 FORMSPEC_API_VERSION = 10;

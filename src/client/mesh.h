@@ -4,9 +4,16 @@
 
 #pragma once
 
+#include "SColor.h"
 #include "SMaterialLayer.h"
-#include "irrlichttypes_extrabloated.h"
 #include "nodedef.h"
+
+namespace scene {
+	class IAnimatedMesh;
+	class IMesh;
+	class IMeshBuffer;
+}
+
 
 /*!
  * Applies shading to a color based on the surface's
@@ -68,7 +75,7 @@ void setMeshColorByNormal(scene::IMesh *mesh, const v3f &normal,
 	Rotate the mesh by 6d facedir value.
 	Method only for meshnodes, not suitable for entities.
 */
-void rotateMeshBy6dFacedir(scene::IMesh *mesh, int facedir);
+void rotateMeshBy6dFacedir(scene::IMesh *mesh, u8 facedir);
 
 /*
 	Rotate the mesh around the axis and given angle in degrees.
@@ -83,10 +90,8 @@ void rotateMeshYZby (scene::IMesh *mesh, f64 degrees);
  */
 scene::IMeshBuffer* cloneMeshBuffer(scene::IMeshBuffer *mesh_buffer);
 
-/*
-	Clone the mesh.
-*/
-scene::SMesh* cloneMesh(scene::IMesh *src_mesh);
+/// Clone a mesh. For an animated mesh, this will clone the static pose.
+scene::SMesh* cloneStaticMesh(scene::IMesh *src_mesh);
 
 /*
 	Convert nodeboxes to mesh. Each tile goes into a different buffer.

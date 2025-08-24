@@ -8,6 +8,7 @@
 #include "stat.h"
 #include "network/fm_lan.h"
 #include <unordered_set>
+#include "network/fm_networkprotocol.h"
 //== 
 
 
@@ -15,7 +16,6 @@
 #include "map.h"
 #include "hud.h"
 #include "gamedef.h"
-#include "serialization.h" // For SER_FMT_VER_INVALID
 #include "content/mods.h"
 #include "inventorymanager.h"
 #include "content/subgames.h"
@@ -31,7 +31,9 @@
 #include "chatmessage.h"
 #include "sound.h"
 #include "translation.h"
+#include "script/common/c_types.h" // LuaError
 #include <atomic>
+#include <csignal>
 #include <string>
 #include <list>
 #include <map>
@@ -58,6 +60,7 @@ class AbmWorldThread;
 class WorldMergeThread;
 
 
+
 class ClientNotFoundException : public BaseException
 {
 public:
@@ -65,6 +68,7 @@ public:
 		BaseException(s)
 	{}
 };
+
 // ==
 
 
@@ -78,6 +82,7 @@ class BanManager;
 class Inventory;
 class ModChannelMgr;
 class RemotePlayer;
+class Player;
 class PlayerSAO;
 struct PlayerHPChangeReason;
 class IRollbackManager;
@@ -122,7 +127,7 @@ enum ClientDeletionReason {
 struct MediaInfo
 {
 	std::string path;
-	std::string sha1_digest; // base64-encoded
+	std::string sha1_digest;
 	// true = not announced in TOCLIENT_ANNOUNCE_MEDIA (at player join)
 	bool no_announce;
 	// does what it says. used by some cases of dynamic media.
@@ -233,7 +238,9 @@ public:
 	u16 Receive(float min_time);
 	void yieldToOtherThreads(float dtime);
 
-	PlayerSAO* StageTwoClientInit(session_t peer_id);
+	// Full player initialization after they processed all static media
+	// This is a helper function for TOSERVER_CLIENT_READY
+	PlayerSAO *StageTwoClientInit(session_t peer_id);
 
 	/*
 	 * Command Handlers
@@ -381,8 +388,7 @@ public:
 	void setStepSettings(StepSettings spdata) { m_step_settings.store(spdata); }
 	StepSettings getStepSettings() { return m_step_settings.load(); }
 
-	inline void setAsyncFatalError(const std::string &error)
-			{ m_async_fatal_error.set(error); }
+	void setAsyncFatalError(const std::string &error);
 	inline void setAsyncFatalError(const LuaError &e)
 	{
 		setAsyncFatalError(std::string("Lua: ") + e.what());
@@ -404,6 +410,7 @@ public:
 	void hudSetHotbarImage(RemotePlayer *player, const std::string &name, int items = 0);
 	void hudSetHotbarSelectedImage(RemotePlayer *player, const std::string &name);
 
+	/// @note this is only available for client state >= CS_HelloSent
 	Address getPeerAddress(session_t peer_id);
 
 	void setLocalPlayerAnimations(RemotePlayer *player, v2f animation_frames[4],
@@ -446,6 +453,7 @@ public:
 	void SendMovePlayerRel(session_t peer_id, const v3f &added_pos);
 	void SendPlayerSpeed(session_t peer_id, const v3f &added_vel);
 	void SendPlayerFov(session_t peer_id);
+	void SendCamera(session_t peer_id, Player *player);
 
 	void SendMinimapModes(session_t peer_id,
 			std::vector<MinimapMode> &modes,
@@ -587,6 +595,7 @@ private:
 	void SendCloudParams(session_t peer_id, const CloudParams &params);
 	void SendOverrideDayNightRatio(session_t peer_id, bool do_override, float ratio);
 	void SendSetLighting(session_t peer_id, const Lighting &lighting);
+
 	void broadcastModChannelMessage(const std::string &channel,
 			const std::string &message, session_t from_peer);
 
@@ -652,14 +661,18 @@ private:
 
 	void handleChatInterfaceEvent(ChatEvent *evt);
 
+	/// @brief Checks if user limit allows a potential client to join
+	/// @return true if the client can NOT join
+	bool checkUserLimit(const std::string &player_name, const std::string &addr_s);
+
 	// This returns the answer to the sender of wmessage, or "" if there is none
 	std::wstring handleChat(const std::string &name, std::wstring wmessage_input,
 		bool check_shout_priv = false, RemotePlayer *player = nullptr);
 	void handleAdminChat(const ChatEventChat *evt);
 
 	// When called, connection mutex should be locked
-	RemoteClient* getClient(session_t peer_id, ClientState state_min = CS_Active);
-	RemoteClient* getClientNoEx(session_t peer_id, ClientState state_min = CS_Active);
+	RemoteClient *getClient(session_t peer_id, ClientState state_min = CS_Active);
+	RemoteClient *getClientNoEx(session_t peer_id, ClientState state_min = CS_Active);
 
 	// When called, environment mutex should be locked
 	std::string getPlayerName(session_t peer_id);
@@ -672,7 +685,8 @@ private:
 
 		Call with env and con locked.
 	*/
-	PlayerSAO *emergePlayer(const char *name, session_t peer_id, u16 proto_version);
+	std::unique_ptr<PlayerSAO> emergePlayer(const char *name, session_t peer_id,
+		u16 proto_version);
 
 	/*
 		Variables
@@ -898,11 +912,12 @@ public:
 
 	Shuts down when kill is set to true.
 */
-void dedicated_server_loop(Server &server, bool &kill);
-
 
 // fm:
 MapDatabase *GetFarDatabase(MapDatabase *dbase, ServerMap::far_dbases_t &far_dbases,
 		const std::string &savedir, block_step_t step);
 MapBlockPtr loadBlockNoStore(Map *smap, MapDatabase *dbase, const v3bpos_t &pos);
 // ==
+
+
+void dedicated_server_loop(Server &server, volatile std::sig_atomic_t &kill);

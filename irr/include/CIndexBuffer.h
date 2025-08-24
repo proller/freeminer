@@ -14,8 +14,6 @@
 #include "../src/os.h"
 #endif
 
-namespace irr
-{
 namespace scene
 {
 //! Template implementation of the IIndexBuffer interface
@@ -24,12 +22,7 @@ class CIndexBuffer final : public IIndexBuffer
 {
 public:
 	//! Default constructor for empty buffer
-	CIndexBuffer()
-	{
-#ifdef _DEBUG
-		setDebugName("CIndexBuffer");
-#endif
-	}
+	CIndexBuffer() {}
 
 	video::E_INDEX_TYPE getType() const override
 	{
@@ -100,4 +93,3 @@ public:
 typedef CIndexBuffer<u16> SIndexBuffer;
 
 } // end namespace scene
-} // end namespace irr

@@ -11,17 +11,12 @@
 #include <GL/gl.h>
 #include <GL/wglext.h>
 
-namespace irr
-{
 namespace video
 {
 
 CWGLManager::CWGLManager() :
 		PrimaryContext(SExposedVideoData(0)), PixelFormat(0), libHandle(NULL)
 {
-#ifdef _DEBUG
-	setDebugName("CWGLManager");
-#endif
 	memset(FunctionPointers, 0, sizeof(FunctionPointers));
 }
 
@@ -436,7 +431,6 @@ bool CWGLManager::swapBuffers()
 	return SwapBuffers((HDC)CurrentContext.OpenGLWin32.HDc) == TRUE;
 }
 
-}
 }
 
 #endif

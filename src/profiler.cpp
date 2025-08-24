@@ -19,7 +19,7 @@ ScopeProfiler::ScopeProfiler(Profiler *profiler, const std::string &name,
 	m_time1 = porting::getTime(prec);
 }
 
-ScopeProfiler::~ScopeProfiler()
+void ScopeProfiler::stop() noexcept
 {
 	if (!m_profiler)
 		return;
@@ -40,6 +40,8 @@ ScopeProfiler::~ScopeProfiler()
 		m_profiler->max(m_name, duration);
 		break;
 	}
+
+	m_profiler = nullptr; // don't stop a second time
 }
 
 Profiler::Profiler()
@@ -123,7 +125,7 @@ int Profiler::print(std::ostream &o, u32 page, u32 pagecount)
 {
 	GraphValues values;
 	getPage(values, page, pagecount);
-	char buffer[50];
+	char buffer[128];
 
 	for (const auto &i : values) {
 		o << "  " << i.first << " ";
@@ -134,7 +136,7 @@ int Profiler::print(std::ostream &o, u32 page, u32 pagecount)
 
 		{
 			// Padding
-			s32 space = std::max(0, 44 - (s32)i.first.size());
+			s32 space = std::max(0, 46 - (s32)i.first.size());
 			memset(buffer, '_', space);
 			buffer[space] = '\0';
 			o << buffer;

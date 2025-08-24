@@ -19,6 +19,7 @@ class GenericCAO;
 class ClientActiveObject;
 class ClientEnvironment;
 class IGameDef;
+struct CollisionInfo;
 struct collisionMoveResult;
 
 enum class LocalPlayerAnimation
@@ -51,6 +52,9 @@ private:
 class LocalPlayer : public Player
 {
 public:
+	// fm:
+	bool canPlaceNode(const v3pos_t& p, const MapNode& node);
+	// ===
 
 	LocalPlayer(Client *client, const std::string &name);
 	virtual ~LocalPlayer();
@@ -71,15 +75,8 @@ public:
 
 	f32 gravity = 0; // total downwards acceleration
 
-	void move(f32 dtime, Environment *env, f32 pos_max_d);
-	void move(f32 dtime, Environment *env, f32 pos_max_d,
-			std::vector<CollisionInfo> *collision_info);
-
-	// fm:
-	bool canPlaceNode(const v3pos_t& p, const MapNode& node);
-
-	// Temporary option for old move code
-	void old_move(f32 dtime, Environment *env, f32 pos_max_d,
+	void move(f32 dtime, Environment *env);
+	void move(f32 dtime, Environment *env,
 			std::vector<CollisionInfo> *collision_info);
 
 	void applyControl(float dtime, Environment *env);
@@ -108,6 +105,8 @@ public:
 
 	std::string hotbar_image = "";
 	std::string hotbar_selected_image = "";
+	/// Temporary player inventory formspec. Empty value = feature inactive.
+	std::string inventory_formspec_override;
 
 	video::SColor light_color = video::SColor(255, 255, 255, 255);
 
@@ -190,10 +189,11 @@ private:
 		const f32 max_increase_V, const bool use_pitch);
 	bool updateSneakNode(Map *map, const v3f &position, const v3f &sneak_max);
 	float getSlipFactor(Environment *env, const v3f &speedH);
+	void old_move(f32 dtime, Environment *env,
+			std::vector<CollisionInfo> *collision_info);
 	void handleAutojump(f32 dtime, Environment *env,
 		const collisionMoveResult &result,
-		const v3f &position_before_move, const v3f &speed_before_move,
-		f32 pos_max_d);
+		v3f position_before_move, v3f speed_before_move);
 
 	v3f m_position;
 	v3s16 m_standing_node;

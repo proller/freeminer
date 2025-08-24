@@ -8,6 +8,7 @@
 
 #include "SIrrCreationParameters.h"
 #include "Common.h"
+#include "VBO.h"
 #include "CNullDriver.h"
 #include "IMaterialRendererServices.h"
 #include "EDriverFeatures.h"
@@ -15,8 +16,6 @@
 #include "ExtensionHandler.h"
 #include "IContextManager.h"
 
-namespace irr
-{
 namespace video
 {
 struct VertexType;
@@ -49,8 +48,7 @@ public:
 		SHWBufferLink_opengl(const scene::IVertexBuffer *vb) : SHWBufferLink(vb) {}
 		SHWBufferLink_opengl(const scene::IIndexBuffer *ib) : SHWBufferLink(ib) {}
 
-		GLuint vbo_ID = 0;
-		u32 vbo_Size = 0;
+		OpenGLVBO Vbo;
 	};
 
 	bool updateVertexHardwareBuffer(SHWBufferLink_opengl *HWBuffer);
@@ -74,8 +72,15 @@ public:
 
 	IRenderTarget *addRenderTarget() override;
 
+	void blitRenderTarget(IRenderTarget *from, IRenderTarget *to) override;
+
 	//! draws a vertex primitive list
 	virtual void drawVertexPrimitiveList(const void *vertices, u32 vertexCount,
+			const void *indexList, u32 primitiveCount,
+			E_VERTEX_TYPE vType, scene::E_PRIMITIVE_TYPE pType, E_INDEX_TYPE iType) override;
+
+	//! draws a vertex primitive list in 2d
+	virtual void draw2DVertexPrimitiveList(const void *vertices, u32 vertexCount,
 			const void *indexList, u32 primitiveCount,
 			E_VERTEX_TYPE vType, scene::E_PRIMITIVE_TYPE pType, E_INDEX_TYPE iType) override;
 
@@ -182,18 +187,13 @@ public:
 	//! Adds a new material renderer to the VideoDriver
 	virtual s32 addHighLevelShaderMaterial(
 			const c8 *vertexShaderProgram,
-			const c8 *vertexShaderEntryPointName = 0,
-			E_VERTEX_SHADER_TYPE vsCompileTarget = EVST_VS_1_1,
-			const c8 *pixelShaderProgram = 0,
-			const c8 *pixelShaderEntryPointName = 0,
-			E_PIXEL_SHADER_TYPE psCompileTarget = EPST_PS_1_1,
-			const c8 *geometryShaderProgram = 0,
-			const c8 *geometryShaderEntryPointName = "main",
-			E_GEOMETRY_SHADER_TYPE gsCompileTarget = EGST_GS_4_0,
+			const c8 *pixelShaderProgram,
+			const c8 *geometryShaderProgram = nullptr,
+			const c8 *shaderName = nullptr,
 			scene::E_PRIMITIVE_TYPE inType = scene::EPT_TRIANGLES,
 			scene::E_PRIMITIVE_TYPE outType = scene::EPT_TRIANGLE_STRIP,
 			u32 verticesOut = 0,
-			IShaderConstantSetCallBack *callback = 0,
+			IShaderConstantSetCallBack *callback = nullptr,
 			E_MATERIAL_TYPE baseMaterial = video::EMT_SOLID,
 			s32 userData = 0) override;
 
@@ -209,8 +209,11 @@ public:
 	virtual ITexture *addRenderTargetTexture(const core::dimension2d<u32> &size,
 			const io::path &name, const ECOLOR_FORMAT format = ECF_UNKNOWN) override;
 
+	virtual ITexture *addRenderTargetTextureMs(const core::dimension2d<u32> &size, u8 msaa,
+			const io::path &name, const ECOLOR_FORMAT format = ECF_UNKNOWN) override;
+
 	//! Creates a render target texture for a cubemap
-	ITexture *addRenderTargetTextureCubemap(const irr::u32 sideLen,
+	ITexture *addRenderTargetTextureCubemap(const u32 sideLen,
 			const io::path &name, const ECOLOR_FORMAT format) override;
 
 	virtual bool setRenderTargetEx(IRenderTarget *target, u16 clearFlag, SColor clearColor = SColor(255, 0, 0, 0),
@@ -237,7 +240,7 @@ public:
 	bool queryTextureFormat(ECOLOR_FORMAT format) const override;
 
 	//! Used by some SceneNodes to check if a material should be rendered in the transparent render pass
-	bool needsTransparentRenderPass(const irr::video::SMaterial &material) const override;
+	bool needsTransparentRenderPass(const video::SMaterial &material) const override;
 
 	//! Convert E_BLEND_FACTOR to OpenGL equivalent
 	GLenum getGLBlend(E_BLEND_FACTOR factor) const;
@@ -262,9 +265,8 @@ protected:
 
 	void chooseMaterial2D();
 
-	ITexture *createDeviceDependentTexture(const io::path &name, IImage *image) override;
-
-	ITexture *createDeviceDependentTextureCubemap(const io::path &name, const std::vector<IImage*> &image) override;
+	ITexture *createDeviceDependentTexture(const io::path &name, E_TEXTURE_TYPE type,
+		const std::vector<IImage*> &images) override;
 
 	//! Map Irrlicht wrap mode to OpenGL enum
 	GLint getTextureWrapMode(u8 clamp) const;
@@ -290,13 +292,13 @@ protected:
 		LockRenderStateMode = false;
 	}
 
-	bool updateHardwareBuffer(SHWBufferLink_opengl *b, const void *buffer, size_t bufferSize, scene::E_HARDWARE_MAPPING hint);
+	bool uploadHardwareBuffer(OpenGLVBO &vbo, const void *buffer, size_t bufferSize, scene::E_HARDWARE_MAPPING hint);
 
 	void createMaterialRenderers();
 
 	void loadShaderData(const io::path &vertexShaderName, const io::path &fragmentShaderName, c8 **vertexShaderData, c8 **fragmentShaderData);
 
-	bool setMaterialTexture(irr::u32 layerIdx, const irr::video::ITexture *texture);
+	bool setMaterialTexture(u32 layerIdx, const video::ITexture *texture);
 
 	//! Same as `CacheHandler->setViewport`, but also sets `ViewPort`
 	virtual void setViewPortRaw(u32 width, u32 height);
@@ -305,6 +307,9 @@ protected:
 	void drawArrays(GLenum primitiveType, const VertexType &vertexType, const void *vertices, int vertexCount);
 	void drawElements(GLenum primitiveType, const VertexType &vertexType, const void *vertices, int vertexCount, const u16 *indices, int indexCount);
 	void drawElements(GLenum primitiveType, const VertexType &vertexType, uintptr_t vertices, uintptr_t indices, int indexCount);
+
+	void drawGeneric(const void *vertices, const void *indexList, u32 primitiveCount,
+		E_VERTEX_TYPE vType, scene::E_PRIMITIVE_TYPE pType, E_INDEX_TYPE iType);
 
 	void beginDraw(const VertexType &vertexType, uintptr_t verticesBase);
 	void endDraw(const VertexType &vertexType);
@@ -349,7 +354,7 @@ private:
 
 	E_RENDER_MODE CurrentRenderMode;
 	bool Transformation3DChanged;
-	irr::io::path OGLES2ShaderPath;
+	io::path OGLES2ShaderPath;
 
 	SMaterial Material, LastMaterial;
 
@@ -362,13 +367,11 @@ private:
 
 	bool EnableErrorTest;
 
-	unsigned QuadIndexCount;
-	GLuint QuadIndexBuffer = 0;
-	void initQuadsIndices(int max_vertex_count = 65536);
+	OpenGLVBO QuadIndexVBO;
+	void initQuadsIndices(u32 max_vertex_count = 65536);
 
 	void debugCb(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message);
 	static void APIENTRY debugCb(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam);
 };
 
 } // end namespace video
-} // end namespace irr

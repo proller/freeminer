@@ -788,7 +788,7 @@ void fill_with_sunlight(MMVManip *vm, const NodeDefManager *ndef, v2s16 offset,
 	bool light[MAP_BLOCKSIZE][MAP_BLOCKSIZE])
 {
 	// Distance in array between two nodes on top of each other.
-	s16 ystride = vm->m_area.getExtent().X;
+	s32 ystride = vm->m_area.getExtent().X;
 	// Cache the ignore node.
 	MapNode ignore = MapNode(CONTENT_IGNORE);
 	// For each column of nodes:
@@ -842,9 +842,9 @@ void is_sunlight_above_block(Map *map, mapblock_v3 pos,
 	// Get or load source block.
 	// It might take a while to load, but correcting incorrect
 	// sunlight may be even slower.
-	MapBlock *source_block = map->emergeBlock(source_block_pos, false);
+	auto source_block = map->emergeBlock(source_block_pos, false);
 	// Trust only generated blocks.
-	if (source_block == NULL || !source_block->isGenerated()) {
+	if (!source_block || !source_block->isGenerated()) {
 		// But if there is no block above, then use heuristics
 		bool sunlight = true;
 		MapBlock *node_block = map->getBlockNoCreateNoEx(pos);

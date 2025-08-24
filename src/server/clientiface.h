@@ -16,26 +16,25 @@
 
 #include "irr_v3d.h"                   // for irrlicht datatypes
 
-#include "constants.h"
-#include "serialization.h"             // for SER_FMT_VER_INVALID
-#include "network/networkpacket.h"
-#include "network/networkprotocol.h"
 #include "network/address.h"
+#include "network/networkprotocol.h" // session_t
 #include "porting.h"
 #include "threading/mutex_auto_lock.h"
 #include "clientdynamicinfo.h"
 
 #include <list>
-#include <vector>
-#include <set>
-#include <unordered_map>
-#include <unordered_set>
 #include <memory>
 #include <mutex>
+#include <set>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
-class MapBlock;
-class ServerEnvironment;
 class EmergeManager;
+class MapBlock;
+class NetworkPacket;
+class ServerEnvironment;
 
 /*
  * State Transitions
@@ -230,7 +229,7 @@ public:
 	//       Also, the client must be moved to some other container.
 	session_t peer_id = PEER_ID_INEXISTENT;
 	// The serialization version to use with the client
-	u8 serialization_version = SER_FMT_VER_INVALID;
+	u8 serialization_version;
 	//
 	std::atomic_ushort net_proto_version = 0;
 
@@ -258,7 +257,7 @@ public:
 	std::mutex far_blocks_requested_mutex;
 	int GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge, float dtime,
 			std::vector<PrioritySortedBlockTransfer> &dest, double m_uptime, u64 max_ms);
-	uint32_t SendFarBlocks();
+	uint32_t SendFarBlocks(const int32_t uptime);
 	// ==
 
 	/* Authentication information */
@@ -288,8 +287,8 @@ public:
 
 	void SentBlock(v3bpos_t p, double time);
 
-	void SetBlockNotSent(v3s16 p);
-	void SetBlocksNotSent(const std::vector<v3s16> &blocks);
+	void SetBlockNotSent(v3s16 p, bool low_priority = false);
+	void SetBlocksNotSent(const std::vector<v3s16> &blocks, bool low_priority = false);
 
 	/**
 	 * tell client about this block being modified right now.
@@ -316,12 +315,17 @@ public:
 
 	void PrintInfo(std::ostream &o)
 	{
-		o<<"RemoteClient "<<peer_id<<": "
-				<<"m_blocks_sent.size()="<<m_blocks_sent.size()
-				<<", m_nearest_unsent_d="<<m_nearest_unsent_d
-				<<", wanted_range="<<wanted_range * MAP_BLOCKSIZE
-				<< ", v=" << net_proto_version << ":" << net_proto_version_fm
-				<<std::endl;
+		o << "RemoteClient " << peer_id << ": "
+			<<"blocks_sent=" << m_blocks_sent.size()
+			<<", blocks_sending=" << m_blocks_sending.size()
+			<<", nearest_unsent_d=" << m_nearest_unsent_d
+			<<", map_send_completion_timer=" << (int)(m_map_send_completion_timer + 0.5f)
+/*
+			<<", excess_gotblocks=" << m_excess_gotblocks;
+		m_excess_gotblocks = 0;
+*/
+		    << ", wanted_range="<<wanted_range * MAP_BLOCKSIZE
+			<< ", v=" << net_proto_version << ":" << net_proto_version_fm;
 	}
 
 	// Time from last placing or removing blocks
@@ -371,7 +375,7 @@ public:
 
 private:
 	// Version is stored in here after INIT before INIT2
-	u8 m_pending_serialization_version = SER_FMT_VER_INVALID;
+	u8 m_pending_serialization_version;
 
 	/* current state of client */
 	std::atomic<ClientState> m_state = CS_Created;
@@ -430,19 +434,8 @@ private:
 		- The size of this list is limited to some value
 		Block is added when it is sent with BLOCKDATA.
 		Block is removed when GOTBLOCKS is received.
-		Value is time from sending. (not used at the moment)
 	*/
-	std::unordered_map<v3s16, float> m_blocks_sending;
-
-	/*
-		Blocks that have been modified since blocks were
-		sent to the client last (getNextBlocks()).
-		This is used to reset the unsent distance, so that
-		modified blocks are resent to the client.
-
-		List of block positions.
-	*/
-	std::unordered_set<v3s16> m_blocks_modified;
+	std::unordered_set<v3s16> m_blocks_sending;
 
 	/*
 		Count of excess GotBlocks().
@@ -495,7 +488,7 @@ public:
 			bool reliable); //todo: delete
 	void sendToAll(u16 channelnum, SharedBuffer<u8> data, bool reliable);
 	void sendToAll(u16 channelnum, msgpack::sbuffer const &buffer, bool reliable);
-	RemoteClientPtr getClient(u16 peer_id, ClientState state_min = CS_Active);
+	RemoteClientPtr getClient(session_t peer_id, ClientState state_min = CS_Active);
 	//RemoteClientVector getClientList();
 	// ==
 
@@ -512,9 +505,9 @@ public:
 	std::vector<session_t> getClientIDs(ClientState min_state=CS_Active);
 
 	/* mark blocks as not sent on all active clients */
-	void markBlocksNotSent(const std::vector<v3s16> &positions);
+	void markBlocksNotSent(const std::vector<v3s16> &positions, bool low_priority = false);
 
-	/* verify is server user limit was reached */
+	/* verify if server user limit was reached */
 	bool isUserLimitReached();
 
 	/* get list of client player names */
@@ -527,7 +520,7 @@ public:
 	void sendCustom(session_t peer_id, u8 channel, NetworkPacket *pkt, bool reliable);
 
 	/* send to all clients */
-	void sendToAll(NetworkPacket *pkt);
+	void sendToAll(NetworkPacket *pkt, ClientState state_min = CS_Active);
 
 	/* delete a client */
 	void DeleteClient(session_t peer_id);
@@ -536,23 +529,16 @@ public:
 	void CreateClient(session_t peer_id);
 
 	/* get a client by peer_id */
-	RemoteClient *getClientNoEx(session_t peer_id,  ClientState state_min = CS_Active);
+	RemoteClient* getClientNoEx(session_t peer_id,  ClientState state_min = CS_Active);
 
 	/* get client by peer_id (make sure you have list lock before!*/
-	RemoteClient *lockedGetClientNoEx(session_t peer_id,  ClientState state_min = CS_Active);
+	RemoteClient* lockedGetClientNoEx(session_t peer_id,  ClientState state_min = CS_Active);
 
 	/* get state of client by id*/
 	ClientState getClientState(session_t peer_id);
 
-	/* set client playername */
-	void setPlayerName(session_t peer_id, const std::string &name);
-
 	/* get protocol version of client */
 	u16 getProtocolVersion(session_t peer_id);
-
-	/* set client version */
-	void setClientVersion(session_t peer_id, u8 major, u8 minor, u8 patch,
-			const std::string &full);
 
 	/* event to update client state */
 	void event(session_t peer_id, ClientStateEvent event);
@@ -564,7 +550,8 @@ public:
 		m_env = env;
 	}
 
-	static std::string state2Name(ClientState state);
+	static const char *state2Name(ClientState state);
+
 protected:
 	class AutoLock {
 	public:
@@ -599,18 +586,24 @@ private:
 
 	// Connection
 	std::shared_ptr<con::IConnection> m_con;
+
+	// FIXME?: as far as I can tell this lock is pointless because only the server
+	// thread ever touches the clients. Consider how getClientNoEx() returns
+	// a raw pointer too.
 	//std::recursive_mutex m_clients_mutex;
-	// Connected clients (behind the con mutex)
+	// Connected clients (behind the mutex)
 	RemoteClientMap m_clients;
-	std::vector<std::string> m_clients_names; //for announcing masterserver
+	std::vector<std::string> m_clients_names; // for announcing to server list
 
 	// Environment
-	ServerEnvironment *m_env;
+	ServerEnvironment *m_env = nullptr;
 
 	float m_print_info_timer = 0;
 	float m_check_linger_timer = 0;
 
 	static const char *statenames[];
 
-	static constexpr int LINGER_TIMEOUT = 10;
+	// Note that this puts a fixed timeout on the init & auth phase for a client.
+	// (lingering is enforced until CS_InitDone)
+	static constexpr int LINGER_TIMEOUT = 12;
 };

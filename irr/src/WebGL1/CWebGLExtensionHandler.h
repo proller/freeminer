@@ -9,8 +9,6 @@
 #include "COpenGLCoreFeature.h"
 #include "os.h"
 
-namespace irr
-{
 namespace video
 {
 	// Extension handling for WebGL.
@@ -173,7 +171,6 @@ namespace video
 
 		bool FeatureAvailable[IRR_WEBGL_Feature_Count];
 	};
-}
 }
 
 #endif // defined(_IRR_COMPILE_WITH_WEBGL1_)

@@ -5,8 +5,6 @@
 #include <functional>
 #include "mainloop.h"
 #include "../server/serverlist.h"
-
-#include "IAttributes.h"
 #include "gui/mainmenumanager.h"
 #include "clouds.h"
 #include "gui/touchcontrols.h"
@@ -124,11 +122,11 @@ void ClientLauncher::run(std::function<void(bool)> resolve)
 
 	init_args(start_data, cmd_args);
 
-	// Moved to preinit_sound() so that sound can be initialized before pack download
-//#if USE_SOUND
-//	if (g_settings->getBool("enable_sound"))
-//		g_sound_manager_singleton = createSoundManagerSingleton();
-//#endif
+#if 0
+#if USE_SOUND
+	g_sound_manager_singleton = createSoundManagerSingleton();
+#endif
+#endif
 
 	if (!init_engine()) {
 		resolve(false); return;
@@ -150,9 +148,6 @@ void ClientLauncher::run(std::function<void(bool)> resolve)
 
 	init_input();
 
-	m_rendering_engine->get_scene_manager()->getParameters()->
-		setAttribute(scene::ALLOW_ZWRITE_ON_TRANSPARENT, true);
-
 	guienv = m_rendering_engine->get_gui_env();
 	config_guienv();
 	g_settings->registerChangedCallback("dpi_change_notifier", setting_changed_callback, this);
@@ -165,7 +160,7 @@ void ClientLauncher::run(std::function<void(bool)> resolve)
 	// This is only global so it can be used by RenderingEngine::draw_load_screen().
 	assert(!g_menucloudsmgr && !g_menuclouds);
 	std::unique_ptr<IWritableShaderSource> ssrc(createShaderSource());
-	ssrc->addShaderConstantSetterFactory(new FogShaderConstantSetterFactory());
+	ssrc->addShaderUniformSetterFactory(new FogShaderUniformSetterFactory());
 	g_menucloudsmgr = m_rendering_engine->get_scene_manager()->createNewSceneManager();
 	g_menuclouds = new Clouds(g_menucloudsmgr, ssrc.get(), -1, rand());
 	g_menuclouds->setHeight(100.0f);
@@ -194,8 +189,8 @@ void ClientLauncher::run(std::function<void(bool)> resolve)
 	/*
 		Menu-game loop
 	*/
-	retval = true;
-	kill = porting::signal_handler_killstatus();
+	bool retval = true;
+	volatile auto *kill = porting::signal_handler_killstatus();
 
 #ifdef __EMSCRIPTEN__
 	// HEREHERE
@@ -411,29 +406,46 @@ void ClientLauncher::init_input()
 	else
 		input = new RealInputHandler(receiver);
 
-	if (g_settings->getBool("enable_joysticks")) {
-		irr::core::array<irr::SJoystickInfo> infos;
-		std::vector<irr::SJoystickInfo> joystick_infos;
+	if (g_settings->getBool("enable_joysticks"))
+		init_joysticks();
+}
 
-		// Make sure this is called maximum once per
-		// irrlicht device, otherwise it will give you
-		// multiple events for the same joystick.
-		if (m_rendering_engine->get_raw_device()->activateJoysticks(infos)) {
-			infostream << "Joystick support enabled" << std::endl;
-			joystick_infos.reserve(infos.size());
-			for (u32 i = 0; i < infos.size(); i++) {
-				joystick_infos.push_back(infos[i]);
-			}
-			input->joystick.onJoystickConnect(joystick_infos);
-		} else {
-			errorstream << "Could not activate joystick support." << std::endl;
-		}
+void ClientLauncher::init_joysticks()
+{
+	core::array<SJoystickInfo> infos;
+	std::vector<SJoystickInfo> joystick_infos;
+
+	// Make sure this is called maximum once per
+	// irrlicht device, otherwise it will give you
+	// multiple events for the same joystick.
+	if (!m_rendering_engine->get_raw_device()->activateJoysticks(infos)) {
+		errorstream << "Could not activate joystick support." << std::endl;
+		return;
 	}
+
+	infostream << "Joystick support enabled" << std::endl;
+	joystick_infos.reserve(infos.size());
+	for (u32 i = 0; i < infos.size(); i++) {
+		joystick_infos.push_back(infos[i]);
+	}
+	input->joystick.onJoystickConnect(joystick_infos);
 }
 
 void ClientLauncher::setting_changed_callback(const std::string &name, void *data)
 {
 	static_cast<ClientLauncher*>(data)->config_guienv();
+}
+
+static video::ITexture *loadTexture(video::IVideoDriver *driver, const char *path)
+{
+	// FIXME?: it would be cleaner to do this through a ITextureSource, but we don't have one
+	video::ITexture *texture = nullptr;
+	verbosestream << "Loading texture " << path << std::endl;
+	if (auto *image = driver->createImageFromFile(path); image) {
+		texture = driver->addTexture(fs::GetFilenameFromPath(path), image);
+		image->drop();
+	}
+	return texture;
 }
 
 void ClientLauncher::config_guienv()
@@ -476,10 +488,9 @@ void ClientLauncher::config_guienv()
 		if (cached_id != sprite_ids.end()) {
 			skin->setIcon(gui::EGDI_CHECK_BOX_CHECKED, cached_id->second);
 		} else {
-			gui::IGUISpriteBank *sprites = skin->getSpriteBank();
-			video::IVideoDriver *driver = m_rendering_engine->get_video_driver();
-			video::ITexture *texture = driver->getTexture(path.c_str());
-			s32 id = sprites->addTextureAsSprite(texture);
+			auto *driver = m_rendering_engine->get_video_driver();
+			auto *texture = loadTexture(driver, path.c_str());
+			s32 id = skin->getSpriteBank()->addTextureAsSprite(texture);
 			if (id != -1) {
 				skin->setIcon(gui::EGDI_CHECK_BOX_CHECKED, id);
 				sprite_ids.emplace(path, id);
@@ -688,6 +699,22 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 void ClientLauncher::main_menu(std::function<void()> resolve)
 {
 	ServerList::lan_get();
+
+/*
+	volatile auto       *kill   = porting::signal_handler_killstatus();
+	video::IVideoDriver *driver = m_rendering_engine->get_video_driver();
+*/	
+	auto                *device = m_rendering_engine->get_raw_device();
+
+	// Wait until app is in foreground because of #15883
+	infostream << "Waiting for app to be in foreground" << std::endl;
+	while (m_rendering_engine->run() && !*kill) {
+		if (device->isWindowVisible())
+			break;
+		sleep_ms(25);
+	}
+	infostream << "Waited for app to be in foreground" << std::endl;
+
 	infostream << "Waiting for other menus" << std::endl;
 
 /*
@@ -722,9 +749,12 @@ void ClientLauncher::main_menu_loop(std::function<void()> resolve) {
 void ClientLauncher::main_menu_after_loop(std::function<void()> resolve) {
 	//}
 	//framemarker.end();
+
+	auto *device = m_rendering_engine->get_raw_device();
+
 	infostream << "Waited for other menus" << std::endl;
 
-	auto *cur_control = m_rendering_engine->get_raw_device()->getCursorControl();
+	auto *cur_control = device->getCursorControl();
 	if (cur_control) {
 		// Cursor can be non-visible when coming from the game
 		cur_control->setVisible(true);
@@ -768,7 +798,7 @@ void ClientLauncher::wait_data() {
 			wait = true;
 			break;
 		}
-	bool &kill = *porting::signal_handler_killstatus();
+	auto &kill = *porting::signal_handler_killstatus();
 	for (int i = 0; i < 100; ++i) { // 10s max
 		if (i || wait) {
 			auto driver = device->getVideoDriver();

@@ -34,9 +34,9 @@ void FpsControl::reset()
 	last_time = porting::getTimeUs();
 }
 
-void FpsControl::limit(IrrlichtDevice *device, f32 *dtime, bool assume_paused)
+void FpsControl::limit(IrrlichtDevice *device, f32 *dtime)
 {
-	const float fps_limit = (device->isWindowFocused() && !assume_paused)
+	const float fps_limit = device->isWindowFocused()
 			? g_settings->getFloat("fps_max")
 			: g_settings->getFloat("fps_max_unfocused");
 	const u64 frametime_min = 1000000.0f / std::max(fps_limit, 1.0f);
@@ -50,8 +50,7 @@ void FpsControl::limit(IrrlichtDevice *device, f32 *dtime, bool assume_paused)
 
 	if (busy_time < frametime_min) {
 		sleep_time = frametime_min - busy_time;
-		if (sleep_time > 0)
-			sleep_us(sleep_time);
+		porting::preciseSleepUs(sleep_time);
 	} else {
 		sleep_time = 0;
 	}
@@ -68,14 +67,14 @@ void FpsControl::limit(IrrlichtDevice *device, f32 *dtime, bool assume_paused)
 	last_time = time;
 }
 
-class FogShaderConstantSetter : public IShaderConstantSetter
+class FogShaderUniformSetter : public IShaderUniformSetter
 {
 	CachedPixelShaderSetting<float, 4> m_fog_color{"fogColor"};
 	CachedPixelShaderSetting<float> m_fog_distance{"fogDistance"};
 	CachedPixelShaderSetting<float> m_fog_shading_parameter{"fogShadingParameter"};
 
 public:
-	void onSetConstants(video::IMaterialRendererServices *services) override
+	void onSetUniforms(video::IMaterialRendererServices *services) override
 	{
 		auto *driver = services->getVideoDriver();
 		assert(driver);
@@ -102,9 +101,9 @@ public:
 	}
 };
 
-IShaderConstantSetter *FogShaderConstantSetterFactory::create()
+IShaderUniformSetter *FogShaderUniformSetterFactory::create()
 {
-	return new FogShaderConstantSetter();
+	return new FogShaderUniformSetter();
 }
 
 /* Other helpers */
@@ -131,11 +130,11 @@ static inline auto getVideoDriverName(video::E_DRIVER_TYPE driver)
 	return RenderingEngine::getVideoDriverInfo(driver).friendly_name;
 }
 
-static irr::IrrlichtDevice *createDevice(SIrrlichtCreationParameters params, std::optional<video::E_DRIVER_TYPE> requested_driver)
+static IrrlichtDevice *createDevice(SIrrlichtCreationParameters params, std::optional<video::E_DRIVER_TYPE> requested_driver)
 {
 	if (requested_driver) {
 		params.DriverType = *requested_driver;
-		verbosestream << "Trying video driver " << getVideoDriverName(params.DriverType) << std::endl;
+		infostream << "Trying video driver " << getVideoDriverName(params.DriverType) << std::endl;
 		if (auto *device = createDeviceEx(params))
 			return device;
 		errorstream << "Failed to initialize the " << getVideoDriverName(params.DriverType) << " video driver" << std::endl;
@@ -147,7 +146,7 @@ static irr::IrrlichtDevice *createDevice(SIrrlichtCreationParameters params, std
 		if (fallback_driver == video::EDT_NULL || fallback_driver == requested_driver)
 			continue;
 		params.DriverType = fallback_driver;
-		verbosestream << "Trying video driver " << getVideoDriverName(params.DriverType) << std::endl;
+		infostream << "Trying video driver " << getVideoDriverName(params.DriverType) << std::endl;
 		if (auto *device = createDeviceEx(params))
 			return device;
 	}
@@ -179,7 +178,10 @@ RenderingEngine::RenderingEngine(MyEventReceiver *receiver)
 
 	// bpp, fsaa, vsync
 	bool vsync = g_settings->getBool("vsync");
-	bool enable_fsaa = g_settings->get("antialiasing") == "fsaa";
+	// Don't enable MSAA in OpenGL context creation if post-processing is enabled,
+	// the post-processing pipeline handles it.
+	bool enable_fsaa = g_settings->get("antialiasing") == "fsaa" &&
+			!g_settings->getBool("enable_post_processing");
 	u16 fsaa = enable_fsaa ? MYMAX(2, g_settings->getU16("fsaa")) : 0;
 
 	// Determine driver
@@ -187,7 +189,7 @@ RenderingEngine::RenderingEngine(MyEventReceiver *receiver)
 
 	SIrrlichtCreationParameters params = SIrrlichtCreationParameters();
 	if (tracestream)
-		params.LoggingLevel = irr::ELL_DEBUG;
+		params.LoggingLevel = ELL_DEBUG;
 	params.WindowSize = core::dimension2d<u32>(screen_w, screen_h);
 	params.AntiAlias = fsaa;
 	params.Fullscreen = fullscreen;
@@ -372,7 +374,7 @@ void RenderingEngine::draw_load_screen(const std::wstring &text,
 std::vector<video::E_DRIVER_TYPE> RenderingEngine::getSupportedVideoDrivers()
 {
 	// Only check these drivers. We do not support software and D3D in any capacity.
-	// Order by preference (best first)
+	// ordered by preference (best first)
 	static const video::E_DRIVER_TYPE glDrivers[] = {
 		video::EDT_OPENGL,
 		video::EDT_OPENGL3,
@@ -384,7 +386,7 @@ std::vector<video::E_DRIVER_TYPE> RenderingEngine::getSupportedVideoDrivers()
 	};
 	std::vector<video::E_DRIVER_TYPE> drivers;
 
-	for (video::E_DRIVER_TYPE driver: glDrivers) {
+	for (auto driver : glDrivers) {
 		if (IrrlichtDevice::isDriverSupported(driver))
 			drivers.push_back(driver);
 	}
@@ -409,7 +411,7 @@ void RenderingEngine::draw_scene(video::SColor skycolor, bool show_hud,
 	core->draw(skycolor, show_hud, draw_wield_tool, draw_crosshair);
 }
 
-const VideoDriverInfo &RenderingEngine::getVideoDriverInfo(irr::video::E_DRIVER_TYPE type)
+const VideoDriverInfo &RenderingEngine::getVideoDriverInfo(video::E_DRIVER_TYPE type)
 {
 	static const std::unordered_map<int, VideoDriverInfo> driver_info_map = {
 		{(int)video::EDT_NULL,   {"null",   "NULL Driver"}},
@@ -437,7 +439,7 @@ float RenderingEngine::getDisplayDensity()
 }
 
 void RenderingEngine::autosaveScreensizeAndCo(
-		const irr::core::dimension2d<u32> initial_screen_size,
+		const core::dimension2d<u32> initial_screen_size,
 		const bool initial_window_maximized)
 {
 	if (!g_settings->getBool("autosave_screensize"))
@@ -451,11 +453,11 @@ void RenderingEngine::autosaveScreensizeAndCo(
 	// Don't save the fullscreen size, we want the windowed size.
 	bool fullscreen = RenderingEngine::get_raw_device()->isFullscreen();
 	// Screen size
-	const irr::core::dimension2d<u32> current_screen_size =
+	const core::dimension2d<u32> current_screen_size =
 		RenderingEngine::get_video_driver()->getScreenSize();
 	// Don't replace good value with (0, 0)
 	if (!fullscreen &&
-			current_screen_size != irr::core::dimension2d<u32>(0, 0) &&
+			current_screen_size != core::dimension2d<u32>(0, 0) &&
 			current_screen_size != initial_screen_size) {
 		g_settings->setU16("screen_w", current_screen_size.Width);
 		g_settings->setU16("screen_h", current_screen_size.Height);

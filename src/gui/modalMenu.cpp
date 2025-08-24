@@ -147,12 +147,13 @@ bool GUIModalMenu::remapClickOutside(const SEvent &event)
 	if (event.MouseInput.Event == EMIE_LMOUSE_LEFT_UP &&
 			current.isRelated(last)) {
 		SEvent translated{};
-		translated.EventType            = EET_KEY_INPUT_EVENT;
-		translated.KeyInput.Key         = KEY_ESCAPE;
-		translated.KeyInput.Control     = false;
-		translated.KeyInput.Shift       = false;
-		translated.KeyInput.PressedDown = true;
-		translated.KeyInput.Char        = 0;
+		translated.EventType              = EET_KEY_INPUT_EVENT;
+		translated.KeyInput.Key           = KEY_ESCAPE;
+		translated.KeyInput.SystemKeyCode = EscapeKey.getScancode();
+		translated.KeyInput.Control       = false;
+		translated.KeyInput.Shift         = false;
+		translated.KeyInput.PressedDown   = true;
+		translated.KeyInput.Char          = 0;
 		OnEvent(translated);
 		return true;
 	}
@@ -250,7 +251,7 @@ bool GUIModalMenu::preprocessEvent(const SEvent &event)
 		gui::IGUIElement *hovered =
 			Environment->getRootGUIElement()->getElementFromPoint(
 				core::position2d<s32>(event.MouseInput.X, event.MouseInput.Y));
-		if ((hovered) && (hovered->getType() == irr::gui::EGUIET_EDIT_BOX)) {
+		if ((hovered) && (hovered->getType() == gui::EGUIET_EDIT_BOX)) {
 			bool retval = hovered->OnEvent(event);
 			if (retval)
 				Environment->setFocus(hovered);

@@ -14,6 +14,8 @@
 #include "util/enriched_string.h"
 #include "translation.h"
 
+#include <csignal>
+
 /******************************************************************************/
 /* Structs and macros                                                         */
 /******************************************************************************/
@@ -60,12 +62,6 @@ public:
 	 * @param fields map containing formspec field elements currently active
 	 */
 	void gotText(const StringMap &fields);
-
-	/**
-	 * receive text/events transmitted by guiFormSpecMenu
-	 * @param text textual representation of event
-	 */
-	void gotText(const std::wstring &text);
 
 private:
 	/** target to transmit data to */
@@ -130,7 +126,7 @@ public:
 			RenderingEngine *rendering_engine,
 			IMenuManager *menumgr,
 			MainMenuData *data,
-			bool &kill,
+			volatile std::sig_atomic_t &kill,
 			std::function<void()> resolve);
 
 	/** default destructor */
@@ -178,7 +174,7 @@ private:
 	video::IVideoDriver *driver;
 	unsigned int text_height;
 	//core::dimension2du previous_screen_size;
-    irr::core::dimension2d<u32> initial_screen_size;
+    core::dimension2d<u32> initial_screen_size;
     bool initial_window_maximized;
     u64 t_last_frame;
     f32 dtime;
@@ -210,7 +206,7 @@ private:
 	irr_ptr<GUIFormSpecMenu>              m_menu;
 
 	/** reference to kill variable managed by SIGINT handler */
-	bool                                 &m_kill;
+	volatile std::sig_atomic_t           &m_kill;
 
 	/** variable used to abort menu and return back to main game handling */
 	bool                                  m_startgame = false;
@@ -269,7 +265,7 @@ private:
 	void setTopleftText(const std::string &text);
 
 	/** pointer to gui element shown at topleft corner */
-	irr::gui::IGUIStaticText *m_irr_toplefttext = nullptr;
+	gui::IGUIStaticText *m_irr_toplefttext = nullptr;
 	/** and text that is in it */
 	EnrichedString m_toplefttext;
 

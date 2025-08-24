@@ -41,6 +41,7 @@ private:
 	void init_args(GameStartData &start_data, const Settings &cmd_args);
 	bool init_engine();
 	void init_input();
+	void init_joysticks();
 
 	static void setting_changed_callback(const std::string &name, void *data);
 	void config_guienv();
@@ -69,7 +70,7 @@ private:
 	bool reconnect_requested = false;
 	bool first_loop = true;
 	bool retval = true;
-	bool *kill = nullptr;
+	volatile std::sig_atomic_t *kill = nullptr;
 
 	// locals for launch_game
     std::string server_name;

@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include "settings.h"
 
@@ -37,7 +38,7 @@ public:
 
 	bool getMapSetting(const std::string &name, std::string *value_out) const;
 
-	bool getMapSettingNoiseParams(const std::string &name,
+	bool getNoiseParams(const std::string &name,
 		NoiseParams *value_out) const;
 
 	// Note: Map config becomes read-only after makeMapgenParams() gets called
@@ -57,6 +58,6 @@ private:
 	std::string m_map_meta_path;
 
 	SettingsHierarchy m_hierarchy;
-	Settings *m_defaults;
-	Settings *m_map_settings;
+	std::unique_ptr<Settings> m_defaults;
+	std::unique_ptr<Settings> m_map_settings;
 };

@@ -21,8 +21,6 @@
 	numerical
 */
 
-namespace irr
-{
 namespace gui
 {
 
@@ -39,10 +37,6 @@ CGUIEditBox::CGUIEditBox(const wchar_t *text, bool border,
 		PasswordChar(L'*'), HAlign(EGUIA_UPPERLEFT), VAlign(EGUIA_CENTER),
 		CurrentTextRect(0, 0, 1, 1), FrameRect(rectangle)
 {
-#ifdef _DEBUG
-	setDebugName("CGUIEditBox");
-#endif
-
 	Text = text;
 
 	if (Environment)
@@ -318,7 +312,7 @@ bool CGUIEditBox::processKey(const SEvent &event)
 				// add the string
 				const c8 *p = Operator->getTextFromClipboard();
 				if (p) {
-					irr::core::stringw widep;
+					core::stringw widep;
 					core::utf8ToWString(widep, p);
 
 					if (MarkBegin == MarkEnd) {
@@ -792,9 +786,9 @@ void CGUIEditBox::draw()
 						mbegin = font->getDimension(s.c_str()).Width;
 
 						// deal with kerning
-						mbegin += font->getKerningWidth(
-								&((*txtLine)[realmbgn - startPos]),
-								realmbgn - startPos > 0 ? &((*txtLine)[realmbgn - startPos - 1]) : 0);
+						mbegin += font->getKerning(
+								(*txtLine)[realmbgn - startPos],
+								realmbgn - startPos > 0 ? (*txtLine)[realmbgn - startPos - 1] : 0).X;
 
 						lineStartPos = realmbgn - startPos;
 					}
@@ -836,7 +830,8 @@ void CGUIEditBox::draw()
 			}
 			s = txtLine->subString(0, CursorPos - startPos);
 			charcursorpos = font->getDimension(s.c_str()).Width +
-							font->getKerningWidth(CursorChar.c_str(), CursorPos - startPos > 0 ? &((*txtLine)[CursorPos - startPos - 1]) : 0);
+							font->getKerning(CursorChar[0],
+							CursorPos - startPos > 0 ? (*txtLine)[CursorPos - startPos - 1] : 0).X;
 
 			if (focus && (CursorBlinkTime == 0 || (os::Timer::getTime() - BlinkStartTime) % (2 * CursorBlinkTime) < CursorBlinkTime)) {
 				setTextRect(cursorLine);
@@ -939,13 +934,13 @@ wchar_t CGUIEditBox::getCursorChar() const
 }
 
 //! Set the blinktime for the cursor. 2x blinktime is one full cycle.
-void CGUIEditBox::setCursorBlinkTime(irr::u32 timeMs)
+void CGUIEditBox::setCursorBlinkTime(u32 timeMs)
 {
 	CursorBlinkTime = timeMs;
 }
 
 //! Get the cursor blinktime
-irr::u32 CGUIEditBox::getCursorBlinkTime() const
+u32 CGUIEditBox::getCursorBlinkTime() const
 {
 	return CursorBlinkTime;
 }
@@ -953,7 +948,7 @@ irr::u32 CGUIEditBox::getCursorBlinkTime() const
 bool CGUIEditBox::processMouse(const SEvent &event)
 {
 	switch (event.MouseInput.Event) {
-	case irr::EMIE_LMOUSE_LEFT_UP:
+	case EMIE_LMOUSE_LEFT_UP:
 		if (Environment->hasFocus(this)) {
 			CursorPos = getCursorPos(event.MouseInput.X, event.MouseInput.Y);
 			if (MouseMarking) {
@@ -964,7 +959,7 @@ bool CGUIEditBox::processMouse(const SEvent &event)
 			return true;
 		}
 		break;
-	case irr::EMIE_MOUSE_MOVED: {
+	case EMIE_MOUSE_MOVED: {
 		if (MouseMarking) {
 			CursorPos = getCursorPos(event.MouseInput.X, event.MouseInput.Y);
 			setTextMarkers(MarkBegin, CursorPos);
@@ -1014,7 +1009,7 @@ bool CGUIEditBox::processMouse(const SEvent &event)
 
 		// paste from the primary selection
 		inputString([&] {
-			irr::core::stringw inserted_text;
+			core::stringw inserted_text;
 			if (!Operator)
 				return inserted_text;
 			const c8 *inserted_text_utf8 = Operator->getTextFromPrimarySelection();
@@ -1107,10 +1102,7 @@ void CGUIEditBox::breakText()
 			lineBreak = true;
 			c = 0;
 			if (Text[i + 1] == L'\n') { // Windows breaks
-				// TODO: I (Michael) think that we shouldn't change the text given by the user for whatever reason.
-				// Instead rework the cursor positioning to be able to handle this (but not in stable release
-				// branch as users might already expect this behavior).
-				Text.erase(i + 1);
+				Text.erase(i);
 				--size;
 				if (CursorPos > i)
 					--CursorPos;
@@ -1198,7 +1190,7 @@ void CGUIEditBox::setTextRect(s32 line)
 		d = font->getDimension(Text.c_str());
 		d.Height = AbsoluteRect.getHeight();
 	}
-	d.Height += font->getKerningHeight();
+	d.Height += font->getKerning(L'A').Y;
 
 	// justification
 	switch (HAlign) {
@@ -1355,7 +1347,7 @@ void CGUIEditBox::calculateScrollPos()
 	{
 		// get cursor position
 		// get cursor area
-		irr::u32 cursorWidth = font->getDimension(CursorChar.c_str()).Width;
+		u32 cursorWidth = font->getDimension(CursorChar.c_str()).Width;
 		core::stringw *txtLine = hasBrokenText ? &BrokenText[cursLine] : &Text;
 		s32 cPos = hasBrokenText ? CursorPos - BrokenTextPositions[cursLine] : CursorPos; // column
 		s32 cStart = font->getDimension(txtLine->subString(0, cPos).c_str()).Width;       // pixels from text-start
@@ -1386,9 +1378,9 @@ void CGUIEditBox::calculateScrollPos()
 
 	// calculate vertical scrolling
 	if (hasBrokenText) {
-		irr::u32 lineHeight = font->getDimension(L"A").Height + font->getKerningHeight();
+		u32 lineHeight = font->getDimension(L"A").Height + font->getKerning(L'A').Y;
 		// only up to 1 line fits?
-		if (lineHeight >= (irr::u32)FrameRect.getHeight()) {
+		if (lineHeight >= (u32)FrameRect.getHeight()) {
 			VScrollPos = 0;
 			setTextRect(cursLine);
 			s32 unscrolledPos = CurrentTextRect.UpperLeftCorner.Y;
@@ -1492,4 +1484,3 @@ bool CGUIEditBox::acceptsIME()
 }
 
 } // end namespace gui
-} // end namespace irr

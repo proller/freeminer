@@ -51,7 +51,14 @@ LuaEntitySAO::LuaEntitySAO(ServerEnvironment *env, v3f pos, const std::string &d
 		rotation.X = readF1000(is);
 		rotation.Z = readF1000(is);
 
-		// if (version2 < 2)
+		if (version2 < 2) {
+			m_guid = env->getGUIDGenerator().next();
+			break;
+		}
+
+		m_guid.deSerialize(is);
+
+		// if (version2 < 3)
 		//     break;
 		// <read new values>
 		break;
@@ -69,6 +76,14 @@ LuaEntitySAO::LuaEntitySAO(ServerEnvironment *env, v3f pos, const std::string &d
 	m_hp = hp;
 	m_velocity = velocity;
 	setRotation(rotation);
+}
+
+LuaEntitySAO::LuaEntitySAO(ServerEnvironment *env, v3f pos, const std::string &name,
+		const std::string &state) :
+		UnitSAO(env, pos),
+		m_init_name(name), m_init_state(state),
+		m_guid(env->getGUIDGenerator().next())
+{
 }
 
 LuaEntitySAO::~LuaEntitySAO()
@@ -160,12 +175,11 @@ void LuaEntitySAO::step(float dtime, bool send_recommended)
 			aabb3f box = m_prop.collisionbox;
 			box.MinEdge *= BS;
 			box.MaxEdge *= BS;
-			f32 pos_max_d = BS*0.25; // Distance per iteration
 			v3f p_pos = getBasePosition();
 			v3f p_velocity = m_velocity;
 			v3f p_acceleration = m_acceleration;
 			moveresult = collisionMoveSimple(m_env, m_env->getGameDef(),
-					pos_max_d, box, m_prop.stepheight, dtime,
+					box, m_prop.stepheight, dtime,
 					&p_pos, &p_velocity, p_acceleration,
 					this, m_prop.collideWithObjects);
 			moveresult_p = &moveresult;
@@ -175,7 +189,7 @@ void LuaEntitySAO::step(float dtime, bool send_recommended)
 			m_velocity = p_velocity;
 			m_acceleration = p_acceleration;
 		} else {
-			setBasePosition(getBasePosition() + (m_velocity + m_acceleration * 0.5f * dtime) * dtime);
+			addPos((m_velocity + m_acceleration * 0.5f * dtime) * dtime);
 			m_velocity += dtime * m_acceleration;
 		}
 
@@ -312,10 +326,12 @@ void LuaEntitySAO::getStaticData(std::string *result) const
 	writeF1000(os, m_rotation.Y);
 
 	// version2. Increase this variable for new values
-	writeU8(os, 1); // PROTOCOL_VERSION >= 37
+	writeU8(os, 2);
 
 	writeF1000(os, m_rotation.X);
 	writeF1000(os, m_rotation.Z);
+
+	m_guid.serialize(os);
 
 	// <write new values>
 
@@ -430,6 +446,13 @@ void LuaEntitySAO::setHP(s32 hp, const PlayerHPChangeReason &reason)
 u16 LuaEntitySAO::getHP() const
 {
 	return m_hp;
+}
+
+std::string LuaEntitySAO::getGUID() const
+{
+	// The "@" ensures that entity GUIDs are easily recognizable
+	// and makes it obvious that they can't collide with player names.
+	return "@" + m_guid.base64();
 }
 
 void LuaEntitySAO::setVelocity(v3f velocity)

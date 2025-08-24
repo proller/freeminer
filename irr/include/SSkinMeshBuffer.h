@@ -8,9 +8,8 @@
 #include "CVertexBuffer.h"
 #include "CIndexBuffer.h"
 #include "S3DVertex.h"
+#include <cassert>
 
-namespace irr
-{
 namespace scene
 {
 
@@ -22,9 +21,6 @@ struct SSkinMeshBuffer final : public IMeshBuffer
 			VertexType(vt), PrimitiveType(EPT_TRIANGLES),
 			BoundingBoxNeedsRecalculated(true)
 	{
-#ifdef _DEBUG
-		setDebugName("SSkinMeshBuffer");
-#endif
 		Vertices_Tangents = new SVertexBufferTangents();
 		Vertices_2TCoords = new SVertexBufferLightMap();
 		Vertices_Standard = new SVertexBuffer();
@@ -203,7 +199,7 @@ public:
 	//! append the vertices and indices to the current buffer
 	void append(const void *const vertices, u32 numVertices, const u16 *const indices, u32 numIndices) override
 	{
-		_IRR_DEBUG_BREAK_IF(true);
+		assert(false);
 	}
 
 	//! Describe what kind of primitive geometry is used by the meshbuffer
@@ -231,7 +227,7 @@ public:
 	video::SMaterial Material;
 	video::E_VERTEX_TYPE VertexType;
 
-	core::aabbox3d<f32> BoundingBox;
+	core::aabbox3d<f32> BoundingBox{{0, 0, 0}};
 
 	//! Primitive type used for rendering (triangles, lines, ...)
 	E_PRIMITIVE_TYPE PrimitiveType;
@@ -240,4 +236,3 @@ public:
 };
 
 } // end namespace scene
-} // end namespace irr

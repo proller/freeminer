@@ -7,8 +7,6 @@
 #include "IReferenceCounted.h"
 #include "IFileArchive.h"
 
-namespace irr
-{
 namespace video
 {
 class IVideoDriver;
@@ -19,7 +17,6 @@ namespace io
 class IReadFile;
 class IWriteFile;
 class IFileList;
-class IAttributes;
 
 //! The FileSystem manages files and archives and provides access to them.
 /** It manages where files are, so that modules which use the the IO do not
@@ -155,4 +152,3 @@ public:
 };
 
 } // end namespace io
-} // end namespace irr

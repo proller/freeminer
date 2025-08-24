@@ -4,7 +4,9 @@
 
 #pragma once
 
-#include "irrlichttypes_extrabloated.h"
+#include <IEventReceiver.h>
+#include "irrlichttypes.h"
+
 #include "keys.h"
 #include <bitset>
 #include <vector>
@@ -29,7 +31,7 @@ struct JoystickAxisLayout {
 
 struct JoystickCombination {
 
-	virtual bool isTriggered(const irr::SEvent::SJoystickEvent &ev) const=0;
+	virtual bool isTriggered(const SEvent::SJoystickEvent &ev) const=0;
 
 	GameKeyType key;
 };
@@ -47,7 +49,7 @@ struct JoystickButtonCmb : public JoystickCombination {
 
 	virtual ~JoystickButtonCmb() = default;
 
-	virtual bool isTriggered(const irr::SEvent::SJoystickEvent &ev) const;
+	virtual bool isTriggered(const SEvent::SJoystickEvent &ev) const;
 
 	u32 filter_mask;
 	u32 compare_mask;
@@ -67,7 +69,7 @@ struct JoystickAxisCmb : public JoystickCombination {
 
 	virtual ~JoystickAxisCmb() = default;
 
-	bool isTriggered(const irr::SEvent::SJoystickEvent &ev) const override;
+	bool isTriggered(const SEvent::SJoystickEvent &ev) const override;
 
 	u16 axis_to_compare;
 
@@ -89,9 +91,9 @@ class JoystickController {
 public:
 	JoystickController();
 
-	void onJoystickConnect(const std::vector<irr::SJoystickInfo> &joystick_infos);
+	void onJoystickConnect(const std::vector<SJoystickInfo> &joystick_infos);
 
-	bool handleEvent(const irr::SEvent::SJoystickEvent &ev);
+	bool handleEvent(const SEvent::SJoystickEvent &ev);
 	void clear();
 
 	void releaseAllKeys()

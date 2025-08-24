@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <vector>
+#include "fm_nodecontainer.h"
 #include "irr_v3d.h"
 #include "mapnode.h"
 #include "exceptions.h"
@@ -28,6 +29,7 @@ class NodeMetadataList;
 class IGameDef;
 class MapBlockMesh;
 class VoxelManipulator;
+class NameIdMapping;
 
 #define BLOCK_TIMESTAMP_UNDEFINED 0xffffffff
 
@@ -117,11 +119,6 @@ public:
 			data[i] = ignoreNode;
 
 		//raiseModified(MOD_STATE_WRITE_NEEDED, MOD_REASON_REALLOCATE);
-	}
-
-	MapNode* getData()
-	{
-		return data;
 	}
 
 	////
@@ -349,7 +346,7 @@ public:
 	}
 
 	// Copies data to VoxelManipulator to getPosRelative()
-	void copyTo(VoxelManipulator &dst);
+	void copyTo(NodeContainer &dst);
 
 	// Copies data from VoxelManipulator to getPosRelative()
 	void copyFrom(const VoxelManipulator &src);
@@ -372,6 +369,7 @@ public:
 	bool onObjectsActivation();
 	bool saveStaticObject(u16 id, const StaticObject &obj, u32 reason);
 
+	/// @note This method is only for Server, don't call it on client
 	void step(float dtime, const std::function<bool(v3s16, MapNode, f32)> &on_timer_cb);
 
 	////
@@ -396,6 +394,7 @@ public:
 		return m_timestamp;
 	}
 
+	/// @deprecated don't use in new code, unclear semantics.
 	inline u32 getDiskTimestamp()
 	{
 		return m_disk_timestamp;
@@ -507,7 +506,8 @@ public:
 	uint32_t mesh_requested_timestamp{};
 	block_step_t mesh_requested_step{};
 
-private:
+protected:
+	friend class ClientMap;
 	std::array<MapBlock::mesh_type, LODMESH_STEP_MAX + 1> m_lod_mesh;
 	std::array<MapBlock::mesh_type, FARMESH_STEP_MAX + 1> m_far_mesh;
 	MapBlock::mesh_type delete_mesh;
@@ -581,17 +581,22 @@ public:
 	// clearObject and return removed objects count
 	u32 clearObjects();
 
+private:
 	static const u32 ystride = MAP_BLOCKSIZE;
 	static const u32 zstride = MAP_BLOCKSIZE * MAP_BLOCKSIZE;
 
 	static const u32 nodecount = MAP_BLOCKSIZE * MAP_BLOCKSIZE * MAP_BLOCKSIZE;
 
-private:
 	/*
 		Private methods
 	*/
 
 	void deSerialize_pre22(std::istream &is, u8 version, bool disk);
+
+	static void getBlockNodeIdMapping(NameIdMapping *nimap, MapNode *nodes,
+		const NodeDefManager *nodedef);
+	static void correctBlockNodeIds(const NameIdMapping *nimap, MapNode *nodes,
+			IGameDef *gamedef);
 
 	/*
 	 * PLEASE NOTE: When adding something here be mindful of position and size

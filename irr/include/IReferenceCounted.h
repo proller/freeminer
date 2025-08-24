@@ -5,9 +5,7 @@
 #pragma once
 
 #include "irrTypes.h"
-
-namespace irr
-{
+#include <cassert>
 
 //! Base class of most objects of the Irrlicht Engine.
 /** This class provides reference counting through the methods grab() and drop().
@@ -118,7 +116,7 @@ public:
 	bool drop() const
 	{
 		// someone is doing bad reference counting.
-		_IRR_DEBUG_BREAK_IF(ReferenceCounter <= 0)
+		assert(ReferenceCounter > 0);
 
 		--ReferenceCounter;
 		if (!ReferenceCounter) {
@@ -136,35 +134,8 @@ public:
 		return ReferenceCounter;
 	}
 
-#ifdef _DEBUG
-	//! Returns the debug name of the object.
-	/** The Debugname may only be set and changed by the object
-	itself. This method should only be used in Debug mode.
-	\return Returns a string, previously set by setDebugName(); */
-	const c8 *getDebugName() const
-	{
-		return DebugName;
-	}
-
-protected:
-	//! Sets the debug name of the object.
-	/** The Debugname may only be set and changed by the object
-	itself. This method should only be used in Debug mode.
-	\param newName: New debug name to set. */
-	void setDebugName(const c8 *newName)
-	{
-		DebugName = newName;
-	}
-
-private:
-	//! The debug name.
-	const c8 *DebugName = nullptr;
-#endif
-
 private:
 
 	//! The reference counter. Mutable to do reference counting on const objects.
 	mutable s32 ReferenceCounter;
 };
-
-} // end namespace irr

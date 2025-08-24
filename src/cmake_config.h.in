@@ -24,9 +24,11 @@
 #cmakedefine01 USE_SCTP
 #cmakedefine01 USE_SQLITE3
 #cmakedefine01 USE_TIFF
-#cmakedefine01 USE_UNWIND
 #cmakedefine01 USE_WEBSOCKET
 #cmakedefine01 USE_WEBSOCKET_SCTP
+#cmakedefine01 USE_UNWIND
+#cmakedefine01 Backtrace_FOUND
+#define Backtrace_HEADER "@Backtrace_HEADER@"
 
 
 #define PROJECT_NAME "@PROJECT_NAME@"
@@ -57,6 +59,7 @@
 #cmakedefine01 USE_SYSTEM_GMP
 #cmakedefine01 USE_SYSTEM_JSONCPP
 #cmakedefine01 USE_REDIS
+#cmakedefine01 USE_OPENSSL
 #cmakedefine01 HAVE_ENDIAN_H
 #cmakedefine01 HAVE_STRLCPY
 #cmakedefine01 HAVE_MALLOC_TRIM

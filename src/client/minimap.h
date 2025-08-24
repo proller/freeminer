@@ -4,21 +4,36 @@
 
 #pragma once
 
-#include "../hud.h"
 #include "fm_nodecontainer.h"
-#include "irrlichttypes_extrabloated.h"
+#include "util/unordered_map_hash.h"
+
+#include "irrlichttypes.h"
 #include "irr_ptr.h"
+#include "rect.h"
+#include "CMeshBuffer.h"
+
+#include "../hud.h"
+#include "mapnode.h"
 #include "util/thread.h"
-#include "voxel.h"
 #include <map>
 #include <string>
 #include <vector>
 
+namespace video {
+	class IVideoDriver;
+	class IImage;
+	class ITexture;
+}
+
+namespace scene {
+	class ISceneNode;
+}
+
 class Client;
+class NodeDefManager;
 class ITextureSource;
 class IShaderSource;
-
-#include "util/unordered_map_hash.h"
+class VoxelManipulator;
 
 #define MINIMAP_MAX_SX 512
 #define MINIMAP_MAX_SY 512
@@ -52,7 +67,7 @@ struct MinimapPixel {
 };
 
 struct MinimapMapblock {
-	void getMinimapNodes(NodeContainer *vmanip, const v3s16 &pos);
+	void getMinimapNodes(NodeContainer *vmanip, const NodeDefManager *nodedef, const v3s16 &pos);
 
 	MinimapPixel data[MAP_BLOCKSIZE * MAP_BLOCKSIZE];
 };
@@ -159,7 +174,6 @@ private:
 	const NodeDefManager *m_ndef;
 	std::unique_ptr<MinimapUpdateThread> m_minimap_update_thread;
 	irr_ptr<scene::SMeshBuffer> m_meshbuffer;
-	bool m_enable_shaders;
 	std::vector<MinimapModeDef> m_modes;
 	size_t m_current_mode_index;
 	u16 m_surface_mode_scan_height;

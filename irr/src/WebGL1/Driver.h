@@ -8,13 +8,11 @@
 
 #ifdef _IRR_COMPILE_WITH_WEBGL1_
 
-#include "OpenGLES2/Driver.h"
+#include "OpenGLES2/DriverGLES2.h"
 #include "CWebGLExtensionHandler.h"
 #include "CMeshBuffer.h"
 #include "EHardwareBufferFlags.h"
 
-namespace irr
-{
 namespace video
 {
 	//! WebGL friendly subset of OGL ES 2.0.
@@ -130,7 +128,7 @@ namespace video
 
 	protected:
 		// create a meshbuffer which has as many vertices as indices
-		scene::SMeshBuffer* createSimpleMeshBuffer(irr::u32 numVertices, scene::E_PRIMITIVE_TYPE primitiveType, scene::E_HARDWARE_MAPPING vertexMappingHint=scene::EHM_STREAM, scene::E_HARDWARE_MAPPING indexMappingHint=scene::EHM_STATIC) const;
+		scene::SMeshBuffer* createSimpleMeshBuffer(u32 numVertices, scene::E_PRIMITIVE_TYPE primitiveType, scene::E_HARDWARE_MAPPING vertexMappingHint=scene::EHM_STREAM, scene::E_HARDWARE_MAPPING indexMappingHint=scene::EHM_STATIC) const;
 
 		bool genericDriverInit(const core::dimension2d<u32>& screenSize, bool stencilBuffer) override;
 		void initWebGLExtensions();
@@ -147,6 +145,5 @@ namespace video
 	};
 
 } // end namespace video
-} // end namespace irr
 
 #endif // _IRR_COMPILE_WITH_WEBGL1_

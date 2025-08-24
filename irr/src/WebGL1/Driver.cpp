@@ -11,8 +11,6 @@
 #include "COpenGLCoreCacheHandler.h"
 #include "EVertexAttributes.h"
 
-namespace irr
-{
 namespace video
 {
 
@@ -69,7 +67,7 @@ void CWebGL1Driver::drawVertexPrimitiveList(const void* vertices, u32 vertexCoun
 		{
 			first = false;
 			os::Printer::log("WebGL driver does not support drawVertexPrimitiveList calls without a VBO", ELL_WARNING);
-			os::Printer::log(__FILE__, irr::core::stringc(__LINE__).c_str(), ELL_WARNING);
+			os::Printer::log(__FILE__, core::stringc(__LINE__).c_str(), ELL_WARNING);
 		}
 	}
 }
@@ -410,7 +408,7 @@ void CWebGL1Driver::draw2DImageBatch(const video::ITexture* texture,
 	if (!texture)
 		return;
 
-	const irr::u32 drawCount = core::min_<u32>(positions.size(), sourceRects.size());
+	const u32 drawCount = core::min_<u32>(positions.size(), sourceRects.size());
 	if ( !drawCount )
 		return;
 
@@ -677,7 +675,7 @@ void CWebGL1Driver::drawStencilShadowVolume(const core::array<core::vector3df>& 
 	{
 		first = false;
 		os::Printer::log("WebGL1 driver does not yet support drawStencilShadowVolume", ELL_WARNING);
-		os::Printer::log(__FILE__, irr::core::stringc(__LINE__).c_str(), ELL_WARNING);
+		os::Printer::log(__FILE__, core::stringc(__LINE__).c_str(), ELL_WARNING);
 	}
 }
 #endif
@@ -873,12 +871,12 @@ bool CWebGL1Driver::getColorFormatParameters(ECOLOR_FORMAT format, GLint& intern
 }
 
 
-scene::SMeshBuffer* CWebGL1Driver::createSimpleMeshBuffer(irr::u32 numVertices, scene::E_PRIMITIVE_TYPE primitiveType, scene::E_HARDWARE_MAPPING vertexMappingHint, scene::E_HARDWARE_MAPPING indexMappingHint) const
+scene::SMeshBuffer* CWebGL1Driver::createSimpleMeshBuffer(u32 numVertices, scene::E_PRIMITIVE_TYPE primitiveType, scene::E_HARDWARE_MAPPING vertexMappingHint, scene::E_HARDWARE_MAPPING indexMappingHint) const
 {
 	scene::SMeshBuffer* mbResult = new scene::SMeshBuffer();
 	mbResult->Vertices->Data.resize(numVertices);
 	mbResult->Indices->Data.resize(numVertices);
-	for ( irr::u32 i=0; i < numVertices; ++i )
+	for ( u32 i=0; i < numVertices; ++i )
 		mbResult->Indices->Data[i] = i;
 
 	mbResult->setPrimitiveType(primitiveType);
@@ -908,7 +906,7 @@ bool CWebGL1Driver::genericDriverInit(const core::dimension2d<u32>& screenSize, 
 */
 
 	StencilBuffer = stencilBuffer;
-
+/*
 	DriverAttributes->setAttribute("MaxTextures", (s32)Feature.MaxTextureUnits);
 	DriverAttributes->setAttribute("MaxSupportedTextures", (s32)Feature.MaxTextureUnits);
 	DriverAttributes->setAttribute("MaxAnisotropy", MaxAnisotropy);
@@ -917,7 +915,7 @@ bool CWebGL1Driver::genericDriverInit(const core::dimension2d<u32>& screenSize, 
 	DriverAttributes->setAttribute("MaxTextureLODBias", MaxTextureLODBias);
 	//DriverAttributes->setAttribute("Version", Version);
 	DriverAttributes->setAttribute("AntiAlias", AntiAlias);
-
+*/
 	glPixelStorei(GL_PACK_ALIGNMENT, 1);
 
 	//UserClipPlane.reallocate(0);
@@ -925,7 +923,7 @@ bool CWebGL1Driver::genericDriverInit(const core::dimension2d<u32>& screenSize, 
 	for (s32 i = 0; i < ETS_COUNT; ++i)
 		setTransform(static_cast<E_TRANSFORMATION_STATE>(i), core::IdentityMatrix);
 
-	setAmbientLight(SColorf(0.0f, 0.0f, 0.0f, 0.0f));
+	//setAmbientLight(SColorf(0.0f, 0.0f, 0.0f, 0.0f));
 	//glClearDepthf(1.0f);
 	glClearDepth(1.0f);
 
@@ -997,12 +995,9 @@ void CWebGL1Driver::initWebGLExtensions()
 }
 
 } // end namespace video
-} // end namespace irr
 
 #endif // _IRR_COMPILE_WITH_WEBGL1_
 
-namespace irr
-{
 #ifndef _IRR_COMPILE_WITH_WEBGL1_
 namespace io
 {
@@ -1028,5 +1023,4 @@ IVideoDriver* createWebGL1Driver(const SIrrlichtCreationParameters& params, io::
 #endif //  _IRR_COMPILE_WITH_WEBGL1_
 }
 
-} // end namespace
 } // end namespace

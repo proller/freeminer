@@ -10,8 +10,6 @@
 #include "IGUIFont.h"
 #include "os.h"
 
-namespace irr
-{
 namespace gui
 {
 
@@ -26,9 +24,6 @@ CGUIButton::CGUIButton(IGUIEnvironment *environment, IGUIElement *parent,
 		IsPushButton(false), Pressed(false),
 		UseAlphaChannel(false), DrawBorder(true), ScaleImage(false)
 {
-#ifdef _DEBUG
-	setDebugName("CGUIButton");
-#endif
 	setNotClipped(noclip);
 
 	// This element can be tabbed.
@@ -414,7 +409,7 @@ video::SColor CGUIButton::getOverrideColor() const
 	return OverrideColor;
 }
 
-irr::video::SColor CGUIButton::getActiveColor() const
+video::SColor CGUIButton::getActiveColor() const
 {
 	if (OverrideColorEnabled)
 		return OverrideColor;
@@ -497,4 +492,3 @@ bool CGUIButton::isDrawingBorder() const
 }
 
 } // end namespace gui
-} // end namespace irr

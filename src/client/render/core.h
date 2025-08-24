@@ -4,12 +4,11 @@
 // Copyright (C) 2017 numzero, Lobachevskiy Vitaliy <numzer0@yandex.ru>
 
 #pragma once
-#include "irrlichttypes_extrabloated.h"
 
-namespace irr
-{
-	class IrrlichtDevice;
-}
+#include "irr_v2d.h"
+#include <SColor.h>
+
+class IrrlichtDevice;
 
 class ShadowRenderer;
 class Camera;

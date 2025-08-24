@@ -5,7 +5,6 @@
 #pragma once
 #include "SColor.h"
 
-using namespace irr;
 
 /**
  * Parameters for automatic exposure compensation
@@ -30,7 +29,14 @@ struct AutoExposure
 	/// @brief Power value for center-weighted metering. Value of 1.0 measures entire screen uniformly
 	float center_weight_power;
 
-	AutoExposure();
+	constexpr AutoExposure()
+		: luminance_min(-3.f),
+		luminance_max(-3.f),
+		exposure_correction(0.0f),
+		speed_dark_bright(1000.f),
+		speed_bright_dark(1000.f),
+		center_weight_power(1.f)
+	{}
 };
 
 /** Describes ambient light settings for a player

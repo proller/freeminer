@@ -113,7 +113,8 @@ public:
 
 	void resize(u32 scrollback);
 
-protected:
+	// Get the current scroll position
+	s32 getScrollPosition() const { return m_scroll; }
 	s32 getTopScrollPos() const;
 	s32 getBottomScrollPos() const;
 
@@ -137,7 +138,7 @@ private:
 	// Enable clickable chat weblinks
 	bool m_cache_clickable_chat_weblinks;
 	// Color of clickable chat weblinks
-	irr::video::SColor m_cache_chat_weblink_color;
+	video::SColor m_cache_chat_weblink_color;
 
 	// Whether the lines were modified since last markLinesUnchanged()
 	// Is always set to true when m_unformatted is modified, because that's what

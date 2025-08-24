@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
+if(POLICY CMP0177)
+    cmake_policy(SET CMP0177 NEW)
+endif()
 
 # This can be read from ${PROJECT_NAME} after project() is called
 project(freeminer)
@@ -12,7 +15,7 @@ set(CLANG_MINIMUM_VERSION "7.0.1")
 
 # You should not need to edit these manually, use util/bump_version.sh
 set(VERSION_MAJOR 5)
-set(VERSION_MINOR 10)
+set(VERSION_MINOR 13)
 set(VERSION_PATCH 0)
 set(VERSION_EXTRA "" CACHE STRING "Stuff to append to version string")
 
@@ -53,7 +56,7 @@ endif()
 # - win32/gcc: fails to link
 # - win32/clang: works
 # - macOS on x86: seems to be fine
-# - macOS on ARM: crashes, see <https://github.com/minetest/minetest/issues/14397>
+# - macOS on ARM: crashes, see <https://github.com/luanti-org/luanti/issues/14397>
 # Note: since CMake has no easy architecture detection disabling for Mac entirely
 #### ####
 if((WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU") OR APPLE)
@@ -85,6 +88,7 @@ find_program(CCACHE_FOUND ccache)
 if(CCACHE_FOUND)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache)
+	set(ENV{CCACHE_SLOPPINESS} pch_defines,time_macros)
 endif(CCACHE_FOUND)
 
 set(BUILD_CLIENT TRUE CACHE BOOL "Build client")
@@ -188,8 +192,7 @@ else()
 endif()
 
 if(NOT MSVC)
-        # FM: TODO: REMOVE:
-	set(WARNING_FLAGS "${WARNING_FLAGS} -Wno-inconsistent-missing-override")
+	# set(WARNING_FLAGS "${WARNING_FLAGS} -Wno-inconsistent-missing-override")
 
 	if("${CMAKE_GENERATOR}" STREQUAL "Ninja" )
 		if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
@@ -263,22 +266,21 @@ if(NOT MSVC)
 	endif()
 
     # too noisy
-	option(ENABLE_UNWIND "Enable unwind" 0)
+	option(ENABLE_UNWIND "Enable unwind" 1)
 	if(ENABLE_UNWIND)
 
 	if(USE_STATIC_LIBRARIES AND UNWIND_STATIC)
 		list(REVERSE CMAKE_FIND_LIBRARY_SUFFIXES)
 	endif()
-
-	find_library(UNWIND_LIBRARY NAMES unwind)
+    find_package(Backtrace)
 
 	if(USE_STATIC_LIBRARIES AND UNWIND_STATIC)
 		list(REVERSE CMAKE_FIND_LIBRARY_SUFFIXES)
 	endif()
 
-	if(UNWIND_LIBRARY)
+	if(Backtrace_FOUND)
         CHECK_CXX_SOURCE_RUNS("
-       #include <execinfo.h> // for backtrace
+       #include <${Backtrace_HEADER}> // for backtrace
        int main(int argc, char *argv[]) {
             void *callstack[128];
             const int nMaxFrames = sizeof(callstack) / sizeof(callstack[0]);
@@ -292,8 +294,9 @@ if(NOT MSVC)
             set(USE_UNWIND 0)
         endif()
         # set(USE_UNWIND 1)
-		SET(PLATFORM_LIBS ${PLATFORM_LIBS} ${UNWIND_LIBRARY})
-		message(STATUS "Build with unwind ${UNWIND_LIBRARY}")
+		SET(PLATFORM_LIBS ${PLATFORM_LIBS} ${Backtrace_LIBRARIES})
+		message(STATUS "Build with unwind ${Backtrace_LIBRARIES} : ${Backtrace_INCLUDE_DIRS} : ${Backtrace_HEADER}")
+		include_directories(SYSTEM ${Backtrace_INCLUDE_DIRS})
 	endif()
 
 	endif()

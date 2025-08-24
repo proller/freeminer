@@ -14,8 +14,6 @@
 
 #include "COpenGLCoreFeature.h"
 
-namespace irr
-{
 namespace video
 {
 
@@ -1015,8 +1013,6 @@ public:
 	bool TextureCompressionExtension;
 
 	// Some non-boolean properties
-	//! Maximum hardware lights supported
-	u8 MaxLights;
 	//! Maximal Anisotropy
 	u8 MaxAnisotropy;
 	//! Number of auxiliary buffers
@@ -1067,6 +1063,10 @@ public:
 	void irrGlCompressedTexSubImage2D(GLenum target, GLint level,
 			GLint xoffset, GLint yoffset, GLsizei width, GLsizei height,
 			GLenum format, GLsizei imageSize, const void *data);
+	inline void irrGlObjectLabel(GLenum identifier, GLuint name, const char *label)
+	{
+		// unimplemented
+	}
 
 	// shader programming
 	void extGlGenPrograms(GLsizei n, GLuint *programs);
@@ -2606,8 +2606,6 @@ inline void COpenGLExtensionHandler::extGlSwapInterval(int interval)
 }
 #endif
 #endif
-}
-
 }
 }
 

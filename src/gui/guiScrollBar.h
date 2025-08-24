@@ -12,12 +12,13 @@ the arrow buttons where there is insufficient space.
 
 #pragma once
 
-#include "irrlichttypes_extrabloated.h"
 #include <optional>
+#include <IGUIElement.h>
+#include <IGUIEnvironment.h>
 
 class ISimpleTextureSource;
 
-using namespace irr;
+
 using namespace gui;
 
 class GUIScrollBar : public IGUIElement
@@ -53,7 +54,7 @@ public:
 	void setLargeStep(const s32 &step);
 	//! Sets a position immediately, aborting any ongoing interpolation.
 	// setPos does not send EGET_SCROLL_BAR_CHANGED events for you.
-	void setPos(const s32 &pos);
+	void setPos(const s32 pos);
 	//! The same as setPos, but it takes care of sending EGET_SCROLL_BAR_CHANGED events.
 	void setPosAndSend(const s32 &pos);
 	//! Sets a target position for interpolation.
@@ -93,7 +94,7 @@ private:
 
 	ISimpleTextureSource *m_tsrc;
 
-	void setPosRaw(const s32 &pos);
+	void setPosRaw(const s32 pos);
 	void updatePos();
 	std::optional<s32> target_pos;
 	u32 last_time_ms = 0;

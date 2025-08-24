@@ -56,6 +56,9 @@ private:
 	// get_mapgen_edges([mapgen_limit[, chunksize]])
 	static int l_get_mapgen_edges(lua_State *L);
 
+	// get_mapgen_chunksize()
+	static int l_get_mapgen_chunksize(lua_State *L);
+
 	// get_seed([add])
 	static int l_get_seed(lua_State *L);
 
@@ -130,6 +133,9 @@ private:
 	// place_schematic_on_vmanip(vm, p, schematic, rotation,
 	//     replacements, force_placement, flagstring)
 	static int l_place_schematic_on_vmanip(lua_State *L);
+
+	// spawn_tree_on_vmanip(vmanip, pos, treedef)
+	static int l_spawn_tree_on_vmanip(lua_State *L);
 
 	// serialize_schematic(schematic, format, options={...})
 	static int l_serialize_schematic(lua_State *L);

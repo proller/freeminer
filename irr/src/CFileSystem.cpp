@@ -35,18 +35,12 @@
 #include <unistd.h>
 #endif
 
-namespace irr
-{
 namespace io
 {
 
 //! constructor
 CFileSystem::CFileSystem()
 {
-#ifdef _DEBUG
-	setDebugName("CFileSystem");
-#endif
-
 	setFileListSystem(FILESYSTEM_NATIVE);
 	//! reset current working directory
 	getWorkingDirectory();
@@ -492,5 +486,4 @@ IFileSystem *createFileSystem()
 	return new CFileSystem();
 }
 
-} // end namespace irr
 } // end namespace io

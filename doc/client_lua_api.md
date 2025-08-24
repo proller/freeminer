@@ -1,12 +1,15 @@
-Luanti Lua Client Modding API Reference 5.10.0
+Luanti Lua Client Modding API Reference 5.13.0
 ==============================================
 
 **WARNING**: if you're looking for the `minetest` namespace (e.g. `minetest.something`),
 it's now called `core` due to the renaming of Luanti (formerly Minetest).
 `minetest` will keep existing as an alias, so that old code won't break.
 
-* More information at <http://www.minetest.net/>
-* Developer Wiki: <http://dev.minetest.net/>
+Note that `core` has already existed since version 0.4.10, so you can use it
+safely without breaking backwards compatibility.
+
+* More information at <http://www.luanti.org/>
+* Additional documentation: <https://docs.luanti.org/>
 
 Introduction
 ------------
@@ -23,7 +26,7 @@ Transferring client-sided mods from the server to the client is planned, but not
 
 If you see a deficiency in the API, feel free to attempt to add the
 functionality in the engine and API. You can send such improvements as
-source code patches on GitHub (https://github.com/minetest/minetest).
+source code patches on GitHub.
 
 Programming in Lua
 ------------------

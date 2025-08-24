@@ -10,19 +10,13 @@
 #include "irrArray.h"
 #include "os.h"
 
-namespace irr
-{
 namespace video
 {
 
 CEGLManager::CEGLManager() :
 		IContextManager(), EglWindow(0), EglDisplay(EGL_NO_DISPLAY),
 		EglSurface(EGL_NO_SURFACE), EglContext(EGL_NO_CONTEXT), EglConfig(0), MajorVersion(0), MinorVersion(0)
-{
-#ifdef _DEBUG
-	setDebugName("CEGLManager");
-#endif
-}
+{}
 
 CEGLManager::~CEGLManager()
 {
@@ -298,7 +292,7 @@ EGLConfig CEGLManager::chooseConfig(EConfigStyle confStyle)
 	return configResult;
 }
 
-irr::s32 CEGLManager::rateConfig(EGLConfig config, EGLint eglOpenGLBIT, bool log)
+s32 CEGLManager::rateConfig(EGLConfig config, EGLint eglOpenGLBIT, bool log)
 {
 	// some values must be there or we ignore the config
 #ifdef EGL_VERSION_1_3
@@ -576,7 +570,6 @@ bool CEGLManager::testEGLError()
 	return true;
 }
 
-}
 }
 
 #endif

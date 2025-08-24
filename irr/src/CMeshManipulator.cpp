@@ -3,14 +3,13 @@
 // For conditions of distribution and use, see copyright notice in irrlicht.h
 
 #include "CMeshManipulator.h"
-#include "ISkinnedMesh.h"
+#include "SkinnedMesh.h"
 #include "SMesh.h"
 #include "CMeshBuffer.h"
-#include "SAnimatedMesh.h"
 #include "os.h"
 
-namespace irr
-{
+#include <cassert>
+
 namespace scene
 {
 
@@ -101,7 +100,7 @@ void CMeshManipulator::recalculateNormals(scene::IMesh *mesh, bool smooth, bool 
 		return;
 
 	if (mesh->getMeshType() == EAMT_SKINNED) {
-		ISkinnedMesh *smesh = (ISkinnedMesh *)mesh;
+		auto *smesh = (SkinnedMesh *)mesh;
 		smesh->resetAnimation();
 	}
 
@@ -110,7 +109,7 @@ void CMeshManipulator::recalculateNormals(scene::IMesh *mesh, bool smooth, bool 
 		recalculateNormals(mesh->getMeshBuffer(b), smooth, angleWeighted);
 
 	if (mesh->getMeshType() == EAMT_SKINNED) {
-		ISkinnedMesh *smesh = (ISkinnedMesh *)mesh;
+		auto *smesh = (SkinnedMesh *)mesh;
 		smesh->refreshJointCache();
 	}
 }
@@ -118,14 +117,14 @@ void CMeshManipulator::recalculateNormals(scene::IMesh *mesh, bool smooth, bool 
 template <typename T>
 void copyVertices(const scene::IVertexBuffer *src, scene::CVertexBuffer<T> *dst)
 {
-	_IRR_DEBUG_BREAK_IF(T::getType() != src->getType());
+	assert(T::getType() == src->getType());
 	auto *data = static_cast<const T*>(src->getData());
 	dst->Data.assign(data, data + src->getCount());
 }
 
 static void copyIndices(const scene::IIndexBuffer *src, scene::SIndexBuffer *dst)
 {
-	_IRR_DEBUG_BREAK_IF(src->getType() != video::EIT_16BIT);
+	assert(src->getType() == video::EIT_16BIT);
 	auto *data = static_cast<const u16*>(src->getData());
 	dst->Data.assign(data, data + src->getCount());
 }
@@ -176,34 +175,4 @@ SMesh *CMeshManipulator::createMeshCopy(scene::IMesh *mesh) const
 	return clone;
 }
 
-//! Returns amount of polygons in mesh.
-s32 CMeshManipulator::getPolyCount(scene::IMesh *mesh) const
-{
-	if (!mesh)
-		return 0;
-
-	s32 trianglecount = 0;
-
-	for (u32 g = 0; g < mesh->getMeshBufferCount(); ++g)
-		trianglecount += mesh->getMeshBuffer(g)->getIndexCount() / 3;
-
-	return trianglecount;
-}
-
-//! Returns amount of polygons in mesh.
-s32 CMeshManipulator::getPolyCount(scene::IAnimatedMesh *mesh) const
-{
-	if (mesh && mesh->getMaxFrameNumber() != 0)
-		return getPolyCount(mesh->getMesh(0));
-
-	return 0;
-}
-
-//! create a new AnimatedMesh and adds the mesh to it
-IAnimatedMesh *CMeshManipulator::createAnimatedMesh(scene::IMesh *mesh, scene::E_ANIMATED_MESH_TYPE type) const
-{
-	return new SAnimatedMesh(mesh, type);
-}
-
 } // end namespace scene
-} // end namespace irr

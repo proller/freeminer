@@ -65,6 +65,9 @@ struct MapEditEvent
 	MapNode n = CONTENT_AIR;
 	std::vector<v3s16> modified_blocks; // Represents a set
 	bool is_private_change = false;
+	// Setting low_priority to true allows the server
+	// to send this change to clients with some delay.
+	bool low_priority = false;
 
 	MapEditEvent() = default;
 
@@ -97,7 +100,7 @@ struct MapEditEvent
 			VoxelArea a;
 			for (v3s16 p : modified_blocks) {
 				v3s16 np1 = p*MAP_BLOCKSIZE;
-				v3s16 np2 = np1 + v3s16(1,1,1)*MAP_BLOCKSIZE - v3s16(1,1,1);
+				v3s16 np2 = np1 + v3s16(MAP_BLOCKSIZE-1);
 				a.addPoint(np1);
 				a.addPoint(np2);
 			}
@@ -200,6 +203,13 @@ public:
 	*/
 	void unloadUnreferencedBlocks(std::vector<v3s16> *unloaded_blocks=NULL);
 
+	// Deletes sectors and their blocks from memory
+	// Takes cache into account
+	// If deleted sector is in sector cache, clears cache
+/*
+	void deleteSectors(const std::vector<v2s16> &list);
+*/
+
 	// For debug printing. Prints "Map: ", "ServerMap: " or "ClientMap: "
 	virtual void PrintInfo(std::ostream &out);
 
@@ -266,8 +276,12 @@ public:
 	using far_blocks_ask_t = concurrent_shared_unordered_map<v3bpos_t,
 			std::pair<block_step_t, uint32_t>>; // client
 	far_blocks_ask_t m_far_blocks_ask;
-	std::array<concurrent_unordered_map<v3bpos_t, MapBlockPtr>, FARMESH_STEP_MAX>
-			far_blocks_storage;
+	struct BlockUsed
+	{
+		MapBlockPtr block{};
+		int32_t last_used{};
+	};
+	std::array<concurrent_unordered_map<v3bpos_t, BlockUsed>, FARMESH_STEP_MAX> far_blocks_storage;
 	//double m_far_blocks_created = 0;
 	float far_blocks_sent_timer{1};
 	v3pos_t far_blocks_last_cam_pos;
@@ -392,25 +406,35 @@ protected:
 		u32 needed_count);
 };
 
-#define VMANIP_BLOCK_DATA_INEXIST     1
-#define VMANIP_BLOCK_CONTAINS_CIGNORE 2
-
 class MMVManip : public VoxelManipulator
 {
 public:
 	MMVManip(Map *map);
 	virtual ~MMVManip() = default;
 
-	virtual void clear()
-	{
-		VoxelManipulator::clear();
-		m_loaded_blocks.clear();
-	}
-
+	/*
+		Loads specified area from map and *adds* it to the area already
+		contained in the VManip.
+	*/
 	void initialEmerge(v3s16 blockpos_min, v3s16 blockpos_max,
 		bool load_if_inexistent = true);
 
-	// This is much faster with big chunks of generated data
+	/**
+		Uses the flags array to determine which blocks the VManip covers,
+		and for which of them we have any data.
+		@warning requires VManip area to be block-aligned
+		@return map of blockpos -> any data?
+	*/
+	std::map<v3s16, bool> getCoveredBlocks() const;
+
+	/**
+		Writes data in VManip back to the map. Blocks without any data in the VManip
+		are skipped.
+		@note VOXELFLAG_NO_DATA is checked per-block, not per-node. So you need
+		to ensure that the relevant parts of m_data are initialized.
+		@param modified_blocks output array of touched blocks (optional)
+		@param overwrite_generated if false, blocks marked as generate in the map are not changed
+	*/
 	void blitBackAll(std::map<v3s16, MapBlock*> * modified_blocks,
 		bool overwrite_generated = true
 		, bool save_generated_block = true) const;
@@ -435,10 +459,4 @@ protected:
 	// may be null
 public:
 	Map *m_map = nullptr;
-protected:
-	/*
-		key = blockpos
-		value = flags describing the block
-	*/
-	std::map<v3s16, u8> m_loaded_blocks;
 };

@@ -9,8 +9,6 @@
 #include "CVertexBuffer.h"
 #include "CIndexBuffer.h"
 
-namespace irr
-{
 namespace scene
 {
 //! Template implementation of the IMeshBuffer interface
@@ -22,9 +20,6 @@ public:
 	CMeshBuffer() :
 			PrimitiveType(EPT_TRIANGLES)
 	{
-#ifdef _DEBUG
-		setDebugName("CMeshBuffer");
-#endif
 		Vertices = new CVertexBuffer<T>();
 		Indices = new SIndexBuffer();
 	}
@@ -90,7 +85,7 @@ public:
 	{
 		if (Vertices->getCount()) {
 			BoundingBox.reset(Vertices->getPosition(0));
-			const irr::u32 vsize = Vertices->getCount();
+			const u32 vsize = Vertices->getCount();
 			for (u32 i = 1; i < vsize; ++i)
 				BoundingBox.addInternalPoint(Vertices->getPosition(i));
 		} else
@@ -137,7 +132,7 @@ public:
 	//! Index buffer
 	SIndexBuffer *Indices;
 	//! Bounding box of this meshbuffer.
-	core::aabbox3d<f32> BoundingBox;
+	core::aabbox3d<f32> BoundingBox{{0, 0, 0}};
 	//! Primitive type used for rendering (triangles, lines, ...)
 	E_PRIMITIVE_TYPE PrimitiveType;
 };
@@ -149,4 +144,3 @@ typedef CMeshBuffer<video::S3DVertex2TCoords> SMeshBufferLightMap;
 //! Meshbuffer with vertices having tangents stored, e.g. for normal mapping
 typedef CMeshBuffer<video::S3DVertexTangents> SMeshBufferTangents;
 } // end namespace scene
-} // end namespace irr

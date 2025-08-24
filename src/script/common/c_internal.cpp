@@ -3,12 +3,14 @@
 // Copyright (C) 2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
 #include "common/c_internal.h"
+#include "cpp_api/s_security.h"
 #include "util/numeric.h"
 #include "debug.h"
 #include "log.h"
 #include "porting.h"
 #include "settings.h"
 #include <algorithm> // std::find
+#include "common/c_types.h" // LuaError
 
 std::string script_get_backtrace(lua_State *L)
 {
@@ -118,8 +120,10 @@ void script_error(lua_State *L, int pcall_result, const char *mod, const char *f
 	lua_Debug ar;
 	if (lua_getstack(L, stack_depth, &ar)) {
 		FATAL_ERROR_IF(!lua_getinfo(L, "Sl", &ar), "lua_getinfo() failed");
-		ret.append(" (at ").append(ar.short_src).append(":"
-			+ std::to_string(ar.currentline) + ")");
+		ret.append(" (at ");
+		// Use the full path for files, only use the shortened source for strings
+		ret.append(ar.source[0] == '@' ? &ar.source[1] : ar.short_src);
+		ret.append(":" + std::to_string(ar.currentline) + ")");
 	} else {
 		ret.append(" (at ?:?)");
 	}
@@ -185,12 +189,9 @@ void log_deprecated(lua_State *L, std::string_view message, int stack_depth, boo
 
 void call_string_dump(lua_State *L, int idx)
 {
-	// Retrieve string.dump from insecure env to avoid it being tampered with
-	lua_rawgeti(L, LUA_REGISTRYINDEX, CUSTOM_RIDX_GLOBALS_BACKUP);
-	if (!lua_isnil(L, -1))
-		lua_getfield(L, -1, "string");
-	else
-		lua_getglobal(L, "string");
+	// Retrieve string.dump from untampered env
+	ScriptApiSecurity::getGlobalsBackup(L);
+	lua_getfield(L, -1, "string");
 	lua_getfield(L, -1, "dump");
 	lua_remove(L, -2); // remove _G
 	lua_remove(L, -2); // remove 'string' table

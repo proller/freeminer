@@ -5,9 +5,7 @@
 #pragma once
 
 #include "IGUIElement.h"
-
-namespace irr
-{
+#include "SColor.h"
 
 namespace video
 {
@@ -253,4 +251,3 @@ public:
 };
 
 } // end namespace gui
-} // end namespace irr

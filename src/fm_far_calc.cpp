@@ -45,6 +45,7 @@ block_step_t getLodStep(const MapDrawControl &draw_control,
 		// 		return i;
 		// }
 
+/*
 		if (range >= cells + draw_control.lodmesh * 64) // cell_size = 4
 			return 8;
 		if (range >= cells + draw_control.lodmesh * 32)
@@ -53,6 +54,8 @@ block_step_t getLodStep(const MapDrawControl &draw_control,
 			return 6;
 		if (range >= cells + draw_control.lodmesh * 8)
 			return 5;
+*/
+
 		if (range >= cells + draw_control.lodmesh * 4)
 			return 4;
 		else if (range >= cells + draw_control.lodmesh * 2)
@@ -234,7 +237,11 @@ block_step_t getFarStepCellSize(const MapDrawControl &draw_control, const v3bpos
 			return {};
 #endif
 */
-		const auto step = int(log(res->size) / log(2)) - cell_size_pow;
+		const auto step1 = int(log(res->size) / log(2));
+		if (cell_size_pow >= step1) {
+			return 0;
+		}
+		const auto step = step1 - cell_size_pow;
 		return step;
 	}
 	return 0; // TODO! fix intersection with cell_size_pow

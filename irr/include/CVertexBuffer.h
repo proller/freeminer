@@ -14,8 +14,6 @@
 #include "../src/os.h"
 #endif
 
-namespace irr
-{
 namespace scene
 {
 //! Template implementation of the IVertexBuffer interface
@@ -24,12 +22,7 @@ class CVertexBuffer final : public IVertexBuffer
 {
 public:
 	//! Default constructor for empty buffer
-	CVertexBuffer()
-	{
-#ifdef _DEBUG
-		setDebugName("CVertexBuffer");
-#endif
-	}
+	CVertexBuffer() {}
 
 	const void *getData() const override
 	{
@@ -133,4 +126,3 @@ typedef CVertexBuffer<video::S3DVertex2TCoords> SVertexBufferLightMap;
 typedef CVertexBuffer<video::S3DVertexTangents> SVertexBufferTangents;
 
 } // end namespace scene
-} // end namespace irr

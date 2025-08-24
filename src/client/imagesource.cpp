@@ -11,6 +11,7 @@
 #include "settings.h"
 #include "texturepaths.h"
 #include "irrlicht_changes/printing.h"
+#include "irr_ptr.h"
 #include "util/base64.h"
 #include "util/numeric.h"
 #include "util/strfnd.h"
@@ -31,8 +32,7 @@ void SourceImageCache::insert(const std::string &name, video::IImage *img, bool 
 {
 	assert(img); // Pre-condition
 	// Remove old image
-	std::map<std::string, video::IImage*>::iterator n;
-	n = m_images.find(name);
+	auto n = m_images.find(name);
 	if (n != m_images.end()){
 		if (n->second)
 			n->second->drop();
@@ -63,8 +63,7 @@ void SourceImageCache::insert(const std::string &name, video::IImage *img, bool 
 
 video::IImage* SourceImageCache::get(const std::string &name)
 {
-	std::map<std::string, video::IImage*>::iterator n;
-	n = m_images.find(name);
+	auto n = m_images.find(name);
 	if (n != m_images.end())
 		return n->second;
 	return nullptr;
@@ -73,8 +72,7 @@ video::IImage* SourceImageCache::get(const std::string &name)
 // Primarily fetches from cache, secondarily tries to read from filesystem
 video::IImage* SourceImageCache::getOrLoad(const std::string &name)
 {
-	std::map<std::string, video::IImage*>::iterator n;
-	n = m_images.find(name);
+	auto n = m_images.find(name);
 	if (n != m_images.end()){
 		n->second->grab(); // Grab for caller
 		return n->second;
@@ -105,19 +103,25 @@ video::IImage* SourceImageCache::getOrLoad(const std::string &name)
 
 /** Draw an image on top of another one with gamma-incorrect alpha compositing
  *
- * This exists because IImage::copyToWithAlpha() doesn't seem to always work.
- *
  * \tparam overlay If enabled, only modify pixels in dst which are fully opaque.
  *   Defaults to false.
  * \param src Top image. This image must have the ECF_A8R8G8B8 color format.
  * \param dst Bottom image.
  *   The top image is drawn onto this base image in-place.
- * \param dst_pos An offset vector to move src before drawing it onto dst
+ * \param src_pos Offset into the Top image
+ * \param dst_pos Offset into the Bottom image
  * \param size Size limit of the copied area
 */
 template<bool overlay = false>
-static void blit_with_alpha(video::IImage *src, video::IImage *dst,
-	v2s32 dst_pos, v2u32 size);
+static void blit_with_alpha2(video::IImage *src, video::IImage *dst,
+	v2s32 src_pos, v2s32 dst_pos, v2u32 size);
+
+template<bool overlay = false>
+static inline void blit_with_alpha(video::IImage *src, video::IImage *dst,
+	v2s32 dst_pos, v2u32 size)
+{
+	blit_with_alpha2<overlay>(src, dst, v2s32(), dst_pos, size);
+}
 
 // Apply a color to an image.  Uses an int (0-255) to calculate the ratio.
 // If the ratio is 255 or -1 and keep_alpha is true, then it multiples the
@@ -166,13 +170,13 @@ static void draw_crack(video::IImage *crack, video::IImage *dst,
 		video::IVideoDriver *driver, u8 tiles = 1);
 
 // Brighten image
-void brighten(video::IImage *image);
+static void brighten(video::IImage *image);
 // Parse a transform name
-u32 parseImageTransform(std::string_view s);
+static u32 parseImageTransform(std::string_view s);
 // Apply transform to image dimension
-core::dimension2d<u32> imageTransformDimension(u32 transform, core::dimension2d<u32> dim);
+static core::dimension2du imageTransformDimension(u32 transform, core::dimension2du dim);
 // Apply transform to image data
-void imageTransform(u32 transform, video::IImage *src, video::IImage *dst);
+static void imageTransform(u32 transform, video::IImage *src, video::IImage *dst);
 
 inline static void applyShadeFactor(video::SColor &color, u32 factor)
 {
@@ -289,7 +293,7 @@ static video::IImage *createInventoryCubeImage(
 	return result;
 }
 
-static std::string unescape_string(const std::string &str, const char esc = '\\')
+static std::string unescape_string(std::string_view str, const char esc = '\\')
 {
 	std::string out;
 	size_t pos = 0, cpos;
@@ -300,7 +304,8 @@ static std::string unescape_string(const std::string &str, const char esc = '\\'
 			out += str.substr(pos);
 			break;
 		}
-		out += str.substr(pos, cpos - pos) + str[cpos + 1];
+		out += str.substr(pos, cpos - pos);
+		out += str[cpos + 1];
 		pos = cpos + 2;
 	}
 	return out;
@@ -312,7 +317,7 @@ static std::string unescape_string(const std::string &str, const char esc = '\\'
 	Ensure no other references to these images are being held, as one may
 	get dropped and switched with a new image.
 */
-void upscaleImagesToMatchLargest(video::IImage *& img1,
+static void upscaleImagesToMatchLargest(video::IImage *& img1,
 	video::IImage *& img2)
 {
 	core::dimension2d<u32> dim1 = img1->getDimension();
@@ -340,7 +345,7 @@ void upscaleImagesToMatchLargest(video::IImage *& img1,
 	}
 }
 
-void blitBaseImage(video::IImage* &src, video::IImage* &dst)
+static void blitBaseImage(video::IImage* &src, video::IImage* &dst)
 {
 	//infostream<<"Blitting "<<part_of_name<<" on base"<<std::endl;
 	upscaleImagesToMatchLargest(dst, src);
@@ -411,50 +416,67 @@ void blit_pixel(video::SColor src_col, video::SColor &dst_col)
 	dst_col.set(dst_a, dst.r, dst.g, dst.b);
 }
 
-}  // namespace
+}  // namespace (anonymous)
+
 template<bool overlay>
-void blit_with_alpha(video::IImage *src, video::IImage *dst, v2s32 dst_pos,
-	v2u32 size)
+static void blit_with_alpha2(video::IImage *src, video::IImage *dst,
+	v2s32 src_pos, v2s32 dst_pos, v2u32 size)
 {
 	if (dst->getColorFormat() != video::ECF_A8R8G8B8)
 		throw BaseException("blit_with_alpha() supports only ECF_A8R8G8B8 "
 			"destination images.");
 
-	core::dimension2d<u32> src_dim = src->getDimension();
-	core::dimension2d<u32> dst_dim = dst->getDimension();
-	bool drop_src = false;
+	if (size.X == 0 || size.Y == 0)
+		return;
+
+	const v2u32 src_dim = src->getDimension();
+	const v2u32 dst_dim = dst->getDimension();
+
+	// Convert source image if needed
+	irr_ptr<video::IImage> converted;
 	if (src->getColorFormat() != video::ECF_A8R8G8B8) {
-		video::IVideoDriver *driver = RenderingEngine::get_video_driver();
-		video::IImage *src_converted = driver->createImage(video::ECF_A8R8G8B8,
-			src_dim);
-		if (!src_converted)
-			throw BaseException("blit_with_alpha() failed to convert the "
-				"source image to ECF_A8R8G8B8.");
-		src->copyTo(src_converted);
-		src = src_converted;
-		drop_src = true;
+		auto *driver = RenderingEngine::get_video_driver();
+		converted.reset(driver->createImage(video::ECF_A8R8G8B8, src_dim));
+		sanity_check(converted);
+		src->copyTo(converted.get());
+		src = converted.get();
 	}
+
+	// A negative offset is the same as shifting the other position.
+	// equivalent: if (src_pos < 0) { dst_pos += -src_pos; src_pos = 0; }
+	dst_pos -= componentwise_min(src_pos, {0,0});
+	src_pos = componentwise_max(src_pos, {0,0});
+	// and in reverse
+	src_pos -= componentwise_min(dst_pos, {0,0});
+	dst_pos = componentwise_max(dst_pos, {0,0});
+
+	assert(src_pos.X >= 0 && src_pos.Y >= 0);
+	assert(dst_pos.X >= 0 && dst_pos.Y >= 0);
+	const v2u32 src_pos_u = v2u32::from(src_pos);
+	const v2u32 dst_pos_u = v2u32::from(dst_pos);
+
+	// Out of bounds?
+	if (src_pos_u.X >= src_dim.X || src_pos_u.Y >= src_dim.Y)
+		return;
+	if (dst_pos_u.X >= dst_dim.X || dst_pos_u.Y >= dst_dim.Y)
+		return;
+
+	// Truncate blit area as needed
+	size = componentwise_min(size,
+		componentwise_min(src_dim - src_pos_u, dst_dim - dst_pos_u));
+
+	// Do it!
 	video::SColor *pixels_src =
 		reinterpret_cast<video::SColor *>(src->getData());
 	video::SColor *pixels_dst =
 		reinterpret_cast<video::SColor *>(dst->getData());
-	// Limit y and x to the overlapping ranges
-	// s.t. the positions are all in bounds after offsetting.
-	u32 x_start = (u32)std::max(0, -dst_pos.X);
-	u32 y_start = (u32)std::max(0, -dst_pos.Y);
-	u32 x_end = (u32)std::min<s64>({size.X, src_dim.Width,
-		dst_dim.Width - (s64)dst_pos.X});
-	u32 y_end = (u32)std::min<s64>({size.Y, src_dim.Height,
-		dst_dim.Height - (s64)dst_pos.Y});
-	for (u32 y0 = y_start; y0 < y_end; ++y0) {
-		size_t i_src = y0 * src_dim.Width + x_start;
-		size_t i_dst = (dst_pos.Y + y0) * dst_dim.Width + dst_pos.X + x_start;
-		for (u32 x0 = x_start; x0 < x_end; ++x0) {
+	for (u32 y0 = 0; y0 < size.Y; ++y0) {
+		size_t i_src = (src_pos_u.Y + y0) * src_dim.X + src_pos_u.X;
+		size_t i_dst = (dst_pos_u.Y + y0) * dst_dim.X + dst_pos_u.X;
+		for (u32 x0 = 0; x0 < size.X; ++x0) {
 			blit_pixel<overlay>(pixels_src[i_src++], pixels_dst[i_dst++]);
 		}
 	}
-	if (drop_src)
-		src->drop();
 }
 
 /*
@@ -566,7 +588,7 @@ static void apply_hue_saturation(video::IImage *dst, v2u32 dst_pos, v2u32 size,
 		for (u32 x = dst_pos.X; x < dst_pos.X + size.X; x++) {
 
 			if (colorize) {
-				f32 lum = dst->getPixel(x, y).getLuminance() / 255.0f;
+				f32 lum = dst->getPixel(x, y).getBrightness() / 255.0f;
 
 				if (norm_l < 0) {
 					lum *= norm_l + 1.0f;
@@ -602,7 +624,7 @@ static void apply_hue_saturation(video::IImage *dst, v2u32 dst_pos, v2u32 size,
 			}
 
 			// Apply the specified HSL adjustments
-			hsl.Hue = fmod(hsl.Hue + hue, 360);
+			hsl.Hue = fmodf(hsl.Hue + hue, 360);
 			if (hsl.Hue < 0)
 				hsl.Hue += 360;
 
@@ -633,19 +655,19 @@ static void apply_overlay(video::IImage *blend, video::IImage *dst,
 		video::SColor blend_c =
 			blend_layer->getPixel(x + blend_layer_pos.X, y + blend_layer_pos.Y);
 		video::SColor base_c = base_layer->getPixel(base_x, base_y);
-		double blend_r = blend_c.getRed()   / 255.0;
-		double blend_g = blend_c.getGreen() / 255.0;
-		double blend_b = blend_c.getBlue()  / 255.0;
-		double base_r = base_c.getRed()   / 255.0;
-		double base_g = base_c.getGreen() / 255.0;
-		double base_b = base_c.getBlue()  / 255.0;
+		f32 blend_r = blend_c.getRed()   / 255.0f;
+		f32 blend_g = blend_c.getGreen() / 255.0f;
+		f32 blend_b = blend_c.getBlue()  / 255.0f;
+		f32 base_r = base_c.getRed()   / 255.0f;
+		f32 base_g = base_c.getGreen() / 255.0f;
+		f32 base_b = base_c.getBlue()  / 255.0f;
 
 		base_c.set(
 			base_c.getAlpha(),
 			// Do a Multiply blend if less that 0.5, otherwise do a Screen blend
-			(u32)((base_r < 0.5 ? 2 * base_r * blend_r : 1 - 2 * (1 - base_r) * (1 - blend_r)) * 255),
-			(u32)((base_g < 0.5 ? 2 * base_g * blend_g : 1 - 2 * (1 - base_g) * (1 - blend_g)) * 255),
-			(u32)((base_b < 0.5 ? 2 * base_b * blend_b : 1 - 2 * (1 - base_b) * (1 - blend_b)) * 255)
+			(u32)((base_r < 0.5f ? 2 * base_r * blend_r : 1 - 2 * (1 - base_r) * (1 - blend_r)) * 255),
+			(u32)((base_g < 0.5f ? 2 * base_g * blend_g : 1 - 2 * (1 - base_g) * (1 - blend_g)) * 255),
+			(u32)((base_b < 0.5f ? 2 * base_b * blend_b : 1 - 2 * (1 - base_b) * (1 - blend_b)) * 255)
 		);
 		dst->setPixel(base_x, base_y, base_c);
 	}
@@ -660,38 +682,38 @@ static void apply_overlay(video::IImage *blend, video::IImage *dst,
 static void apply_brightness_contrast(video::IImage *dst, v2u32 dst_pos, v2u32 size,
 	s32 brightness, s32 contrast)
 {
-	video::SColor dst_c;
 	// Only allow normalized contrast to get as high as 127/128 to avoid infinite slope.
 	// (we could technically allow -128/128 here as that would just result in 0 slope)
-	double norm_c = core::clamp(contrast,   -127, 127) / 128.0;
-	double norm_b = core::clamp(brightness, -127, 127) / 127.0;
+	f32 norm_c = core::clamp(contrast,   -127, 127) / 128.0f;
+	f32 norm_b = core::clamp(brightness, -127, 127) / 127.0f;
 
 	// Scale brightness so its range is -127.5 to 127.5, otherwise brightness
 	// adjustments will outputs values from 0.5 to 254.5 instead of 0 to 255.
-	double scaled_b = brightness * 127.5 / 127;
+	f32 scaled_b = brightness * 127.5f / 127;
 
 	// Calculate a contrast slope such that that no colors will get clamped due
 	// to the brightness setting.
 	// This allows the texture modifier to used as a brightness modifier without
 	// the user having to calculate a contrast to avoid clipping at that brightness.
-	double slope = 1 - fabs(norm_b);
+	f32 slope = 1 - std::fabs(norm_b);
 
 	// Apply the user's contrast adjustment to the calculated slope, such that
 	// -127 will make it near-vertical and +127 will make it horizontal
-	double angle = atan(slope);
+	f32 angle = std::atan(slope);
 	angle += norm_c <= 0
 		? norm_c * angle // allow contrast slope to be lowered to 0
 		: norm_c * (M_PI_2 - angle); // allow contrast slope to be raised almost vert.
-	slope = tan(angle);
+	slope = std::tan(angle);
 
-	double c = slope <= 1
-		? -slope * 127.5 + 127.5 + scaled_b    // shift up/down when slope is horiz.
-		: -slope * (127.5 - scaled_b) + 127.5; // shift left/right when slope is vert.
+	f32 c = slope <= 1
+		? -slope * 127.5f + 127.5f + scaled_b    // shift up/down when slope is horiz.
+		: -slope * (127.5f - scaled_b) + 127.5f; // shift left/right when slope is vert.
 
 	// add 0.5 to c so that when the final result is cast to int, it is effectively
 	// rounded rather than trunc'd.
-	c += 0.5;
+	c += 0.5f;
 
+	video::SColor dst_c;
 	for (u32 y = dst_pos.Y; y < dst_pos.Y + size.Y; y++)
 	for (u32 x = dst_pos.X; x < dst_pos.X + size.X; x++) {
 		dst_c = dst->getPixel(x, y);
@@ -726,7 +748,7 @@ static void apply_mask(video::IImage *mask, video::IImage *dst,
 	}
 }
 
-video::IImage *create_crack_image(video::IImage *crack, s32 frame_index,
+static video::IImage *create_crack_image(video::IImage *crack, s32 frame_index,
 		core::dimension2d<u32> size, u8 tiles, video::IVideoDriver *driver)
 {
 	core::dimension2d<u32> strip_size = crack->getDimension();
@@ -804,9 +826,9 @@ static void draw_crack(video::IImage *crack, video::IImage *dst,
 	crack_scaled->drop();
 }
 
-void brighten(video::IImage *image)
+static void brighten(video::IImage *image)
 {
-	if (image == NULL)
+	if (!image)
 		return;
 
 	core::dimension2d<u32> dim = image->getDimension();
@@ -815,14 +837,14 @@ void brighten(video::IImage *image)
 	for (u32 x=0; x<dim.Width; x++)
 	{
 		video::SColor c = image->getPixel(x,y);
-		c.setRed(0.5 * 255 + 0.5 * (float)c.getRed());
-		c.setGreen(0.5 * 255 + 0.5 * (float)c.getGreen());
-		c.setBlue(0.5 * 255 + 0.5 * (float)c.getBlue());
+		c.setRed(127.5f + 0.5f * c.getRed());
+		c.setGreen(127.5f + 0.5f * c.getGreen());
+		c.setBlue(127.5f + 0.5f * c.getBlue());
 		image->setPixel(x,y,c);
 	}
 }
 
-u32 parseImageTransform(std::string_view s)
+static u32 parseImageTransform(std::string_view s)
 {
 	int total_transform = 0;
 
@@ -872,17 +894,17 @@ u32 parseImageTransform(std::string_view s)
 	return total_transform;
 }
 
-core::dimension2d<u32> imageTransformDimension(u32 transform, core::dimension2d<u32> dim)
+static core::dimension2du imageTransformDimension(u32 transform, core::dimension2du dim)
 {
 	if (transform % 2 == 0)
 		return dim;
 
-	return core::dimension2d<u32>(dim.Height, dim.Width);
+	return core::dimension2du(dim.Height, dim.Width);
 }
 
-void imageTransform(u32 transform, video::IImage *src, video::IImage *dst)
+static void imageTransform(u32 transform, video::IImage *src, video::IImage *dst)
 {
-	if (src == NULL || dst == NULL)
+	if (!src || !dst)
 		return;
 
 	core::dimension2d<u32> dstdim = dst->getDimension();
@@ -925,48 +947,6 @@ void imageTransform(u32 transform, video::IImage *src, video::IImage *dst)
 	}
 }
 
-namespace {
-	// For more colorspace transformations, see for example
-	// https://github.com/tobspr/GLSL-Color-Spaces/blob/master/ColorSpaces.inc.glsl
-
-	inline float linear_to_srgb_component(float v)
-	{
-		if (v > 0.0031308f)
-			return 1.055f * powf(v, 1.0f / 2.4f) - 0.055f;
-		return 12.92f * v;
-	}
-	inline float srgb_to_linear_component(float v)
-	{
-		if (v > 0.04045f)
-			return powf((v + 0.055f) / 1.055f, 2.4f);
-		return v / 12.92f;
-	}
-
-	v3f srgb_to_linear(const video::SColor col_srgb)
-	{
-		v3f col(col_srgb.getRed(), col_srgb.getGreen(), col_srgb.getBlue());
-		col /= 255.0f;
-		col.X = srgb_to_linear_component(col.X);
-		col.Y = srgb_to_linear_component(col.Y);
-		col.Z = srgb_to_linear_component(col.Z);
-		return col;
-	}
-
-	video::SColor linear_to_srgb(const v3f col_linear)
-	{
-		v3f col;
-		col.X = linear_to_srgb_component(col_linear.X);
-		col.Y = linear_to_srgb_component(col_linear.Y);
-		col.Z = linear_to_srgb_component(col_linear.Z);
-		col *= 255.0f;
-		col.X = core::clamp<float>(col.X, 0.0f, 255.0f);
-		col.Y = core::clamp<float>(col.Y, 0.0f, 255.0f);
-		col.Z = core::clamp<float>(col.Z, 0.0f, 255.0f);
-		return video::SColor(0xff, myround(col.X), myround(col.Y),
-			myround(col.Z));
-	}
-}
-
 
 ///////////////////////////
 // ImageSource Functions //
@@ -992,9 +972,10 @@ namespace {
 
 #define CHECK_DIM(w, h) \
 	do { \
-		if ((w) <= 0 || (h) <= 0 || (w) >= 0xffff || (h) >= 0xffff) { \
-			COMPLAIN_INVALID("width or height"); \
-		} \
+		if ((w) <= 0 || (w) > MAX_IMAGE_DIMENSION) \
+			COMPLAIN_INVALID("width"); \
+		if ((h) <= 0 || (h) > MAX_IMAGE_DIMENSION) \
+			COMPLAIN_INVALID("height"); \
 	} while(0)
 
 bool ImageSource::generateImagePart(std::string_view part_of_name,
@@ -1017,17 +998,11 @@ bool ImageSource::generateImagePart(std::string_view part_of_name,
 		std::string part_s(part_of_name);
 		source_image_names.insert(part_s);
 		video::IImage *image = m_sourcecache.getOrLoad(part_s);
+
 		if (!image) {
 			// Do not create the dummy texture
 			if (part_of_name.empty())
 				return true;
-
-			// Do not create normalmap dummies
-			if (str_ends_with(part_of_name, "_normal.png")) {
-				warningstream << "generateImagePart(): Could not load normal map \""
-					<< part_of_name << "\"" << std::endl;
-				return true;
-			}
 
 			errorstream << "generateImagePart(): Could not load image \""
 				<< part_of_name << "\" while building texture; "
@@ -1040,16 +1015,15 @@ bool ImageSource::generateImagePart(std::string_view part_of_name,
 					myrand()%256,myrand()%256));
 		}
 
-		// If base image is NULL, load as base.
-		if (baseimg == NULL)
+		// load as base or blit
+		if (!baseimg)
 		{
 			/*
 				Copy it this way to get an alpha channel.
 				Otherwise images with alpha cannot be blitted on
 				images that don't have alpha in the original file.
 			*/
-			core::dimension2d<u32> dim = image->getDimension();
-			baseimg = driver->createImage(video::ECF_A8R8G8B8, dim);
+			baseimg = driver->createImage(video::ECF_A8R8G8B8, image->getDimension());
 			image->copyTo(baseimg);
 		}
 		// Else blit on base.
@@ -1329,7 +1303,7 @@ bool ImageSource::generateImagePart(std::string_view part_of_name,
 			video::IImage *img_left = generateImage(imagename_left, source_image_names);
 			video::IImage *img_right = generateImage(imagename_right, source_image_names);
 
-			if (img_top == NULL || img_left == NULL || img_right == NULL) {
+			if (!img_top || !img_left || !img_right) {
 				errorstream << "generateImagePart(): Failed to create textures"
 						<< " for inventorycube \"" << part_of_name << "\""
 						<< std::endl;
@@ -1362,16 +1336,11 @@ bool ImageSource::generateImagePart(std::string_view part_of_name,
 				if (!baseimg)
 					baseimg = driver->createImage(video::ECF_A8R8G8B8, dim);
 
-				core::position2d<s32> pos_base(0, 0);
-				core::position2d<s32> clippos(0, 0);
+				v2s32 clippos(0, 0);
 				clippos.Y = dim.Height * (100-percent) / 100;
-				core::dimension2d<u32> clipdim = dim;
+				core::dimension2du clipdim = dim;
 				clipdim.Height = clipdim.Height * percent / 100 + 1;
-				core::rect<s32> cliprect(clippos, clipdim);
-				img->copyToWithAlpha(baseimg, pos_base,
-						core::rect<s32>(v2s32(0,0), dim),
-						video::SColor(255,255,255,255),
-						&cliprect);
+				blit_with_alpha2(img, baseimg, clippos, clippos, clipdim);
 				img->drop();
 			}
 		}
@@ -1400,20 +1369,17 @@ bool ImageSource::generateImagePart(std::string_view part_of_name,
 
 			v2u32 frame_size = baseimg->getDimension();
 			frame_size.Y /= frame_count;
+			if (frame_size.Y == 0)
+				frame_size.Y = 1;
 
 			video::IImage *img = driver->createImage(video::ECF_A8R8G8B8,
 					frame_size);
 
-			// Fill target image with transparency
-			img->fill(video::SColor(0,0,0,0));
-
 			core::dimension2d<u32> dim = frame_size;
 			core::position2d<s32> pos_dst(0, 0);
 			core::position2d<s32> pos_src(0, frame_index * frame_size.Y);
-			baseimg->copyToWithAlpha(img, pos_dst,
-					core::rect<s32>(pos_src, dim),
-					video::SColor(255,255,255,255),
-					NULL);
+			baseimg->copyTo(img, pos_dst,
+					core::rect<s32>(pos_src, dim), nullptr);
 			// Replace baseimg
 			baseimg->drop();
 			baseimg = img;
@@ -1511,28 +1477,43 @@ bool ImageSource::generateImagePart(std::string_view part_of_name,
 
 			CHECK_BASEIMG();
 
-			// Apply the "clean transparent" filter, if needed
+			/* Apply the "clean transparent" filter, if necessary
+			 * This is needed since filtering will sample parts of the image
+			 * that are transparent and PNG optimizers often discard the color
+			 * information in those parts. */
 			if (m_setting_mipmap || m_setting_bilinear_filter ||
-				m_setting_trilinear_filter || m_setting_anisotropic_filter)
-				imageCleanTransparent(baseimg, 127);
+				m_setting_trilinear_filter || m_setting_anisotropic_filter) {
+				/* Note: in theory we should pass either 0 or 127 depending on
+				 * if the texture is used with an ALPHA or ALPHA_REF material,
+				 * however we don't have this information here.
+				 * It doesn't matter in practice. */
+				imageCleanTransparent(baseimg, 0);
+			}
 
 			/* Upscale textures to user's requested minimum size.  This is a trick to make
 			 * filters look as good on low-res textures as on high-res ones, by making
-			 * low-res textures BECOME high-res ones.  This is helpful for worlds that
+			 * low-res textures BECOME high-res ones. This is helpful for worlds that
 			 * mix high- and low-res textures, or for mods with least-common-denominator
 			 * textures that don't have the resources to offer high-res alternatives.
+			 *
+			 * Q: why not just enable/disable filtering depending on texture size?
+			 * A: large texture resolutions apparently allow getting rid of the Moire
+			 *    effect way better than anisotropic filtering alone could.
+			 *    see <https://github.com/luanti-org/luanti/issues/15604> and related
+			 *    linked discussions.
 			 */
 			const bool filter = m_setting_trilinear_filter || m_setting_bilinear_filter;
-			const s32 scaleto = filter ? g_settings->getU16("texture_min_size") : 1;
-			if (scaleto > 1) {
-				const core::dimension2d<u32> dim = baseimg->getDimension();
+			if (filter) {
+				const f32 scaleto = rangelim(g_settings->getU16("texture_min_size"),
+					TEXTURE_FILTER_MIN_SIZE, 16384);
 
-				/* Calculate scaling needed to make the shortest texture dimension
-				 * equal to the target minimum.  If e.g. this is a vertical frames
-				 * animation, the short dimension will be the real size.
+				/* Calculate integer-scaling needed to make the shortest texture
+				 * dimension equal to the target minimum. If this is e.g. a
+				 * vertical frames animation, the short dimension will be the real size.
 				 */
-				u32 xscale = scaleto / dim.Width;
-				u32 yscale = scaleto / dim.Height;
+				const auto &dim = baseimg->getDimension();
+				u32 xscale = std::ceil(scaleto / dim.Width);
+				u32 yscale = std::ceil(scaleto / dim.Height);
 				const s32 scale = std::max(xscale, yscale);
 
 				// Never downscale; only scale up by 2x or more.
@@ -1540,11 +1521,13 @@ bool ImageSource::generateImagePart(std::string_view part_of_name,
 					u32 w = scale * dim.Width;
 					u32 h = scale * dim.Height;
 					const core::dimension2d<u32> newdim(w, h);
-					video::IImage *newimg = driver->createImage(
-							baseimg->getColorFormat(), newdim);
-					baseimg->copyToScaling(newimg);
-					baseimg->drop();
-					baseimg = newimg;
+					if (w <= MAX_IMAGE_DIMENSION && h <= MAX_IMAGE_DIMENSION) {
+						video::IImage *newimg = driver->createImage(
+								baseimg->getColorFormat(), newdim);
+						baseimg->copyToScaling(newimg);
+						baseimg->drop();
+						baseimg = newimg;
+					}
 				}
 			}
 		}
@@ -1656,12 +1639,10 @@ bool ImageSource::generateImagePart(std::string_view part_of_name,
 
 			video::IImage *img = driver->createImage(
 					video::ECF_A8R8G8B8, tile_dim);
-			img->fill(video::SColor(0,0,0,0));
 
 			v2u32 vdim(tile_dim);
 			core::rect<s32> rect(v2s32(x0 * vdim.X, y0 * vdim.Y), tile_dim);
-			baseimg->copyToWithAlpha(img, v2s32(0), rect,
-					video::SColor(255,255,255,255), NULL);
+			baseimg->copyTo(img, v2s32(0), rect, nullptr);
 
 			// Replace baseimg
 			baseimg->drop();
@@ -1697,14 +1678,17 @@ bool ImageSource::generateImagePart(std::string_view part_of_name,
 				return false;
 			}
 
+			// blit or use as base
 			if (baseimg) {
 				blitBaseImage(pngimg, baseimg);
-			} else {
-				core::dimension2d<u32> dim = pngimg->getDimension();
-				baseimg = driver->createImage(video::ECF_A8R8G8B8, dim);
+				pngimg->drop();
+			} else if (pngimg->getColorFormat() != video::ECF_A8R8G8B8) {
+				baseimg = driver->createImage(video::ECF_A8R8G8B8, pngimg->getDimension());
 				pngimg->copyTo(baseimg);
+				pngimg->drop();
+			} else {
+				baseimg = pngimg;
 			}
-			pngimg->drop();
 		}
 		/*
 			[hsl:hue:saturation:lightness
@@ -1923,7 +1907,7 @@ video::IImage* ImageSource::generateImage(std::string_view name,
 	}
 
 	// If no resulting image, print a warning
-	if (baseimg == NULL) {
+	if (!baseimg) {
 		errorstream << "generateImage(): baseimg is NULL (attempted to"
 				" create texture \"" << name << "\")" << std::endl;
 	} else if (baseimg->getDimension().Width == 0 ||
@@ -1937,32 +1921,7 @@ video::IImage* ImageSource::generateImage(std::string_view name,
 	return baseimg;
 }
 
-video::SColor ImageSource::getImageAverageColor(const video::IImage &image)
+void ImageSource::insertSourceImage(const std::string &name, video::IImage *img, bool prefer_local)
 {
-	video::SColor c(0, 0, 0, 0);
-	u32 total = 0;
-	v3f col_acc(0, 0, 0);
-	core::dimension2d<u32> dim = image.getDimension();
-	u16 step = 1;
-	if (dim.Width > 16)
-		step = dim.Width / 16;
-	for (u16 x = 0; x < dim.Width; x += step) {
-		for (u16 y = 0; y < dim.Width; y += step) {
-			c = image.getPixel(x,y);
-			if (c.getAlpha() > 0) {
-				total++;
-				col_acc += srgb_to_linear(c);
-			}
-		}
-	}
-	if (total > 0) {
-		col_acc /= total;
-		c = linear_to_srgb(col_acc);
-	}
-	c.setAlpha(255);
-	return c;
-}
-
-void ImageSource::insertSourceImage(const std::string &name, video::IImage *img, bool prefer_local) {
 	m_sourcecache.insert(name, img, prefer_local);
 }

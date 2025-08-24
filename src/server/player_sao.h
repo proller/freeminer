@@ -89,6 +89,7 @@ public:
 	void addPos(const v3f &added_pos) override;
 	void moveTo(v3f pos, bool continuous) override;
 	void setPlayerYaw(const float yaw);
+	std::string getGUID() const override { return m_player_name; }
 	// Data should not be sent at player initialization
 	void setPlayerYawAndSend(const float yaw);
 	void setLookPitch(const float pitch);
@@ -169,11 +170,13 @@ public:
 
 	// Other
 
-	void updatePrivileges(const std::set<std::string> &privs, bool is_singleplayer)
+	void updatePrivileges(const std::set<std::string> &privs)
 	{
 		m_privs = privs;
-		m_is_singleplayer = is_singleplayer;
 	}
+
+	inline void setNewPlayer() { m_is_new_player = true; }
+	inline bool isNewPlayer()  { return m_is_new_player; }
 
 	bool getCollisionBox(aabb3f *toset) const override;
 	bool getSelectionBox(aabb3f *toset) const override;
@@ -193,6 +196,8 @@ private:
 	std::string generateUpdatePhysicsOverrideCommand() const;
 
 	RemotePlayer *m_player = nullptr;
+	// Extra variable because during shutdown m_player is unavailable, but we still need to know.
+	std::string m_player_name; ///< used as GUID
 	session_t m_peer_id_initial = 0; ///< only used to initialize RemotePlayer
 
 	// Cheat prevention
@@ -216,7 +221,8 @@ public:
 
 	// Cached privileges for enforcement
 	std::set<std::string> m_privs;
-	bool m_is_singleplayer;
+	const bool m_is_singleplayer;
+	bool m_is_new_player = false;
 
 	std::atomic_uint16_t m_breath = PLAYER_MAX_BREATH_DEFAULT;
 	std::atomic<f32> m_pitch {0.0f};

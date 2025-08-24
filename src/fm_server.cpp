@@ -40,6 +40,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mapblock.h"
 #include "mapnode.h"
 #include "network/fm_networkprotocol.h"
+#include "network/networkpacket.h"
 #include "profiler.h"
 #include "server.h"
 #include "debug/stacktrace.h"
@@ -714,12 +715,15 @@ void Server::SendBlockFm(session_t peer_id, MapBlockPtr block, u8 ver,
 
 uint32_t Server::SendFarBlocks(float dtime)
 {
+	int32_t uptime = m_uptime_counter->get();
 	ScopeProfiler sp(g_profiler, "Server: Far blocks send");
 	uint32_t sent{};
+	const auto lock = m_clients.getClientList().lock_shared_rec();
 	for (const auto &client : m_clients.getClientList()) {
-		if (!client.second)
+		const auto c = client.second;
+		if (!c)
 			continue;
-		sent += client.second->SendFarBlocks();
+		sent += c->SendFarBlocks(uptime);
 	}
 	return sent;
 }
@@ -751,7 +755,7 @@ void *WorldMergeThread::run()
 			.ndef{m_server->getNodeDefManager()},
 			.smap{m_server->getEnv().m_map.get()},
 			.far_dbases{m_server->far_dbases},
-			.dbase{m_server->getEnv().m_map->m_db.dbase},
+			.dbase{m_server->getEnv().m_map->m_db.dbase, [](MapDatabase*){}},
 			.save_dir{m_server->getEnv().m_map->m_savedir},
 	};
 
@@ -816,6 +820,7 @@ void *WorldMergeThread::run()
 
 void Server::SetBlocksNotSent()
 {
+#if 0
 	std::vector<session_t> clients = m_clients.getClientIDs();
 	ClientInterface::AutoLock clientlock(m_clients);
 	// Set the modified blocks unsent for all the clients
@@ -823,4 +828,5 @@ void Server::SetBlocksNotSent()
 		if (RemoteClient *client = m_clients.lockedGetClientNoEx(client_id))
 			client->SetBlocksNotSent(/*block*/);
 	}
+#endif
 }

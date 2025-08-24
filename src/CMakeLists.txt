@@ -203,96 +203,7 @@ if(ENABLE_POSTGRESQL)
 	endif()
 endif(ENABLE_POSTGRESQL)
 
-option(ENABLE_LEVELDB "Enable LevelDB backend" TRUE)
-set(USE_LEVELDB FALSE)
-
-if(ENABLE_LEVELDB)
-
-	if (LIBCXX_LIBRARY)
-		set(SYSTEM_LEVELDB 0 CACHE BOOL "")
-	endif()
-
-   if (SYSTEM_LEVELDB)
-    if(USE_STATIC_LIBRARIES AND LEVELDB_STATIC)
-	   list(REVERSE CMAKE_FIND_LIBRARY_SUFFIXES)
-	endif()
-
-	find_library(LEVELDB_LIBRARY NAMES leveldb libleveldb)
-	find_path(LEVELDB_INCLUDE_DIR db.h PATH_SUFFIXES leveldb)
-	find_library(SNAPPY_LIBRARY snappy)
-	find_path(SNAPPY_INCLUDE_DIR snappy.h PATH_SUFFIXES snappy)
-
-	if(USE_STATIC_LIBRARIES AND LEVELDB_STATIC)
-		list(REVERSE CMAKE_FIND_LIBRARY_SUFFIXES)
-	endif()
-
-   endif()
-
-	message (STATUS "Snappy library: ${SNAPPY_LIBRARY} : ${SNAPPY_INCLUDE_DIR}")
-	message (STATUS "Leveldb library: ${LEVELDB_LIBRARY} : ${LEVELDB_INCLUDE_DIR}")
-
-	if ((NOT SNAPPY_INCLUDE_DIR OR NOT SNAPPY_LIBRARY) AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/snappy/snappy.h)
-		set(SNAPPY_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/snappy)
-		# Snappy have no cmake by default,
-		# git clone --recursive --depth 1 https://github.com/google/snappy src/external/snappy
-		# But we can collect something from pulls
-		# wget -O src/external/snappy/CMakeLists.txt https://raw.githubusercontent.com/adasworks/snappy-cmake/master/CMakeLists.txt
-		set(SNAPPY_BUILD_TESTS 0 CACHE INTERNAL "")
-		set(SNAPPY_BUILD_BENCHMARKS 0 CACHE INTERNAL "")
-		set(SNAPPY_INSTALL 0 CACHE INTERNAL "")
-		set(HAVE_TCMALLOC 0 CACHE INTERNAL "")
-
-		add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/snappy)
-		set(SNAPPY_LIBRARY snappy)
-		set(HAVE_SNAPPY 1 CACHE INTERNAL "")
-		message(STATUS "Using bundled snappy ${SNAPPY_LIBRARY} : ${SNAPPY_INCLUDE_DIR}")
-	endif()
-
-	if ((NOT LEVELDB_INCLUDE_DIR OR NOT LEVELDB_LIBRARY) AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/leveldb/include/leveldb/db.h)
-		set(LEVELDB_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/leveldb/include)
-		# bad try direct make build 
-		#find_path(LEVELDB_MAKEFILE_DIR Makefile ${PROJECT_SOURCE_DIR}/external/leveldb NO_DEFAULT_PATH)
-		#if (LEVELDB_MAKEFILE_DIR)
-		#	execute_process(COMMAND "make -f ${LEVELDB_MAKEFILE_DIR}/Makefile" WORKING_DIRECTORY LEVELDB_MAKEFILE_DIR OUTPUT_VARIABLE LMKE ERROR_VARIABLE LMKE)
-		#message(STATUS "leveldb mk=${LMKE}")
-		#endif()
-		#
-		# good cmake try
-		# Leveldb have no cmake by default,
-		# git clone --recursive --depth 1 https://github.com/google/leveldb src/external/leveldb
-		# But we can collect something from pulls
-		# wget -O src/external/leveldb/CMakeLists.txt https://raw.githubusercontent.com/proller/leveldb/patch-2/CMakeLists.txt
-		# wget -O src/external/leveldb/leveldbConfig.cmake.in https://raw.githubusercontent.com/tamaskenez/leveldb-cmake-win/native_windows_port_1_18/leveldbConfig.cmake.in
-		set(LEVELDB_BUILD_TESTS 0 CACHE INTERNAL "")
-		set(LEVELDB_BUILD_BENCHMARKS 0 CACHE INTERNAL "")
-		set(LEVELDB_INSTALL 0 CACHE INTERNAL "")
-		set(HAVE_CLANG_THREAD_SAFETY 0 CACHE INTERNAL "") # -Werror remove
-      	if(EMSCRIPTEN) # BUG?
-		    include_directories(${ZSTD_INCLUDE_DIR})
-        endif()
-		add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/leveldb)
-		set(LEVELDB_LIBRARY leveldb)
-		message(STATUS "Using bundled leveldb ${LEVELDB_INCLUDE_DIR} ${LEVELDB_LIBRARY}")
-	endif()
-
-	if(SNAPPY_LIBRARY AND SNAPPY_INCLUDE_DIR)
-		include_directories(SYSTEM ${SNAPPY_INCLUDE_DIR})
-	endif()
-
-	if(LEVELDB_LIBRARY AND LEVELDB_INCLUDE_DIR)
-		set(USE_LEVELDB TRUE)
-		message(STATUS "LevelDB backend enabled. ${LEVELDB_LIBRARY} : ${LEVELDB_INCLUDE_DIR}")
-		include_directories(SYSTEM ${LEVELDB_INCLUDE_DIR})
-	elseif (NOT FORCE_LEVELDB)
-		message(WARNING "LevelDB not found! Player data cannot be saved in singleplayer or server")
-	endif()
-endif(ENABLE_LEVELDB)
-
-# this is needed because VS builds install LevelDB via nuget
-if(FORCE_LEVELDB)
-	set(USE_LEVELDB 1)
-endif()
-
+include(freeminer_leveldb)
 
 OPTION(ENABLE_REDIS "Enable Redis backend" TRUE)
 set(USE_REDIS FALSE)
@@ -377,6 +288,19 @@ if(ENABLE_SPATIAL)
 	endif(SPATIAL_LIBRARY AND SPATIAL_INCLUDE_DIR)
 endif(ENABLE_SPATIAL)
 
+option(ENABLE_OPENSSL "Use OpenSSL's libcrypto for faster SHA implementations" TRUE)
+set(USE_OPENSSL FALSE)
+
+if(ENABLE_OPENSSL)
+	find_package(OpenSSL 3.0)
+	if(OPENSSL_FOUND)
+		set(USE_OPENSSL TRUE)
+		message(STATUS "OpenSSL's libcrypto SHA enabled.")
+	else()
+		message(STATUS "OpenSSL not found!")
+	endif()
+endif(ENABLE_OPENSSL)
+
 
 find_package(ZLIB REQUIRED)
 find_package(Zstd REQUIRED)
@@ -388,12 +312,11 @@ endif()
 
 # Haiku endian support
 if(HAIKU)
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_BSD_SOURCE")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_BSD_SOURCE")
+	add_compile_definitions(_BSD_SOURCE)
 endif()
 
 # Use cmake_config.h
-add_definitions(-DUSE_CMAKE_CONFIG_H)
+add_compile_definitions(USE_CMAKE_CONFIG_H)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -402,15 +325,19 @@ set(PLATFORM_LIBS ${PLATFORM_LIBS} Threads::Threads)
 if(WIN32)
 	# Windows
 	if(MSVC) # MSVC Specifics
-		set(PLATFORM_LIBS dbghelp.lib ${PLATFORM_LIBS})
+		list(APPEND PLATFORM_LIBS dbghelp.lib)
 		# Surpress some useless warnings
-		add_definitions ( /D "_CRT_SECURE_NO_DEPRECATE" /W1 )
-		# Get M_PI to work
-		add_definitions(/D "_USE_MATH_DEFINES")
-		# Don't define min/max macros in minwindef.h
-		add_definitions(/D "NOMINMAX")
+		add_compile_options(/W1)
+		add_compile_definitions(
+			# Suppress some useless warnings
+			_CRT_SECURE_NO_DEPRECATE
+			# Get M_PI to work
+			_USE_MATH_DEFINES
+			# Don't define min/max macros in minwindef.h
+			NOMINMAX
+		)
 	endif()
-	set(PLATFORM_LIBS ws2_32.lib version.lib shlwapi.lib winmm.lib ${PLATFORM_LIBS})
+	list(APPEND PLATFORM_LIBS ws2_32.lib version.lib shlwapi.lib winmm.lib)
 
 	set(EXTRA_DLL "" CACHE FILEPATH "Optional paths to additional DLLs that should be packaged")
 
@@ -437,28 +364,28 @@ if(WIN32)
 	endif()
 else()
 	# Unix probably
-	set(PLATFORM_LIBS ${PLATFORM_LIBS} ${CMAKE_DL_LIBS})
+	list(APPEND PLATFORM_LIBS ${CMAKE_DL_LIBS})
 	if(APPLE)
-		set(PLATFORM_LIBS "-framework CoreFoundation" ${PLATFORM_LIBS})
+		list(APPEND PLATFORM_LIBS "-framework CoreFoundation")
 	else()
 		check_library_exists(rt clock_gettime "" HAVE_LIBRT)
 		if (HAVE_LIBRT)
-			set(PLATFORM_LIBS -lrt ${PLATFORM_LIBS})
+			list(APPEND PLATFORM_LIBS -lrt)
 		endif(HAVE_LIBRT)
 	endif(APPLE)
 
 	find_library(ICONV_LIBRARY iconv)
 	mark_as_advanced(ICONV_LIBRARY)
 	if (ICONV_LIBRARY)
-		set(PLATFORM_LIBS ${PLATFORM_LIBS} ${ICONV_LIBRARY})
+		list(APPEND PLATFORM_LIBS ${ICONV_LIBRARY})
 	endif()
 
 	if (HAIKU)
-		set(PLATFORM_LIBS ${PLATFORM_LIBS} network)
+		list(APPEND PLATFORM_LIBS network)
 	endif()
 
 	if (ANDROID)
-		set(PLATFORM_LIBS ${PLATFORM_LIBS} android log)
+		list(APPEND PLATFORM_LIBS android log)
 	endif()
 endif()
 
@@ -472,7 +399,7 @@ if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 	check_c_source_compiles("int main(){}" HAVE_LINK_ATOMIC)
 	set(CMAKE_REQUIRED_LIBRARIES "")
 	if(HAVE_LINK_ATOMIC)
-		set(PLATFORM_LIBS ${PLATFORM_LIBS} "-latomic")
+		list(APPEND PLATFORM_LIBS "-latomic")
 	endif()
 endif()
 
@@ -487,11 +414,14 @@ endif()
 
 check_include_files(endian.h HAVE_ENDIAN_H)
 
-if(HAVE_ENDIAN_H)
-	set(HAVE_ENDIAN_H 1)
-else()
-	set(HAVE_ENDIAN_H 0)
+if((NOT PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR) AND EXISTS "${PROJECT_SOURCE_DIR}/cmake_config.h")
+	message(FATAL_ERROR "You are doing an out-of-tree build, but build artifacts are left in-tree. This will break the build!")
 endif()
+configure_file(
+	"${PROJECT_SOURCE_DIR}/cmake_config.h.in"
+	"${PROJECT_BINARY_DIR}/cmake_config.h"
+)
+
 
 # Add a target that always rebuilds cmake_config_githash.h
 add_custom_target(GenerateVersion
@@ -515,177 +445,7 @@ add_subdirectory(script)
 add_subdirectory(util)
 add_subdirectory(server)
 
-# == freeminer:
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-	OPTION(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL)" 0)
-	OPTION(USE_MULTI "Enable MT+ENET+WSS networking" 1)
-endif()
-
-if(USE_MULTI)
-	#set(ENABLE_SCTP 1 CACHE BOOL "") # Maybe bugs
-	set(ENABLE_ENET 1 CACHE BOOL "")
-	#set(ENABLE_WEBSOCKET_SCTP 1 CACHE BOOL "") # NOT FINISHED
-        if (NOT ANDROID)
-	    	set(ENABLE_WEBSOCKET 1 CACHE BOOL "")
-        endif()
-endif()
-
-
-if(ENABLE_WEBSOCKET OR ENABLE_WEBSOCKET_SCTP)
-    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp/CMakeLists.txt)
-		find_package(Boost)
-		if(Boost_FOUND)
-			include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp)
-			# add_subdirectory(external/websocketpp)
-			# set(WEBSOCKETPP_LIBRARY websocketpp::websocketpp)
-			message(STATUS "Using websocket: ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp")
-			find_package(OpenSSL)
-			set(WEBSOCKETPP_LIBRARY ${WEBSOCKETPP_LIBRARY} OpenSSL::SSL)
-			set(USE_WEBSOCKET 1 CACHE BOOL "")
-			#TODO:
-			# set(USE_WEBSOCKET_SCTP 1 CACHE BOOL "")
-		endif()
-	else()
-		#set(USE_WEBSOCKET 0)
-		#set(USE_WEBSOCKET_SCTP 0)
-    endif()
-endif()
-
-
-if(ENABLE_SCTP AND NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp/usrsctplib)
-    message(WARNING "Please Clone usrsctp:  git clone --depth 1 https://github.com/sctplab/usrsctp ${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp")
-    set(ENABLE_SCTP 0)
-endif()
-
-if(ENABLE_SCTP)
-        # from external/usrsctp/usrsctplib/CMakeLists.txt :
-	if(SCTP_DEBUG)
-		set(sctp_debug 1 CACHE INTERNAL "")
-		add_definitions(-DSCTP_DEBUG=1)
-	endif()
-	set(sctp_build_programs 0 CACHE INTERNAL "")
-	set(sctp_werror 0 CACHE INTERNAL "")
-	set(WERROR 0 CACHE INTERNAL "") #old
-
-	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp)
-
-	#include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp/usrsctplib)
-	set(SCTP_LIBRARY usrsctp)
-
-	set(USE_SCTP 1)
-
-	message(STATUS "Using sctp: ${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp ${SCTP_LIBRARY} SCTP_DEBUG=${SCTP_DEBUG}")
-#else()
-	#set(USE_SCTP 0)
-endif()
-
-if(ENABLE_ENET)
-	if(NOT ENABLE_SYSTEM_ENET AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/enet/include/enet/enet.h)
-		add_subdirectory(external/enet)
-		set(ENET_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/enet/include)
-		set(ENET_LIBRARY enet)
-	endif()
-	if(NOT ENET_LIBRARY)
-		find_library(ENET_LIBRARY NAMES enet)
-		find_path(ENET_INCLUDE_DIR enet/enet.h)
-	endif()
-	if(ENET_LIBRARY AND ENET_INCLUDE_DIR)
-		include_directories(${ENET_INCLUDE_DIR})
-		message(STATUS "Using enet: ${ENET_INCLUDE_DIR} ${ENET_LIBRARY}")
-		set(USE_ENET 1)
-	endif()
-endif()
-
-#set(TinyTIFF_BUILD_TESTS 0 CACHE INTERNAL "")
-#add_subdirectory(external/TinyTIFF/src)
-#set(TINYTIFF_LIRARY TinyTIFF)
-
-option(ENABLE_TIFF "Enable tiff (feotiff for mapgen earth)" 1)
-if(ENABLE_TIFF AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/libtiff/CMakeLists.txt)
-	set(tiff-tools 0 CACHE INTERNAL "")
-	set(tiff-tests 0 CACHE INTERNAL "")
-	set(tiff-docs 0 CACHE INTERNAL "")
-	add_subdirectory(external/libtiff)
-	set(TIFF_LIRARY TIFF::tiff)
-	set(TIFF_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/external/libtiff/libtiff ${CMAKE_CURRENT_SOURCE_DIR}/external/libtiff/libtiff)
-	include_directories(BEFORE SYSTEM ${TIFF_INCLUDE_DIR})
-	message(STATUS "Using tiff: ${TIFF_INCLUDE_DIR} ${TIFF_LIRARY}")
-	set(USE_TIFF 1)
-endif()
-
-option(ENABLE_OSMIUM "Enable Osmium" 1)
-
-if (ENABLE_OSMIUM)
-	find_path(OSMIUM_INCLUDE_DIR osmium/osm.hpp)
-endif()
-
-if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/libosmium/CMakeLists.txt))
-	find_package(Boost)
-	if(Boost_FOUND)
-		set(BUILD_TESTING 0 CACHE INTERNAL "")
-		set(BUILD_DATA_TESTS 0 CACHE INTERNAL "")
-		set(BUILD_EXAMPLES 0 CACHE INTERNAL "")
-		set(BUILD_BENCHMARKS 0 CACHE INTERNAL "")
-
-		if (NOT OSMIUM_INCLUDE_DIR)
-			add_subdirectory(external/libosmium)
-			set(OSMIUM_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/libosmium/include)
-			include_directories(BEFORE SYSTEM ${OSMIUM_INCLUDE_DIR})
-		endif()
-		find_package(BZip2)
-		if(BZIP2_FOUND)
-			set (OSMIUM_LIRARY ${OSMIUM_LIRARY} BZip2::BZip2)
-		endif()
-		find_package(EXPAT)
-		if(EXPAT_FOUND)
-			set (OSMIUM_LIRARY ${OSMIUM_LIRARY} EXPAT::EXPAT)
-		endif()
-		set(USE_OSMIUM 1)
-		message(STATUS "Using osmium: ${OSMIUM_INCLUDE_DIR} : ${OSMIUM_LIRARY}")
-	endif()
-endif()
-
-if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND ${CMAKE_VERSION} VERSION_GREATER "3.11.0")
-    set(USE_DEBUG_DUMP ON CACHE BOOL "")
-endif()
-
-if (USE_DEBUG_DUMP)
-    #get_target_property(MAGIC_ENUM_INCLUDE_DIR ch_contrib::magic_enum INTERFACE_INCLUDE_DIRECTORIES)
-    # CMake generator expression will do insane quoting when it encounters special character like quotes, spaces, etc.
-    # Prefixing "SHELL:" will force it to use the original text.
-    #set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${MAGIC_ENUM_INCLUDE_DIR}\" -include \"${ClickHouse_SOURCE_DIR}/base/base/dump.h\"")
-    set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${CMAKE_CURRENT_SOURCE_DIR}/debug/\" -include \"${CMAKE_CURRENT_SOURCE_DIR}/debug/dump.h\"")
-    #set (INCLUDE_DEBUG_HELPERS "SHELL:-include \"${CMAKE_CURRENT_SOURCE_DIR}/util/dump.h\"")
-    # Use generator expression as we don't want to pollute CMAKE_CXX_FLAGS, which will interfere with CMake check system.
-    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:${INCLUDE_DEBUG_HELPERS}>)
-	if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-		add_definitions(-DDUMP_STREAM=actionstream)
-	else()
-		add_definitions(-DDUMP_STREAM=verbosestream)
-	endif()
-endif ()
-
-set(FMcommon_SRCS ${FMcommon_SRCS}
-	circuit_element_virtual.cpp
-	circuit_element.cpp
-	circuit.cpp
-	fm_abm_world.cpp
-	fm_bitset.cpp
-	fm_liquid.cpp
-	fm_map.cpp
-	fm_server.cpp
-	fm_world_merge.cpp
-	fm_far_calc.cpp
-	key_value_storage.cpp
-	log_types.cpp
-	stat.cpp
-	content_abm_grow_tree.cpp
-	content_abm.cpp
-	fm_abm.cpp
-	fm_clientiface.cpp
-	fm_serverenvironment.cpp
-	)
-# == end freeminer:
+include(freeminer_src)
 
 # Source files that are identical between server & client builds.
 # This means they don't use or include anything that depends on the
@@ -703,7 +463,6 @@ set(independent_SRCS
 	hud.cpp
 	inventory.cpp
 	itemstackmetadata.cpp
-	lighting.cpp
 	log.cpp
 	mainloop.cpp
 	metadata.cpp
@@ -730,12 +489,14 @@ set(independent_SRCS
 	${util_SRCS}
 )
 
+file(GLOB common_HDRS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
+
 # /!\ Consider carefully before adding files here /!\
 set(common_SRCS
 	${FMcommon_SRCS}
 	${contrib_SRCS}
 
-	${DEBUG_SRCS}
+	${common_HDRS}
 	clientdynamicinfo.cpp
 	collision.cpp
 	content_mapnode.cpp
@@ -775,21 +536,21 @@ set(common_SRCS
 )
 
 if(ANDROID)
-	set(common_SRCS ${common_SRCS} porting_android.cpp)
+	list(APPEND common_SRCS porting_android.cpp)
 endif()
 
 if(BUILD_UNITTESTS)
 	add_subdirectory(unittest)
-	set(common_SRCS ${common_SRCS} ${UNITTEST_SRCS})
+	list(APPEND common_SRCS ${UNITTEST_SRCS})
 endif()
 
 if(BUILD_BENCHMARKS)
 	add_subdirectory(benchmark)
-	set(common_SRCS ${common_SRCS} ${BENCHMARK_SRCS})
+	list(APPEND common_SRCS ${BENCHMARK_SRCS})
 endif()
 
 if(BUILD_UNITTESTS OR BUILD_BENCHMARKS)
-	set(common_SRCS ${common_SRCS} catch.cpp)
+	list(APPEND common_SRCS catch.cpp)
 endif()
 
 # This gives us the icon and file version information
@@ -813,7 +574,7 @@ if(WIN32)
 endif()
 
 set(FMclient_SRCS
-	guiTextInputMenu.cpp
+	#guiTextInputMenu.cpp
 )
 
 # Client sources
@@ -823,7 +584,7 @@ if (BUILD_CLIENT)
 	add_subdirectory(irrlicht_changes)
 endif(BUILD_CLIENT)
 
-set(client_SRCS
+list(APPEND client_SRCS
 	${FMclient_SRCS}
 
 	${client_SRCS}
@@ -835,11 +596,11 @@ set(client_SRCS
 )
 
 if(BUILD_UNITTESTS)
-	set(client_SRCS ${client_SRCS} ${UNITTEST_CLIENT_SRCS})
+	list(APPEND client_SRCS ${UNITTEST_CLIENT_SRCS})
 endif()
 
 if(BUILD_BENCHMARKS)
-	set(client_SRCS ${client_SRCS} ${BENCHMARK_CLIENT_SRCS})
+	list(APPEND client_SRCS ${BENCHMARK_CLIENT_SRCS})
 endif()
 
 # Server sources
@@ -892,12 +653,14 @@ if(USE_CURL)
 	include_directories(${CURL_INCLUDE_DIRS})
 endif()
 
-
 if (NO_BUILD_BIN_DIR)
 
-# When cross-compiling assume the user doesn't want to run the executable anyway,
-# otherwise place it in <source dir>/bin/ since Luanti can only run from there.
-if(NOT CMAKE_CROSSCOMPILING)
+# When cross-compiling place the executable in <build dir>/bin so that multiple
+# targets can be built from the same source folder. Otherwise, place it in
+# <source dir>/bin/ since Luanti can only run from there.
+if(CMAKE_CROSSCOMPILING)
+	set(EXECUTABLE_OUTPUT_PATH "${CMAKE_BINARY_DIR}/bin")
+else()
 	set(EXECUTABLE_OUTPUT_PATH "${CMAKE_SOURCE_DIR}/bin")
 endif()
 
@@ -915,6 +678,9 @@ add_dependencies(EngineCommon GenerateVersion)
 target_link_libraries(EngineCommon
 	sha256
 )
+if(USE_OPENSSL)
+	target_link_libraries(EngineCommon OpenSSL::Crypto)
+endif()
 get_target_property(
 	IRRLICHT_INCLUDES IrrlichtMt::IrrlichtMt INTERFACE_INCLUDE_DIRECTORIES)
 target_include_directories(EngineCommon PRIVATE ${IRRLICHT_INCLUDES})
@@ -1060,6 +826,9 @@ if(BUILD_CLIENT)
 	if (USE_SPATIAL)
 		target_link_libraries(${PROJECT_NAME} ${SPATIAL_LIBRARY})
 	endif()
+	if (USE_OPENSSL)
+		target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto)
+	endif()
 	if(BUILD_UNITTESTS OR BUILD_BENCHMARKS)
 		target_link_libraries(${PROJECT_NAME} Catch2::Catch2)
 	endif()
@@ -1142,6 +911,9 @@ if(BUILD_SERVER)
 	if (USE_SPATIAL)
 		target_link_libraries(${PROJECT_NAME}server ${SPATIAL_LIBRARY})
 	endif()
+	if (USE_OPENSSL)
+		target_link_libraries(${PROJECT_NAME}server OpenSSL::Crypto)
+	endif()
 	if(USE_CURL)
 		target_link_libraries(
 			${PROJECT_NAME}server
@@ -1223,7 +995,7 @@ endif()
 
 if(MSVC)
 	# Visual Studio
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /D _WIN32_WINNT=0x0601 /D WIN32_LEAN_AND_MEAN /D _CRT_SECURE_NO_WARNINGS")
+	add_compile_definitions(_WIN32_WINNT=0x0601 WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
 	# EHa enables SEH exceptions (used for catching segfaults)
 	set(CMAKE_CXX_FLAGS_RELEASE "/EHa /Ox /MD /GS- /Zi /fp:fast /D NDEBUG /D _HAS_ITERATOR_DEBUGGING=0")
 	if(CMAKE_SIZEOF_VOID_P EQUAL 4)
@@ -1250,12 +1022,12 @@ if(MSVC)
 	# Flags that cannot be shared between cl and clang-cl
 	# https://clang.llvm.org/docs/UsersManual.html#clang-cl
 	if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=lld")
+		add_compile_options(-fuse-ld=lld)
 
 		# Disable pragma-pack warning
 		set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-pragma-pack")
 	else()
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
+		add_compile_options(/MP)
 		set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /TP /FD /GL")
 		set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /LTCG")
 	endif()
@@ -1273,7 +1045,7 @@ else()
 		if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 			set(OTHER_FLAGS "${OTHER_FLAGS} -mthreads")
 		endif()
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_WIN32_WINNT=0x0601 -DWIN32_LEAN_AND_MEAN")
+		add_compile_definitions(_WIN32_WINNT=0x0601 WIN32_LEAN_AND_MEAN)
 	endif()
 
 	# Use a safe subset of flags to speed up math calculations:
@@ -1282,7 +1054,7 @@ else()
 	set(MATH_FLAGS "-fno-math-errno -fno-trapping-math -fno-signed-zeros")
 
 	# Enable SSE for floating point math on 32-bit x86 by default
-	# reasoning see minetest issue #11810 and https://gcc.gnu.org/wiki/FloatingPointMath
+	# reasoning see luanti issue #11810 and https://gcc.gnu.org/wiki/FloatingPointMath
 	if(CMAKE_SIZEOF_VOID_P EQUAL 4)
 		check_c_source_compiles("#ifndef __i686__\n#error\n#endif\nint main(){}" IS_I686)
 		if(IS_I686)
@@ -1451,22 +1223,19 @@ elseif (USE_GETTEXT)
 		#set(MO_FILE_PATH "${MO_BUILD_PATH}/${PROJECT_NAME}.mo")
 		set(MO_FILE_PATH "${MO_BUILD_PATH}/luanti.mo")
 
-		add_custom_command(OUTPUT ${MO_BUILD_PATH}
-			COMMAND ${CMAKE_COMMAND} -E make_directory ${MO_BUILD_PATH}
-			COMMENT "mo-update [${LOCALE}]: Creating locale directory.")
-
 		add_custom_command(
 			OUTPUT ${MO_FILE_PATH}
+			COMMAND ${CMAKE_COMMAND} -E make_directory ${MO_BUILD_PATH}
 			COMMAND ${GETTEXT_MSGFMT} -o ${MO_FILE_PATH} ${PO_FILE_PATH}
-			DEPENDS ${MO_BUILD_PATH} ${PO_FILE_PATH}
+			DEPENDS ${PO_FILE_PATH}
 			WORKING_DIRECTORY "${GETTEXT_PO_PATH}/${LOCALE}"
-			COMMENT "mo-update [${LOCALE}]: Creating mo file."
+			COMMENT "mo-update [${LOCALE}]: Creating mo file"
 			)
 
-		set(MO_FILES ${MO_FILES} ${MO_FILE_PATH})
+		list(APPEND MO_FILES ${MO_FILE_PATH})
 	endforeach()
 
-	add_custom_target(translations ALL COMMENT "mo update" DEPENDS ${MO_FILES})
+	add_custom_target(translations ALL COMMENT "mo-update" DEPENDS ${MO_FILES})
 endif()
 
 # Subdirectories

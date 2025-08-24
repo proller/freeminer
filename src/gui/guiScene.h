@@ -4,11 +4,12 @@
 
 #pragma once
 
-#include "irrlichttypes_extrabloated.h"
 #include "ICameraSceneNode.h"
 #include "StyleSpec.h"
+#include <IAnimatedMeshSceneNode.h>
+#include <IGUIElement.h>
+#include <IGUIEnvironment.h>
 
-using namespace irr;
 
 class GUIScene : public gui::IGUIElement
 {
