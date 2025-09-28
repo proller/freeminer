@@ -84,7 +84,16 @@ void CWebGL1Driver::drawMeshBuffer(const scene::IMeshBuffer* mb)
 		if ( mb->getIndexBuffer()->getHardwareMappingHint() == scene::EHM_NEVER)
 			mbUglyHack->setHardwareMappingHint(scene::EHM_STREAM);
 
-		COpenGLES2Driver::drawMeshBuffer(mb);
+		//COpenGLES2Driver::drawMeshBuffer(mb);
+
+		SHWBufferLink *HWBuffer=getBufferLink(mb);
+
+		if (HWBuffer)
+			drawHardwareBuffer(HWBuffer);
+		else
+			drawVertexPrimitiveList(mb->getVertices(), mb->getVertexCount(),
+					mb->getIndices(), mb->getPrimitiveCount(), mb->getVertexType(),
+					mb->getPrimitiveType(), mb->getIndexType());
 	}
 }
 

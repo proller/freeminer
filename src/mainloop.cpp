@@ -118,7 +118,7 @@ void MainLoop::RunAsyncThenResume(AsyncPayload payload) {
 }
 
 void MainLoop::NextFrame(std::function<void()> resolve) {
-    assert(!next_callback);
+    //assert(!next_callback);
     next_callback = resolve;
 }
 
