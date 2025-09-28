@@ -18,6 +18,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 */
 
 #include <log.h>
+#include "irr_aabb3d.h"
+#include "irr_v3d.h"
+#include "irrlichttypes.h"
 #include "mapblock.h"
 #include "profiler.h"
 #include "server/serveractiveobject.h"
@@ -157,7 +160,7 @@ bool ActiveObjectMgr::registerObject(std::shared_ptr<ServerActiveObject> obj)
 	}
 
 	if (objectpos_over_limit(obj->getBasePosition())) {
-		v3f p = obj->getBasePosition();
+		v3opos_t p = obj->getBasePosition();
 		warningstream << "Server::ActiveObjectMgr::addActiveObjectRaw(): "
 				<< "object position (" << p.X << "," << p.Y << "," << p.Z
 				<< ") outside maximum range" << std::endl;
@@ -196,7 +199,7 @@ void ActiveObjectMgr::removeObject(u16 id)
 }
 
 // clang-format on
-void ActiveObjectMgr::getObjectsInsideRadius(const v3f &pos, float radius,
+void ActiveObjectMgr::getObjectsInsideRadius(const v3opos_t &pos, float radius,
 		std::vector<ServerActiveObjectPtr> &result,
 		const std::function<bool(ServerActiveObjectPtr &obj)> &include_obj_cb)
 {
@@ -215,7 +218,7 @@ void ActiveObjectMgr::getObjectsInsideRadius(const v3f &pos, float radius,
 	float r2 = radius * radius;
 	for (auto &obj : active_objects) {
 		//ServerActiveObject *obj = activeObject.second.get();
-		const v3f &objectpos = obj->getBasePosition();
+		const v3opos_t &objectpos = obj->getBasePosition();
 		if (objectpos.getDistanceFromSQ(pos) > r2)
 			continue;
 
@@ -224,7 +227,7 @@ void ActiveObjectMgr::getObjectsInsideRadius(const v3f &pos, float radius,
 	}
 }
 
-void ActiveObjectMgr::getObjectsInArea(const aabb3f &box,
+void ActiveObjectMgr::getObjectsInArea(const aabb3o &box,
 		std::vector<ServerActiveObjectPtr> &result,
 		const std::function<bool(ServerActiveObjectPtr &obj)> &include_obj_cb)
 {
@@ -244,7 +247,7 @@ void ActiveObjectMgr::getObjectsInArea(const aabb3f &box,
 
 	for (auto &obj : active_objects) {
 		//ServerActiveObject *obj = activeObject.second;
-		const v3f &objectpos = obj->getBasePosition();
+		const v3opos_t &objectpos = obj->getBasePosition();
 		if (!box.isPointInside(objectpos))
 			continue;
 
@@ -253,7 +256,7 @@ void ActiveObjectMgr::getObjectsInArea(const aabb3f &box,
 	}
 }
 
-void ActiveObjectMgr::getAddedActiveObjectsAroundPos(const v3f &player_pos, f32 radius,
+void ActiveObjectMgr::getAddedActiveObjectsAroundPos(const v3opos_t &player_pos, opos_t radius,
 		f32 player_radius, std::set<u16> &current_objects,
 		std::queue<u16> &added_objects)
 {

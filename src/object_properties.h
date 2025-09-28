@@ -25,6 +25,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <optional>
 #include <string>
 #include "irrlichttypes_bloated.h"
+#include "threading/concurrent_vector.h"
+#include "threading/lock.h"
 #include <iostream>
 #include <map>
 #include <vector>

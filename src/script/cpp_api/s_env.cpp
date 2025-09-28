@@ -23,6 +23,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "cpp_api/s_env.h"
 #include "cpp_api/s_internal.h"
 #include "common/c_converter.h"
+#include "irr_v3d.h"
 #include "log.h"
 #include "environment.h"
 #include "mapgen/mapgen.h"
@@ -31,7 +32,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "script/common/c_content.h"
 
 
-void ScriptApiEnv::environment_OnGenerated(v3s16 minp, v3s16 maxp,
+void ScriptApiEnv::environment_OnGenerated(v3pos_t minp, v3pos_t maxp,
 	u32 blockseed)
 {
 	SCRIPTAPI_PRECHECKHEADER
@@ -40,8 +41,8 @@ void ScriptApiEnv::environment_OnGenerated(v3s16 minp, v3s16 maxp,
 	lua_getglobal(L, "core");
 	lua_getfield(L, -1, "registered_on_generateds");
 	// Call callbacks
-	push_v3s16(L, minp);
-	push_v3s16(L, maxp);
+	push_v3pos(L, minp);
+	push_v3pos(L, maxp);
 	lua_pushnumber(L, blockseed);
 	runCallbacks(3, RUN_CALLBACKS_MODE_FIRST);
 }
@@ -152,10 +153,10 @@ void ScriptApiEnv::initializeEnvironment(ServerEnvironment *env)
 		bool simple_catch_up = true;
 		getboolfield(L, current_abm, "catch_up", simple_catch_up);
 
-		s16 min_y = INT16_MIN;
+		pos_t min_y = INT16_MIN;
 		getintfield(L, current_abm, "min_y", min_y);
 
-		s16 max_y = INT16_MAX;
+		pos_t max_y = INT16_MAX;
 		getintfield(L, current_abm, "max_y", max_y);
 
 		lua_getfield(L, current_abm, "action");
@@ -228,7 +229,7 @@ void ScriptApiEnv::initializeEnvironment(ServerEnvironment *env)
 }
 
 void ScriptApiEnv::on_emerge_area_completion(
-	v3s16 blockpos, int action, ScriptCallbackState *state)
+	v3bpos_t blockpos, int action, ScriptCallbackState *state)
 {
 	Server *server = getServer();
 
@@ -247,7 +248,7 @@ void ScriptApiEnv::on_emerge_area_completion(
 	lua_rawgeti(L, LUA_REGISTRYINDEX, state->callback_ref);
 	luaL_checktype(L, -1, LUA_TFUNCTION);
 
-	push_v3s16(L, blockpos);
+	push_v3pos(L, blockpos);
 	lua_pushinteger(L, action);
 	lua_pushinteger(L, state->refcount);
 	lua_rawgeti(L, LUA_REGISTRYINDEX, state->args_ref);
@@ -269,7 +270,7 @@ void ScriptApiEnv::on_emerge_area_completion(
 	}
 }
 
-void ScriptApiEnv::check_for_falling(v3s16 p)
+void ScriptApiEnv::check_for_falling(v3pos_t p)
 {
 	SCRIPTAPI_PRECHECKHEADER
 
@@ -277,12 +278,12 @@ void ScriptApiEnv::check_for_falling(v3s16 p)
 	lua_getglobal(L, "core");
 	lua_getfield(L, -1, "check_for_falling");
 	luaL_checktype(L, -1, LUA_TFUNCTION);
-	push_v3s16(L, p);
+	push_v3pos(L, p);
 	PCALL_RES(lua_pcall(L, 1, 0, error_handler));
 }
 
 void ScriptApiEnv::on_liquid_transformed(
-	const std::vector<std::pair<v3s16, MapNode>> &list)
+	const std::vector<std::pair<v3pos_t, MapNode>> &list)
 {
 	SCRIPTAPI_PRECHECKHEADER
 
@@ -300,9 +301,9 @@ void ScriptApiEnv::on_liquid_transformed(
 	int index = 1;
 	lua_createtable(L, list.size(), 0);
 	lua_createtable(L, list.size(), 0);
-	for(std::pair<v3s16, MapNode> p : list) {
+	for(std::pair<v3pos_t, MapNode> p : list) {
 		lua_pushnumber(L, index);
-		push_v3s16(L, p.first);
+		push_v3pos(L, p.first);
 		lua_rawset(L, -4);
 		lua_pushnumber(L, index++);
 		pushnode(L, p.second);
@@ -312,7 +313,7 @@ void ScriptApiEnv::on_liquid_transformed(
 	runCallbacks(2, RUN_CALLBACKS_MODE_FIRST);
 }
 
-void ScriptApiEnv::on_mapblocks_changed(const std::unordered_set<v3s16> &set)
+void ScriptApiEnv::on_mapblocks_changed(const std::unordered_set<v3bpos_t> &set)
 {
 	SCRIPTAPI_PRECHECKHEADER
 
@@ -324,7 +325,7 @@ void ScriptApiEnv::on_mapblocks_changed(const std::unordered_set<v3s16> &set)
 
 	// Convert the set to a set of position hashes
 	lua_createtable(L, 0, set.size());
-	for(const v3s16 &p : set) {
+	for(const v3bpos_t &p : set) {
 		lua_pushnumber(L, hash_node_position(p));
 		lua_pushboolean(L, true);
 		lua_rawset(L, -3);

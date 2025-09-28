@@ -2,7 +2,7 @@
 Minetest
 Copyright (C) 2023 DS
 
-/*
+
 This file is part of Freeminer.
 
 Freeminer is free software: you can redistribute it and/or modify

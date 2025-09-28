@@ -121,7 +121,7 @@ private:
 	//video::SMaterial m_material;
 	v2f m_texpos;
 	v2f m_texsize;
-	v3f m_pos;
+	v3opos_t m_pos;
 	v3f m_velocity;
 	v3f m_acceleration;
 	const ParticleParameters m_p;
@@ -189,10 +189,10 @@ public:
 	void handleParticleEvent(ClientEvent *event, Client *client,
 			LocalPlayer *player);
 
-	void addDiggingParticles(IGameDef *gamedef, LocalPlayer *player, v3s16 pos,
+	void addDiggingParticles(IGameDef *gamedef, LocalPlayer *player, v3pos_t pos,
 		const MapNode &n, const ContentFeatures &f);
 
-	void addNodeParticle(IGameDef *gamedef, LocalPlayer *player, v3s16 pos,
+	void addNodeParticle(IGameDef *gamedef, LocalPlayer *player, v3pos_t pos,
 		const MapNode &n, const ContentFeatures &f);
 
 	void reserveParticleSpace(size_t max_estimate);

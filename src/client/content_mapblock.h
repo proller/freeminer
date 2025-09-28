@@ -19,6 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #pragma once
 
+#include "irr_v3d.h"
 #include "nodedef.h"
 #include <IMeshManipulator.h>
 
@@ -73,7 +74,7 @@ private:
 	const NodeDefManager *const nodedef;
 	scene::IMeshManipulator *const meshmanip;
 
-	const v3s16 blockpos_nodes;
+	const v3pos_t blockpos_nodes;
 
 // options
 	const bool enable_mesh_cache;
@@ -83,7 +84,7 @@ private:
 		v3pos_t pf;
 		v3pos_t pr;
 
-		v3s16 p;
+		v3pos_t p;
 		v3f origin;
 		MapNode n;
 		const ContentFeatures *f;
@@ -103,11 +104,11 @@ private:
 	void useTile(int index = 0, u8 set_flags = MATERIAL_FLAG_CRACK_OVERLAY,
 		u8 reset_flags = 0, bool special = false);
 	void getTile(int index, TileSpec *tile);
-	void getTile(v3s16 direction, TileSpec *tile);
+	void getTile(v3pos_t direction, TileSpec *tile);
 	void getSpecialTile(int index, TileSpec *tile, bool apply_crack = false);
 
 // face drawing
-	void drawQuad(v3f *vertices, const v3s16 &normal = v3s16(0, 0, 0),
+	void drawQuad(v3f *vertices, const v3pos_t &normal = v3pos_t(0, 0, 0),
 		float vertical_tiling = 1.0);
 
 // cuboid drawing!
@@ -153,7 +154,7 @@ private:
 		int raillike_group;
 	};
 	RaillikeData cur_rail;
-	bool isSameRail(v3s16 dir);
+	bool isSameRail(v3pos_t dir);
 
 // plantlike-specific
 	struct PlantlikeData {

@@ -22,6 +22,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include "irr_v3d.h"
 #include "lua_api/l_base.h"
 #include "serverenvironment.h"
 #include "raycast.h"
@@ -33,11 +34,11 @@ protected:
 	static void collectNodeIds(lua_State *L, int idx,
 		const NodeDefManager *ndef, std::vector<content_t> &filter);
 
-	static void checkArea(v3s16 &minp, v3s16 &maxp);
+	static void checkArea(v3pos_t &minp, v3pos_t &maxp);
 
 	// F must be (v3s16 pos) -> MapNode
 	template <typename F>
-	static int findNodeNear(lua_State *L, v3s16 pos, int radius,
+	static int findNodeNear(lua_State *L, v3pos_t pos, int radius,
 		const std::vector<content_t> &filter, int start_radius, F &&getNode);
 
 	// F must be (G callback) -> void
@@ -49,7 +50,7 @@ protected:
 
 	// F must be (v3s16 pos) -> MapNode
 	template <typename F>
-	static int findNodesInAreaUnderAir(lua_State *L, v3s16 minp, v3s16 maxp,
+	static int findNodesInAreaUnderAir(lua_State *L, v3pos_t minp, v3pos_t maxp,
 		const std::vector<content_t> &filter, F &&getNode);
 
 	static const EnumString es_ClearObjectsMode[];
@@ -266,14 +267,14 @@ private:
 	float m_trigger_interval;
 	u32 m_trigger_chance;
 	bool m_simple_catch_up;
-	s16 m_min_y;
-	s16 m_max_y;
+	pos_t m_min_y;
+	pos_t m_max_y;
 public:
 	LuaABM(lua_State *L, int id,
 			const std::vector<std::string> &trigger_contents,
 			const std::vector<std::string> &required_neighbors,
 			int neighbors_range,
-			float trigger_interval, u32 trigger_chance, bool simple_catch_up, s16 min_y, s16 max_y):
+			float trigger_interval, u32 trigger_chance, bool simple_catch_up, pos_t min_y, pos_t max_y):
 		m_id(id),
 		m_neighbors_range(neighbors_range),
 		m_trigger_contents(trigger_contents),
@@ -309,15 +310,15 @@ public:
 	{
 		return m_simple_catch_up;
 	}
-	virtual s16 getMinY()
+	virtual pos_t getMinY()
 	{
 		return m_min_y;
 	}
-	virtual s16 getMaxY()
+	virtual pos_t getMaxY()
 	{
 		return m_max_y;
 	}
-	virtual void trigger(ServerEnvironment *env, v3s16 p, MapNode n,
+	virtual void trigger(ServerEnvironment *env, v3pos_t p, MapNode n,
 			u32 active_object_count, u32 active_object_count_wider, 
 			v3pos_t neighbor_pos, uint8_t activate);
 };
@@ -337,7 +338,7 @@ public:
 		this->trigger_contents = trigger_contents;
 		this->name = name;
 	}
-	virtual void trigger(ServerEnvironment *env, v3s16 p, MapNode n, float dtime_s);
+	virtual void trigger(ServerEnvironment *env, v3pos_t p, MapNode n, float dtime_s);
 };
 
 //! Lua wrapper for RaycastState objects
@@ -361,7 +362,7 @@ private:
 public:
 	//! Constructor with the same arguments as RaycastState.
 	LuaRaycast(
-		const core::line3d<f32> &shootline,
+		const core::line3d<opos_t> &shootline,
 		bool objects_pointable,
 		bool liquids_pointable) :
 		state(shootline, objects_pointable, liquids_pointable)

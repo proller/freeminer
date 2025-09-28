@@ -107,7 +107,7 @@ public:
 	 * \param p output, position of the first non-air node
 	 * the line intersects
 	 */
-	bool line_of_sight(v3f pos1, v3f pos2, v3s16 *p = nullptr);
+	bool line_of_sight(v3opos_t pos1, v3f pos2, v3pos_t *p = nullptr);
 
 	/*!
 	 * Gets the objects pointed by the shootline as
@@ -119,7 +119,7 @@ public:
 	 *
 	 * @param[out] objects          found objects
 	 */
-	virtual void getSelectedActiveObjects(const core::line3d<f32> &shootline_on_map,
+	virtual void getSelectedActiveObjects(const core::line3d<opos_t> &shootline_on_map,
 			std::vector<PointedThing> &objects) = 0;
 
 	/*!

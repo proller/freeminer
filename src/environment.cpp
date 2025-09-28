@@ -26,11 +26,13 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "contrib/fallingsao.h"
 #include "contrib/itemsao.h"
 
+#include "irr_v3d.h"
 #include "raycast.h"
 #include "scripting_server.h"
 #include "server.h"
 #include "daynightratio.h"
 #include "emerge.h"
+#include "util/numeric.h"
 
 #include "fm_bitset.h"
 #include "circuit.h"
@@ -101,10 +103,10 @@ float Environment::getTimeOfDayF()
 */
 }
 
-bool Environment::line_of_sight(v3f pos1, v3f pos2, v3s16 *p)
+bool Environment::line_of_sight(v3opos_t pos1, v3f pos2, v3pos_t *p)
 {
 	// Iterate trough nodes on the line
-	voxalgo::VoxelLineIterator iterator(pos1 / BS, (pos2 - pos1) / BS);
+	voxalgo::VoxelLineIterator iterator(pos1 / BS, oposToV3f(v3fToOpos(pos2) - pos1) / BS);
 	do {
 		MapNode n = getMap().getNode(iterator.m_current_node_pos);
 
@@ -143,7 +145,7 @@ void Environment::continueRaycast(RaycastState *state, PointedThing *result)
 			}
 		}
 		// Set search range
-		core::aabbox3d<s16> maximal_exceed = nodedef->getSelectionBoxIntUnion();
+		core::aabbox3d<pos_t> maximal_exceed = nodedef->getSelectionBoxIntUnion();
 		state->m_search_range.MinEdge = -maximal_exceed.MaxEdge;
 		state->m_search_range.MaxEdge = -maximal_exceed.MinEdge;
 		// Setting is done
@@ -161,9 +163,9 @@ void Environment::continueRaycast(RaycastState *state, PointedThing *result)
 	Map &map = getMap();
 	// If a node is found, this is the center of the
 	// first nodebox the shootline meets.
-	v3f found_boxcenter(0, 0, 0);
+	v3opos_t found_boxcenter(0, 0, 0);
 	// The untested nodes are in this range.
-	core::aabbox3d<s16> new_nodes;
+	core::aabbox3d<pos_t> new_nodes;
 	while (state->m_iterator.m_current_index <= lastIndex) {
 		// Test the nodes around the current node in search_range.
 		new_nodes = state->m_search_range;
@@ -171,7 +173,7 @@ void Environment::continueRaycast(RaycastState *state, PointedThing *result)
 		new_nodes.MaxEdge += state->m_iterator.m_current_node_pos;
 
 		// Only check new nodes
-		v3s16 delta = state->m_iterator.m_current_node_pos
+		v3pos_t delta = state->m_iterator.m_current_node_pos
 			- state->m_previous_node;
 		if (delta.X > 0) {
 			new_nodes.MinEdge.X = new_nodes.MaxEdge.X;
@@ -194,11 +196,11 @@ void Environment::continueRaycast(RaycastState *state, PointedThing *result)
 		}
 
 		// For each untested node
-		for (s16 x = new_nodes.MinEdge.X; x <= new_nodes.MaxEdge.X; x++)
-		for (s16 y = new_nodes.MinEdge.Y; y <= new_nodes.MaxEdge.Y; y++)
-		for (s16 z = new_nodes.MinEdge.Z; z <= new_nodes.MaxEdge.Z; z++) {
+		for (pos_t x = new_nodes.MinEdge.X; x <= new_nodes.MaxEdge.X; x++)
+		for (pos_t y = new_nodes.MinEdge.Y; y <= new_nodes.MaxEdge.Y; y++)
+		for (pos_t z = new_nodes.MinEdge.Z; z <= new_nodes.MaxEdge.Z; z++) {
 			MapNode n;
-			v3s16 np(x, y, z);
+			v3pos_t np(x, y, z);
 			bool is_valid_position;
 
 			n = map.getNode(np, &is_valid_position);
@@ -222,10 +224,11 @@ void Environment::continueRaycast(RaycastState *state, PointedThing *result)
 
 			// Do calculations relative to the node center
 			// to translate the ray rather than the boxes
-			v3f npf = intToFloat(np, BS);
-			v3f rel_start = state->m_shootline.start - npf;
+			v3opos_t npf = intToFloat(np, BS);
+			v3opos_t rel_start = state->m_shootline.start - npf;
 			for (aabb3f &box : boxes) {
-				v3f intersection_point;
+				//aabb3o box(v3fToOpos(boxf.MinEdge), v3fToOpos(boxf.MaxEdge));
+				v3opos_t intersection_point;
 				v3f intersection_normal;
 				if (!boxLineCollision(box, rel_start,
 						state->m_shootline.getVector(), &intersection_point,
@@ -243,7 +246,7 @@ void Environment::continueRaycast(RaycastState *state, PointedThing *result)
 					result.intersection_point = intersection_point;
 					result.intersection_normal = intersection_normal;
 					result.box_id = id;
-					found_boxcenter = box.getCenter();
+					found_boxcenter = v3fToOpos(box.getCenter());
 					is_colliding = true;
 				}
 				++id;
@@ -257,7 +260,7 @@ void Environment::continueRaycast(RaycastState *state, PointedThing *result)
 			result.distanceSq = min_distance_sq;
 			// Set undersurface and abovesurface nodes
 			f32 d = 0.002 * BS;
-			v3f fake_intersection = result.intersection_point;
+			v3opos_t fake_intersection = result.intersection_point;
 			found_boxcenter += npf; // translate back to world coords
 			// Move intersection towards its source block.
 			if (fake_intersection.X < found_boxcenter.X) {

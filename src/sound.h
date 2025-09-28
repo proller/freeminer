@@ -27,7 +27,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/serialize.h"
 #include "irrlichttypes_bloated.h"
 
-// fm:
+// == fm:
 #include "msgpack_fix.h"
 #include "network/connection.h"
 #include "util/msgpack_serialize.h"
@@ -39,7 +39,7 @@ enum {
 	SOUNDSPEC_PITCH,
 	SOUNDSPEC_FADE
 };
-
+// ==
 
 /**
  * Describes the sound information for playback.
@@ -88,7 +88,8 @@ struct SoundSpec
 	float fade = 0.0f;
 	float pitch = 1.0f;
 
-//fm:
+
+// == fm:
 	void msgpack_pack(msgpack::packer<msgpack::sbuffer> &pk) const {
 		pk.pack_map(4);
 		PACK(SOUNDSPEC_NAME, name);
@@ -103,7 +104,7 @@ struct SoundSpec
 		packet[SOUNDSPEC_PITCH].convert(pitch);
 		packet[SOUNDSPEC_FADE].convert(fade);
 	}
-
+// == 
 
 
 

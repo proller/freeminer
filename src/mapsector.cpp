@@ -25,7 +25,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "mapblock.h"
 #include "serialization.h"
 
-MapSector::MapSector(Map *parent, v2s16 pos, IGameDef *gamedef):
+MapSector::MapSector(Map *parent, v2bpos_t pos, IGameDef *gamedef):
 		m_parent(parent),
 		m_pos(pos),
 		m_gamedef(gamedef)
@@ -46,7 +46,7 @@ void MapSector::deleteBlocks()
 	m_blocks.clear();
 }
 
-MapBlock *MapSector::getBlockBuffered(s16 y)
+MapBlock *MapSector::getBlockBuffered(bpos_t y)
 {
 	MapBlock *block;
 
@@ -65,21 +65,21 @@ MapBlock *MapSector::getBlockBuffered(s16 y)
 	return block;
 }
 
-MapBlock *MapSector::getBlockNoCreateNoEx(s16 y)
+MapBlock *MapSector::getBlockNoCreateNoEx(bpos_t y)
 {
 	return getBlockBuffered(y);
 }
 
-std::unique_ptr<MapBlock> MapSector::createBlankBlockNoInsert(s16 y)
+std::unique_ptr<MapBlock> MapSector::createBlankBlockNoInsert(bpos_t y)
 {
 	assert(getBlockBuffered(y) == nullptr); // Pre-condition
 
-	v3s16 blockpos_map(m_pos.X, y, m_pos.Y);
+	v3bpos_t blockpos_map(m_pos.X, y, m_pos.Y);
 
 	return std::make_unique<MapBlock>(m_parent, blockpos_map, m_gamedef);
 }
 
-MapBlock *MapSector::createBlankBlock(s16 y)
+MapBlock *MapSector::createBlankBlock(bpos_t y)
 {
 	std::unique_ptr<MapBlock> block_u = createBlankBlockNoInsert(y);
 	MapBlock *block = block_u.get();
@@ -91,14 +91,14 @@ MapBlock *MapSector::createBlankBlock(s16 y)
 
 void MapSector::insertBlock(std::unique_ptr<MapBlock> block)
 {
-	s16 block_y = block->getPos().Y;
+	bpos_t block_y = block->getPos().Y;
 
 	MapBlock *block2 = getBlockBuffered(block_y);
 	if (block2) {
 		throw AlreadyExistsException("Block already exists");
 	}
 
-	v2s16 p2d(block->getPos().X, block->getPos().Z);
+	v2bpos_t p2d(block->getPos().X, block->getPos().Z);
 	assert(p2d == m_pos);
 
 	// Insert into container
@@ -113,7 +113,7 @@ void MapSector::deleteBlock(MapBlock *block)
 
 std::unique_ptr<MapBlock> MapSector::detachBlock(MapBlock *block)
 {
-	s16 block_y = block->getPos().Y;
+	bpos_t block_y = block->getPos().Y;
 
 	// Clear from cache
 	m_block_cache = nullptr;

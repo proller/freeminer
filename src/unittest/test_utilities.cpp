@@ -17,6 +17,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 */
 
+#include "irr_v3d.h"
 #include "test.h"
 
 #include <cmath>
@@ -652,7 +653,7 @@ C apply_all(const C &co, F functor)
 
 void TestUtilities::testIsBlockInSight()
 {
-	const std::vector<v3s16> testdata1 = {
+	const std::vector<v3pos_t> testdata1 = {
 		{0, 1 * (int)BS, 0}, // camera_pos
 		{1, 0, 0},           // camera_dir
 
@@ -663,10 +664,11 @@ void TestUtilities::testIsBlockInSight()
 		{0, 0, 0},
 		{6, 0, 0}
 	};
-	auto test1 = [] (const std::vector<v3s16> &data) {
+	auto test1 = [] (const std::vector<v3pos_t> &data) {
 		float range = BS * MAP_BLOCKSIZE * 4;
 		float fov = 72 * core::DEGTORAD;
-		v3f cam_pos = cast_v3(v3f, data[0]), cam_dir = cast_v3(v3f, data[1]);
+		v3opos_t cam_pos = cast_v3(v3opos_t, data[0]);
+		v3f cam_dir = cast_v3(v3f, data[1]);
 		UASSERT( isBlockInSight(data[2], cam_pos, cam_dir, fov, range));
 		UASSERT(!isBlockInSight(data[3], cam_pos, cam_dir, fov, range));
 		UASSERT(!isBlockInSight(data[4], cam_pos, cam_dir, fov, range));
@@ -680,7 +682,7 @@ void TestUtilities::testIsBlockInSight()
 	};
 	// XZ rotations
 	for (int j = 0; j < 4; j++) {
-		auto tmpdata = apply_all(testdata1, [&] (v3s16 v) -> v3s16 {
+		auto tmpdata = apply_all(testdata1, [&] (v3pos_t v) -> v3pos_t {
 			v.rotateXZBy(j*90);
 			return v;
 		});
@@ -688,7 +690,7 @@ void TestUtilities::testIsBlockInSight()
 	}
 	// just two for XY
 	for (int j = 0; j < 2; j++) {
-		auto tmpdata = apply_all(testdata1, [&] (v3s16 v) -> v3s16 {
+		auto tmpdata = apply_all(testdata1, [&] (v3pos_t v) -> v3pos_t {
 			v.rotateXYBy(90+j*180);
 			return v;
 		});
@@ -698,7 +700,8 @@ void TestUtilities::testIsBlockInSight()
 	{
 		float range = BS * MAP_BLOCKSIZE * 2;
 		float fov = 72 * core::DEGTORAD;
-		v3f cam_pos(-(MAP_BLOCKSIZE - 1) * BS, 0, 0), cam_dir(1, 0, 0);
+		v3opos_t cam_pos(-(MAP_BLOCKSIZE - 1) * BS, 0, 0);
+		v3f cam_dir(1, 0, 0);
 		// we're looking at X+ but are so close to block (-1,0,0) that it
 		// should still be considered visible
 		UASSERT(isBlockInSight({-1, 0, 0}, cam_pos, cam_dir, fov, range));

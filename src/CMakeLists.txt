@@ -220,6 +220,8 @@ if(NOT (BUILD_CLIENT OR BUILD_SERVER OR NO_BUILD))
 	set(BUILD_SERVER TRUE)
 endif()
 
+option(USE_POS32 "32 bit node/block positions (experimental, not compatible with 16 bit)" TRUE)
+option(USE_OPOS64 "64 bit object positions (experimental, not compatible with 32 bit)" ${USE_POS32})
 
 option(ENABLE_CURL "Enable cURL support for fetching media" TRUE)
 set(USE_CURL FALSE)
@@ -928,7 +930,7 @@ if(WIN32)
 endif()
 
 set(FMclient_SRCS
-	guiTextInputMenu.cpp
+	#guiTextInputMenu.cpp
 )
 
 # Client sources

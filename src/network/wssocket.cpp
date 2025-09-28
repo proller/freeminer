@@ -256,7 +256,7 @@ bool WSSocket::init(bool ipv6, bool noExceptions)
 	server.set_max_message_size(500000000);
 
 	server.init_asio();
-
+	
 	server.set_reuse_addr(true);
 	server.set_open_handler(websocketpp::lib::bind(
 			&WSSocket::on_open, this, websocketpp::lib::placeholders::_1));

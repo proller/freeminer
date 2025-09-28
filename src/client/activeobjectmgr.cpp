@@ -19,7 +19,11 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include <cmath>
 #include <log.h>
+#include <string>
+#include "irr_v3d.h"
+#include "irrlichttypes.h"
 #include "profiler.h"
+#include "util/numeric.h"
 #include "activeobjectmgr.h"
 
 namespace client
@@ -37,6 +41,8 @@ ActiveObjectMgr::~ActiveObjectMgr()
 void ActiveObjectMgr::step(
 		float dtime, const std::function<void(const ClientActiveObjectPtr&)> &f)
 {
+	 TimeTaker timr(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " obj="+ std::to_string(m_active_objects.size()));
+
 	g_profiler->avg("ActiveObjectMgr: CAO count [#]", m_active_objects.size());
 
 	// Same as in server activeobjectmgr.
@@ -107,14 +113,14 @@ void ActiveObjectMgr::removeObject(u16 id)
 }
 
 // clang-format on
-void ActiveObjectMgr::getActiveObjects(const v3f &origin, f32 max_d,
+void ActiveObjectMgr::getActiveObjects(const v3opos_t &origin, f32 max_d,
 		std::vector<DistanceSortedActiveObject> &dest)
 {
-	f32 max_d2 = max_d * max_d;
+	opos_t max_d2 = max_d * max_d;
 	for (auto &ao_it : m_active_objects) {
 		const auto obj = ao_it.second;
 
-		f32 d2 = (obj->getPosition() - origin).getLengthSQ();
+		opos_t d2 = (obj->getPosition() - origin).getLengthSQ();
 
 		if (d2 > max_d2)
 			continue;
@@ -123,11 +129,11 @@ void ActiveObjectMgr::getActiveObjects(const v3f &origin, f32 max_d,
 	}
 }
 
-std::vector<DistanceSortedActiveObject> ActiveObjectMgr::getActiveSelectableObjects(const core::line3d<f32> &shootline)
+std::vector<DistanceSortedActiveObject> ActiveObjectMgr::getActiveSelectableObjects(const core::line3d<opos_t> &shootline)
 {
 	std::vector<DistanceSortedActiveObject> dest;
 	f32 max_d = shootline.getLength();
-	v3f dir = shootline.getVector().normalize();
+	v3opos_t dir = shootline.getVector().normalize();
 
 	for (auto &ao_it : m_active_objects) {
 		auto obj = ao_it.second;
@@ -136,11 +142,11 @@ std::vector<DistanceSortedActiveObject> ActiveObjectMgr::getActiveSelectableObje
 		if (!obj->getSelectionBox(&selection_box))
 			continue;
 
-		v3f obj_center = obj->getPosition() + selection_box.getCenter();
+		v3opos_t obj_center = obj->getPosition() + v3fToOpos(selection_box.getCenter());
 		f32 obj_radius_sq = selection_box.getExtent().getLengthSQ() / 4;
 
-		v3f c = obj_center - shootline.start;
-		f32 a = dir.dotProduct(c);           // project c onto dir
+		v3opos_t c = obj_center - shootline.start;
+		opos_t a = dir.dotProduct(c);           // project c onto dir
 		f32 b_sq = c.getLengthSQ() - a * a;  // distance from shootline to obj_center, squared
 
 		if (b_sq > obj_radius_sq)

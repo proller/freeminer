@@ -68,6 +68,7 @@ inline std::string strgettext(const char *str)
 	return str[0] ? mygettext(str) : "";
 }
 
+
 inline std::string strgettext(const std::string &str)
 {
 	return strgettext(str.c_str());

@@ -344,6 +344,7 @@ int FarMesh::go_flat()
 
 	for (; last_step < blocks.size(); ++last_step) {
 		for (const auto &bpos : blocks[last_step]) {
+			//DUMP(last_distance_max, last_step, bpos, cbpos, bpos.getDistanceFromSQ(cbpos), bpos.getDistanceFrom(cbpos), 1 << last_step,(1 << (last_step + MAP_BLOCKP)));
 			// just first suggestion
 			if (1 << (last_step + MAP_BLOCKP) > draw_control.farmesh &&
 					radius_box(bpos, cbpos) << MAP_BLOCKP > last_distance_max) {

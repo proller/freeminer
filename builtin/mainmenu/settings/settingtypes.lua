@@ -122,6 +122,10 @@ local function parse_setting_line(settings, line, read_all, base_level, allow_se
 		return "Tried to add \"secure.\" setting"
 	end
 
+	if readable_name == "" then
+		readable_name = name
+	end
+
 	local requires = {}
 	local last_line = #current_comment > 0 and current_comment[#current_comment]:trim()
 	if last_line and last_line:lower():sub(1, 9) == "requires:" then
@@ -242,6 +246,11 @@ local function parse_setting_line(settings, line, read_all, base_level, allow_se
 				persistence = values[8],
 				lacunarity = values[9],
 				flags = values[10]
+
+				,
+				farscale  = values[11],
+				farspread  = values[12],
+
 			},
 			values = values,
 			requires = requires,
@@ -253,6 +262,10 @@ local function parse_setting_line(settings, line, read_all, base_level, allow_se
 	end
 
 	if setting_type == "bool" then
+
+		if remaining_line == "0" then remaining_line = "false" end
+		if remaining_line == "1" then remaining_line = "true" end
+
 		if remaining_line ~= "false" and remaining_line ~= "true" then
 			return "Invalid boolean setting"
 		end

@@ -22,6 +22,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include "config.h"
+
 /*
 	All kinds of constants.
 
@@ -79,7 +81,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 // This is the maximum value the setting map_generation_limit can be
 #if USE_POS32
 #define MAX_MAP_GENERATION_LIMIT (2147483008)
-#define FARMESH_LIMIT (100000)
+#define FARMESH_LIMIT (200000)
 #else
 #define MAX_MAP_GENERATION_LIMIT (31007)
 #define FARMESH_LIMIT (31007)

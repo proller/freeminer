@@ -19,6 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "settings.h"
 #include "convert_json.h"
+#include "irr_v3d.h"
 #include "irrlichttypes_bloated.h"
 #include "exceptions.h"
 #include "threading/mutex_auto_lock.h"
@@ -583,6 +584,18 @@ v3f Settings::getV3F(const std::string &name) const
 	return str_to_v3f(get(name));
 }
 
+#if USE_OPOS64
+v3opos_t Settings::getV3O(const std::string &name) const
+{
+	v3opos_t value;
+	Strfnd f(get(name));
+	f.next("(");
+	value.X = stod(f.next(","));
+	value.Y = stod(f.next(","));
+	value.Z = stod(f.next(")"));
+	return value;
+}
+#endif
 
 u32 Settings::getFlagStr(const std::string &name, const FlagDesc *flagdesc,
 	u32 *flagmask) const
@@ -869,6 +882,17 @@ bool Settings::getV3FNoEx(const std::string &name, v3f &val) const
 	}
 }
 
+#if USE_OPOS64
+bool Settings::getV3FNoEx(const std::string &name, v3opos_t &val) const
+{
+	try {
+		val = getV3O(name);
+		return true;
+	} catch (SettingNotFoundException &e) {
+		return false;
+	}
+}
+#endif
 
 bool Settings::getFlagStrNoEx(const std::string &name, u32 &val,
 	const FlagDesc *flagdesc) const

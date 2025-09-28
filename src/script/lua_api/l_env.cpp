@@ -23,6 +23,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <algorithm>
 #include "irr_v3d.h"
 #include "lua_api/l_env.h"
+#include "irr_v3d.h"
 #include "lua_api/l_internal.h"
 #include "lua_api/l_nodemeta.h"
 #include "lua_api/l_nodetimer.h"
@@ -71,7 +72,7 @@ const EnumString ModApiEnvBase::es_BlockStatusType[] =
 
 //v3pos_t start_pos;
 
-void LuaABM::trigger(ServerEnvironment *env, v3s16 p, MapNode n,
+void LuaABM::trigger(ServerEnvironment *env, v3pos_t p, MapNode n,
 		u32 active_object_count, u32 active_object_count_wider, 
 		v3pos_t neighbor_pos, uint8_t activate)
 {
@@ -109,7 +110,7 @@ void LuaABM::trigger(ServerEnvironment *env, v3s16 p, MapNode n,
 	lua_getfield(L, -1, "action");
 	luaL_checktype(L, -1, LUA_TFUNCTION);
 	lua_remove(L, -2); // Remove registered_abms[m_id]
-	push_v3s16(L, p);
+	push_v3pos(L, p);
 	pushnode(L, n);
 	lua_pushnumber(L, active_object_count);
 	lua_pushnumber(L, active_object_count_wider);
@@ -124,7 +125,7 @@ void LuaABM::trigger(ServerEnvironment *env, v3s16 p, MapNode n,
 	lua_pop(L, 1); // Pop error handler
 }
 
-void LuaLBM::trigger(ServerEnvironment *env, v3s16 p,
+void LuaLBM::trigger(ServerEnvironment *env, v3pos_t p,
 	const MapNode n, const float dtime_s)
 {
 	ServerScripting *scriptIface = env->getScriptIface();
@@ -163,7 +164,7 @@ void LuaLBM::trigger(ServerEnvironment *env, v3s16 p,
 	lua_getfield(L, -1, "action");
 	luaL_checktype(L, -1, LUA_TFUNCTION);
 	lua_remove(L, -2); // Remove registered_lbms[m_id]
-	push_v3s16(L, p);
+	push_v3pos(L, p);
 	pushnode(L, n);
 	lua_pushnumber(L, dtime_s);
 
@@ -201,8 +202,8 @@ int LuaRaycast::create_object(lua_State *L)
 	bool objects = true;
 	bool liquids = false;
 
-	v3f pos1 = checkFloatPos(L, 1);
-	v3f pos2 = checkFloatPos(L, 2);
+	auto pos1 = checkOposPos(L, 1);
+	auto pos2 = checkOposPos(L, 2);
 	if (lua_isboolean(L, 3)) {
 		objects = readParam<bool>(L, 3);
 	}
@@ -210,7 +211,7 @@ int LuaRaycast::create_object(lua_State *L)
 		liquids = readParam<bool>(L, 4);
 	}
 
-	LuaRaycast *o = new LuaRaycast(core::line3d<f32>(pos1, pos2),
+	LuaRaycast *o = new LuaRaycast(core::line3d<opos_t>(pos1, pos2),
 		objects, liquids);
 
 	*(void **) (lua_newuserdata(L, sizeof(void *))) = o;
@@ -245,7 +246,7 @@ const luaL_Reg LuaRaycast::methods[] =
 	{ 0, 0 }
 };
 
-void LuaEmergeAreaCallback(v3s16 blockpos, EmergeAction action, void *param)
+void LuaEmergeAreaCallback(v3bpos_t blockpos, EmergeAction action, void *param)
 {
 	ScriptCallbackState *state = (ScriptCallbackState *)param;
 	assert(state != NULL);
@@ -273,7 +274,7 @@ int ModApiEnv::l_set_node(lua_State *L)
 	GET_ENV_PTR;
 
 	// parameters
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 	MapNode n = readnode(L, 2);
 	// Do it
 	bool succeeded = env->setNode(pos, n, lua_tonumber(L, 3), lua_tonumber(L, 4));
@@ -304,7 +305,7 @@ int ModApiEnv::l_bulk_set_node(lua_State *L)
 	bool succeeded = true;
 	for (s32 i = 1; i <= len; i++) {
 		lua_rawgeti(L, 1, i);
-		if (!env->setNode(read_v3s16(L, -1), n))
+		if (!env->setNode(read_v3pos(L, -1), n))
 			succeeded = false;
 		lua_pop(L, 1);
 	}
@@ -325,7 +326,7 @@ int ModApiEnv::l_remove_node(lua_State *L)
 	GET_ENV_PTR;
 
 	// parameters
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 	// Do it
 	bool succeeded = env->removeNode(pos, lua_tonumber(L, 2), lua_tonumber(L, 3));
 	lua_pushboolean(L, succeeded);
@@ -339,7 +340,7 @@ int ModApiEnv::l_swap_node(lua_State *L)
 	GET_ENV_PTR;
 
 	// parameters
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 	MapNode n = readnode(L, 2);
 	// Do it
 	bool succeeded = env->swapNode(pos, n);
@@ -354,7 +355,7 @@ int ModApiEnv::l_get_node(lua_State *L)
 	GET_ENV_PTR;
 
 	// pos
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 	// Do it
 	MapNode n = env->getMap().getNode(pos);
 	// Return node
@@ -369,7 +370,7 @@ int ModApiEnv::l_get_node_or_nil(lua_State *L)
 	GET_ENV_PTR;
 
 	// pos
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 	// Do it
 	bool pos_ok;
 	MapNode n = env->getMap().getNode(pos, &pos_ok);
@@ -390,7 +391,7 @@ int ModApiEnv::l_get_node_light(lua_State *L)
 	GET_PLAIN_ENV_PTR;
 
 	// Do it
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 	u32 time_of_day = env->getTimeOfDay();
 	if(lua_isnumber(L, 2))
 		time_of_day = 24000.0 * lua_tonumber(L, 2);
@@ -416,7 +417,7 @@ int ModApiEnv::l_get_natural_light(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 
 	bool is_position_ok;
 	MapNode n = env->getMap().getNode(pos, &is_position_ok);
@@ -459,7 +460,7 @@ int ModApiEnv::l_place_node(lua_State *L)
 	const NodeDefManager *ndef = server->ndef();
 	IItemDefManager *idef = server->idef();
 
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 	MapNode n = readnode(L, 2);
 
 	// Don't attempt to load non-loaded area as of now
@@ -474,7 +475,7 @@ int ModApiEnv::l_place_node(lua_State *L)
 	PointedThing pointed;
 	pointed.type = POINTEDTHING_NODE;
 	pointed.node_abovesurface = pos;
-	pointed.node_undersurface = pos + v3s16(0,-1,0);
+	pointed.node_undersurface = pos + v3pos_t(0,-1,0);
 	// Place it with a NULL placer (appears in Lua as nil)
 	bool success = scriptIfaceItem->item_OnPlace(item, nullptr, pointed);
 	lua_pushboolean(L, success);
@@ -489,7 +490,7 @@ int ModApiEnv::l_dig_node(lua_State *L)
 
 	ScriptApiNode *scriptIfaceNode = getScriptApi<ScriptApiNode>(L);
 
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 
 	// Don't attempt to load non-loaded area as of now
 	MapNode n = env->getMap().getNode(pos);
@@ -512,7 +513,7 @@ int ModApiEnv::l_punch_node(lua_State *L)
 
 	ScriptApiNode *scriptIfaceNode = getScriptApi<ScriptApiNode>(L);
 
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 
 	// Don't attempt to load non-loaded area as of now
 	MapNode n = env->getMap().getNode(pos);
@@ -571,7 +572,8 @@ int ModApiEnv::l_set_node_level(lua_State *L)
 		return 1;
 	}
 	lua_pushnumber(L, n.setLevel(env->getGameDef()->ndef(), level));
-	env->swapNode(pos, n, fast);
+	env->setNode(pos, n, fast);
+	//env->swapNode(pos, n);
 	return 1;
 }
 
@@ -597,7 +599,8 @@ int ModApiEnv::l_add_node_level(lua_State *L)
 		return 1;
 	}
 	lua_pushnumber(L, n.addLevel(env->getGameDef()->ndef(), level, compress));
-	env->swapNode(pos, n, fast);
+	env->setNode(pos, n, fast);
+	//env->swapNode(pos, n);
 	return 1;
 }
 
@@ -622,7 +625,8 @@ int ModApiEnv::l_freeze_melt(lua_State *L)
 		return 1;
 	}
 	lua_pushnumber(L, n.freeze_melt(env->getGameDef()->ndef(), direction));
-	env->swapNode(pos, n, fast);
+	env->setNode(pos, n, fast);
+	//env->swapNode(pos, n);
 	return 1;
 }
 
@@ -656,12 +660,12 @@ int ModApiEnv::l_find_nodes_with_meta(lua_State *L)
 {
 	GET_PLAIN_ENV_PTR;
 
-	std::vector<v3s16> positions = env->getMap().findNodesWithMetadata(
-		check_v3s16(L, 1), check_v3s16(L, 2));
+	std::vector<v3pos_t> positions = env->getMap().findNodesWithMetadata(
+		check_v3pos(L, 1), check_v3pos(L, 2));
 
 	lua_createtable(L, positions.size(), 0);
 	for (size_t i = 0; i != positions.size(); i++) {
-		push_v3s16(L, positions[i]);
+		push_v3pos(L, positions[i]);
 		lua_rawseti(L, -2, i + 1);
 	}
 
@@ -674,7 +678,7 @@ int ModApiEnv::l_get_meta(lua_State *L)
 	GET_ENV_PTR;
 
 	// Do it
-	v3s16 p = read_v3s16(L, 1);
+	v3pos_t p = read_v3pos(L, 1);
 	NodeMetaRef::create(L, p, env);
 	return 1;
 }
@@ -685,7 +689,7 @@ int ModApiEnv::l_get_node_timer(lua_State *L)
 	GET_ENV_PTR;
 
 	// Do it
-	v3s16 p = read_v3s16(L, 1);
+	v3pos_t p = read_v3pos(L, 1);
 	NodeTimerRef::create(L, p, &env->getServerMap());
 	return 1;
 }
@@ -696,7 +700,7 @@ int ModApiEnv::l_add_entity(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3f pos = checkFloatPos(L, 1);
+	auto pos = checkOposPos(L, 1);
 	const char *name = luaL_checkstring(L, 2);
 	std::string staticdata = readParam<std::string>(L, 3, "");
 
@@ -795,7 +799,7 @@ int ModApiEnv::l_get_objects_inside_radius(lua_State *L)
 	ScriptApiBase *script = getScriptApiBase(L);
 
 	// Do it
-	v3f pos = checkFloatPos(L, 1);
+	v3opos_t pos = checkOposPos(L, 1);
 	float radius = readParam<float>(L, 2) * BS;
 	std::vector<ServerActiveObjectPtr> objs;
 
@@ -818,9 +822,9 @@ int ModApiEnv::l_get_objects_in_area(lua_State *L)
 	GET_ENV_PTR;
 	ScriptApiBase *script = getScriptApiBase(L);
 
-	v3f minp = read_v3f(L, 1) * BS;
-	v3f maxp = read_v3f(L, 2) * BS;
-	aabb3f box(minp, maxp);
+	auto minp = read_v3o(L, 1) * BS;
+	auto maxp = read_v3o(L, 2) * BS;
+	aabb3o box(minp, maxp);
 	box.repair();
 	std::vector<ServerActiveObjectPtr> objs;
 
@@ -907,16 +911,16 @@ void ModApiEnvBase::collectNodeIds(lua_State *L, int idx, const NodeDefManager *
 }
 
 template <typename F>
-int ModApiEnvBase::findNodeNear(lua_State *L, v3s16 pos, int radius,
+int ModApiEnvBase::findNodeNear(lua_State *L, v3pos_t pos, int radius,
 		const std::vector<content_t> &filter, int start_radius, F &&getNode)
 {
 	for (int d = start_radius; d <= radius; d++) {
-		const std::vector<v3s16> &list = FacePositionCache::getFacePositions(d);
-		for (const v3s16 &i : list) {
-			v3s16 p = pos + i;
+		const std::vector<v3pos_t> &list = FacePositionCache::getFacePositions(d);
+		for (const v3pos_t &i : list) {
+			v3pos_t p = pos + i;
 			content_t c = getNode(p).getContent();
 			if (CONTAINS(filter, c)) {
-				push_v3s16(L, p);
+				push_v3pos(L, p);
 				return 1;
 			}
 		}
@@ -933,7 +937,7 @@ int ModApiEnv::l_find_node_near(lua_State *L)
 	const NodeDefManager *ndef = env->getGameDef()->ndef();
 	Map &map = env->getMap();
 
-	v3s16 pos = read_v3s16(L, 1);
+	v3pos_t pos = read_v3pos(L, 1);
 	int radius = luaL_checkinteger(L, 2);
 	std::vector<content_t> filter;
 	collectNodeIds(L, 3, ndef, filter);
@@ -946,13 +950,13 @@ int ModApiEnv::l_find_node_near(lua_State *L)
 		radius = client->CSMClampRadius(pos, radius);
 #endif
 
-	auto getNode = [&map] (v3s16 p) -> MapNode {
+	auto getNode = [&map] (v3pos_t p) -> MapNode {
 		return map.getNode(p);
 	};
 	return findNodeNear(L, pos, radius, filter, start_radius, getNode);
 }
 
-void ModApiEnvBase::checkArea(v3s16 &minp, v3s16 &maxp)
+void ModApiEnvBase::checkArea(v3pos_t &minp, v3pos_t &maxp)
 {
 	auto volume = VoxelArea(minp, maxp).getVolume();
 	// Volume limit equal to 8 default mapchunks, (80 * 2) ^ 3 = 4,096,000
@@ -961,9 +965,9 @@ void ModApiEnvBase::checkArea(v3s16 &minp, v3s16 &maxp)
 	}
 
 	// Clamp to map range to avoid problems
-#define CLAMP(arg) core::clamp(arg, (s16)-MAX_MAP_GENERATION_LIMIT, (s16)MAX_MAP_GENERATION_LIMIT)
-	minp = v3s16(CLAMP(minp.X), CLAMP(minp.Y), CLAMP(minp.Z));
-	maxp = v3s16(CLAMP(maxp.X), CLAMP(maxp.Y), CLAMP(maxp.Z));
+#define CLAMP(arg) core::clamp(arg, (pos_t)-MAX_MAP_GENERATION_LIMIT, (pos_t)MAX_MAP_GENERATION_LIMIT)
+	minp = v3pos_t(CLAMP(minp.X), CLAMP(minp.Y), CLAMP(minp.Z));
+	maxp = v3pos_t(CLAMP(maxp.X), CLAMP(maxp.Y), CLAMP(maxp.Z));
 #undef CLAMP
 }
 
@@ -982,14 +986,14 @@ int ModApiEnvBase::findNodesInArea(lua_State *L, const NodeDefManager *ndef,
 		for (u32 i = 0; i < filter.size(); i++)
 			lua_newtable(L);
 
-		iterate([&](v3s16 p, MapNode n) -> bool {
+		iterate([&](v3pos_t p, MapNode n) -> bool {
 			content_t c = n.getContent();
 
 			auto it = std::find(filter.begin(), filter.end(), c);
 			if (it != filter.end()) {
 				// Calculate index of the table and append the position
 				u32 filt_index = it - filter.begin();
-				push_v3s16(L, p);
+				push_v3pos(L, p);
 				lua_rawseti(L, base + 1 + filt_index, ++idx[filt_index]);
 			}
 
@@ -1016,12 +1020,12 @@ int ModApiEnvBase::findNodesInArea(lua_State *L, const NodeDefManager *ndef,
 
 		lua_newtable(L);
 		u32 i = 0;
-		iterate([&](v3s16 p, MapNode n) -> bool {
+		iterate([&](v3pos_t p, MapNode n) -> bool {
 			content_t c = n.getContent();
 
 			auto it = std::find(filter.begin(), filter.end(), c);
 			if (it != filter.end()) {
-				push_v3s16(L, p);
+				push_v3pos(L, p);
 				lua_rawseti(L, -2, ++i);
 
 				u32 filt_index = it - filter.begin();
@@ -1045,8 +1049,8 @@ int ModApiEnv::l_find_nodes_in_area(lua_State *L)
 {
 	GET_PLAIN_ENV_PTR;
 
-	v3s16 minp = read_v3s16(L, 1);
-	v3s16 maxp = read_v3s16(L, 2);
+	v3pos_t minp = read_v3pos(L, 1);
+	v3pos_t maxp = read_v3pos(L, 2);
 	sortBoxVerticies(minp, maxp);
 
 	const NodeDefManager *ndef = env->getGameDef()->ndef();
@@ -1073,22 +1077,22 @@ int ModApiEnv::l_find_nodes_in_area(lua_State *L)
 }
 
 template <typename F>
-int ModApiEnvBase::findNodesInAreaUnderAir(lua_State *L, v3s16 minp, v3s16 maxp,
+int ModApiEnvBase::findNodesInAreaUnderAir(lua_State *L, v3pos_t minp, v3pos_t maxp,
 	const std::vector<content_t> &filter, F &&getNode)
 {
 	lua_newtable(L);
 	u32 i = 0;
-	v3s16 p;
+	v3pos_t p;
 	for (p.X = minp.X; p.X <= maxp.X; p.X++)
 	for (p.Z = minp.Z; p.Z <= maxp.Z; p.Z++) {
 		p.Y = minp.Y;
 		content_t c = getNode(p).getContent();
 		for (; p.Y <= maxp.Y; p.Y++) {
-			v3s16 psurf(p.X, p.Y + 1, p.Z);
+			v3pos_t psurf(p.X, p.Y + 1, p.Z);
 			content_t csurf = getNode(psurf).getContent();
 			if (c != CONTENT_AIR && csurf == CONTENT_AIR &&
 					CONTAINS(filter, c)) {
-				push_v3s16(L, p);
+				push_v3pos(L, p);
 				lua_rawseti(L, -2, ++i);
 			}
 			c = csurf;
@@ -1107,8 +1111,8 @@ int ModApiEnv::l_find_nodes_in_area_under_air(lua_State *L)
 	 */
 	GET_PLAIN_ENV_PTR;
 
-	v3s16 minp = read_v3s16(L, 1);
-	v3s16 maxp = read_v3s16(L, 2);
+	v3pos_t minp = read_v3pos(L, 1);
+	v3pos_t maxp = read_v3pos(L, 2);
 	sortBoxVerticies(minp, maxp);
 
 	const NodeDefManager *ndef = env->getGameDef()->ndef();
@@ -1126,7 +1130,7 @@ int ModApiEnv::l_find_nodes_in_area_under_air(lua_State *L)
 	std::vector<content_t> filter;
 	collectNodeIds(L, 3, ndef, filter);
 
-	auto getNode = [&map] (v3s16 p) -> MapNode {
+	auto getNode = [&map] (v3pos_t p) -> MapNode {
 		return map.getNode(p);
 	};
 	return findNodesInAreaUnderAir(L, minp, maxp, filter, getNode);
@@ -1167,7 +1171,7 @@ int ModApiEnv::l_get_perlin_map(lua_State *L)
 	NoiseParams np;
 	if (!read_noiseparams(L, 1, &np))
 		return 0;
-	v3s16 size = read_v3s16(L, 2);
+	v3pos_t size = read_v3pos(L, 2);
 
 	s32 seed = (s32)(env->getServerMap().getSeed());
 	LuaPerlinNoiseMap *n = new LuaPerlinNoiseMap(&np, seed, size);
@@ -1207,16 +1211,16 @@ int ModApiEnv::l_line_of_sight(lua_State *L)
 	GET_PLAIN_ENV_PTR;
 
 	// read position 1 from lua
-	v3f pos1 = checkFloatPos(L, 1);
+	v3opos_t pos1 = checkOposPos(L, 1);
 	// read position 2 from lua
 	v3f pos2 = checkFloatPos(L, 2);
 
-	v3s16 p;
+	v3pos_t p;
 
 	bool success = env->line_of_sight(pos1, pos2, &p);
 	lua_pushboolean(L, success);
 	if (!success) {
-		push_v3s16(L, p);
+		push_v3pos(L, p);
 		return 2;
 	}
 	return 1;
@@ -1227,12 +1231,12 @@ int ModApiEnv::l_fix_light(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 blockpos1 = getContainerPos(read_v3s16(L, 1), MAP_BLOCKSIZE);
-	v3s16 blockpos2 = getContainerPos(read_v3s16(L, 2), MAP_BLOCKSIZE);
+	v3bpos_t blockpos1 = getContainerPos(read_v3pos(L, 1), MAP_BLOCKSIZE);
+	v3bpos_t blockpos2 = getContainerPos(read_v3pos(L, 2), MAP_BLOCKSIZE);
 	ServerMap &map = env->getServerMap();
-	std::map<v3s16, MapBlock *> modified_blocks;
+	std::map<v3bpos_t, MapBlock *> modified_blocks;
 	bool success = true;
-	v3s16 blockpos;
+	v3bpos_t blockpos;
 	for (blockpos.X = blockpos1.X; blockpos.X <= blockpos2.X; blockpos.X++)
 	for (blockpos.Y = blockpos1.Y; blockpos.Y <= blockpos2.Y; blockpos.Y++)
 	for (blockpos.Z = blockpos1.Z; blockpos.Z <= blockpos2.Z; blockpos.Z++) {
@@ -1263,16 +1267,16 @@ int ModApiEnv::l_load_area(lua_State *L)
 	MAP_LOCK_REQUIRED;
 
 	Map *map = &(env->getMap());
-	v3s16 bp1 = getNodeBlockPos(check_v3s16(L, 1));
+	v3bpos_t bp1 = getNodeBlockPos(check_v3pos(L, 1));
 	if (!lua_istable(L, 2)) {
 		map->emergeBlock(bp1);
 	} else {
-		v3s16 bp2 = getNodeBlockPos(check_v3s16(L, 2));
+		v3bpos_t bp2 = getNodeBlockPos(check_v3pos(L, 2));
 		sortBoxVerticies(bp1, bp2);
-		for (s16 z = bp1.Z; z <= bp2.Z; z++)
-		for (s16 y = bp1.Y; y <= bp2.Y; y++)
-		for (s16 x = bp1.X; x <= bp2.X; x++) {
-			map->emergeBlock(v3s16(x, y, z));
+		for (bpos_t z = bp1.Z; z <= bp2.Z; z++)
+		for (bpos_t y = bp1.Y; y <= bp2.Y; y++)
+		for (bpos_t x = bp1.X; x <= bp2.X; x++) {
+			map->emergeBlock(v3bpos_t(x, y, z));
 		}
 	}
 
@@ -1290,8 +1294,8 @@ int ModApiEnv::l_emerge_area(lua_State *L)
 
 	EmergeManager *emerge = getServer(L)->getEmergeManager();
 
-	v3s16 bpmin = getNodeBlockPos(read_v3s16(L, 1));
-	v3s16 bpmax = getNodeBlockPos(read_v3s16(L, 2));
+	v3bpos_t bpmin = getNodeBlockPos(read_v3pos(L, 1));
+	v3bpos_t bpmax = getNodeBlockPos(read_v3pos(L, 2));
 	sortBoxVerticies(bpmin, bpmax);
 
 	size_t num_blocks = VoxelArea(bpmin, bpmax).getVolume();
@@ -1318,7 +1322,7 @@ int ModApiEnv::l_emerge_area(lua_State *L)
 	for (s16 z = bpmin.Z; z <= bpmax.Z; z++)
 	for (s16 y = bpmin.Y; y <= bpmax.Y; y++)
 	for (s16 x = bpmin.X; x <= bpmax.X; x++) {
-		emerge->enqueueBlockEmergeEx(v3s16(x, y, z), PEER_ID_INEXISTENT,
+		emerge->enqueueBlockEmergeEx(v3bpos_t(x, y, z), PEER_ID_INEXISTENT,
 			BLOCK_EMERGE_ALLOW_GEN | BLOCK_EMERGE_FORCE_QUEUE, callback, state);
 	}
 
@@ -1331,8 +1335,8 @@ int ModApiEnv::l_delete_area(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 bpmin = getNodeBlockPos(read_v3s16(L, 1));
-	v3s16 bpmax = getNodeBlockPos(read_v3s16(L, 2));
+	v3bpos_t bpmin = getNodeBlockPos(read_v3pos(L, 1));
+	v3bpos_t bpmax = getNodeBlockPos(read_v3pos(L, 2));
 	sortBoxVerticies(bpmin, bpmax);
 
 	ServerMap &map = env->getServerMap();
@@ -1341,10 +1345,10 @@ int ModApiEnv::l_delete_area(lua_State *L)
 	event.type = MEET_OTHER;
 
 	bool success = true;
-	for (s16 z = bpmin.Z; z <= bpmax.Z; z++)
-	for (s16 y = bpmin.Y; y <= bpmax.Y; y++)
-	for (s16 x = bpmin.X; x <= bpmax.X; x++) {
-		v3s16 bp(x, y, z);
+	for (bpos_t z = bpmin.Z; z <= bpmax.Z; z++)
+	for (bpos_t y = bpmin.Y; y <= bpmax.Y; y++)
+	for (bpos_t x = bpmin.X; x <= bpmax.X; x++) {
+		v3bpos_t bp(x, y, z);
 		if (map.deleteBlock(bp)) {
 			env->setStaticForActiveObjectsInBlock(bp, false);
 			event.modified_blocks.push_back(bp);
@@ -1364,8 +1368,8 @@ int ModApiEnv::l_find_path(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 pos1                  = read_v3s16(L, 1);
-	v3s16 pos2                  = read_v3s16(L, 2);
+	v3pos_t pos1                  = read_v3pos(L, 1);
+	v3pos_t pos2                  = read_v3pos(L, 2);
 	unsigned int searchdistance = luaL_checkint(L, 3);
 	unsigned int max_jump       = luaL_checkint(L, 4);
 	unsigned int max_drop       = luaL_checkint(L, 5);
@@ -1380,16 +1384,16 @@ int ModApiEnv::l_find_path(lua_State *L)
 			algo = PA_DIJKSTRA;
 	}
 
-	std::vector<v3s16> path = get_path(&env->getServerMap(), env->getGameDef()->ndef(), pos1, pos2,
+	std::vector<v3pos_t> path = get_path(&env->getServerMap(), env->getGameDef()->ndef(), pos1, pos2,
 		searchdistance, max_jump, max_drop, algo);
 
 	if (!path.empty()) {
 		lua_createtable(L, path.size(), 0);
 		int top = lua_gettop(L);
 		unsigned int index = 1;
-		for (const v3s16 &i : path) {
+		for (const v3pos_t &i : path) {
 			lua_pushnumber(L,index);
-			push_v3s16(L, i);
+			push_v3pos(L, i);
 			lua_settable(L, top);
 			index++;
 		}
@@ -1443,7 +1447,7 @@ int ModApiEnv::l_spawn_tree(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 p0 = read_v3s16(L, 1);
+	v3pos_t p0 = read_v3pos(L, 1);
 
 	treegen::TreeDef tree_def;
 	const NodeDefManager *ndef = env->getGameDef()->ndef();
@@ -1470,7 +1474,7 @@ int ModApiEnv::l_transforming_liquid_add(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 p0 = read_v3s16(L, 1);
+	v3pos_t p0 = read_v3pos(L, 1);
 	env->getServerMap().transforming_liquid_add(p0);
 
 	return 1;
@@ -1482,7 +1486,7 @@ int ModApiEnv::l_forceload_block(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 blockpos = read_v3s16(L, 1);
+	v3bpos_t blockpos = read_v3pos(L, 1);
 	env->getForceloadedBlocks()->insert(blockpos);
 	return 0;
 }
@@ -1492,7 +1496,7 @@ int ModApiEnv::l_compare_block_status(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 nodepos = check_v3s16(L, 1);
+	v3pos_t nodepos = check_v3pos(L, 1);
 	std::string condition_s = luaL_checkstring(L, 2);
 	auto status = env->getBlockStatus(getNodeBlockPos(nodepos));
 
@@ -1511,7 +1515,7 @@ int ModApiEnv::l_forceload_free_block(lua_State *L)
 {
 	GET_ENV_PTR;
 
-	v3s16 blockpos = read_v3s16(L, 1);
+	v3bpos_t blockpos = read_v3pos(L, 1);
 	env->getForceloadedBlocks()->erase(blockpos);
 	return 0;
 }
