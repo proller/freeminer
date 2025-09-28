@@ -1590,7 +1590,7 @@ PlayerSAO *Server::StageTwoClientInit(session_t peer_id)
 		const auto &names = m_clients.getPlayerNames();
 
 		actionstream << player->getName() << " [" << ip_str << "] (" << player->protocol_version 
-		<< "," << player->pos_size
+		<< "," << (int)player->pos_size
 		<< ") joins game. List of players: ";
 		for (const std::string &name : names)
 			actionstream << name << " ";

@@ -72,7 +72,7 @@
 */
 
 // First version with 32bit support
-const u16 PROTOCOL_VERSION_32BIT = 147; // change to actual LATEST_PROTOCOL_VERSION+1 in future
+const u16 PROTOCOL_VERSION_32BIT = 140; // change to actual LATEST_PROTOCOL_VERSION+1 in future
 
 #if USE_POS32
 const u16 LATEST_PROTOCOL_VERSION = 148;
