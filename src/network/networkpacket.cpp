@@ -424,7 +424,7 @@ NetworkPacket& NetworkPacket::operator>>(v3f& dst)
 #if USE_OPOS64
 NetworkPacket& NetworkPacket::operator>>(v3opos_t& dst)
 {
-	if (m_proto_ver < PROTOCOL_VERSION_32BIT) {
+	if (pos_size) {
 		v3f tmp;
 		*this >> tmp;
 		dst = v3fToOpos(tmp);
@@ -505,7 +505,7 @@ v3s32 NetworkPacket::readV3S32()
 #if USE_POS32
 NetworkPacket& NetworkPacket::operator>>(v3pos_t& dst)
 {
-	if (m_proto_ver < PROTOCOL_VERSION_32BIT) {
+	if (pos_size) {
 		v3s16 tmp;
 		*this >> tmp;
 		dst = s16ToPos(tmp);
@@ -539,7 +539,7 @@ NetworkPacket& NetworkPacket::operator<<(v3f src)
 #if USE_OPOS64
 NetworkPacket& NetworkPacket::operator<<(v3opos_t src)
 {
-	if (m_proto_ver < PROTOCOL_VERSION_32BIT) {
+	if (pos_size) {
 		*this << oposToV3f(src);
 		return *this;
 	}
@@ -569,7 +569,7 @@ NetworkPacket& NetworkPacket::operator<<(v2s32 src)
 #if USE_POS32
 NetworkPacket& NetworkPacket::operator<<(v3pos_t src)
 {
-	if (m_proto_ver < PROTOCOL_VERSION_32BIT) {
+	if (pos_size) {
         *this << posToS16(src);
 		return *this;
 	}

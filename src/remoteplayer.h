@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include "network/networkprotocol.h"
 #include "player.h"
 #include "skyparams.h"
@@ -121,6 +122,7 @@ public:
 
 	u16 protocol_version = 0;
 	u16 formspec_version = 0;
+	uint8_t pos_size {};
 
 	bool inventory_formspec_overridden = false;
 

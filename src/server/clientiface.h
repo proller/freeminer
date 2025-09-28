@@ -23,6 +23,7 @@
 #include "threading/mutex_auto_lock.h"
 #include "clientdynamicinfo.h"
 
+#include <cstdint>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -236,6 +237,7 @@ public:
 
 	// fm:
 	u16 net_proto_version_fm{};
+	uint8_t pos_size{};
 	//std::atomic_int m_nearest_unsent_reset {0};
 	std::atomic_uint wanted_range{10};
 	std::atomic_bool range_all{};

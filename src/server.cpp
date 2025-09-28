@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
+#include "debug/dump.h"
+
+
 #include "server.h"
 #include <atomic>
 #include <iostream>
@@ -1520,6 +1523,7 @@ PlayerSAO *Server::StageTwoClientInit(session_t peer_id)
 		if (client) {
 			playername = client->getName();
 			sao = emergePlayer(playername.c_str(), peer_id, client->net_proto_version);
+			sao->getPlayer()->pos_size = client->pos_size;
 		}
 	}
 
@@ -1585,7 +1589,9 @@ PlayerSAO *Server::StageTwoClientInit(session_t peer_id)
 		std::string ip_str = getPeerAddress(player->getPeerId()).serializeString();
 		const auto &names = m_clients.getPlayerNames();
 
-		actionstream << player->getName() << " [" << ip_str << "] (" << player->protocol_version << ") joins game. List of players: ";
+		actionstream << player->getName() << " [" << ip_str << "] (" << player->protocol_version 
+		<< "," << player->pos_size
+		<< ") joins game. List of players: ";
 		for (const std::string &name : names)
 			actionstream << name << " ";
 		actionstream << player->getName() << std::endl;
@@ -1650,6 +1656,8 @@ void Server::ProcessData(NetworkPacket *pkt)
 		RemoteClient * client = getClient(peer_id, CS_InitDone);
 		u8 peer_ser_ver = client->serialization_version;
 		pkt->setProtoVer(client->net_proto_version);
+		pkt->pos_size = client->pos_size;
+
 		if(peer_ser_ver == SER_FMT_VER_INVALID) {
 			errorstream << "Server: Peer serialization format invalid. "
 					"Skipping incoming command "
@@ -2356,7 +2364,11 @@ void Server::SendMovePlayer(PlayerSAO *sao)
 	// Send attachment updates instantly to the client prior updating position
 	sao->sendOutdatedData();
 
-	NetworkPacket pkt(TOCLIENT_MOVE_PLAYER, sizeof_v3opos(sao->getPlayer()->protocol_version) + sizeof(f32) * 2, sao->getPeerID(), sao->getPlayer()->protocol_version);
+	NetworkPacket pkt(TOCLIENT_MOVE_PLAYER,
+			sizeof_v3opos(sao->getPlayer()->pos_size) + sizeof(f32) * 2, sao->getPeerID(),
+			sao->getPlayer()->protocol_version);
+	pkt.pos_size = sao->getPlayer()->pos_size;
+
 	pkt << sao->getBasePosition() << sao->getLookPitch() << sao->getRotation().Y;
 
 	{
@@ -2751,13 +2763,14 @@ void Server::sendNodeChangePkt(u16 command, const MapNode& n, v3pos_t p_int, flo
 
 		if (command == TOCLIENT_ADDNODE) {
 			NetworkPacket pkt(TOCLIENT_ADDNODE,
-					sizeof_v3pos(player->protocol_version) + 2 + 1 + 1 + 1, 0,
+					sizeof_v3pos(player->pos_size) + 2 + 1 + 1 + 1, 0,
 					player->protocol_version);
+			pkt.pos_size = player->pos_size;
 			pkt << p << n.param0 << n.param1 << n.param2 << (u8)(remove_metadata ? 0 : 1);
 			m_clients.send(client_id, &pkt);
 		} else if (command == TOCLIENT_REMOVENODE) {
-			NetworkPacket pkt(TOCLIENT_REMOVENODE, sizeof_v3pos(player->protocol_version),
-					0, player->protocol_version);
+			NetworkPacket pkt(TOCLIENT_REMOVENODE, sizeof_v3pos(player->pos_size), 0,
+					player->protocol_version);
 			pkt << p;
 			m_clients.send(client_id, &pkt);
 		}
@@ -2839,7 +2852,10 @@ void Server::SendBlockNoLock(session_t peer_id, MapBlock *block, u8 ver,
 		sptr = &s;
 	}
 
-	NetworkPacket pkt(TOCLIENT_BLOCKDATA, sizeof_v3pos(m_env->getPlayer(peer_id)->protocol_version) + sptr->size(), peer_id, m_env->getPlayer(peer_id)->protocol_version);
+	NetworkPacket pkt(TOCLIENT_BLOCKDATA,
+			sizeof_v3pos(m_env->getPlayer(peer_id)->pos_size) + sptr->size(), peer_id,
+			m_env->getPlayer(peer_id)->protocol_version);
+	pkt.pos_size = m_env->getPlayer(peer_id)->pos_size;
 	pkt << block->getPos();
 	pkt.putRawString(*sptr);
 	pkt << block->far_step;

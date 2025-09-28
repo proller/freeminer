@@ -3,6 +3,7 @@
 // Copyright (C) 2015 nerzhul, Loic Blot <loic.blot@unix-experience.fr>
 
 #include "config.h"
+#include "debug/dump.h"
 
 #if !MINETEST_PROTO
 #include "network/fm_serverpackethandler.cpp"
@@ -120,6 +121,12 @@ void Server::handleCommand_Init(NetworkPacket* pkt)
 		// Else go with client's maximum
 		else
 			net_proto_version = max_net_proto_version;
+	}
+
+	if (net_proto_version > 100) {
+		net_proto_version -= 100;
+		client->pos_size = 32;
+		DUMP(net_proto_version, client->pos_size);
 	}
 
 	verbosestream << "Server: " << addr_s << ": Protocol version: min: "
@@ -495,7 +502,7 @@ void Server::process_PlayerPos(RemotePlayer *player, PlayerSAO *playersao,
 	}
 
 	v3opos_t position((opos_t)ps.X / 100.0f, (opos_t)ps.Y / 100.0f, (opos_t)ps.Z / 100.0f);
-	if (pkt->getRemainingBytes() >= 24 && pkt->getProtoVer() >= PROTOCOL_VERSION_32BIT) {
+	if (pkt->getRemainingBytes() >= 24 && pkt->pos_size) {
 		*pkt >> position;
 	}
 	v3f speed((f32)ss.X / 100.0f, (f32)ss.Y / 100.0f, (f32)ss.Z / 100.0f);

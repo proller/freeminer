@@ -8,6 +8,7 @@
 #include "irrlichttypes_bloated.h"
 #include "networkprotocol.h"
 #include <SColor.h>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -19,12 +20,12 @@
 class MsgpackPacketSafe;
 // ==
 
-inline size_t sizeof_v3opos(u16 proto_ver) {
-	return proto_ver >= PROTOCOL_VERSION_32BIT ? sizeof(v3opos_t) : sizeof(v3f);
+inline size_t sizeof_v3opos(u16 pos_size) {
+	return pos_size ? sizeof(v3opos_t) : sizeof(v3f);
 }
 
-inline size_t sizeof_v3pos(u16 proto_ver) {
-	return proto_ver >= PROTOCOL_VERSION_32BIT ? sizeof(v3pos_t) : sizeof(v3s16);
+inline size_t sizeof_v3pos(u16 pos_size) {
+	return pos_size ? sizeof(v3pos_t) : sizeof(v3s16);
 }
 
 class NetworkPacket
@@ -177,6 +178,7 @@ public:
 	std::shared_ptr<MsgpackPacketSafe> packet;
 	std::shared_ptr<msgpack::unpacked> packet_unpacked;
 	int packet_unpack();
+    uint8_t pos_size {};
 private:
 	// ==
 
