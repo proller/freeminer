@@ -86,7 +86,7 @@ private:
 
 	EmergeAction getBlockOrStartGen(
 		const v3bpos_t &pos, bool allow_gen, MapBlockPtr *block, BlockMakeData *data);
-	MapBlockPtr finishGen(v3s16 pos, BlockMakeData *bmdata,
+	MapBlockPtr finishGen(v3bpos_t pos, BlockMakeData *bmdata,
 		std::map<v3bpos_t, MapBlock *> *modified_blocks);
 
 	friend class EmergeManager;
