@@ -408,7 +408,7 @@ public:
 
 		return m_data[m_area.index(p)];
 	}
-	MapNode getNodeNoEx(const v3s16 &p)
+	MapNode getNodeNoEx(const v3s16 &p) override
 	{
 		VoxelArea voxel_area(p);
 		addArea(voxel_area);
@@ -419,7 +419,7 @@ public:
 
 		return m_data[m_area.index(p)];
 	}
-	MapNode getNodeNoExNoEmerge(const v3s16 &p)
+	MapNode getNodeNoExNoEmerge(const v3s16 &p) override
 	{
 		if (!m_area.contains(p))
 			return {CONTENT_IGNORE};
@@ -429,12 +429,12 @@ public:
 	}
 	// Stuff explodes if non-emerged area is touched with this.
 	// Emerge first, and check VOXELFLAG_NO_DATA if appropriate.
-	MapNode & getNodeRefUnsafe(const v3s16 &p)
+	MapNode & getNodeRefUnsafe(const v3s16 &p) override
 	{
 		return m_data[m_area.index(p)];
 	}
 
-	const MapNode & getNodeRefUnsafeCheckFlags(const v3s16 &p)
+	const MapNode & getNodeRefUnsafeCheckFlags(const v3s16 &p) override
 	{
 		s32 index = m_area.index(p);
 
@@ -455,7 +455,7 @@ public:
 			!(getFlagsRefUnsafe(p) & VOXELFLAG_NO_DATA);
 	}
 
-	void setNode(const v3s16 &p, const MapNode &n)
+	void setNode(const v3s16 &p, const MapNode &n, bool i = true) override
 	{
 		VoxelArea voxel_area(p);
 		addArea(voxel_area);
@@ -487,19 +487,19 @@ public:
 		Control
 	*/
 
-	virtual void clear();
+	virtual void clear() override;
 
 	void print(std::ostream &o, const NodeDefManager *nodemgr,
 			VoxelPrintMode mode=VOXELPRINT_MATERIAL);
 
-	void addArea(const VoxelArea &area);
+	void addArea(const VoxelArea &area) override;
 
 	/*
 		Copy data and set flags to 0
 		dst_area.getExtent() <= src_area.getExtent()
 	*/
 	void copyFrom(MapNode *src, const VoxelArea& src_area,
-			v3s16 from_pos, v3s16 to_pos, const v3s16 &size);
+			v3s16 from_pos, v3s16 to_pos, const v3s16 &size) override;
 
 	// Copy data
 	void copyTo(MapNode *dst, const VoxelArea& dst_area,

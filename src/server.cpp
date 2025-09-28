@@ -1342,6 +1342,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 	m_shutdown_state.tick(dtime, this);
 }
 
+#if 0
 int Server::save(float dtime, float dedicated_server_step, bool breakable) {
 	// Save map, players and auth stuff
 	int ret = 0;
@@ -1384,6 +1385,7 @@ int Server::save(float dtime, float dedicated_server_step, bool breakable) {
 
 	return ret;
 }
+#endif 
 
 u16 Server::Receive(int ms)
 {

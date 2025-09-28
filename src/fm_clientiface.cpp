@@ -1,6 +1,6 @@
 #include "fm_far_calc.h"
 #include "constants.h"
-#include "clientiface.h"
+//#include "clientiface.h"
 #include "irr_v3d.h"
 #include "irrlichttypes.h"
 #include "map.h"
@@ -21,7 +21,7 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 		float dtime, std::vector<PrioritySortedBlockTransfer> &dest, double m_uptime,
 		u64 max_ms)
 {
-	auto lock = try_lock_unique_rec();
+	const auto lock = try_lock_unique_rec();
 	if (!lock->owns_lock())
 		return 0;
 
@@ -118,7 +118,7 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 	}
 
 	// s16 last_nearest_unsent_d = m_nearest_unsent_d;
-	auto d_start = m_nearest_unsent_d.load();
+	short d_start = m_nearest_unsent_d; //.load();
 
 	// infostream<<"d_start="<<d_start<<std::endl;
 
@@ -359,7 +359,7 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 							MAP_BLOCKSIZE / 2, MAP_BLOCKSIZE / 2, MAP_BLOCKSIZE / 2);
 
 					v3pos_t spn = cam_pos_nodes + v3pos_t(0, 0, 0);
-					if (env->getServerMap().isBlockOccluded(p * MAP_BLOCKSIZE, spn)) {
+					if (env->getMap().isBlockOccluded(p * MAP_BLOCKSIZE, spn)) {
 						g_profiler->add("SMap: Occlusion skip", 1);
 						++blocks_occlusion_culled;
 						return false;
@@ -377,7 +377,7 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 
 			MapBlock *block;
 			if (0) {
-				auto lock = env->getMap().m_blocks.try_lock_shared_rec();
+				const auto lock = env->getMap().m_blocks.try_lock_shared_rec();
 				if (!lock->owns_lock()) {
 					++block_skip_retry;
 					if (!first_skipped_d && d > always_first_ds)
@@ -565,17 +565,18 @@ queue_full_break:
 	return num_blocks_selected - num_blocks_sending;
 }
 
-uint32_t RemoteClient::SendFarBlocks()
+uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 {
+	const static thread_local auto client_unload_unused_data_timeout = g_settings->getFloat("client_unload_unused_data_timeout");
 	uint16_t sent_cnt{};
 	TRY_UNIQUE_LOCK(far_blocks_requested_mutex)
 	{
-		std::multimap<int32_t, MapBlockP> ordered;
+		std::multimap<int32_t, MapBlockPtr> ordered;
 		constexpr uint16_t send_max{50};
 		for (auto &far_blocks : far_blocks_requested) {
 			for (auto &[bpos, step_sent] : far_blocks) {
 				auto &[step, sent_ts] = step_sent;
-				if (sent_ts <= 0) {
+				if (sent_ts < 0 || (sent_ts && sent_ts + client_unload_unused_data_timeout > uptime)) {
 					continue;
 				}
 				if (step >= FARMESH_STEP_MAX - 1) {
@@ -590,14 +591,14 @@ uint32_t RemoteClient::SendFarBlocks()
 				}
 				const auto block = loadBlockNoStore(m_env->m_map, dbase, bpos);
 				if (!block) {
-					sent_ts = -1;
+					sent_ts = uptime + client_unload_unused_data_timeout * 3;
 					continue;
 				}
 
 				g_profiler->add("Server: Far blocks sent", 1);
 
 				block->far_step = step;
-				sent_ts = 0;
+				sent_ts = uptime ?: 1;
 				ordered.emplace(sent_ts - step, block);
 
 				if (++sent_cnt > send_max) {
@@ -622,7 +623,7 @@ uint32_t RemoteClient::SendFarBlocks()
 
 			const auto cell_size = 1; // FMTODO from remoteclient
 			const auto cell_size_pow = log(cell_size) / log(2);
-			thread_local static const s16 setting_farmesh_all_changed =
+			thread_local static const pos_t setting_farmesh_all_changed =
 					g_settings->getU32("farmesh_all_changed");
 			const auto &use_farmesh_all_changed =
 					std::min(setting_farmesh_all_changed, farmesh_all_changed);
@@ -684,7 +685,7 @@ uint32_t RemoteClient::SendFarBlocks()
 
 RemoteClientVector ClientInterface::getClientList()
 {
-	auto lock = m_clients.lock_unique_rec();
+	const auto lock = m_clients.lock_unique_rec();
 	RemoteClientVector clients;
 	for (const auto &ir : m_clients) {
 		const auto &c = ir.second;

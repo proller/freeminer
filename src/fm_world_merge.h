@@ -23,8 +23,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <cstdint>
 #include <future>
+#include <memory>
 #include <unordered_set>
-#include "map.h"
+#include "server.h"
 #include "mapblock.h"
 
 class Server;
@@ -46,7 +47,7 @@ public:
 	ServerMap::far_dbases_t &far_dbases;
 	std::unordered_set<v3bpos_t> changed_blocks_for_merge;
 	int16_t m_map_compression_level{7};
-	MapDatabase *const dbase{};
+	const std::shared_ptr<MapDatabase> dbase{};
 	std::string save_dir;
 	std::future<void> last_async;
 	~WorldMerger();
