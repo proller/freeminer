@@ -85,8 +85,8 @@ private:
 	bool popBlockEmerge(v3bpos_t *pos, BlockEmergeData *bedata);
 
 	EmergeAction getBlockOrStartGen(
-		const v3bpos_t &pos, bool allow_gen, MapBlock **block, BlockMakeData *data);
-	MapBlock *finishGen(v3bpos_t pos, BlockMakeData *bmdata,
+		const v3bpos_t &pos, bool allow_gen, MapBlockPtr *block, BlockMakeData *data);
+	MapBlockPtr finishGen(v3bpos_t pos, BlockMakeData *bmdata,
 		std::map<v3bpos_t, MapBlock *> *modified_blocks);
 
 	friend class EmergeManager;
@@ -617,14 +617,14 @@ bool EmergeThread::popBlockEmerge(v3bpos_t *pos, BlockEmergeData *bedata)
 }
 
 EmergeAction EmergeThread::getBlockOrStartGen(
-	const v3bpos_t &pos, bool allow_gen, MapBlock **block, BlockMakeData *bmdata)
+	const v3bpos_t &pos, bool allow_gen, MapBlockPtr *block, BlockMakeData *bmdata)
 {
 	//MutexAutoLock envlock(m_server->m_env_mutex);
 
 	{
 	MAP_NOTHREAD_LOCK(m_map);
 	// 1). Attempt to fetch block from memory
-	*block = m_map->getBlockNoCreateNoEx(pos, false, true);
+	*block = m_map->getBlock(pos, false, true);
 	}
 	if (*block) {
 		if ((*block)->isGenerated())
@@ -640,7 +640,7 @@ EmergeAction EmergeThread::getBlockOrStartGen(
 		if (*block && (*block)->isGenerated())
 		{
 		 	MAP_NOTHREAD_LOCK(m_map);
-			m_map->prepareBlock(*block);
+			m_map->prepareBlock((*block).get());
 			return EMERGE_FROM_DISK;
 		}
 
@@ -663,7 +663,7 @@ EmergeAction EmergeThread::getBlockOrStartGen(
 }
 
 
-MapBlock *EmergeThread::finishGen(v3bpos_t pos, BlockMakeData *bmdata,
+MapBlockPtr EmergeThread::finishGen(v3bpos_t pos, BlockMakeData *bmdata,
 	std::map<v3bpos_t, MapBlock *> *modified_blocks)
 {
 	//MutexAutoLock envlock(m_server->m_env_mutex);
@@ -676,7 +676,7 @@ MapBlock *EmergeThread::finishGen(v3bpos_t pos, BlockMakeData *bmdata,
 	*/
 	m_map->finishBlockMake(bmdata, modified_blocks);
 
-	MapBlock *block = m_map->getBlockNoCreateNoEx(pos, false, true);
+	MapBlockPtr block = m_map->getBlock(pos, false, true);
 	if (!block) {
 		errorstream << "EmergeThread::finishGen: Couldn't grab block we "
 			"just generated: " << pos << std::endl;
@@ -707,7 +707,7 @@ MapBlock *EmergeThread::finishGen(v3bpos_t pos, BlockMakeData *bmdata,
 		m_server->setAsyncFatalError(e);
 	}
 
-	EMERGE_DBG_OUT("ended up with: " << analyze_block(block));
+	EMERGE_DBG_OUT("ended up with: " << analyze_block(block.get()));
 
 	/*
 		Clear mapgen state
@@ -719,7 +719,7 @@ MapBlock *EmergeThread::finishGen(v3bpos_t pos, BlockMakeData *bmdata,
 	/*
 		Activate the block
 	*/
-	m_server->m_env->activateBlock(block, 0);
+	m_server->m_env->activateBlock(block.get(), 0);
 
 	return block;
 }
@@ -746,7 +746,7 @@ void *EmergeThread::run()
 		BlockEmergeData bedata;
 		BlockMakeData bmdata;
 		EmergeAction action;
-		MapBlock *block = nullptr;
+		MapBlockPtr block = nullptr;
 
 		if (!popBlockEmerge(&pos, &bedata)) {
 			m_queue_event.wait();

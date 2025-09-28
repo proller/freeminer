@@ -212,7 +212,7 @@ static void set_node_in_block(MapBlock *block, v3pos_t relpos, MapNode n, bool i
 }
 
 // throws InvalidPositionException if not found
-void Map::setNode(v3pos_t p, MapNode n, bool important)
+void Map::setNode(const v3pos_t &p, const MapNode &n, bool important)
 {
 	v3bpos_t blockpos = getNodeBlockPos(p);
 	MapBlock *block = getBlockNoCreate(blockpos);
@@ -1020,7 +1020,7 @@ std::vector<v3pos_t> Map::findNodesWithMetadata(v3pos_t p1, v3pos_t p2)
 	for (bpos_t x = bpmin.X; x <= bpmax.X; x++) {
 		v3bpos_t blockpos(x, y, z);
 
-		MapBlock *block = getBlockNoCreateNoEx(blockpos, false, true);
+		auto block = getBlock(blockpos, false, true);
 		if (!block) {
 			verbosestream << "Map::getNodeMetadata(): Need to emerge "
 				<< blockpos << std::endl;
@@ -1049,8 +1049,8 @@ std::vector<v3pos_t> Map::findNodesWithMetadata(v3pos_t p1, v3pos_t p2)
 NodeMetadata *Map::getNodeMetadata(v3pos_t p)
 {
 	v3bpos_t blockpos = getNodeBlockPos(p);
-	v3pos_t p_rel = p - getBlockPosRelative(blockpos);
-	MapBlock *block = getBlockNoCreateNoEx(blockpos, false, true);
+	v3pos_t p_rel = p - blockpos*MAP_BLOCKSIZE;
+	auto block = getBlock(blockpos, false, true);
 	if(!block){
 		infostream<<"Map::getNodeMetadata(): Need to emerge "
 				<<blockpos<<std::endl;
@@ -1068,8 +1068,8 @@ NodeMetadata *Map::getNodeMetadata(v3pos_t p)
 bool Map::setNodeMetadata(v3pos_t p, NodeMetadata *meta)
 {
 	v3bpos_t blockpos = getNodeBlockPos(p);
-	v3pos_t p_rel = p - getBlockPosRelative(blockpos);
-	MapBlock *block = getBlockNoCreateNoEx(blockpos, false, true);
+	v3pos_t p_rel = p - blockpos*MAP_BLOCKSIZE;
+	auto block = getBlock(blockpos, false, true);
 	if(!block){
 		infostream<<"Map::setNodeMetadata(): Need to emerge "
 				<<blockpos<<std::endl;
@@ -1101,8 +1101,8 @@ void Map::removeNodeMetadata(v3pos_t p)
 NodeTimer Map::getNodeTimer(v3pos_t p)
 {
 	v3bpos_t blockpos = getNodeBlockPos(p);
-	v3pos_t p_rel = p - getBlockPosRelative(blockpos);
-	MapBlock *block = getBlockNoCreateNoEx(blockpos, false, true);
+	v3pos_t p_rel = p - blockpos*MAP_BLOCKSIZE;
+	auto block = getBlock(blockpos, false, true);
 	if(!block){
 		infostream<<"Map::getNodeTimer(): Need to emerge "
 				<<blockpos<<std::endl;
@@ -1120,10 +1120,10 @@ NodeTimer Map::getNodeTimer(v3pos_t p)
 
 void Map::setNodeTimer(const NodeTimer &t)
 {
-	v3pos_t p = t.position;
-	v3bpos_t blockpos = getNodeBlockPos(p);
-	v3pos_t p_rel = p - getBlockPosRelative(blockpos);
-	MapBlock *block = getBlockNoCreateNoEx(blockpos, false, true);
+	auto p = t.position;
+	auto blockpos = getNodeBlockPos(p);
+	v3pos_t p_rel = p - blockpos*MAP_BLOCKSIZE;
+	auto block = getBlock(blockpos, false, true);
 	if(!block){
 		infostream<<"Map::setNodeTimer(): Need to emerge "
 				<<blockpos<<std::endl;
@@ -1510,8 +1510,8 @@ bool ServerMap::initBlockMake(v3bpos_t blockpos, BlockMakeData *data)
 		for (bpos_t y = full_bpmin.Y; y <= full_bpmax.Y; y++) {
 			v3bpos_t p(x, y, z);
 
-			MapBlock *block = emergeBlock(p, false);
-			if (block == NULL) {
+			auto block = emergeBlock(p, false);
+			if (!block ) {
 				block = createBlock(p);
 
 				// Block gets sunlight if this is true.
@@ -1698,13 +1698,13 @@ MapBlock * ServerMap::createBlock(v3bpos_t p)
 
 #endif // WTF
 
-MapBlock * ServerMap::emergeBlock(v3bpos_t p, bool create_blank)
+MapBlockPtr ServerMap::emergeBlock(v3bpos_t p, bool create_blank)
 {
 	TimeTaker timer("generateBlock");
 	MAP_NOTHREAD_LOCK(this);
 
 	{
-		MapBlock *block = getBlockNoCreateNoEx(p, false, true);
+		MapBlockPtr block = getBlock(p, false, true);
 		if (block)
 			return block;
 	}
@@ -1713,13 +1713,13 @@ MapBlock * ServerMap::emergeBlock(v3bpos_t p, bool create_blank)
 		return nullptr;
 
 	{
-		MapBlock *block = loadBlock(p);
+		auto block = loadBlock(p);
 		if(block)
 			return block;
 	}
 
 	if (create_blank) {
-        return this->createBlankBlock(p).get();
+        return this->createBlankBlock(p);
 /*
 		MapSector *sector = createSector(v2bpos_t(p.X, p.Z));
 		MapBlock *block = sector->createBlankBlock(p.Y);
@@ -1740,6 +1740,7 @@ MapBlock *ServerMap::getBlockOrEmerge(v3bpos_t p3d)
 	return block;
 }
 
+/*
 void ServerMap::prepareBlock(MapBlock *block) {
 	ServerEnvironment *senv = &((Server *)m_gamedef)->getEnv();
 
@@ -1750,6 +1751,7 @@ void ServerMap::prepareBlock(MapBlock *block) {
 	updateBlockHeat(senv, p, block);
 	updateBlockHumidity(senv, p, block);
 }
+*/
 
 bool ServerMap::isBlockInQueue(v3bpos_t pos)
 {
@@ -1809,6 +1811,7 @@ void ServerMap::reportMetrics(u64 save_time_us, u32 saved_blocks, u32 all_blocks
 	m_save_count_counter->increment(saved_blocks);
 }
 
+#if 0
 s32 ServerMap::save(ModifiedState save_level, float dedicated_server_step, bool breakable)
 {
 	if (!m_map_saving_enabled) {
@@ -1916,6 +1919,7 @@ s32 ServerMap::save(ModifiedState save_level, float dedicated_server_step, bool 
 
 	return m_blocks_save_last;
 }
+#endif
 
 void ServerMap::listAllLoadableBlocks(std::vector<v3bpos_t> &dst)
 {
@@ -2020,11 +2024,11 @@ bool ServerMap::saveBlock(MapBlock *block, MapDatabase *db, int compression_leve
 	return ret;
 }
 
-MapBlock * ServerMap::loadBlock(v3bpos_t p3d)
+MapBlockPtr ServerMap::loadBlock(v3bpos_t p3d)
 {
 	ScopeProfiler sp(g_profiler, "ServerMap::loadBlock");
 	const auto sector = this;
-	MapBlock *block = nullptr;
+	MapBlockPtr block = nullptr;
 	try {
 		std::string blob;
 		dbase->loadBlock(p3d, &blob);
@@ -2053,7 +2057,7 @@ MapBlock * ServerMap::loadBlock(v3bpos_t p3d)
 		//MapSector *sector = emergeSector(p2d);
 
 		bool created_new = false;
-		block = sector->getBlockNoCreateNoEx(p3d, false, true);
+		block = sector->getBlock(p3d, false, true);
 		if(block == NULL)
 		{
 			block = sector->createBlankBlockNoInsert(p3d);
@@ -2062,21 +2066,21 @@ MapBlock * ServerMap::loadBlock(v3bpos_t p3d)
 
 		// Read basic data
 		if (!block->deSerialize(is, version, true)) {
-			if (created_new && block)
-				delete block;
+			//if (created_new && block)
+			//	delete block;
 			return nullptr;
 		}
 
 		// If it's a new block, insert it to the map
 		if(created_new)
 			if(!sector->insertBlock(block)) {
-				delete block;
+				//delete block;
 				return nullptr;
 			}
 
 		if (!g_settings->getBool("liquid_real")) {
 			ReflowScan scanner(this, m_emerge->ndef);
-			scanner.scan(block, &m_transforming_liquid);
+			scanner.scan(block.get(), &m_transforming_liquid);
 		}
 
 		// We just loaded it from, so it's up-to-date.
@@ -2093,7 +2097,7 @@ MapBlock * ServerMap::loadBlock(v3bpos_t p3d)
 	if (created_new && (block != NULL)) {
 		std::map<v3bpos_t, MapBlock*> modified_blocks;
 		// Fix lighting if necessary
-		voxalgo::update_block_border_lighting(this, block, modified_blocks);
+		voxalgo::update_block_border_lighting(this, block.get(), modified_blocks);
 		if (!modified_blocks.empty()) {
 			//Modified lighting, send event
 			MapEditEvent event;
@@ -2109,8 +2113,8 @@ MapBlock * ServerMap::loadBlock(v3bpos_t p3d)
 
 		return block;
 	} catch (const std::exception &e) {
-		if (block)
-			delete block;
+		//if (block)
+		//	delete block;
 
 		errorstream<<"Invalid block data in database"
 				<<" ("<<p3d.X<<","<<p3d.Y<<","<<p3d.Z<<")"
@@ -2280,10 +2284,10 @@ void ServerMap::PrintInfo(std::ostream &out)
 bool ServerMap::repairBlockLight(v3bpos_t blockpos,
 	std::map<v3bpos_t, MapBlock *> *modified_blocks)
 {
-	MapBlock *block = emergeBlock(blockpos, false);
+	auto block = emergeBlock(blockpos, false);
 	if (!block || !block->isGenerated())
 		return false;
-	voxalgo::repair_block_light(this, block, modified_blocks);
+	voxalgo::repair_block_light(this, block.get(), modified_blocks);
 	return true;
 }
 
@@ -2325,7 +2329,7 @@ void MMVManip::initialEmerge(v3bpos_t blockpos_min, v3bpos_t blockpos_max,
 	for(s32 x=p_min.X; x<=p_max.X; x++)
 	{
 		u8 flags = 0;
-		MapBlock *block;
+		MapBlockPtr block;
 		v3bpos_t p(x,y,z);
 		std::map<v3bpos_t, u8>::iterator n;
 		n = m_loaded_blocks.find(p);
@@ -2336,7 +2340,7 @@ void MMVManip::initialEmerge(v3bpos_t blockpos_min, v3bpos_t blockpos_max,
 		{
 			TimeTaker timer2("emerge load");
 
-			block = m_map->getBlockNoCreateNoEx(p, false, true);
+			block = m_map->getBlock(p, false, true);
 			if (!block)
 				block_data_inexistent = true;
 			else

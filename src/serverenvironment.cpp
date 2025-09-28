@@ -1428,7 +1428,7 @@ void ServerEnvironment::clearObjects(ClearObjectsMode mode)
 	for (auto i = loadable_blocks.begin();
 		i != loadable_blocks.end(); ++i) {
 		v3bpos_t p = *i;
-		MapBlock *block = m_map->emergeBlock(p, false);
+		auto block = m_map->emergeBlock(p, false);
 		if (!block) {
 			errorstream << "ServerEnvironment::clearObjects(): "
 				<< "Failed to emerge block " << p << std::endl;
@@ -2174,7 +2174,7 @@ u16 ServerEnvironment::addActiveObjectRaw(std::shared_ptr<ServerActiveObject> ob
 		StaticObject s_obj(object, objectpos);
 		// Add to the block where the object is located in
 		v3bpos_t blockpos = getNodeBlockPos(floatToInt(objectpos, BS));
-		MapBlock *block = m_map->emergeBlock(blockpos);
+		MapBlockPtr block = m_map->emergeBlock(blockpos);
 		if (block) {
 			block->m_static_objects.setActive(object->getId(), s_obj);
 			{
@@ -2242,7 +2242,7 @@ void ServerEnvironment::removeRemovedObjects(u32 max_cycle_ms)
 			Move static data from active to stored if deactivated
 		*/
 		if (!obj->isPendingRemoval() && obj->m_static_exists) {
-			if (MapBlock *block = m_map->emergeBlock(obj->m_static_block, false)) {
+			if (MapBlockPtr block = m_map->emergeBlock(obj->m_static_block, false)) {
 				if (!block->storeActiveObject(id)) {
 					warningstream << "ServerEnvironment::removeRemovedObjects(): "
 							<< "id=" << id << " m_static_exists=true but "
@@ -2473,7 +2473,7 @@ void ServerEnvironment::deactivateFarObjects(bool _force_delete)
 				if (static_block == blockpos_o)
 					stays_in_same_block = true;
 
-				if (MapBlock *block = m_map->emergeBlock(static_block, false)) {
+				if (MapBlockPtr block = m_map->emergeBlock(static_block, false)) {
 					const auto n = block->m_static_objects.getAllActives().find(id);
 					if (n != block->m_static_objects.getAllActives().end()) {
 						StaticObject static_old = n->second;
@@ -2546,9 +2546,9 @@ void ServerEnvironment::deleteStaticFromBlock(
 	if (!obj->m_static_exists)
 		return;
 
-	MapBlock *block;
+	MapBlockPtr block;
 	if (no_emerge)
-		block = m_map->getBlockNoCreateNoEx(obj->m_static_block);
+		block = m_map->getBlock(obj->m_static_block);
 	else
 		block = m_map->emergeBlock(obj->m_static_block, false);
 	if (!block) {
@@ -2570,7 +2570,7 @@ bool ServerEnvironment::saveStaticToBlock(
 		ServerActiveObject *obj, const StaticObject &s_obj,
 		u32 mod_reason)
 {
-	MapBlock *block = nullptr;
+	MapBlockPtr block = nullptr;
 	try {
 		block = m_map->emergeBlock(blockpos);
 	} catch (InvalidPositionException &e) {

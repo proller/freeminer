@@ -170,19 +170,19 @@ public:
 	MapBlock * getBlockNoCreate(v3bpos_t p);
 	// Returns NULL if not found
 	MapBlock * getBlockNoCreateNoEx(v3bpos_t p, bool trylock = false, bool nocache = false);
-	MapBlockP getBlock(v3bpos_t p, bool trylock = false, bool nocache = false);
+	MapBlockPtr getBlock(v3bpos_t p, bool trylock = false, bool nocache = false);
 	void getBlockCacheFlush();
 
 	/* Server overrides */
-	virtual MapBlock * emergeBlock(v3bpos_t p, bool create_blank=false)
-	{ return getBlockNoCreateNoEx(p); }
+	virtual MapBlockPtr emergeBlock(v3bpos_t p, bool create_blank=false)
+	{ return getBlock(p); }
 
 	inline const NodeDefManager * getNodeDefManager() { return m_nodedef; }
 
 	bool isValidPosition(v3pos_t p);
 
 	// throws InvalidPositionException if not found
-	void setNode(v3pos_t p, MapNode n, bool important = false);
+	void setNode(const v3pos_t &p, const MapNode &n, bool important = false) override;
 
 	// Returns a CONTENT_IGNORE node if not found
 	// If is_valid_position is not NULL then this will be set to true if the
@@ -305,8 +305,12 @@ public:
 	using far_blocks_ask_t = concurrent_shared_unordered_map<v3bpos_t,
 			std::pair<block_step_t, uint32_t>>; // client
 	far_blocks_ask_t m_far_blocks_ask;
-	std::array<concurrent_unordered_map<v3bpos_t, MapBlockP>, FARMESH_STEP_MAX>
-			far_blocks_storage;
+	struct BlockUsed
+	{
+		MapBlockPtr block{};
+		int32_t last_used{};
+	};
+	std::array<concurrent_unordered_map<v3bpos_t, BlockUsed>, FARMESH_STEP_MAX> far_blocks_storage;			
 	//double m_far_blocks_created = 0;
 	float far_blocks_sent_timer{1};
 	v3pos_t far_blocks_last_cam_pos;
@@ -317,9 +321,10 @@ public:
 	uint32_t far_iteration_use{};
 	uint32_t far_iteration_clean{};
 	// MapBlock * getBlockNoCreateNoEx(v3pos_t & p);
-	MapBlock *createBlankBlockNoInsert(const v3bpos_t &p);
+	MapBlockPtr createBlankBlockNoInsert(const v3bpos_t &p);
 	MapBlockP createBlankBlock(const v3bpos_t &p);
-	bool insertBlock(MapBlock *block);
+	bool insertBlock(MapBlockPtr block);
+	
 	void eraseBlock(const MapBlockP block);
 	std::unordered_map<MapBlockP, int> *m_blocks_delete = nullptr;
 	std::unordered_map<MapBlockP, int> m_blocks_delete_1, m_blocks_delete_2;
@@ -436,6 +441,9 @@ class ServerMap : public Map
 public:
 
     // freeminer:
+	using humidity_t = s16;
+	using heat_t = s16;
+
 	virtual s16 updateBlockHeat(ServerEnvironment *env, const v3pos_t &p,
 			MapBlock *block = nullptr, unordered_map_v3pos<s16> *cache = nullptr,
 			bool block_add = true);
@@ -485,7 +493,6 @@ public:
 			bool remove_light = false);
 
 	MapBlockP loadBlockNoStore(const v3bpos_t &p3d);
-
 	// == end of freeminer
 
 
@@ -522,7 +529,7 @@ public:
 		- Memory
 		- Create blank
 	*/
-	MapBlock *createBlock(v3bpos_t p);
+	MapBlockPtr createBlock(v3bpos_t p);
 
 	/*
 		Forcefully get a block from somewhere.
@@ -531,7 +538,7 @@ public:
 		- Create blank filled with CONTENT_IGNORE
 
 	*/
-	MapBlock *emergeBlock(v3bpos_t p, bool create_blank=false) override;
+	MapBlockPtr emergeBlock(v3bpos_t p, bool create_blank=false) override;
 
 	/*
 		Try to get a block.
@@ -571,11 +578,7 @@ public:
 
 	bool saveBlock(MapBlock *block) override;
 	static bool saveBlock(MapBlock *block, MapDatabase *db, int compression_level = -1);
-	MapBlock* loadBlock(v3bpos_t p);
-/*	
-	// Database version
-	void loadBlock(std::string *blob, v3bpos_t p3d, MapSector *sector, bool save_after_load=false);
-*/
+	MapBlockPtr loadBlock(v3bpos_t p);
 
 	// Blocks are removed from the map but not deleted from memory until
 	// deleteDetachedBlocks() is called, since pointers to them may still exist
