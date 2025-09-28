@@ -845,7 +845,7 @@ void is_sunlight_above_block(Map *map, mapblock_v3 pos,
 	// Get or load source block.
 	// It might take a while to load, but correcting incorrect
 	// sunlight may be even slower.
-	MapBlock *source_block = map->emergeBlock(source_block_pos, false);
+	MapBlockPtr source_block = map->emergeBlock(source_block_pos, false);
 	// Trust only generated blocks.
 	if (source_block == NULL || !source_block->isGenerated()) {
 		// But if there is no block above, then use heuristics

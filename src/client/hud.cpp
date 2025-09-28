@@ -1001,7 +1001,7 @@ void Hud::drawBlockBounds()
 			const auto &blocks = far_blocks[step];
 			const auto mesh_step = step;
 			for (const auto &[blockPos, block] : blocks) {
-				const auto has_mesh = !!block->getFarMesh(mesh_step);
+				const auto has_mesh = !!block.block->getFarMesh(mesh_step);
 				int fscale = pow(2, mesh_step );
 				int lod_step = 0;
 				int far_step = 0;
