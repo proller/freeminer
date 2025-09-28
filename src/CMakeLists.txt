@@ -766,7 +766,7 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/libosmium/CMakeLists.txt)
 	if(EXPAT_FOUND)
 		set (OSMIUM_LIRARY ${OSMIUM_LIRARY} EXPAT::EXPAT)
 	endif()
-	set(USE_OSMIUM 1)
+	#set(USE_OSMIUM 1)
 	message(STATUS "Using osmium: ${OSMIUM_INCLUDE_DIR} : ${OSMIUM_LIRARY}")
 endif()
 
@@ -800,6 +800,7 @@ set(FMcommon_SRCS ${FMcommon_SRCS}
 	fm_map.cpp
 	fm_server.cpp
 	fm_world_merge.cpp
+	fm_far_calc.cpp
 	key_value_storage.cpp
 	log_types.cpp
 	profiler.cpp

@@ -23,7 +23,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <string>
 #include <iostream>
 #include <cmath>
-#include "client/fm_far_calc.h"
+#include "fm_far_calc.h"
 #include "client/mapblock_mesh.h"
 #include "irr_v3d.h"
 #include "settings.h"
@@ -1002,7 +1002,7 @@ void Hud::drawBlockBounds()
 			const auto &blocks = far_blocks[step];
 			const auto mesh_step = step;
 			for (const auto &[blockPos, block] : blocks) {
-				const auto has_mesh = !!block->getFarMesh(mesh_step);
+				const auto has_mesh = !!block.block->getFarMesh(mesh_step);
 				int fscale = pow(2, mesh_step );
 				int lod_step = 0;
 				int far_step = 0;

@@ -806,5 +806,6 @@ inline v3pos_t getBlockPosRelative(const v3bpos_t &p)
 std::string analyze_block(MapBlock *block);
 
 using MapBlockP = std::shared_ptr<MapBlock>;
+using MapBlockPtr = std::shared_ptr<MapBlock>;
 // using MapBlockP = MapBlock *;
 

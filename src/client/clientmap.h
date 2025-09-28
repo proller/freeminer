@@ -37,8 +37,9 @@ struct MapDrawControl
 
 	// freeminer:
 	int32_t farmesh{30000};
-	uint16_t farmesh_quality{};
+	uint8_t farmesh_quality{};
 	bool farmesh_stable{};
+	pos_t farmesh_all_changed{};
 	int32_t lodmesh{4};
 	int cell_size{1};
 	uint8_t cell_size_pow{};

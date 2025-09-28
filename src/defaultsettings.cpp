@@ -99,7 +99,7 @@ const bool emscripten =
 #endif
 ;
 
-const bool slow = debug || android || emscripten;
+const bool slow = debug || emscripten; // || android
 
 void fm_set_default_settings(Settings *settings) {
 
@@ -184,6 +184,8 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("farmesh_quality", slow ? "1" : "2"); //depends on client_mesh_chunk
 	settings->setDefault("farmesh_stable", "0");
 	settings->setDefault("farmesh_server", "1");
+	settings->setDefault("farmesh_all_changed", slow ? "1000" : "10000");
+
 	settings->setDefault("headless_optimize", "false");
 	//settings->setDefault("node_highlighting", "halo");
 	//settings->setDefault("enable_vbo", win ? "false" : "true");
@@ -195,6 +197,10 @@ void fm_set_default_settings(Settings *settings) {
 	}
 	//settings->setDefault("client_mesh_chunk", std::to_string(std::max<int>(1, Thread::getNumberOfProcessors() / 4)));
 	settings->setDefault("client_mesh_chunk","1");
+
+	if (slow || android) {
+		settings->setDefault("translucent_liquids", "false");
+	}
 
 	// Liquid
 	settings->setDefault("liquid_real", "true");

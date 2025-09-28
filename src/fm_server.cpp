@@ -30,6 +30,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "database/database.h"
 #include "emerge.h"
 #include "filesys.h"
+#include "irrlichttypes.h"
+#include "porting.h"
 #include "fm_world_merge.h"
 #include "irrTypes.h"
 #include "irr_v3d.h"
@@ -517,6 +519,62 @@ void Server::handleCommand_InitFm(NetworkPacket *pkt)
 
 void Server::handleCommand_Drawcontrol(NetworkPacket *pkt)
 {
+	const auto peer_id = pkt->getPeerId();
+	if (!pkt->packet) {
+		if (!pkt->packet_unpack()) {
+			return;
+		}
+	}
+	auto &packet = *(pkt->packet);
+	/*
+	auto player = m_env->getPlayer(pkt->getPeerId());
+	if (!player) {
+		//m_con->DisconnectPeer(pkt->getPeerId());
+		return;
+	}
+	*/
+
+	//auto playersao = player->getPlayerSAO();
+	/*
+	if (!playersao) {
+		m_con.DisconnectPeer(pkt->getPeerId());
+		return;
+	}*/
+
+	auto client = getClientNoEx(peer_id, CS_Created);
+	if (!client) {
+		return;
+	}
+	{
+		const auto lock = client->lock_unique_rec();
+		if (packet.contains(TOSERVER_DRAWCONTROL_WANTED_RANGE))
+			client->wanted_range =
+					packet[TOSERVER_DRAWCONTROL_WANTED_RANGE].as<uint32_t>();
+		if (packet.contains(TOSERVER_DRAWCONTROL_RANGE_ALL))
+			client->range_all = packet[TOSERVER_DRAWCONTROL_RANGE_ALL].as<bool>();
+		if (packet.contains(TOSERVER_DRAWCONTROL_FARMESH))
+			client->farmesh = packet[TOSERVER_DRAWCONTROL_FARMESH].as<uint32_t>();
+		//client->lodmesh = packet[TOSERVER_DRAWCONTROL_LODMESH].as<u32>();
+		if (packet.contains(TOSERVER_DRAWCONTROL_FARMESH_QUALITY)) {
+			client->farmesh_quality =
+					packet[TOSERVER_DRAWCONTROL_FARMESH_QUALITY].as<uint8_t>();
+			client->have_farmesh_quality = true;
+		}
+		if (packet.contains(TOSERVER_DRAWCONTROL_FARMESH_ALL_CHANGED)) {
+			client->farmesh_all_changed =
+					packet[TOSERVER_DRAWCONTROL_FARMESH_ALL_CHANGED].as<pos_t>();
+		}
+	}
+	//client->block_overflow = packet[TOSERVER_DRAWCONTROL_BLOCK_OVERFLOW].as<bool>();
+
+	// minetest compat, fmtodo: make one place
+	/*
+	if (playersao) {
+		playersao->setFov(client->fov);
+		playersao->setWantedRange(client->wanted_range/MAPBLOCK_SIZE);
+	
+	}
+	*/
 }
 
 void Server::handleCommand_GetBlocks(NetworkPacket *pkt)
@@ -655,12 +713,13 @@ void Server::SendBlockFm(session_t peer_id, MapBlockP block, u8 ver,
 
 uint32_t Server::SendFarBlocks(float dtime)
 {
+    int32_t uptime = m_uptime_counter->get();
 	ScopeProfiler sp(g_profiler, "Server: Far blocks send");
 	uint32_t sent{};
 	for (const auto &client : m_clients.getClientList()) {
 		if (!client)
 			continue;
-		sent += client->SendFarBlocks();
+		sent += client->SendFarBlocks(uptime);
 	}
 	return sent;
 }
@@ -695,6 +754,7 @@ void *WorldMergeThread::run()
 			.dbase{m_server->getEnv().m_map->dbase},
 			.save_dir{m_server->getEnv().m_map->m_savedir},
 	};
+
 	{
 		g_settings->getU32NoEx("world_merge_throttle", merger.world_merge_throttle);
 		merger.world_merge_max_clients = m_server->isSingleplayer() ? 1 : 0;
@@ -705,7 +765,7 @@ void *WorldMergeThread::run()
 			merger.world_merge_load_all = -1;
 			g_settings->getS16NoEx("world_merge_load_all", merger.world_merge_load_all);
 			merger.world_merge_throttle = m_server->isSingleplayer() ? 10 : 0;
-			u64 world_merge_all = 0;
+			uint64_t world_merge_all = 0;
 			g_settings->getU64NoEx("world_merge_all", world_merge_all);
 			if (world_merge_all) {
 				merger.merge_all();
@@ -715,6 +775,10 @@ void *WorldMergeThread::run()
 	merger.world_merge_load_all = 0;
 	merger.partial = true;
 
+	// Minimum blocks changed for periodic merge
+	uint64_t world_merge_min = 100;
+	g_settings->getU64NoEx("world_merge_min", world_merge_min);
+
 	while (!stopRequested()) {
 		if (merger.throttle()) {
 			tracestream << "World merge wait" << '\n';
@@ -722,7 +786,8 @@ void *WorldMergeThread::run()
 			continue;
 		}
 		if (merger.merge_server_diff(
-					m_server->getEnv().getServerMap().changed_blocks_for_merge)) {
+					m_server->getEnv().getServerMap().changed_blocks_for_merge,
+					world_merge_min)) {
 			break;
 		}
 

@@ -41,13 +41,16 @@ class Server;
 #endif
 
 // #define FARMESH_FAST 1
-// #define FARMESH_DEBUG 1 // One dirction, one thread, no neighborhoods
-// #define FARMESH_SHADOWS 1 // Unfinished
+// #define FARMESH_DEBUG 1 // One direction, one thread, no neighborhoods
+#define FARMESH_SHADOWS 1
+#if defined(__ANDROID__)
+#define FARMESH_CLEAN 1
+#endif
 
 class FarMesh
 {
 public:
-	FarMesh(Client *client, Server *server, MapDrawControl *m_control);
+	FarMesh(Client *client, Server *server);
 
 	~FarMesh();
 
@@ -56,7 +59,7 @@ public:
 			v3pos_t m_camera_offset,
 			//float brightness,
 			int render_range, float speed);
-	void makeFarBlock(const v3bpos_t &blockpos, block_step_t step, bool near = false);
+	void makeFarBlock(const v3bpos_t &blockpos, block_step_t step, bool bnear = false);
 	void makeFarBlocks(const v3bpos_t &blockpos, block_step_t step);
 	//void makeFarBlocks(const v3bpos_t &blockpos);
 
@@ -70,7 +73,7 @@ private:
 	f32 m_camera_pitch;
 	f32 m_camera_yaw;*/
 	Client *m_client{};
-	MapDrawControl *m_control{};
+	const MapDrawControl *m_control{};
 	pos_t distance_min{MAP_BLOCKSIZE * 9};
 	//v3pos_t m_camera_offset;
 	float m_speed{};
@@ -112,6 +115,7 @@ private:
 	std::atomic_uint last_distance_max{};
 	int go_direction(const size_t dir_n);
 	int go_flat();
+	int go_container();
 	uint32_t far_iteration_complete{};
 	bool complete_set{};
 	uint32_t collect_reset_timestamp{static_cast<uint32_t>(-1)};
@@ -119,4 +123,6 @@ private:
 	concurrent_shared_unordered_map<uint16_t, concurrent_unordered_set<v3bpos_t>>
 			far_blocks_list;
 	std::array<async_step_runner, 6> async;
+	async_step_runner async_cleaner;
+	int async_cleaner_next{};
 };

@@ -19,6 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "config.h"
 #include "fm_world_merge.h"
+#include "mapblock.h"
 #include "server.h"
 
 #if !MINETEST_PROTO
@@ -314,20 +315,20 @@ void Client::handleCommand_BlockData(NetworkPacket* pkt)
 	std::string datastring(pkt->getString(sizeof_v3pos(pkt->getProtoVer())), pkt->getSize() - sizeof_v3pos(pkt->getProtoVer()));
 	std::istringstream istr(datastring, std::ios_base::binary);
 
-	MapBlock *block;
+	MapBlockPtr block;
 
 	///v2bpos_t p2d(p.X, p.Z);
 	auto * sector = &m_env.getMap();
 
 	//assert(sector->getPos() == p2d);
 
-	block = sector->getBlockNoCreateNoEx(p);
+	block = sector->getBlock(p);
 	if (block) {
 		/*
 			Update an existing block
 		*/
 		if (!block->deSerialize(istr, m_server_ser_ver, false)) {
-			delete block;
+			//delete block;
 			return;
 		}
 		block->deSerializeNetworkSpecific(istr);
@@ -338,7 +339,7 @@ void Client::handleCommand_BlockData(NetworkPacket* pkt)
 		*/
 		block = sector->createBlankBlockNoInsert(p);
 		if (!block->deSerialize(istr, m_server_ser_ver, false)){
-			delete block;
+			//delete block;
 			return;
 		}
 		block->deSerializeNetworkSpecific(istr);
@@ -348,7 +349,7 @@ void Client::handleCommand_BlockData(NetworkPacket* pkt)
 	}
 
 	if (m_localdb && !is_simple_singleplayer_game) {
-		ServerMap::saveBlock(block, m_localdb);
+		ServerMap::saveBlock(block.get(), m_localdb);
 		if (!far_container.have_params) {
 			merger->add_changed(p);
 		}
