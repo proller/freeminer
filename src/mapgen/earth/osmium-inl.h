@@ -183,11 +183,8 @@ public:
 
 class MyHandler : public osmium::handler::Handler
 {
-	MapgenEarth *mg;
-	const bool todo{false};
-
 public:
-	MyHandler(MapgenEarth *mg) : mg{mg} {}
+	MapgenEarth *mg{};
 
 	void way(const osmium::Way &way)
 	{
@@ -225,6 +222,9 @@ public:
 		std::vector<arnis::ProcessedElement> v;
 		for (const auto &r : relation) {
 		}
+		for (const auto &sn : relation.subitems<osmium::Way>()) {
+			way(sn);
+		}
 		arnis::generate_world(editor, v);
 	}
 };
@@ -234,20 +234,19 @@ class hdl : public handler_i
 			osmium::Location>;
 	using cache_t = osmium::handler::NodeLocationsForWays<index_t>;
 
-	MapgenEarth *mg{};
 	const std::string path_name;
 
 	MyHandler handler;
 
 public:
 	hdl(MapgenEarth *mg, const std::string &path_name) :
-			mg{mg}, path_name{path_name}, handler{mg}
+			path_name{path_name}
 	{
 	}
 
 	~hdl() = default;
 
-	void apply() override
+	void apply(MapgenEarth *mg) override
 	{
 		osmium::area::Assembler::config_type assembler_config;
 		assembler_config.create_empty_areas = false;
@@ -260,7 +259,6 @@ public:
 		{
 			const auto llmin = mg->pos_to_ll(mg->node_min.X, mg->node_min.Z);
 			const auto llmax = mg->pos_to_ll(mg->node_max.X, mg->node_max.Z);
-
 		}
 		osmium::io::File file{path_name, "pbf"};
 		osmium::relations::read_relations(file, mp_manager);
@@ -272,6 +270,7 @@ public:
 		}
 
 		arnis::init(mg);
+		handler.mg = mg;
 		osmium::apply(reader, cache, handler,
 				mp_manager.handler([&handler = this->handler](
 										   const osmium::memory::Buffer &area_buffer) {

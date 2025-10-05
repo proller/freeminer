@@ -36,7 +36,7 @@ void FpsControl::reset()
 
 void FpsControl::limit(IrrlichtDevice *device, f32 *dtime)
 {
-	const float fps_limit = device->isWindowFocused()
+	static thread_local const float fps_limit = device->isWindowFocused()
 			? g_settings->getFloat("fps_max")
 			: g_settings->getFloat("fps_max_unfocused");
 	const u64 frametime_min = 1000000.0f / std::max(fps_limit, 1.0f);
@@ -312,7 +312,7 @@ void RenderingEngine::draw_load_screen(const std::wstring &text,
 
 	driver->setFog(RenderingEngine::MENU_SKY_COLOR);
 	driver->beginScene(true, true, RenderingEngine::MENU_SKY_COLOR);
-	if (g_settings->getBool("menu_clouds")) {
+	if (static thread_local const auto menu_clouds = g_settings->getBool("menu_clouds"); menu_clouds) {
 		g_menuclouds->step(dtime * 3);
 		g_menucloudsmgr->drawAll();
 	}

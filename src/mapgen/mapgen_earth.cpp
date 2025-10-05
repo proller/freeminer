@@ -451,13 +451,13 @@ void MapgenEarth::generateBuildings()
 	}
 
 	if (const auto &hdlr = maps_holder->osm_bbox.get(bbox)) {
-		hdlr->apply();
+		hdlr->apply(this);
 	}
 
 	verbosestream << "Buildings stat: " << node_min << " set=" << stat.set
 				  << " miss=" << stat.miss << " level=" << stat.level
 				  << " check=" << stat.check << " fill=" << stat.fill << "\n";
-	stat = {};
+	stat.clean();
 
 #endif
 }

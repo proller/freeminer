@@ -330,7 +330,6 @@ int MapgenV7::getSpawnLevelAtPoint(v2pos_t p)
 	return MAX_MAP_GENERATION_LIMIT;
 }
 
-
 void MapgenV7::makeChunk(BlockMakeData *data)
 {
 	// Pre-conditions

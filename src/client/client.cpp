@@ -368,6 +368,7 @@ void Client::Stop()
 	// TODO: correct order:
 	mesh_thread_pool.wait_until_empty();
 	farmesh_async.wait();
+	mesh_thread_pool.wait_until_nothing_in_flight();
 	mesh_thread_pool.wait_until_empty();
 	farmesh.reset();
 	farmesh_async.wait();
@@ -396,6 +397,7 @@ Client::~Client()
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
 	}
+	mesh_thread_pool.wait_until_nothing_in_flight();
 	mesh_thread_pool.wait_until_empty(); // before ~ClientMap()
 
 	deleteAuthData();
@@ -406,6 +408,9 @@ Client::~Client()
 	farmesh_async.wait();
 	updateDrawList_async.wait();
 	update_shadows_async.wait();
+
+	mesh_thread_pool.wait_until_nothing_in_flight();
+    mesh_thread_pool.wait_until_empty(); // before ~ClientMap()
 
 /*	
 	MeshUpdateResult r;

@@ -21,6 +21,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -64,7 +65,7 @@ class MapgenEarth;
 class handler_i
 {
 public:
-	virtual void apply() = 0;
+	virtual void apply(MapgenEarth*) = 0;
 };
 
 struct maps_holder_t
@@ -115,10 +116,11 @@ public:
 
 	struct Stat
 	{
-		int set{};
-		int miss{};
-		int level{};
-		int check{};
-		int fill{};
+		std::atomic_int set{};
+		std::atomic_int miss{};
+		std::atomic_int level{};
+		std::atomic_int check{};
+		std::atomic_int fill{};
+		void clean() { set = miss = level = check = fill = 0; }
 	} stat;
 };
