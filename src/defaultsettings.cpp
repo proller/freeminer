@@ -395,11 +395,14 @@ void fm_set_default_settings(Settings *settings) {
 
 #ifdef __EMSCRIPTEN__
 	settings->setDefault("viewing_range", "64");
-	//settings->setDefault("farmesh", "0");
+#if USE_POS32
+	settings->setDefault("farmesh", "200000");
+#else
 	settings->setDefault("farmesh", "16000");
+#endif	
 	settings->setDefault("lodmesh", "0");
 	settings->setDefault("client_mesh_chunk", "1");
-	settings->setDefault("client_unload_unused_data_timeout", "30");
+	settings->setDefault("client_unload_unused_data_timeout", "60");
 #endif
 
 
