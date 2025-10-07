@@ -284,7 +284,7 @@ const auto multi_http_to_file = [](const auto &zipfile,
 
 	http_failed.insert(zipfile);
 
-	errorstream
+	warningstream
 			<< "Not found " << zipfile << "\n"
 			<< "try to download manually: \n"
 			<< "curl -o " << zipfull << " "
