@@ -28,28 +28,32 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <system_error>
 
 #include "debug/dump.h"
+#include "emerge.h"
 #include "filesys.h"
 #include "irr_v2d.h"
+#include "irr_v3d.h"
 #include "irrlichttypes.h"
+#include "log_types.h"
+#include "log.h"
+#include "map.h"
+#include "mapblock.h"
+#include "mapgen_earth.h"
 #include "mapgen/earth/hgt.h"
 #include "mapgen/earth/http.h"
-#include "mapgen_earth.h"
-#include "voxel.h"
-#include "mapblock.h"
 #include "mapnode.h"
-#include "map.h"
-#include "nodedef.h"
-#include "voxelalgorithms.h"
-#include "settings.h"
-#include "emerge.h"
-#include "serverenvironment.h"
 #include "mg_biome.h"
-#include "log_types.h"
+#include "nodedef.h"
+#include "serverenvironment.h"
+#include "settings.h"
+#include "voxel.h"
+#include "voxelalgorithms.h"
 #if USE_OSMIUM
+#include "earth/osmium-inl.h"
 #include <filesystem>
 #include <osmium/area/assembler.hpp>
 #include <osmium/area/multipolygon_manager.hpp>
 #include <osmium/dynamic_handler.hpp>
+#include <osmium/geom/tile.hpp>
 #include <osmium/handler/node_locations_for_ways.hpp>
 #include <osmium/index/map/sparse_mem_array.hpp>
 #include <osmium/io/file.hpp>
@@ -133,6 +137,7 @@ MapgenEarth::MapgenEarth(MapgenEarthParams *params_, EmergeParams *emerge) :
 	mg_params = params_;
 
 	Json::Value &params = mg_params->params;
+	flags = 0;
 
 	if (params.get("light", 0).asBool())
 		this->flags &= ~MG_LIGHT;
@@ -252,6 +257,10 @@ ll MapgenEarth::pos_to_ll(const pos_t x, const pos_t z)
 		return {89.9999, 0};
 	}
 }
+ll MapgenEarth::pos_to_ll(const v3pos_t &p)
+{
+	return pos_to_ll(p.X, p.Z);
+}
 
 v2pos_t MapgenEarth::ll_to_pos(const ll &l)
 {
@@ -276,69 +285,6 @@ int MapgenEarth::getGroundLevelAtPoint(v2pos_t p)
 	return get_height(p.X, p.Y); // + MGV6_AVERAGE_MUD_AMOUNT;
 }
 
-//  https://www.roguebasin.com/index.php?title=Bresenham%27s_Line_Algorithm
-void MapgenEarth::bresenham(pos_t x1, pos_t y1, const pos_t x2, const pos_t y2, pos_t y,
-		pos_t h, const MapNode &n)
-{
-	pos_t delta_x(x2 - x1);
-	// if x1 == x2, then it does not matter what we set here
-	const int8_t ix((delta_x > 0) - (delta_x < 0));
-	delta_x = std::abs(delta_x) << 1;
-
-	pos_t delta_y(y2 - y1);
-	// if y1 == y2, then it does not matter what we set here
-	const int8_t iy((delta_y > 0) - (delta_y < 0));
-	delta_y = std::abs(delta_y) << 1;
-
-	for (pos_t yi = y; yi <= y + h; ++yi) {
-		if (vm->exists({x1, yi, y1})) {
-			vm->setNode({x1, yi, y1}, n);
-		}
-	}
-
-	if (delta_x >= delta_y) {
-		// error may go below zero
-		pos_t error(delta_y - (delta_x >> 1));
-
-		while (x1 != x2) {
-			// reduce error, while taking into account the corner case of error == 0
-			if ((error > 0) || (!error && (ix > 0))) {
-				error -= delta_x;
-				y1 += iy;
-			}
-
-			error += delta_y;
-			x1 += ix;
-
-			for (pos_t yi = y; yi <= y + h; ++yi) {
-				if (vm->exists({x1, yi, y1})) {
-					vm->setNode({x1, yi, y1}, n);
-				}
-			}
-		}
-	} else {
-		// error may go below zero
-		int error(delta_x - (delta_y >> 1));
-
-		while (y1 != y2) {
-			// reduce error, while taking into account the corner case of error == 0
-			if ((error > 0) || (!error && (iy > 0))) {
-				error -= delta_y;
-				x1 += ix;
-			}
-
-			error += delta_x;
-			y1 += iy;
-
-			for (pos_t yi = y; yi <= y + h; ++yi) {
-				if (vm->exists({x1, yi, y1})) {
-					vm->setNode({x1, yi, y1}, n);
-				}
-			}
-		}
-	}
-}
-
 int MapgenEarth::generateTerrain()
 {
 	MapNode n_ice(c_ice);
@@ -347,7 +293,7 @@ int MapgenEarth::generateTerrain()
 
 	for (pos_t z = node_min.Z; z <= node_max.Z; z++) {
 		for (pos_t x = node_min.X; x <= node_max.X; x++, index++) {
-			s16 heat =
+			auto heat =
 					m_emerge->env->m_use_weather
 							? m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env,
 									  v3pos_t(x, node_max.Y, z), nullptr, &heat_cache)
@@ -425,8 +371,8 @@ void MapgenEarth::generateBuildings()
 
 #if USE_OSMIUM
 
-#define FILE_INCLUDED 1
-#include "earth/osmium-inl.h"
+	//#define FILE_INCLUDED 1
+	//#include "earth/osmium-inl.h"
 	const auto tc = pos_to_ll(node_min.X, node_min.Z);
 	const auto tc_max = pos_to_ll(node_max.X, node_max.Z);
 	static const auto folder = porting::path_cache + DIR_DELIM + "earth";
@@ -434,7 +380,7 @@ void MapgenEarth::generateBuildings()
 	const auto lon_dec = lon_start(tc.lon);
 
 	static const auto timestamp = []() {
-		std::string ts = "202503130700";
+		std::string ts = "latest";
 		g_settings->getNoEx("earth_movisda_timestamp", ts);
 		return ts;
 	}();
@@ -505,7 +451,30 @@ void MapgenEarth::generateBuildings()
 	}
 
 	if (const auto &hdlr = maps_holder->osm_bbox.get(bbox)) {
-		hdlr->apply();
+		hdlr->apply(this);
 	}
+
+	verbosestream << "Buildings stat: " << node_min << " set=" << stat.set
+				  << " miss=" << stat.miss << " level=" << stat.level
+				  << " check=" << stat.check << " fill=" << stat.fill << "\n";
+	stat.clean();
+
 #endif
+}
+
+weather::heat_t MapgenEarth::calcBlockHeat(const v3pos_t &p, uint64_t seed,
+		float timeofday, float totaltime, bool use_weather)
+{
+#if USE_OSMIUM
+	const auto ll = pos_to_ll(p);
+	const auto tile = osmium::geom::Tile(3, osmium::Location(ll.lon, ll.lat));
+#endif
+	return m_emerge->biomemgr->calcBlockHeat(p, seed, timeofday, totaltime, use_weather);
+}
+
+weather::humidity_t MapgenEarth::calcBlockHumidity(const v3pos_t &p, uint64_t seed,
+		float timeofday, float totaltime, bool use_weather)
+{
+	return m_emerge->biomemgr->calcBlockHumidity(
+			p, seed, timeofday, totaltime, use_weather);
 }

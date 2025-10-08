@@ -203,39 +203,42 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 		if (!block)
 			block = m_env.getMap().createBlankBlock(bpos);
 	}
-	const auto lock = block->lock_unique_rec();
-	block->far_step = step;
-	content_t content_only{};
-	packet.convert_safe(TOCLIENT_BLOCKDATA_CONTENT_ONLY, content_only);
-	block->content_only = content_only;
-	packet.convert_safe(
-			TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM1, block->content_only_param1);
-	packet.convert_safe(
-			TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM2, block->content_only_param2);
+	{
+		const auto lock = block->lock_unique_rec();
+		block->far_step = step;
+		content_t content_only{};
+		packet.convert_safe(TOCLIENT_BLOCKDATA_CONTENT_ONLY, content_only);
+		block->content_only = content_only;
+		packet.convert_safe(
+				TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM1, block->content_only_param1);
+		packet.convert_safe(
+				TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM2, block->content_only_param2);
 
-	if (block->content_only == CONTENT_IGNORE) {
-		try {
-			block->deSerialize(istr, m_server_ser_ver, false);
-		} catch (const std::exception &ex) {
-			errorstream << "fm block deSerialize fail " << bpos << " " << block->far_step
-						<< " : " << ex.what() << " : " << pkt->getSize() << " "
-						<< packet.size() << " v=" << (short)m_server_ser_ver << "\n";
+		if (block->content_only == CONTENT_IGNORE) {
+			try {
+				block->deSerialize(istr, m_server_ser_ver, false);
+			} catch (const std::exception &ex) {
+				errorstream << "fm block deSerialize fail " << bpos << " "
+							<< block->far_step << " : " << ex.what() << " : "
+							<< pkt->getSize() << " " << packet.size()
+							<< " v=" << (short)m_server_ser_ver << "\n";
 #if !NDEBUG
-			errorstream << "bad data " << istr.str().size() << " : " << istr.str()
-						<< "\n";
+				errorstream << "bad data " << istr.str().size() << " : " << istr.str()
+							<< "\n";
 #endif
-			return;
+				return;
+			}
+		} else {
+			block->fill({block->content_only, block->content_only_param1,
+					block->content_only_param2});
 		}
-	} else {
-		block->fill({block->content_only, block->content_only_param1,
-				block->content_only_param2});
+		s32 h = 0; // for convert to atomic
+		packet[TOCLIENT_BLOCKDATA_HEAT].convert(h);
+		block->heat = h;
+		h = 0;
+		packet[TOCLIENT_BLOCKDATA_HUMIDITY].convert(h);
+		block->humidity = h;
 	}
-	s32 h = 0; // for convert to atomic
-	packet[TOCLIENT_BLOCKDATA_HEAT].convert(h);
-	block->heat = h;
-	h = 0;
-	packet[TOCLIENT_BLOCKDATA_HUMIDITY].convert(h);
-	block->humidity = h;
 
 	if (m_localdb && !is_simple_singleplayer_game) {
 		if (const auto db = GetFarDatabase({}, far_dbases, m_world_path, step); db) {
@@ -253,7 +256,7 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 				block->content_only != CONTENT_AIR) {
 			if (getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS))
 							.getDistanceFrom(bpos) <= 1)
-			addUpdateMeshTaskWithEdge(bpos);
+				addUpdateMeshTaskWithEdge(bpos);
 		}
 	} else {
 		static thread_local const auto settings_farmesh_server =
@@ -290,7 +293,7 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 			}
 			createFarMesh(block);
 			auto &far_blocks = client_map.m_far_blocks;
-			
+
 			const auto lock = far_blocks.lock_unique_rec();
 			if (const auto &it = far_blocks.find(bpos); it != far_blocks.end()) {
 				if (it->second->far_step != block->far_step) {

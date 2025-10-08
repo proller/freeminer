@@ -939,7 +939,7 @@ void Hud::drawBlockBounds()
 
 	u16 mesh_chunk_size = std::max<u16>(1, g_settings->getU16("client_mesh_chunk"));
 
-	v3s16 pos = player->getStandingNodePos();
+	// 3s16 pos = player->getStandingNodePos();
 
 	if (m_block_bounds_mode == BLOCK_BOUNDS_FAR_DRAWN) {
 		const auto offset = intToFloat(client->getCamera()->getOffset(), BS);

@@ -1,5 +1,8 @@
 
 # == freeminer:
+
+find_package(MsgPack REQUIRED)
+
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
 	OPTION(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL)" 0)
 	OPTION(USE_MULTI "Enable MT+ENET+WSS networking" 1)
@@ -127,6 +130,34 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/e
 	endif()
 endif()
 
+option(ENABLE_ICONV "Enable utf8 convert via iconv " FALSE)
+
+if(ENABLE_ICONV)
+	find_package(Iconv)
+	if(ICONV_INCLUDE_DIR)
+		set(USE_ICONV 1)
+		message(STATUS "iconv.h found: ${ICONV_INCLUDE_DIR}")
+	else()
+		message(STATUS "iconv.h NOT found")
+	endif()
+endif()
+
+if(NOT USE_ICONV)
+	set(USE_ICONV 0)
+endif()
+
+#option(ENABLE_MANDELBULBER "Use Mandelbulber source to generate more fractals in math mapgen" OFF)
+set(USE_MANDELBULBER 1)
+#find_package(Mandelbulber)
+
+option(ENABLE_IPV4_DEFAULT "Do not use ipv6 dual socket " FALSE)
+if(ENABLE_IPV4_DEFAULT)
+	set(USE_IPV4_DEFAULT 1)
+else()
+	set(USE_IPV4_DEFAULT 0)
+endif()
+
+
 if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND ${CMAKE_VERSION} VERSION_GREATER "3.11.0")
     set(USE_DEBUG_DUMP ON CACHE BOOL "")
 endif()
@@ -167,6 +198,5 @@ set(FMcommon_SRCS ${FMcommon_SRCS}
 	fm_abm.cpp
 	fm_clientiface.cpp
 	fm_serverenvironment.cpp
-	${DEBUG_SRCS}
 	)
 # == end freeminer:
