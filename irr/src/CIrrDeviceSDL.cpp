@@ -2,7 +2,6 @@
 // This file is part of the "Irrlicht Engine".
 // For conditions of distribution and use, see copyright notice in irrlicht.h
 
-#include "SDL_keycode.h"
 #ifdef _IRR_COMPILE_WITH_SDL_DEVICE_
 
 #include <iostream>
@@ -27,9 +26,6 @@
 
 #ifdef _IRR_EMSCRIPTEN_PLATFORM_
 #include <emscripten.h>
-#else
-#define EMSCRIPTEN_KEEPALIVE
-#define EM_BOOL bool
 #endif
 
 #include "CSDLManager.h"
@@ -424,12 +420,10 @@ CIrrDeviceSDL::CIrrDeviceSDL(const SIrrlichtCreationParameters &param) :
 			Close = true;
 		}
 
-#if __EMSCRIPTEN__		
 		// This is an SDL hook to filter events, but we need to abuse it to make
 		// SDL events (keyboard/mouse) trigger re-entry for immediate processing.
 		SDL_NOOP_EVENT = SDL_RegisterEvents(1);
 		SDL_SetEventFilter(emloop_event_filter, NULL);
-#endif
 	}
 
 	// create keymap
@@ -568,72 +562,6 @@ SDL_CreateWindowAndRendererFixed(int width, int height, Uint32 window_flags,
 
 bool CIrrDeviceSDL::createWindow()
 {
-
-#ifdef _IRR_EMSCRIPTEN_PLATFORM_
-
-	u32 SDL_Flags = 0;
-
-	if (CreationParams.Fullscreen) {
-#ifdef _IRR_EMSCRIPTEN_PLATFORM_
-		SDL_Flags |= SDL_WINDOW_FULLSCREEN;
-#else
-		SDL_Flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
-#endif
-	}
-#ifndef _IRR_EMSCRIPTEN_PLATFORM_
-	if (Resizable)
-		SDL_Flags |= SDL_WINDOW_RESIZABLE;
-	if (CreationParams.WindowMaximized)
-		SDL_Flags |= SDL_WINDOW_MAXIMIZED;
-#endif
-	SDL_Flags |= SDL_WINDOW_OPENGL;
-
-	if ( Width != 0 || Height != 0 ) {
-		printf("SETTING CANVAS SIZE: WIDTH=%d, HEIGHT=%d\n", Width, Height);
-		emscripten_set_canvas_size( Width, Height);
-	} else
-	{
-		int w, h, fs;
-		emscripten_get_canvas_size(&w, &h, &fs);
-		Width = w;
-		Height = h;
-		printf("GOT FROM EMSCRIPTEN: WIDTH=%d, HEIGHT=%d\n", Width, Height);
-	}
-
-	SDL_GL_SetAttribute( SDL_GL_RED_SIZE, 8 );
-	SDL_GL_SetAttribute( SDL_GL_GREEN_SIZE, 8 );
-	SDL_GL_SetAttribute( SDL_GL_BLUE_SIZE, 8 );
-	SDL_GL_SetAttribute( SDL_GL_ALPHA_SIZE, CreationParams.WithAlphaChannel?8:0 );
-
-	SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, CreationParams.ZBufferBits);
-	SDL_GL_SetAttribute( SDL_GL_STENCIL_SIZE, CreationParams.Stencilbuffer ? 8 : 0);
-	SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, CreationParams.Doublebuffer ? 1 : 0);
-
-	if (CreationParams.AntiAlias>1)
-	{
-		SDL_GL_SetAttribute( SDL_GL_MULTISAMPLEBUFFERS, 1 );
-		SDL_GL_SetAttribute( SDL_GL_MULTISAMPLESAMPLES, CreationParams.AntiAlias );
-	}
-	else
-	{
-		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
-		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
-	}
-
-	SDL_CreateWindowAndRendererFixed(Width, Height, SDL_Flags, &Window, &Renderer); // 0,0 will use the canvas size
-
-	logAttributes();
-
-	// "#canvas" is for the opengl context
-	emscripten_set_mousedown_callback("#canvas", (void*)this, true, MouseUpDownCallback);
-    emscripten_set_mouseup_callback("#canvas", (void*)this, true, MouseUpDownCallback);
-    emscripten_set_mouseenter_callback("#canvas", (void*)this, false, MouseEnterCallback);
-    emscripten_set_mouseleave_callback("#canvas", (void*)this, false, MouseLeaveCallback);
-
-	return true;
-#else // !_IRR_EMSCRIPTEN_PLATFORM_
-
-
 	if (Close)
 		return false;
 
@@ -708,7 +636,6 @@ bool CIrrDeviceSDL::createWindow()
 
 	os::Printer::log("Could not create window and context!", ELL_ERROR);
 	return false;
-#endif
 }
 
 bool CIrrDeviceSDL::createWindowWithContext()
@@ -883,53 +810,6 @@ static int wrap_PollEvent(SDL_Event *ev)
 		os::Printer::log(msg.c_str(), d >= 50 ? ELL_WARNING : ELL_INFORMATION);
 	}
 	return ret;
-}
-
-// This only handles single, printable, ascii characters.
-static char KeyAsText(const SDL_Keysym *keysym) {
-	if (keysym->mod & KMOD_CTRL)
-	{
-		return 0;
-	}
-	bool printable = keysym->sym >= 32 && keysym->sym < 127;
-	if (!printable)
-	{
-		return 0;
-	}
-	bool shiftSymbols = !!(keysym->mod & KMOD_SHIFT);
-	bool shiftLetters = shiftSymbols != !!(keysym->mod & KMOD_CAPS);
-	if (shiftLetters && keysym->sym >= 'a' && keysym->sym <= 'z')
-	{
-		return keysym->sym - 32;
-	}
-	if (shiftSymbols)
-	{
-		switch (keysym->sym)
-		{
-		case '`': return '~';
-		case '1': return '!';
-		case '2': return '@';
-		case '3': return '#';
-		case '4': return '$';
-		case '5': return '%';
-		case '6': return '^';
-		case '7': return '&';
-		case '8': return '*';
-		case '9': return '(';
-		case '0': return ')';
-		case '-': return '_';
-		case '=': return '+';
-		case '[': return '{';
-		case ']': return '}';
-		case '\\': return '|';
-		case ';': return ':';
-		case '\'': return '"';
-		case ',': return '<';
-		case '.': return '>';
-		case '/': return '?';
-		}
-	}
-	return keysym->sym;
 }
 
 //! runs the device. Returns false if device wants to be deleted
@@ -1164,11 +1044,8 @@ bool CIrrDeviceSDL::run()
 			irrevent.KeyInput.PressedDown = (SDL_event.type == SDL_KEYDOWN);
 			irrevent.KeyInput.Shift = (SDL_event.key.keysym.mod & KMOD_SHIFT) != 0;
 			irrevent.KeyInput.Control = (SDL_event.key.keysym.mod & KMOD_CTRL) != 0;
-			irrevent.KeyInput.Char = (SDL_event.type == SDL_KEYDOWN) ? KeyAsText(&SDL_event.key.keysym) : 0;
-			KeySuppress = (irrevent.KeyInput.Char != 0);
-/*			irrevent.KeyInput.Char = findCharToPassToIrrlicht(keysym, key,
+			irrevent.KeyInput.Char = findCharToPassToIrrlicht(keysym, key,
 					(SDL_event.key.keysym.mod & KMOD_NUM) != 0);
-*/
 			irrevent.KeyInput.SystemKeyCode = scancode;
 
 			postEventFromUser(irrevent);
@@ -1185,7 +1062,6 @@ bool CIrrDeviceSDL::run()
 #if SDL_VERSION_ATLEAST(2, 0, 18)
 			case SDL_WINDOWEVENT_DISPLAY_CHANGED:
 #endif
-				std::cout << "RESIZE: w=" << SDL_event.window.data1 << ", h=" << SDL_event.window.data2 << std::endl;
 				u32 old_w = Width, old_h = Height;
 				f32 old_scale_x = ScaleX, old_scale_y = ScaleY;
 				updateSizeAndScale();
@@ -1768,8 +1644,7 @@ void CIrrDeviceSDL::createKeyMap()
 	KeyMap.emplace(SDLK_LALT, KEY_LMENU);
 	KeyMap.emplace(SDLK_RALT, KEY_RMENU);
 
-	//KeyMap.emplace(SDLK_PLUS, KEY_PLUS);
-	KeyMap.emplace(SDLK_EQUALS, KEY_PLUS);
+	KeyMap.emplace(SDLK_PLUS, KEY_PLUS);
 	KeyMap.emplace(SDLK_COMMA, KEY_COMMA);
 	KeyMap.emplace(SDLK_MINUS, KEY_MINUS);
 	KeyMap.emplace(SDLK_PERIOD, KEY_PERIOD);

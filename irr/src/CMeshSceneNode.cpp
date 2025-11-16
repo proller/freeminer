@@ -68,15 +68,6 @@ void CMeshSceneNode::OnRegisterSceneNode()
 		if (transparentCount)
 			SceneManager->registerNodeForRendering(this, scene::ESNRP_TRANSPARENT);
 
-		for (u32 i=0; i<Mesh->getMeshBufferCount(); ++i)
-		{
-			scene::IMeshBuffer* mb = Mesh->getMeshBuffer(i);
-			if (mb)
-			{
-				driver->prepareMeshBuffer(mb);
-			}
-		}
-
 		ISceneNode::OnRegisterSceneNode();
 	}
 }

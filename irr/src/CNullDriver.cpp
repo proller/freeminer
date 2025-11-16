@@ -1085,21 +1085,6 @@ void CNullDriver::drawBuffers(const scene::IVertexBuffer *vb,
 		primCount, vb->getType(), pType, ib->getType());
 }
 
-void CNullDriver::prepareMeshBuffer(const scene::IMeshBuffer *mb)
-{
-	if (!mb)
-		return;
-
-	if (const auto &b = mb->getVertexBuffer()) {
-		if (const auto bb = reinterpret_cast<SHWBufferLink *>(b->getHWBuffer()))
-			updateHardwareBuffer(bb);
-	}
-	if (const auto &b = mb->getIndexBuffer()) {
-		if (const auto bb = reinterpret_cast<SHWBufferLink *>(b->getHWBuffer()))
-			updateHardwareBuffer(bb);
-	}
-}
-
 //! Draws the normals of a mesh buffer
 void CNullDriver::drawMeshBufferNormals(const scene::IMeshBuffer *mb, f32 length, SColor color)
 {

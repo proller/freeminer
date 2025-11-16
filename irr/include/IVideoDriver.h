@@ -758,10 +758,6 @@ public:
 	/** \param mb Buffer to draw */
 	virtual void drawMeshBuffer(const scene::IMeshBuffer *mb) = 0;
 
-	//! Update hardware buffer for a mesh buffer, if needed.
-	/** \param mb Buffer to prepare */
-	virtual void prepareMeshBuffer(const scene::IMeshBuffer* mb) =0;
-
 	/**
 	 * Draws a mesh from individual vertex and index buffers.
 	 * @param vb vertices to use

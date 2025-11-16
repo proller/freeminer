@@ -42,10 +42,7 @@ struct SIrrlichtCreationParameters
 			LoggingLevel(ELL_INFORMATION),
 #endif
 			PrivateData(0),
-
-#if defined(_IRR_EMSCRIPTEN_PLATFORM_)
-			OGLES2ShaderPath("/minetest/media/Shaders/"),
-#elif defined(IRR_MOBILE_PATHS)
+#ifdef IRR_MOBILE_PATHS
 			OGLES2ShaderPath("media/Shaders/"),
 #elif defined(_IRR_EMSCRIPTEN_PLATFORM_)
 			OGLES2ShaderPath("/minetest/media/Shaders/"),

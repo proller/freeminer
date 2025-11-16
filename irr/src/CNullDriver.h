@@ -268,10 +268,6 @@ public:
 			mb->getPrimitiveCount(), mb->getPrimitiveType());
 	}
 
-
-	//! Update hardware buffer for a mesh buffer, if needed.
-	virtual void prepareMeshBuffer(const scene::IMeshBuffer* mb) override;
-
 	// Note: this should handle hw buffers
 	virtual void drawBuffers(const scene::IVertexBuffer *vb,
 		const scene::IIndexBuffer *ib, u32 primCount,

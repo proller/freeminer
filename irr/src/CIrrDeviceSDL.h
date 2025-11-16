@@ -335,6 +335,7 @@ private:
 	// TODO: This is only used for scancode/keycode conversion with EKEY_CODE (among other things, for Luanti
 	// to display keys to users). Drop this along with EKEY_CODE.
 	std::unordered_map<SDL_Keycode, EKEY_CODE> KeyMap;
+
 	bool KeySuppress;
 
 	s32 CurrentTouchCount;

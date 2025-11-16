@@ -1,9 +1,5 @@
 set(DEFAULT_SDL2 ON)
 
-if(EMSCRIPTEN)
-	set(DEFAULT_SDL2 ON)
-endif()
-
 option(USE_SDL2 "Use the SDL2 backend" ${DEFAULT_SDL2})
 
 option(USE_SDL2_STATIC "Link with SDL2 static libraries" FALSE)
@@ -154,8 +150,8 @@ else()
 		set(DEFAULT_WEBGL1 TRUE)
 	endif()
 	option(ENABLE_GLES2 "Enable OpenGL ES 2+" ${DEFAULT_GLES2})
-	option(ENABLE_WEBGL1 "Enable WebGL (requires GLES2)" ${DEFAULT_WEBGL1})
-	#set(ENABLE_WEBGL1 FALSE) # not working currently
+	#option(ENABLE_WEBGL1 "Enable WebGL (requires GLES2)" ${DEFAULT_WEBGL1})
+	set(ENABLE_WEBGL1 FALSE) # not working currently
 	if(ENABLE_WEBGL1)
 		set(ENABLE_GLES2 TRUE)
 	endif()
@@ -214,7 +210,7 @@ if (ENABLE_GLES2)
 else()
 	message(STATUS "OpenGL ES 2: OFF")
 endif()
-message(STATUS "WebGL: ${ENABLE_WEBGL1}")
+#message(STATUS "WebGL: ${ENABLE_WEBGL1}")
 
 # Required libs
 
@@ -402,13 +398,6 @@ if(ENABLE_GLES2)
 		${IRRDRVROBJ}
 		OpenGLES2/DriverGLES2.h
 		OpenGLES2/DriverGLES2.cpp
-	)
-endif()
-
-if(ENABLE_WEBGL1)
-	set(IRRDRVROBJ
-		${IRRDRVROBJ}
-		WebGL1/Driver.cpp
 	)
 endif()
 
