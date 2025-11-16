@@ -172,10 +172,12 @@ public:
 		}
 	}
 
+	const static std::vector<ProcessedNode> dummy_nodes;
 	const std::vector<ProcessedNode> &nodes() const
 	{
 		if (is_way())
 			return as_way().nodes;
+		return dummy_nodes;
 	}
 
 	static ProcessedElement FromNode(const ProcessedNode &n)
@@ -262,6 +264,9 @@ struct Ground
 	{
 		++mg->stat.level;
 		const auto h = mg->get_height(pos.X, pos.Y);
+		if (h < 1) {
+			return 1;
+		}
 		return h;
 	}
 };

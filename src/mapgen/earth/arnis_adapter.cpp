@@ -6,4 +6,5 @@ XZ::operator XZPoint()
 {
 	return XZPoint{X, Y};
 }
+const std::vector<ProcessedNode> ProcessedElement::dummy_nodes;
 }

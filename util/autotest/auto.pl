@@ -83,7 +83,8 @@ $0 ----world_sand
 $0 -mg_name=earth -mg_earth='{"center":{"z":36.822183, "y":0, "x":30.583390}}' bot
 #$0 -mg_name=earth -mg_earth='{"scale":{"z":10000, "y":0.01, "x":10000}}' bot
 $0 -mg_name=earth -mg_earth='{"scale":{"z":10000, "y":100, "x":10000}}' bot
-$0 -mg_name=earth -mg_earth='{"center":{"z":27.9878279,"y":0,"x":86.923833}}' -static_spawnpoint='(130,8842,56)' bot  # everest
+$0 -mg_name=earth -mg_earth='{"center":{"z":27.9878279,"y":0,"x":86.923833}}' -static_spawnpoint='(130,8842,56)' bot  # Everest
+$0 -mg_name=earth -mg_earth='{"center":{"z":22.28422,"x":114.15996,"y":0} }' bot  # HongKong
 
 $0 ---cmake_minetest=1 ---build_name=_minetest ----headless ----headless_optimize --address=cool.server.org --port=30001 ---clients_num=25 clients
 
@@ -214,7 +215,8 @@ our $options = {
         profiler_max_page       => 1,
         profiler_page           => 1,
         debug_log_level         => 'info',
-        movement_speed_fast     => 10000,
+        movement_speed_fast     => 100000,
+        movement_acceleration_fast => 100,
         max_block_send_distance => 100,
         default_privs           => 'interact, shout, teleport, settime, privs, fly, noclip, fast, debug',
         default_privs_creative  => 'interact, shout, teleport, settime, privs, fly, noclip, fast, debug',
@@ -412,7 +414,7 @@ $commands = {
         file_append(
             "$config->{logdir}/run.sh",
             join "\n",
-            qq{# } . join(' ', $0, map { /[\s"]/ ? "'" . $_ . "'" : $_ } @ARGV),
+            qq{# } . join(' ', $0, map { /[()\s"]/ ? "'" . $_ . "'" : $_ } @ARGV),
             qq{cd "$build_dir"},
             ""
         );

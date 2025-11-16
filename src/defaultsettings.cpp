@@ -163,6 +163,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("farmesh_stable", "0");
 	settings->setDefault("farmesh_server", "1");
 	settings->setDefault("farmesh_all_changed", slow ? "1000" : "10000");
+	settings->setDefault("farlights", "1");
 
 	settings->setDefault("headless_optimize", "false");
 	//settings->setDefault("node_highlighting", "halo");

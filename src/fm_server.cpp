@@ -30,6 +30,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "database/database.h"
 #include "emerge.h"
 #include "filesys.h"
+#include "fm_weather.h"
 #include "irrlichttypes.h"
 #include "porting.h"
 #include "fm_world_merge.h"
@@ -698,8 +699,8 @@ void Server::SendBlockFm(session_t peer_id, MapBlockPtr block, u8 ver,
 	block->serializeNetworkSpecific(os);
 
 	PACK(TOCLIENT_BLOCKDATA_DATA, os.str());
-	PACK(TOCLIENT_BLOCKDATA_HEAT, (s16)(block->heat + block->heat_add));
-	PACK(TOCLIENT_BLOCKDATA_HUMIDITY, (s16)(block->humidity + block->humidity_add));
+	PACK(TOCLIENT_BLOCKDATA_HEAT, (weather::heat_t)(block->heat + block->heat_add));
+	PACK(TOCLIENT_BLOCKDATA_HUMIDITY, (weather::humidity_t)(block->humidity + block->humidity_add));
 	PACK(TOCLIENT_BLOCKDATA_STEP, block->far_step);
 	PACK(TOCLIENT_BLOCKDATA_CONTENT_ONLY,
 			block->content_only.load(std::memory_order_relaxed));
@@ -755,7 +756,7 @@ void *WorldMergeThread::run()
 			.ndef{m_server->getNodeDefManager()},
 			.smap{m_server->getEnv().m_map.get()},
 			.far_dbases{m_server->far_dbases},
-			.dbase{m_server->getEnv().m_map->m_db.dbase, [](MapDatabase*){}},
+			.dbase{m_server->getEnv().m_map->m_db.dbase, [](MapDatabase *) {}},
 			.save_dir{m_server->getEnv().m_map->m_savedir},
 	};
 
@@ -764,6 +765,7 @@ void *WorldMergeThread::run()
 		merger.world_merge_max_clients = m_server->isSingleplayer() ? 1 : 0;
 		g_settings->getU32NoEx("world_merge_max_clients", merger.world_merge_max_clients);
 		g_settings->getU32NoEx("world_merge_lazy_up", merger.lazy_up);
+		g_settings->getBoolNoEx("farlights", merger.farlights);
 
 		{
 			merger.world_merge_load_all = -1;

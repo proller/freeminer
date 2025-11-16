@@ -21,6 +21,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include <optional>
 #include "irr_v3d.h"
 #include "irrlichttypes.h"
 
@@ -52,9 +53,9 @@ block_step_t getFarStepBad(const MapDrawControl &draw_control,
 bool inFarGrid(const v3bpos_t &blockpos, const v3bpos_t &playerblockpos,
 		block_step_t step, const MapDrawControl &draw_control);
 v3bpos_t getFarActual(const v3bpos_t &blockpos, const v3bpos_t &playerblockpos,
-		block_step_t step, const MapDrawControl &draw_control);
+		block_step_t step, const MapDrawControl &draw_control,
+		const std::optional<uint8_t> &cell_size_pow = {});
 v3bpos_t playerBlockAlign(
 		const MapDrawControl &draw_control, const v3bpos_t &playerblockpos);
-void runFarAll(const v3bpos_t &ppos,
-		uint8_t cell_size_pow,  uint8_t farmesh_quality, pos_t two_d,
-		const std::function<bool(const v3bpos_t &, const bpos_t &)> &func);
+void runFarAll(const v3bpos_t &ppos, uint8_t cell_size_pow, uint8_t farmesh_quality,
+		pos_t two_d, const std::function<bool(const v3bpos_t &, const bpos_t &)> &func);

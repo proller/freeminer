@@ -321,7 +321,8 @@ void ServerMap::finishBlockMake(BlockMakeData *data,
 	}
 
 	for (auto &changed_block : *changed_blocks) {
-		MapBlock *block = changed_block.second;
+		const auto block = getBlock(changed_block.first); // very bad, changed_block should contain MapBlockPtr
+		//MapBlock *block = changed_block.second;
 		if (!block)
 			continue;
 		/*
@@ -334,8 +335,8 @@ void ServerMap::finishBlockMake(BlockMakeData *data,
 	   if (save_generated_block)		
 		block->raiseModified(MOD_STATE_WRITE_NEEDED,
 			MOD_REASON_EXPIRE_IS_AIR, false);
-       else
-        block->setLightingComplete(0);
+
+		block->setLightingComplete(0);
 	}
 
 	ServerEnvironment *senv = &((Server *)m_gamedef)->getEnv();
@@ -352,6 +353,7 @@ void ServerMap::finishBlockMake(BlockMakeData *data,
 
         updateBlockHeat(senv, p * MAP_BLOCKSIZE, block);
         updateBlockHumidity(senv, p * MAP_BLOCKSIZE, block);
+   	    changed_blocks_for_merge.emplace(p);
 
 		// Set timestamp to ensure correct application of LBMs and other stuff
 		block->setTimestampNoChangedFlag(now);

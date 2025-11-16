@@ -253,8 +253,7 @@ public:
 			m_animation_force_timer--;
 	}
 
-
-// fm:
+	// fm:
 	/*u32 getUsageTimer() {
 		return m_usage_timer;
 	}

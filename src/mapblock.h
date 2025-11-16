@@ -7,6 +7,8 @@
 #include "config.h"
 
 #include <atomic>
+#include <cstdint>
+#include <unordered_map>
 #include <vector>
 #include "fm_nodecontainer.h"
 #include "irr_v3d.h"
@@ -536,6 +538,8 @@ public:
 	std::mutex abm_triggers_mutex;
 	size_t abmTriggersRun(ServerEnvironment *m_env, u32 time, uint8_t activate = 0);
 	uint32_t m_abm_timestamp{};
+    using light_t = uint8_t;
+	std::unordered_map<v3pos_t, light_t> m_light_points;
 
 	u32 getActualTimestamp()
 	{

@@ -21,7 +21,13 @@ namespace con
 IConnection *createMTP(float timeout, bool ipv6, PeerHandler *handler)
 {
 	// safe minimum across internet networks for ipv4 and ipv6
-	constexpr u32 MAX_PACKET_SIZE = 1400; // 512;
+	constexpr u32 MAX_PACKET_SIZE =
+#ifdef _WIN32
+	512; // TODO: find working maximum?
+#else
+	1350;
+#endif
+
 #if USE_MULTI
 	return new con::ConnectionMulti(MAX_PACKET_SIZE, timeout, ipv6, handler);
 #elif USE_ENET

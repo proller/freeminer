@@ -21,6 +21,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "fm_far_calc.h"
 #include <cstdint>
+#include <optional>
 
 #include "client/clientmap.h"
 #include "irr_v3d.h"
@@ -45,7 +46,7 @@ block_step_t getLodStep(const MapDrawControl &draw_control,
 		// 		return i;
 		// }
 
-/*
+		/*
 		if (range >= cells + draw_control.lodmesh * 64) // cell_size = 4
 			return 8;
 		if (range >= cells + draw_control.lodmesh * 32)
@@ -255,9 +256,10 @@ block_step_t getFarStep(const MapDrawControl &draw_control, const v3bpos_t &ppos
 }
 
 v3bpos_t getFarActual(const v3bpos_t &blockpos, const v3bpos_t &ppos, block_step_t step,
-		const MapDrawControl &draw_control)
+		const MapDrawControl &draw_control, const std::optional<uint8_t> &cell_size_pow)
 {
-	const auto blockpos_aligned_cell = align_shift(blockpos, draw_control.cell_size_pow);
+	const auto blockpos_aligned_cell =
+			align_shift(blockpos, cell_size_pow.value_or(draw_control.cell_size_pow));
 	const auto start =
 			child_t{.pos = v3tpos_t((((tpos_t)ppos.X >> tree_align) << tree_align) -
 											(tree_align_size >> 1),
@@ -268,7 +270,8 @@ v3bpos_t getFarActual(const v3bpos_t &blockpos, const v3bpos_t &ppos, block_step
 					.size = tree_size};
 	const auto res = find(
 			{blockpos_aligned_cell.X, blockpos_aligned_cell.Y, blockpos_aligned_cell.Z},
-			{ppos.X, ppos.Y, ppos.Z}, start, draw_control.cell_size_pow,
+			{ppos.X, ppos.Y, ppos.Z}, start,
+			cell_size_pow.value_or(draw_control.cell_size_pow),
 			draw_control.farmesh_quality);
 
 	if (res) {

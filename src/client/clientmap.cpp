@@ -1396,11 +1396,14 @@ static u32 transformBuffersToDrawOrder(
 				new_buffer = true;
 			else if (tmp->getVertexCount() + buf->getVertexCount() > U16_MAX)
 				new_buffer = true;
+			else if (tmp->getPrimitiveType() != buf->getPrimitiveType())
+				new_buffer = true;
 			if (new_buffer) {
 				finish_buf();
 				tmp = new scene::SMeshBuffer();
+				tmp->setPrimitiveType(buf->getPrimitiveType());
 				put_buffers.buf.push_back(tmp);
-				assert(tmp->getPrimitiveType() == buf->getPrimitiveType());
+				//assert(tmp->getPrimitiveType() == buf->getPrimitiveType());
 				tmp->Material = buf->getMaterial();
 				// preallocate approximately
 				tmp->Vertices->Data.reserve(MYMIN(U16_MAX, total_vtx));

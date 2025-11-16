@@ -4,6 +4,7 @@
 
 #include "mapblock_mesh.h"
 #include "CMeshBuffer.h"
+#include "EPrimitiveTypes.h"
 #include "client.h"
 #include "client/clientmap.h"
 #include "mapblock.h"
@@ -32,7 +33,8 @@
 
 MeshMakeData::MeshMakeData(const NodeDefManager *ndef,
 		u16 side_length, MeshGrid mesh_grid
-		, int lod_step, int far_step,
+		, int lod_step
+		, int far_step,
 		NodeContainer *nodecontainer) :
 	m_side_length(side_length >> lod_step),
 	m_mesh_grid(mesh_grid),
@@ -42,7 +44,7 @@ MeshMakeData::MeshMakeData(const NodeDefManager *ndef,
 	side_length_data{side_length},
 	lod_step{lod_step},
 	far_step{far_step},
-	fscale(1<<(far_step + lod_step))
+		fscale(1 << (far_step + lod_step))
 {
 	assert(m_side_length > 0);
 }
@@ -740,6 +742,55 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data):
 			}
 			mesh->addMeshBuffer(buf);
 			buf->drop();
+		}
+
+		if (static const auto farlights = g_settings->getBool("farlights"); farlights && far_step) {
+			scene::SMeshBuffer *buffer = new scene::SMeshBuffer();
+			buffer->PrimitiveType = scene::EPT_POINTS;
+			buffer->Material.PointCloud = true;
+			buffer->Material.BackfaceCulling = false;
+			buffer->Material.FogEnable = true;
+			v3bpos_t ofs;
+			const auto &storage =
+					client->getEnv().getClientMap().far_blocks_storage[far_step];
+			int index_i = 0;
+			for (ofs.Z = 0; ofs.Z < mesh_grid.cell_size; ofs.Z++) {
+				for (ofs.Y = 0; ofs.Y < mesh_grid.cell_size; ofs.Y++) {
+					for (ofs.X = 0; ofs.X < mesh_grid.cell_size; ofs.X++) {
+						v3bpos_t p = (bp + ofs); // * MAP_BLOCKSIZE;
+						const auto block = storage.get(p).block;
+
+						if (!block)
+							continue;
+						if (block->m_light_points.empty())
+							continue;
+						const auto bpos_rel = block->getPosRelative();
+						for (const auto &lp : block->m_light_points) {
+							if (++index_i > 16000)
+								break;
+							float r{200};
+							float g{230};
+							float b{static_cast<float>(16 * lp.second)};
+							const auto color_far_scale = far_step / 3.0f;
+							if (!color_far_scale) {
+								continue;
+							}
+							r /= color_far_scale;
+							g /= color_far_scale;
+							b /= color_far_scale;
+							const video::SColor c(0 / fscale, r, g, b);
+							const auto lpos_rel = lp.first - bpos_rel;
+							const auto coord = posToFloat(lpos_rel, BS);
+							video::S3DVertex v(coord.X, coord.Y, coord.Z, 0.0f, 0.0f,
+									1.0f, c, 0.0f, 0.0f);
+							buffer->Vertices->Data.emplace_back(v);
+							buffer->Indices->Data.emplace_back(index_i);
+						}
+					}
+						}
+					}
+			mesh->addMeshBuffer(buffer);
+			buffer->drop();
 		}
 
 		if (mesh) {

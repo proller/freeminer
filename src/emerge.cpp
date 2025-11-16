@@ -642,7 +642,7 @@ MapBlock *EmergeThread::finishGen(v3s16 pos, BlockMakeData *bmdata,
 	m_map->finishBlockMake(bmdata, modified_blocks,
 		m_server->m_env->getGameTime());
 
-	MapBlock *block = m_map->getBlockNoCreateNoEx(pos, false, true);
+	MapBlockPtr block = m_map->getBlock(pos, false, true);
 	if (!block) {
 		errorstream << "EmergeThread::finishGen: Couldn't grab block we "
 			"just generated: " << pos << std::endl;
@@ -671,7 +671,7 @@ MapBlock *EmergeThread::finishGen(v3s16 pos, BlockMakeData *bmdata,
 		m_server->setAsyncFatalError(e);
 	}
 
-	EMERGE_DBG_OUT("ended up with: " << analyze_block(block));
+	EMERGE_DBG_OUT("ended up with: " << analyze_block(block.get()));
 
 	/*
 		Clear mapgen state
@@ -680,7 +680,7 @@ MapBlock *EmergeThread::finishGen(v3s16 pos, BlockMakeData *bmdata,
 	m_mapgen->gennotify.clearEvents();
 	// m_mapgen->vm = nullptr;
 
-	return block;
+	return block.get();
 }
 
 

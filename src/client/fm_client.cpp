@@ -3,22 +3,26 @@
 #include <future>
 #include <memory>
 #include "client.h"
-#include "fm_far_calc.h"
 #include "client/mapblock_mesh.h"
 #include "clientmap.h"
 #include "emerge.h"
+#include "filesys.h"
+#include "fm_far_calc.h"
+#include "fm_weather.h"
 #include "fm_world_merge.h"
 #include "irr_v3d.h"
 #include "log.h"
-#include "mapblock.h"
-#include "network/fm_networkprotocol.h"
-#include "server.h"
-#include "filesys.h"
 #include "map.h"
+#include "mapblock.h"
 #include "mapgen/mapgen.h"
+#include "network/fm_networkprotocol.h"
 #include "network/networkpacket.h"
+#include "server.h"
 #include "threading/lock.h"
 #include "util/directiontables.h"
+#include <atomic>
+#include <exception>
+#include <memory>
 
 void Client::updateMeshTimestampWithEdge(const v3bpos_t &blockpos)
 {
@@ -135,6 +139,11 @@ void Client::MakeEmerge(const Settings &settings, const MapgenType &mgtype)
 			try {
 				m_localserver = std::make_unique<Server>(
 						"farmesh", findSubgame(game), false, Address{}, true);
+				// auto m_env = new ServerEnvironment({}, //std::move(startup_server_map),
+				// 		m_localserver.get(), &m_metrics_backend		   //	m_metrics_backend.get()
+				// );
+				// m_localserver->m_env = m_env;
+
 				break;
 			} catch (const std::exception &ex) {
 				errorstream << "Failed to make local mapgen server with game " << game
@@ -151,6 +160,7 @@ void Client::MakeEmerge(const Settings &settings, const MapgenType &mgtype)
 		g_settings->set("num_emerge_threads", "1");
 		m_emerge = std::make_unique<EmergeManager>(
 				m_localserver.get(), m_localserver->m_metrics_backend.get());
+		// m_emerge->env = &m_localserver->getEnv();
 		m_emerge->initMapgens(m_mapgen_params.get());
 		g_settings->set("num_emerge_threads", num_emerge_threads);
 	}
@@ -232,12 +242,12 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 			block->fill({block->content_only, block->content_only_param1,
 					block->content_only_param2});
 		}
-		s32 h = 0; // for convert to atomic
-		packet[TOCLIENT_BLOCKDATA_HEAT].convert(h);
-		block->heat = h;
-		h = 0;
-		packet[TOCLIENT_BLOCKDATA_HUMIDITY].convert(h);
-		block->humidity = h;
+		weather::heat_t heat = 0; // for convert to atomic
+		packet[TOCLIENT_BLOCKDATA_HEAT].convert(heat);
+		block->heat = heat;
+		weather::humidity_t humidity = 0;
+		packet[TOCLIENT_BLOCKDATA_HUMIDITY].convert(humidity);
+		block->humidity = humidity;
 	}
 
 	if (m_localdb && !is_simple_singleplayer_game) {

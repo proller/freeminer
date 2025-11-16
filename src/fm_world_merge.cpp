@@ -66,8 +66,8 @@ WorldMerger::~WorldMerger()
 	merge_changed();
 }
 
-void WorldMerger::merge_one_block(MapDatabase *dbase, MapDatabase *dbase_up,
-		const v3bpos_t &bpos_aligned, block_step_t step)
+WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
+		MapDatabase *dbase_up, const v3bpos_t &bpos_aligned, block_step_t step)
 {
 	const auto step_pow = 1;
 	const auto step_size = 1 << step_pow;
@@ -80,9 +80,18 @@ void WorldMerger::merge_one_block(MapDatabase *dbase, MapDatabase *dbase_up,
 					const v3pos_t rpos(x, y, z);
 					const v3bpos_t nbpos(bpos_aligned.X + (x << step),
 							bpos_aligned.Y + (y << step), bpos_aligned.Z + (z << step));
-					auto nblock = load_block(smap, dbase, nbpos);
+					MapBlockPtr nblock;
+					if (!step) {
+						const auto block = smap->getBlock(nbpos);
+						if (block && block->isGenerated()) {
+							nblock = block;
+						}
+					}
 					if (!nblock) {
-						continue;
+						nblock = load_block(smap, dbase, nbpos);
+						if (!nblock || !nblock->isGenerated()) {
+							continue;
+						}
 					}
 					if (const auto ts = nblock->getActualTimestamp(); ts > timestamp)
 						timestamp = ts;
@@ -102,7 +111,7 @@ void WorldMerger::merge_one_block(MapDatabase *dbase, MapDatabase *dbase_up,
 			// actionstream << "s=" << step <<" at=" << block_up->getActualTimestamp() << " t=" << block_up->getTimestamp() <<  " myts=" << timestamp << "\n";
 			const auto up_ts = block_up->getActualTimestamp();
 			if (timestamp < up_ts + lazy_up) {
-				return;
+				return {};
 			}
 		}
 	}
@@ -136,7 +145,7 @@ void WorldMerger::merge_one_block(MapDatabase *dbase, MapDatabase *dbase_up,
 					std::vector<uint8_t> top_light_night;
 					std::unordered_map<content_t, MapNode> nodes;
 
-					// TODO: tune block selector
+			// TODO: tune block selector
 
 #if 0
 // Simple grid aligned
@@ -156,7 +165,8 @@ void WorldMerger::merge_one_block(MapDatabase *dbase, MapDatabase *dbase_up,
 								 v3pos_t{1, 0, 1},
 								 v3pos_t{1, 1, 1},
 						 }) {
-						const auto &n = block->getNodeNoLock(lpos + dir);
+						const auto p = lpos + dir;
+						const auto &n = block->getNodeNoLock(p);
 						const auto c = n.getContent();
 						if (c == CONTENT_IGNORE) {
 							continue;
@@ -174,10 +184,19 @@ void WorldMerger::merge_one_block(MapDatabase *dbase, MapDatabase *dbase_up,
 							top_c[c] += 4;
 						}
 
-						if (const auto light_night = n.getLightRaw(
-									LIGHTBANK_NIGHT, ndef->getLightingFlags(n));
+						const auto &lf = ndef->getLightingFlags(c);
+						const auto &cf = ndef->get(c);
+
+						if (const auto light_night = n.getLightRaw(LIGHTBANK_NIGHT, lf);
 								light_night) {
 							top_light_night.emplace_back(light_night);
+						}
+						// TODO: whats with lava?
+						if (farlights && !step && (lf.light_source) && !cf.isLiquid()) {
+							const auto plpos =
+									block->getPosRelative() + p; //pos_in_block;
+							const auto &[i, r] = block->m_light_points.try_emplace(
+									plpos, lf.light_source);
 						}
 
 						nodes[c] = n;
@@ -210,12 +229,42 @@ void WorldMerger::merge_one_block(MapDatabase *dbase, MapDatabase *dbase_up,
 				}
 	}
 	// TODO: skip full air;
-
-	if (!not_empty_nodes) {
-		return;
+	one_block_stat_t one_step_stat;
+	if (farlights) {
+		constexpr auto some_magick_thinner_const = 1; // more -> less far ligts
+		constexpr auto min_no_skip_ligts =
+				2; // do not skip this amount lights on block << farstep
+		for (const auto &[bpos, block] : blocks) {
+			if (!block) {
+				continue;
+			}
+			size_t lights_in_block = 0;
+			// TODO: apply some smart? filtering here
+			// block_up->m_light_points.insert(block->m_light_points.begin(), block->m_light_points.end());
+			const auto size = block->m_light_points.size();
+			if (!size)
+				continue;
+			const auto coef = 16.0 / size;
+			for (const auto &lp : block->m_light_points) {
+				++one_step_stat.lights_count;
+				++lights_in_block;
+				const auto mod = int(coef * some_magick_thinner_const * (16 - lp.second));
+				if (mod && (step > 1 || lights_in_block > (min_no_skip_ligts << step)) &&
+						(one_step_stat.lights_count % mod)) {
+					continue;
+				}
+				++one_step_stat.lights_used;
+				block_up->m_light_points.emplace(lp);
+			}
+		}
 	}
-	block_up->setGenerated(true);
-	ServerMap::saveBlock(block_up.get(), dbase_up, m_map_compression_level);
+
+	if (not_empty_nodes) {
+		block_up->setGenerated(true);
+		ServerMap::saveBlock(block_up.get(), dbase_up, m_map_compression_level);
+	}
+
+	return one_step_stat;
 }
 
 bool WorldMerger::merge_one_step(
@@ -254,7 +303,7 @@ bool WorldMerger::merge_one_step(
 	size_t processed = 0;
 
 	const auto time_start = porting::getTimeMs();
-
+	WorldMerger::one_block_stat_t stat_step;
 	const auto printstat = [&]() {
 		const auto time = porting::getTimeMs();
 
@@ -264,6 +313,7 @@ bool WorldMerger::merge_one_step(
 				   << blocks_size
 				   //<< " blocks loaded " << m_server->getMap().m_blocks.size()
 				   << " processed " << processed << " per " << (time - time_start) / 1000
+				   << " lights " << stat_step.lights_used << "/" << stat_step.lights_count
 				   << " speed " << processed / (((time - time_start) / 1000) ?: 1)
 				   << '\n';
 	};
@@ -291,8 +341,10 @@ bool WorldMerger::merge_one_step(
 		g_profiler->add("Server: World merge blocks", 1);
 
 		try {
-
-			merge_one_block(dbase_current, dbase_up, bpos_aligned, step);
+			const auto stat_block =
+					merge_one_block(dbase_current, dbase_up, bpos_aligned, step);
+			stat_step.lights_count += stat_block.lights_count;
+			stat_step.lights_used += stat_block.lights_used;
 
 			if (!(cur_n % 10000)) {
 				printstat();

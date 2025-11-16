@@ -84,7 +84,7 @@ public:
 	std::mutex m_lighting_modified_mutex;
 	std::map<v3bpos_t, int> m_lighting_modified_blocks;
 	std::map<unsigned int, lighting_map_t> m_lighting_modified_blocks_range;
-	void lighting_modified_add(const v3pos_t &pos, int range = 5);
+	void lighting_modified_add(const v3bpos_t &pos, int range = 5);
 
 	void unspreadLight(enum LightBank bank, std::map<v3pos_t, u8> &from_nodes,
 			std::set<v3pos_t> &light_sources,

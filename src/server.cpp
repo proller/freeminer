@@ -1519,6 +1519,9 @@ void Server::yieldToOtherThreads(float dtime)
 
 PlayerSAO *Server::StageTwoClientInit(session_t peer_id)
 {
+	uint16_t net_proto_version_fm{};
+	std::string full_version;
+
 	std::string playername;
 	std::unique_ptr<PlayerSAO> sao;
 	{
@@ -1527,6 +1530,8 @@ PlayerSAO *Server::StageTwoClientInit(session_t peer_id)
 		if (client) {
 			playername = client->getName();
 			sao = emergePlayer(playername.c_str(), peer_id, client->net_proto_version);
+			net_proto_version_fm = client->net_proto_version_fm;
+			full_version = client->getFullVer();
 		}
 	}
 
@@ -1592,7 +1597,9 @@ PlayerSAO *Server::StageTwoClientInit(session_t peer_id)
 		std::string ip_str = getPeerAddress(player->getPeerId()).serializeString();
 		const auto &names = m_clients.getPlayerNames();
 
-		actionstream << player->getName() << " [" << ip_str << "] (" << player->protocol_version << ") joins game. List of players: ";
+		actionstream << player->getName() << " [" << ip_str << "] ("
+					 << player->protocol_version << " : " << net_proto_version_fm << " : "
+					 << full_version << ") joins game. List of players: ";
 		for (const std::string &name : names)
 			actionstream << name << " ";
 		actionstream << player->getName() << std::endl;
