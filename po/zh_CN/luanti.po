@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: Chinese (Simplified) (Minetest)\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2025-09-23 19:19+0200\n"
-"PO-Revision-Date: 2025-08-09 01:02+0000\n"
+"PO-Revision-Date: 2025-09-30 20:02+0000\n"
 "Last-Translator: maxchen32 <maxchen32@users.noreply.hosted.weblate.org>\n"
 "Language-Team: Chinese (Simplified Han script) <https://hosted.weblate.org/"
 "projects/minetest/minetest/zh_Hans/>\n"
@@ -12,7 +12,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
-"X-Generator: Weblate 5.13-dev\n"
+"X-Generator: Weblate 5.14-dev\n"
 
 #: builtin/client/chatcommands.lua
 msgid "Clear the out chat queue"
@@ -1204,7 +1204,7 @@ msgstr "Luanti 不自带任何子游戏。"
 msgid ""
 "Luanti is a game-creation platform that allows you to play many different "
 "games."
-msgstr "Luanti 是一方游戏创作平台，可让你游玩各类游戏。"
+msgstr "Luanti 是一个游戏创作平台，可让你游玩各类游戏。"
 
 #: builtin/mainmenu/tab_local.lua
 msgid "New"
@@ -1839,19 +1839,17 @@ msgid "Down Arrow"
 msgstr "⇩"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "End Key"
-msgstr "菜单键"
+msgstr "End键"
 
 #: src/client/keycode.cpp
 #, fuzzy
 msgid "Help Key"
-msgstr "删除键"
+msgstr "帮助键"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Home Key"
-msgstr "缩放"
+msgstr "Home键"
 
 #: src/client/keycode.cpp
 msgid "Insert"
@@ -1862,9 +1860,8 @@ msgid "Left Arrow"
 msgstr "⇦"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Left Click"
-msgstr "左Control键"
+msgstr "鼠标左键"
 
 #: src/client/keycode.cpp
 msgid "Left Control"
@@ -1889,15 +1886,15 @@ msgstr "菜单键"
 
 #: src/client/keycode.cpp
 msgid "Middle Click"
-msgstr ""
+msgstr "鼠标中键"
 
 #: src/client/keycode.cpp
 msgid "Mouse X1"
-msgstr ""
+msgstr "鼠标X1键"
 
 #: src/client/keycode.cpp
 msgid "Mouse X2"
-msgstr ""
+msgstr "鼠标X2键"
 
 #: src/client/keycode.cpp
 msgid "Num Lock"
@@ -1994,9 +1991,8 @@ msgid "Right Arrow"
 msgstr "⇨"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Right Click"
-msgstr "右Control键"
+msgstr "鼠标右键"
 
 #: src/client/keycode.cpp
 msgid "Right Control"
@@ -2033,9 +2029,8 @@ msgid "Space"
 msgstr "空格"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Tab Key"
-msgstr "取消键"
+msgstr "Tab键"
 
 #: src/client/keycode.cpp
 msgid "Up Arrow"
@@ -2452,7 +2447,6 @@ msgid "3D noise that determines number of dungeons per mapchunk."
 msgstr "确定每个地图块的地牢数量的3D噪声。"
 
 #: src/settings_translation_file.cpp
-#, fuzzy
 msgid ""
 "3D support.\n"
 "Currently supported:\n"
@@ -2466,7 +2460,6 @@ msgstr ""
 "目前已支持：\n"
 "-    无 (none)：无 3D 输出。\n"
 "-    色差式 (anaglyph)：红蓝眼镜 3D。\n"
-"-    偏振式 (interlaced)：基于奇偶行的偏振屏支持。\n"
 "-    上下分屏 (topbottom)：将画面分为上下两部分。\n"
 "-    左右分屏 (sidebyside)：将画面分为左右两部分。\n"
 "-    斜视 (crossview)：斜视左右分屏 3D"
@@ -2680,13 +2673,12 @@ msgid ""
 "optimization.\n"
 "Stated in MapBlocks (16 nodes)."
 msgstr ""
-"在此距离下，服务器将积极优化将哪些块发送到客户端。\n"
-"小数值可能会极大地提高性能，\n"
-"却会造成可见的渲染故障。\n"
-"（有些方块将不会在水和洞穴中呈现，\n"
-"有时在陆地上也不会呈现）\n"
-"将其设置为大于 max_block_send_distance 的值\n"
-"将禁用此优化。\n"
+"在此距离下，服务器会积极优化将哪些区块发送到客户端。\n"
+"小数值可能大幅提升性能，\n"
+"代价是会造成可见的渲染异常\n"
+"（洞穴中的部分区块可能无法正确渲染）。\n"
+"若将其设置为大于 max_block_send_distance 的值\n"
+"则会禁用此优化。\n"
 "以 MapBlocks（16 个方块）为单位。"
 
 #: src/settings_translation_file.cpp
@@ -3632,7 +3624,9 @@ msgstr ""
 msgid ""
 "Enables tradeoffs that reduce CPU load or increase rendering performance\n"
 "at the expense of minor visual glitches that do not impact game playability."
-msgstr "允许不影响可玩性的轻微视觉错误，以此减少 CPU 负载，或提高渲染性能。"
+msgstr ""
+"允许不影响可玩性的轻微视觉错误，\n"
+"以此减少 CPU 负载，或提高渲染性能。"
 
 #: src/settings_translation_file.cpp
 msgid "Engine Profiler"
@@ -4300,7 +4294,7 @@ msgstr ""
 msgid ""
 "If disabled, \"Aux1\" key is used to fly fast if both fly and fast mode are\n"
 "enabled."
-msgstr "如果禁用，“Aux1”键将用于快速飞行(飞行和快速模式同时启用)。"
+msgstr "如果禁用，“Aux1”键将用于快速飞行（如果飞行和快速模式同时启用）。"
 
 #: src/settings_translation_file.cpp
 msgid ""
@@ -4308,8 +4302,8 @@ msgid ""
 "ContentDB to\n"
 "check for package updates when opening the mainmenu."
 msgstr ""
-"如果启用并且您安装了 ContentDB 包，Luanti 可能会在打开主菜单时联系 ContentDB "
-"检查包更新。"
+"如果启用此选项并且安装了 ContentDB 包，\n"
+"Luanti 可能会在打开主菜单时连接 ContentDB 检查包更新。"
 
 #: src/settings_translation_file.cpp
 msgid ""
@@ -4626,7 +4620,7 @@ msgstr "跳跃速度"
 
 #: src/settings_translation_file.cpp
 msgid "Key for decrementing the selected value in Quicktune."
-msgstr ""
+msgstr "用于在 Quicktune 中降低已选变量的数值的按键。"
 
 #: src/settings_translation_file.cpp
 msgid ""
@@ -4638,7 +4632,7 @@ msgstr ""
 
 #: src/settings_translation_file.cpp
 msgid "Key for incrementing the selected value in Quicktune."
-msgstr ""
+msgstr "用于在 Quicktune 中提高已选变量的数值的按键。"
 
 #: src/settings_translation_file.cpp
 msgid "Key for moving fast in fast mode."
@@ -4970,7 +4964,6 @@ msgid "Map generation attributes specific to Mapgen v5."
 msgstr "针对v5地图生成器的属性。"
 
 #: src/settings_translation_file.cpp
-#, fuzzy
 msgid ""
 "Map generation attributes specific to Mapgen v6.\n"
 "The 'snowbiomes' flag enables the new 5 biome system.\n"
@@ -4980,9 +4973,10 @@ msgid ""
 "will appear instead."
 msgstr ""
 "针对v6地图生成器的属性。\n"
-"'snowboimes'启用新版5生物群系系统。\n"
-"当'snowbiomes'开启使丛林自动启用，\n"
-"忽略'jungles'标签。"
+"'snowboimes' 启用新版5生物群系系统。\n"
+"当 'snowbiomes' 开启时，丛林自动启用，\n"
+"忽略 'jungles' 标签。\n"
+"启用 'temples' 标签将禁止沙漠神庙生成，取而代之的是普通地牢。"
 
 #: src/settings_translation_file.cpp
 msgid ""
@@ -5694,11 +5688,11 @@ msgstr "打击手势"
 
 #: src/settings_translation_file.cpp
 msgid "Quicktune: decrement value"
-msgstr ""
+msgstr "Quicktune：降低变量数值"
 
 #: src/settings_translation_file.cpp
 msgid "Quicktune: increment value"
-msgstr ""
+msgstr "Quicktune：提高变量数值"
 
 #: src/settings_translation_file.cpp
 msgid "Quicktune: select next entry"
@@ -7351,11 +7345,8 @@ msgid "Width of the selection box lines around nodes."
 msgstr "结点周围的选择框的线宽。"
 
 #: src/settings_translation_file.cpp
-#, fuzzy
 msgid "Will also disable autoforward, when active."
-msgstr ""
-"后退键。\n"
-"在按下时也会取消自动前进。"
+msgstr "在按下时也会取消自动前进。"
 
 #: src/settings_translation_file.cpp
 msgid "Window maximized"

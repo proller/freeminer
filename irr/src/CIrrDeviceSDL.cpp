@@ -6,7 +6,6 @@
 #ifdef _IRR_COMPILE_WITH_SDL_DEVICE_
 
 #include <iostream>
-
 #include "CIrrDeviceSDL.h"
 #include "IEventReceiver.h"
 #include "IGUIElement.h"
@@ -425,14 +424,12 @@ CIrrDeviceSDL::CIrrDeviceSDL(const SIrrlichtCreationParameters &param) :
 			Close = true;
 		}
 
-#ifdef __EMSCRIPTEN__
+#if __EMSCRIPTEN__		
 		// This is an SDL hook to filter events, but we need to abuse it to make
 		// SDL events (keyboard/mouse) trigger re-entry for immediate processing.
 		SDL_NOOP_EVENT = SDL_RegisterEvents(1);
 		SDL_SetEventFilter(emloop_event_filter, NULL);
 #endif
-
-
 	}
 
 	// create keymap
@@ -537,36 +534,35 @@ void CIrrDeviceSDL::logAttributes()
 // requestAnimationFrame for the main loop on Emscripten.
 static int
 SDL_CreateWindowAndRendererFixed(int width, int height, Uint32 window_flags,
-                                 SDL_Window **window, SDL_Renderer **renderer)
+				SDL_Window **window, SDL_Renderer **renderer)
 {
-    *window = SDL_CreateWindow(NULL, SDL_WINDOWPOS_UNDEFINED,
-                                     SDL_WINDOWPOS_UNDEFINED,
-                                     width, height, window_flags);
-    if (!*window) {
-        *renderer = NULL;
-        return -1;
-    }
+	*window = SDL_CreateWindow(NULL, SDL_WINDOWPOS_UNDEFINED,
+					SDL_WINDOWPOS_UNDEFINED,
+					width, height, window_flags);
+	if (!*window) {
+		*renderer = NULL;
+		return -1;
+	}
 
-    // TODO(paradust):
-    //
-    // SDL_RENDERER_PRESENTVSYNC is equivalent to:
-    //
-    //   emscripten_set_main_loop_timing(1, 1);  // use requestAnimationFrame instead of setTimeout
-    //
-    // which is the recommended setting for rendering performance.
-    //
-    // However, major performance issues occur in other threads (especially the server thread)
-    // when this is enabled. It appears something is being done in other threads that
-    // requires periodic messaging to the main thread. If the main thread is too busy, other
-    // threads stall. This dependency should be found and removed, so that vsync can
-    // be enabled.
-    //
-    *renderer = SDL_CreateRenderer(*window, -1, 0); //SDL_RENDERER_PRESENTVSYNC);
-    if (!*renderer) {
-        return -1;
-    }
-
-    return 0;
+	// TODO(paradust):
+	//
+	// SDL_RENDERER_PRESENTVSYNC is equivalent to:
+	//
+	//   emscripten_set_main_loop_timing(1, 1);  // use requestAnimationFrame instead of setTimeout
+	//
+	// which is the recommended setting for rendering performance.
+	//
+	// However, major performance issues occur in other threads (especially the server thread)
+	// when this is enabled. It appears something is being done in other threads that
+	// requires periodic messaging to the main thread. If the main thread is too busy, other
+	// threads stall. This dependency should be found and removed, so that vsync can
+	// be enabled.
+	//
+	*renderer = SDL_CreateRenderer(*window, -1, 0); //SDL_RENDERER_PRESENTVSYNC);
+	if (!*renderer) {
+		return -1;
+	}
+	return 0;
 }
 #endif
 
@@ -653,7 +649,6 @@ bool CIrrDeviceSDL::createWindow()
 			return true;
 		}
 	}
-
 	while (CreationParams.AntiAlias > 0) {
 		CreationParams.AntiAlias--;
 		if (createWindowWithContext()) {
@@ -722,18 +717,21 @@ bool CIrrDeviceSDL::createWindowWithContext()
 	SDL_Flags |= SDL_WINDOW_ALLOW_HIGHDPI;
 
 	SDL_Flags |= getFullscreenFlag(CreationParams.Fullscreen);
+#ifndef _IRR_EMSCRIPTEN_PLATFORM_
 	if (Resizable)
 		SDL_Flags |= SDL_WINDOW_RESIZABLE;
 	if (CreationParams.WindowMaximized)
 		SDL_Flags |= SDL_WINDOW_MAXIMIZED;
+#endif
 	SDL_Flags |= SDL_WINDOW_OPENGL;
 
 	SDL_GL_ResetAttributes();
 
 #ifdef _IRR_EMSCRIPTEN_PLATFORM_
-	if (Width != 0 || Height != 0)
+	if (Width != 0 || Height != 0) {
+		printf("SETTING CANVAS SIZE: WIDTH=%d, HEIGHT=%d\n", Width, Height);
 		emscripten_set_canvas_size(Width, Height);
-	else {
+	} else {
 		int w, h, fs;
 		emscripten_get_canvas_size(&w, &h, &fs);
 		Width = w;
@@ -939,7 +937,8 @@ bool CIrrDeviceSDL::run()
 {
 	os::Timer::tick();
 
-	SEvent irrevent{};
+	SEvent irrevent;
+	memset(&irrevent, 0, sizeof(SEvent));
 	SDL_Event SDL_event;
 
 	// TODO(paradust):
@@ -974,6 +973,8 @@ bool CIrrDeviceSDL::run()
 			}
 			irrevent.MouseInput.X = MouseX;
 			irrevent.MouseInput.Y = MouseY;
+			irrevent.MouseInput.XRel = MouseXRel;
+			irrevent.MouseInput.YRel = MouseYRel;
 
 			irrevent.MouseInput.ButtonStates = MouseButtonStates;
 			irrevent.MouseInput.Shift = (keymod & KMOD_SHIFT) != 0;
@@ -1012,9 +1013,8 @@ bool CIrrDeviceSDL::run()
 			irrevent.EventType = EET_MOUSE_INPUT_EVENT;
 			irrevent.MouseInput.Event = EMIE_MOUSE_MOVED; // value to be ignored
 
-			/* // Handled by javascript instead.
-
-#ifdef _IRR_EMSCRIPTEN_PLATFORM_
+// Handled by javascript / main loop instead
+#if 0
 			// Handle mouselocking in emscripten in Windowed mode.
 			// In fullscreen SDL will handle it.
 			// The behavior we want windowed is - when the canvas was clicked then
@@ -1034,7 +1034,6 @@ bool CIrrDeviceSDL::run()
 				}
 			}
 #endif
-			*/
 
 			auto button = SDL_event.button.button;
 #ifdef __ANDROID__

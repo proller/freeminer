@@ -177,6 +177,7 @@ public:
 	u32 blockseed;
 	s16 *heightmap = nullptr;
 	biome_t *biomemap = nullptr;
+	// Chunk size in nodes
 	v3s16 csize;
 
 	BiomeGen *biomegen = nullptr;

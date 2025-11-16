@@ -150,7 +150,8 @@ COpenGL3DriverBase::COpenGL3DriverBase(const SIrrlichtCreationParameters &params
 		MaterialRenderer2DActive(0), MaterialRenderer2DTexture(0), MaterialRenderer2DNoTexture(0),
 		CurrentRenderMode(ERM_NONE), Transformation3DChanged(true),
 		OGLES2ShaderPath(params.OGLES2ShaderPath),
-		ColorFormat(ECF_R8G8B8), ContextManager(contextManager), EnableErrorTest(params.DriverDebug)
+		ColorFormat(ECF_R8G8B8), ContextManager(contextManager), EnableErrorTest(params.DriverDebug),
+		QuadIndexVBO(GL_ELEMENT_ARRAY_BUFFER)
 {
 	if (!ContextManager)
 		return;
@@ -679,7 +680,7 @@ void COpenGL3DriverBase::drawVertexPrimitiveList(const void *vertices, u32 verte
 
 	setRenderStates3DMode();
 
-	drawGeneric(vertices, indexList, primitiveCount, vType, pType, iType);
+	drawGeneric(vertices, vertexCount, indexList, primitiveCount, vType, pType, iType);
 }
 
 //! draws a vertex primitive list in 2d
@@ -704,7 +705,7 @@ void COpenGL3DriverBase::draw2DVertexPrimitiveList(const void *vertices, u32 ver
 		Material.MaterialType == EMT_TRANSPARENT_ALPHA_CHANNEL
 	);
 
-	drawGeneric(vertices, indexList, primitiveCount, vType, pType, iType);
+	drawGeneric(vertices, vertexCount, indexList, primitiveCount, vType, pType, iType);
 }
 
 void COpenGL3DriverBase::draw2DImage(const video::ITexture *texture, const core::position2d<s32> &destPos,
@@ -973,34 +974,76 @@ void COpenGL3DriverBase::drawQuad(const VertexType &vertexType, const S3DVertex 
 
 void COpenGL3DriverBase::drawArrays(GLenum primitiveType, const VertexType &vertexType, const void *vertices, int vertexCount)
 {
-	beginDraw(vertexType, reinterpret_cast<uintptr_t>(vertices));
+	beginDraw(vertexType, reinterpret_cast<uintptr_t>(vertices), vertexCount);
 	GL.DrawArrays(primitiveType, 0, vertexCount);
 	endDraw(vertexType);
 }
 
 void COpenGL3DriverBase::drawElements(GLenum primitiveType, const VertexType &vertexType, const void *vertices, int vertexCount, const u16 *indices, int indexCount)
 {
-	beginDraw(vertexType, reinterpret_cast<uintptr_t>(vertices));
+	beginDraw(vertexType, reinterpret_cast<uintptr_t>(vertices), vertexCount);
 	GL.DrawRangeElements(primitiveType, 0, vertexCount - 1, indexCount, GL_UNSIGNED_SHORT, indices);
 	endDraw(vertexType);
 }
 
-void COpenGL3DriverBase::drawGeneric(const void *vertices, const void *indexList,
+void COpenGL3DriverBase::drawGeneric(const void *vertices, int vertexCount, const void *indexList,
 		u32 primitiveCount,
 		E_VERTEX_TYPE vType, scene::E_PRIMITIVE_TYPE pType, E_INDEX_TYPE iType)
 {
 	auto &vTypeDesc = getVertexTypeDescription(vType);
-	beginDraw(vTypeDesc, reinterpret_cast<uintptr_t>(vertices));
+	beginDraw(vTypeDesc, reinterpret_cast<uintptr_t>(vertices), vertexCount);
 	GLenum indexSize = 0;
+	size_t indexWidth = 0;
 
 	switch (iType) {
 	case EIT_16BIT:
 		indexSize = GL_UNSIGNED_SHORT;
+		indexWidth = 2;
 		break;
 	case EIT_32BIT:
 		indexSize = GL_UNSIGNED_INT;
+		indexWidth = 4;
 		break;
 	}
+
+#ifdef __EMSCRIPTEN__
+	size_t indexCount = 0;
+
+	switch (pType) {
+	case scene::EPT_POINTS:
+	case scene::EPT_POINT_SPRITES:
+		indexCount = 0;
+		break;
+	case scene::EPT_LINE_STRIP:
+		indexCount = primitiveCount + 1;
+		break;
+	case scene::EPT_LINE_LOOP:
+		indexCount = primitiveCount;
+		break;
+	case scene::EPT_LINES:
+		indexCount = primitiveCount * 2;
+		break;
+	case scene::EPT_TRIANGLE_STRIP:
+		indexCount = primitiveCount + 2;
+		break;
+	case scene::EPT_TRIANGLE_FAN:
+		indexCount = primitiveCount + 2;
+		break;
+	case scene::EPT_TRIANGLES:
+		indexCount = primitiveCount * 3;
+		break;
+	default:
+		break;
+	}
+
+	if (tempIBO) abort();
+	if (indexList && indexCount) {
+                GL.GenBuffers(1, &tempIBO);
+                GL.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, tempIBO);
+                GL.BufferData(GL_ELEMENT_ARRAY_BUFFER, indexWidth * indexCount, indexList, GL_STREAM_DRAW);
+		indexList = nullptr;
+	}
+#endif
 
 	switch (pType) {
 	case scene::EPT_POINTS:
@@ -1029,11 +1072,30 @@ void COpenGL3DriverBase::drawGeneric(const void *vertices, const void *indexList
 		break;
 	}
 
+#ifdef __EMSCRIPTEN__
+	if (tempIBO) {
+		GL.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+		GL.DeleteBuffers(1, &tempIBO);
+		tempIBO = 0;
+	}
+#endif
+
 	endDraw(vTypeDesc);
 }
 
-void COpenGL3DriverBase::beginDraw(const VertexType &vertexType, uintptr_t verticesBase)
+void COpenGL3DriverBase::beginDraw(const VertexType &vertexType, uintptr_t verticesBase, int vertexCount)
 {
+#ifdef __EMSCRIPTEN__
+	if (tempVBO != 0) {
+		abort();
+	}
+	if (verticesBase != 0) {
+                GL.GenBuffers(1, &tempVBO);
+                GL.BindBuffer(GL_ARRAY_BUFFER, tempVBO);
+                GL.BufferData(GL_ARRAY_BUFFER, vertexCount * vertexType.VertexSize, (const void*)verticesBase, GL_STREAM_DRAW);
+		verticesBase = 0;
+	}
+#endif
 	for (auto &attr : vertexType) {
 		GL.EnableVertexAttribArray(attr.Index);
 		switch (attr.mode) {
@@ -1054,6 +1116,13 @@ void COpenGL3DriverBase::endDraw(const VertexType &vertexType)
 {
 	for (auto &attr : vertexType)
 		GL.DisableVertexAttribArray(attr.Index);
+#ifdef __EMSCRIPTEN__
+	if (tempVBO != 0) {
+                GL.BindBuffer(GL_ARRAY_BUFFER, 0);
+                GL.DeleteBuffers(1, &tempVBO);
+		tempVBO = 0;
+	}
+#endif
 }
 
 ITexture *COpenGL3DriverBase::createDeviceDependentTexture(const io::path &name, E_TEXTURE_TYPE type, const std::vector<IImage*> &images)

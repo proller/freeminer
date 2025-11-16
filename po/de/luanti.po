@@ -3,8 +3,8 @@ msgstr ""
 "Project-Id-Version: German (Minetest)\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2025-09-23 19:19+0200\n"
-"PO-Revision-Date: 2025-09-13 08:01+0000\n"
-"Last-Translator: Lars Müller <appgurulars@gmx.de>\n"
+"PO-Revision-Date: 2025-09-24 12:28+0000\n"
+"Last-Translator: Wuzzy <Wuzzy@disroot.org>\n"
 "Language-Team: German <https://hosted.weblate.org/projects/minetest/minetest/"
 "de/>\n"
 "Language: de\n"
@@ -1869,19 +1869,16 @@ msgid "Down Arrow"
 msgstr "Pfeil runter"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "End Key"
-msgstr "Menü-Taste"
+msgstr "Ende-Taste"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Help Key"
-msgstr "Entf-Taste"
+msgstr "Hilfe-Taste"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Home Key"
-msgstr "Zoom-Taste"
+msgstr "Pos1-Taste"
 
 #: src/client/keycode.cpp
 msgid "Insert"
@@ -1892,9 +1889,8 @@ msgid "Left Arrow"
 msgstr "Pfeil links"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Left Click"
-msgstr "Strg links"
+msgstr "Linksklick"
 
 #: src/client/keycode.cpp
 msgid "Left Control"
@@ -1919,15 +1915,15 @@ msgstr "Menü-Taste"
 
 #: src/client/keycode.cpp
 msgid "Middle Click"
-msgstr ""
+msgstr "Mittelklick"
 
 #: src/client/keycode.cpp
 msgid "Mouse X1"
-msgstr ""
+msgstr "Maus X1"
 
 #: src/client/keycode.cpp
 msgid "Mouse X2"
-msgstr ""
+msgstr "Maus X2"
 
 #: src/client/keycode.cpp
 msgid "Num Lock"
@@ -2024,9 +2020,8 @@ msgid "Right Arrow"
 msgstr "Pfeil rechts"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Right Click"
-msgstr "Strg rechts"
+msgstr "Rechtsklick"
 
 #: src/client/keycode.cpp
 msgid "Right Control"
@@ -2050,9 +2045,8 @@ msgid "Scroll Lock"
 msgstr "Rollen"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Select Key"
-msgstr "Entf-Taste"
+msgstr "Select-Taste"
 
 #: src/client/keycode.cpp
 msgid "Shift Key"
@@ -2063,9 +2057,8 @@ msgid "Space"
 msgstr "Leertaste"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Tab Key"
-msgstr "Untbr-Taste"
+msgstr "Tab-Taste"
 
 #: src/client/keycode.cpp
 msgid "Up Arrow"
@@ -2508,7 +2501,6 @@ msgid "3D noise that determines number of dungeons per mapchunk."
 msgstr "3-D-Rauschen, welches die Anzahl der Verliese je Mapchunk festlegt."
 
 #: src/settings_translation_file.cpp
-#, fuzzy
 msgid ""
 "3D support.\n"
 "Currently supported:\n"
@@ -2522,8 +2514,6 @@ msgstr ""
 "Aktuell verfügbar:\n"
 "-    none: Keine 3-D-Ausgabe.\n"
 "-    anaglyph: Türkises / magenta 3-D.\n"
-"-    interlaced: Bildschirmunterstützung für gerade / ungerade "
-"zeilenbasierte Polarisation.\n"
 "-    topbottom: Bildschirm horizontal teilen.\n"
 "-    sidebyside: Bildschirm vertikal teilen.\n"
 "-    crossview: Schieläugiges 3-D"
@@ -2902,7 +2892,7 @@ msgstr "Kameraglättung im Filmmodus"
 
 #: src/settings_translation_file.cpp
 msgid "Capture Tracy zones"
-msgstr ""
+msgstr "Tracy-Zonen aufnehmen"
 
 #: src/settings_translation_file.cpp
 msgid ""
@@ -2910,6 +2900,9 @@ msgid ""
 "You need to build with Tracy to use this, see doc/developing/profiling.md\n"
 "for details."
 msgstr ""
+"Tracy-Zonen mit der Instrumentierung des Profilers aufnehmen.\n"
+"Sie benötigen einen Build mit Tracy, um dies verwenden zu können,\n"
+"siehe doc/developing/profiling.md für Details."
 
 #: src/settings_translation_file.cpp
 msgid "Cave noise"
@@ -3477,7 +3470,7 @@ msgstr "Entwickleroptionen"
 
 #: src/settings_translation_file.cpp
 msgid "Disable if you only want to instrument with Tracy."
-msgstr ""
+msgstr "Deaktivieren, falls Sie mit Tracy nur instrumentieren wollen."
 
 #: src/settings_translation_file.cpp
 msgid "Disallow empty passwords"
@@ -5489,9 +5482,8 @@ msgid "Maximum users"
 msgstr "Maximale Benutzerzahl"
 
 #: src/settings_translation_file.cpp
-#, fuzzy
 msgid "Measure time samples"
-msgstr "Wüstentempel"
+msgstr "Zeitstempel messen"
 
 #: src/settings_translation_file.cpp
 msgid "Message of the day"

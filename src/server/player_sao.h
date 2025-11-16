@@ -61,7 +61,6 @@ public:
 	PlayerSAO(ServerEnvironment *env_, RemotePlayer *player_, session_t peer_id_,
 			bool is_singleplayer);
 
-	~PlayerSAO();
 	ActiveObjectType getType() const override { return ACTIVEOBJECT_TYPE_PLAYER; }
 	ActiveObjectType getSendType() const override { return ACTIVEOBJECT_TYPE_GENERIC; }
 	std::string getDescription() override;

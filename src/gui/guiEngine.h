@@ -13,6 +13,8 @@
 #include "client/sound.h"
 #include "util/enriched_string.h"
 #include "translation.h"
+#include "client/renderingengine.h"
+#include "clientdynamicinfo.h"
 
 #include <csignal>
 
@@ -41,6 +43,7 @@ class GUIEngine;
 class RenderingEngine;
 class MainMenuScripting;
 struct MainMenuData;
+class FrameMarker;
 
 /******************************************************************************/
 /* declarations                                                               */
@@ -172,13 +175,16 @@ private:
 	void run_loop(std::function<void()> resolve);
 	video::IVideoDriver *driver;
 	unsigned int text_height;
-	//core::dimension2du previous_screen_size;
-    core::dimension2d<u32> initial_screen_size;
-    bool initial_window_maximized;
-    u64 t_last_frame;
-    f32 dtime;
-    video::SColor sky_color;
-    MenuMusicFetcher soundfetcher;
+	core::dimension2d<u32> initial_screen_size;
+	bool initial_window_maximized;
+	ClientDynamicInfo last_window_info;
+	u64 t_last_frame;
+	FpsControl fps_control;
+	f32 dtime;
+	FrameMarker *framemarker;
+
+        video::SColor sky_color;
+        MenuMusicFetcher soundfetcher;
 
 	/** update size of topleftext element */
 	void updateTopLeftTextSize();

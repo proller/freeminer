@@ -4,11 +4,13 @@
 
 
 #if __EMSCRIPTEN__
+#include <map>
+#include <algorithm>
+
 #include <emscripten/html5.h>
 #endif
 
 #include "mainloop.h"
-
 #include "irrlichttypes_bloated.h"
 #include "irrlicht.h" // createDevice
 #include "irrlicht_changes/printing.h"
@@ -189,8 +191,10 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 		resolve(0); return;
 	}
 
+#if !__EMSCRIPTEN__
 	// Debug handler
 	BEGIN_DEBUG_EXCEPTION_HANDLER
+#endif
 
 	if (!setup_log_params(cmd_args)) {
 		resolve(1); return;
@@ -364,7 +368,9 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 	resolve(0);
 #endif
 
+#if !__EMSCRIPTEN__
     END_DEBUG_EXCEPTION_HANDLER
+#endif
 }
 
 

@@ -673,7 +673,7 @@ void set_default_settings()
 	settings->setDefault("texture_path", "");
 	settings->setDefault("shader_path", "");
 #ifdef __EMSCRIPTEN__
-	settings->setDefault("video_driver", "webgl1");
+	settings->setDefault("video_driver", "ogles2");
 #else
 	settings->setDefault("video_driver", "");
 #endif
@@ -716,7 +716,7 @@ void set_default_settings()
 	settings->setDefault("minimap_double_scan_height", "true");
 
 	// Effects
-	settings->setDefault("enable_post_processing", "true");
+	settings->setDefault("enable_post_processing", "false");
 	settings->setDefault("post_processing_texture_bits", "16");
 	settings->setDefault("directional_colored_fog", "true");
 	settings->setDefault("inventory_items_animations", "false");
@@ -833,7 +833,7 @@ void set_default_settings()
 
 	// Network
 #ifdef __EMSCRIPTEN__
-	settings->setDefault("enable_ipv6", "false"); // TODO: enable this
+	settings->setDefault("enable_ipv6", "false");// TODO(paradust): Fix
 	settings->setDefault("ipv6_server", "false");
 #else
 	settings->setDefault("enable_ipv6", "true");

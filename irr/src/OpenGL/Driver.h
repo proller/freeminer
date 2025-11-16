@@ -44,8 +44,8 @@ public:
 
 	struct SHWBufferLink_opengl : public SHWBufferLink
 	{
-		SHWBufferLink_opengl(const scene::IVertexBuffer *vb) : SHWBufferLink(vb) {}
-		SHWBufferLink_opengl(const scene::IIndexBuffer *ib) : SHWBufferLink(ib) {}
+		SHWBufferLink_opengl(const scene::IVertexBuffer *vb) : SHWBufferLink(vb), Vbo(GL_ARRAY_BUFFER) {}
+		SHWBufferLink_opengl(const scene::IIndexBuffer *ib) : SHWBufferLink(ib), Vbo(GL_ELEMENT_ARRAY_BUFFER) {}
 
 		OpenGLVBO Vbo;
 	};
@@ -307,11 +307,14 @@ protected:
 	void drawElements(GLenum primitiveType, const VertexType &vertexType, const void *vertices, int vertexCount, const u16 *indices, int indexCount);
 	void drawElements(GLenum primitiveType, const VertexType &vertexType, uintptr_t vertices, uintptr_t indices, int indexCount);
 
-	void drawGeneric(const void *vertices, const void *indexList, u32 primitiveCount,
+	void drawGeneric(const void *vertices, int vertexCount, const void *indexList, u32 primitiveCount,
 		E_VERTEX_TYPE vType, scene::E_PRIMITIVE_TYPE pType, E_INDEX_TYPE iType);
 
-	void beginDraw(const VertexType &vertexType, uintptr_t verticesBase);
+	void beginDraw(const VertexType &vertexType, uintptr_t verticesBase, int vertexCount);
 	void endDraw(const VertexType &vertexType);
+
+	GLuint tempVBO = 0;
+	GLuint tempIBO = 0;
 
 	COpenGL3CacheHandler *CacheHandler;
 	core::stringc Name;

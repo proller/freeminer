@@ -13,8 +13,12 @@ namespace video
 class OpenGLVBO
 {
 public:
+
+	OpenGLVBO() = delete;
+
 	/// @note does not create on GL side
-	OpenGLVBO() = default;
+	OpenGLVBO(GLenum target) : m_target(target) {}
+
 	/// @note does not free on GL side
 	~OpenGLVBO() = default;
 
@@ -47,6 +51,7 @@ public:
 	void destroy();
 
 private:
+	GLenum m_target;
 	GLuint m_name = 0;
 	size_t m_size = 0;
 };

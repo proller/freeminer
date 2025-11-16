@@ -252,7 +252,7 @@ void Thread::setName(const std::string &name)
 	} __except (EXCEPTION_CONTINUE_EXECUTION) {
 	}
 
-#elif defined(_WIN32) || defined(__GNU__)
+#elif defined(_WIN32) || defined(__GNU__) || defined(__EMSCRIPTEN__)
 
 	// These platforms are known to not support thread names.
 	// Silently ignore the request.

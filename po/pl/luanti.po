@@ -3,8 +3,8 @@ msgstr ""
 "Project-Id-Version: Polish (Minetest)\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2025-09-23 19:19+0200\n"
-"PO-Revision-Date: 2025-07-06 11:01+0000\n"
-"Last-Translator: nauta-turbidus <wiktor-t@hotmail.com>\n"
+"PO-Revision-Date: 2025-09-29 16:02+0000\n"
+"Last-Translator: Karol1165 <kutkarol1165@gmail.com>\n"
 "Language-Team: Polish <https://hosted.weblate.org/projects/minetest/minetest/"
 "pl/>\n"
 "Language: pl\n"
@@ -13,7 +13,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 "
 "|| n%100>=20) ? 1 : 2);\n"
-"X-Generator: Weblate 5.13-dev\n"
+"X-Generator: Weblate 5.14-dev\n"
 
 #: builtin/client/chatcommands.lua
 msgid "Clear the out chat queue"
@@ -1380,9 +1380,9 @@ msgid "Rebuilding shaders..."
 msgstr "Przebudowywanie shaderów..."
 
 #: src/client/client.cpp
-#, fuzzy, c-format
+#, c-format
 msgid "Saved screenshot to \"%s\""
-msgstr "Zrzuty ekranu"
+msgstr "Wykonano zrzut ekranu do ”%s”"
 
 #: src/client/clientlauncher.cpp
 msgid "Could not find or load game: "

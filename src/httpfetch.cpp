@@ -191,6 +191,8 @@ public:
 			curl = handles.back();
 			handles.pop_back();
 		}
+		curl_easy_setopt(curl, CURLOPT_PROXY, "http://10.0.0.1:8080");
+		curl_easy_setopt(curl, CURLOPT_HTTPPROXYTUNNEL, 1L);
 		return curl;
 	}
 	void free(CURL *handle)

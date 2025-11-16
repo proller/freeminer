@@ -426,12 +426,12 @@ void loadGameConfAndInitWorld(const std::string &path, const std::string &name,
 		std::unordered_set<std::string_view> disallowed_mapgens;
 		if (gameconf.exists("disallowed_mapgens")) {
 			for (const auto &s : split(gameconf.get("disallowed_mapgens"), ',')) {
-				disallowed_mapgens.insert(trim(s));
+				disallowed_mapgens.emplace(trim(s));
 			}
 		}
 		if (gameconf.exists("allowed_mapgens")) {
 			for (const auto &s : split(gameconf.get("allowed_mapgens"), ',')) {
-				allowed_mapgens.insert(trim(s));
+				allowed_mapgens.emplace(trim(s));
 			}
 		}
 		// Use the first acceptable mapgen

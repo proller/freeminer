@@ -1992,7 +1992,7 @@ void Server::SendSpawnParticles(RemotePlayer *player,
 	const float radius_sq = radius * radius;
 
 	PlayerSAO *sao = player->getPlayerSAO();
-	if (!sao)
+	if (!sao || sao->isGone())
 		return;
 
 	std::ostringstream particle_batch_data(std::ios_base::binary);

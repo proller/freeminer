@@ -162,9 +162,7 @@ void Clouds::updateMesh()
 
 	// Read noise
 
-	//std::vector<bool> grid(m_cloud_radius_i * 2 * m_cloud_radius_i * 2);
-
-	grid.assign(m_cloud_radius_i * 2 * m_cloud_radius_i * 2, false);
+	std::vector<bool> grid(m_cloud_radius_i * 2 * m_cloud_radius_i * 2);
 
 	for(s16 zi = -m_cloud_radius_i; zi < m_cloud_radius_i; zi++) {
 		u32 si = (zi + m_cloud_radius_i) * m_cloud_radius_i * 2 + m_cloud_radius_i;

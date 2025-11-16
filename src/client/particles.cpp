@@ -65,16 +65,6 @@ Particle::Particle(
 		m_parent(parent),
 		m_owned_texture(std::move(owned_texture))
 {
-/* ems?
-	// Mesh Buffer
-	m_meshbuffer = new scene::SMeshBuffer();
-	core::array<u16>& Indices = m_meshbuffer->Indices;
-	Indices.set_used(6);
-	u16 indices[] = {0,1,2, 2,3,0};
-	for (int i = 0; i < 6; i++) {
-		Indices[i] = indices[i];
-	}
-*/
 }
 
 Particle::~Particle()
@@ -229,9 +219,6 @@ void Particle::updateVertices(ClientEnvironment *env, video::SColor color)
 		ty1 = m_texpos.Y + m_texsize.Y;
 	}
 
-	//core::array<video::S3DVertex>& Vertices = m_meshbuffer->Vertices;
-	//Vertices.set_used(4);
-
 	auto half = m_p.size * .5f,
 	     hx   = half * scale.X,
 	     hy   = half * scale.Y;
@@ -260,8 +247,6 @@ void Particle::updateVertices(ClientEnvironment *env, video::SColor color)
 		}
 		vertex.Pos += m_pos * BS - intToFloat(camera_offset, BS);
 	}
-
-	//m_meshbuffer->setDirty();
 }
 
 /*

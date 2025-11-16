@@ -3,6 +3,7 @@
 // For conditions of distribution and use, see copyright notice in irrlicht.h and irrXML.h
 
 #pragma once
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 #include "irrTypes.h"
 #include <string>

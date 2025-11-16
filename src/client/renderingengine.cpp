@@ -36,13 +36,16 @@ void FpsControl::reset()
 
 void FpsControl::limit(IrrlichtDevice *device, f32 *dtime)
 {
+#if !__EMSCRIPTEN__
 	static thread_local const float fps_limit = device->isWindowFocused()
 			? g_settings->getFloat("fps_max")
 			: g_settings->getFloat("fps_max_unfocused");
 	const u64 frametime_min = 1000000.0f / std::max(fps_limit, 1.0f);
+#endif
 
 	u64 time = porting::getTimeUs();
 
+#if !__EMSCRIPTEN__
 	if (time > last_time) // Make sure time hasn't overflowed
 		busy_time = time - last_time;
 	else
@@ -54,10 +57,9 @@ void FpsControl::limit(IrrlichtDevice *device, f32 *dtime)
 	} else {
 		sleep_time = 0;
 	}
-
+#endif
 	// Read the timer again to accurately determine how long we actually slept,
 	// rather than calculating it by adding sleep_time to time.
-	time = porting::getTimeUs();
 
 	if (time > last_time) // Make sure last_time hasn't overflowed
 		*dtime = (time - last_time) / 1000000.0f;
@@ -379,9 +381,6 @@ std::vector<video::E_DRIVER_TYPE> RenderingEngine::getSupportedVideoDrivers()
 		video::EDT_OPENGL,
 		video::EDT_OPENGL3,
 		video::EDT_OGLES2,
-#if __EMSCRIPTEN__
-		video::EDT_WEBGL1,
-#endif
 		video::EDT_NULL,
 	};
 	std::vector<video::E_DRIVER_TYPE> drivers;
@@ -418,9 +417,6 @@ const VideoDriverInfo &RenderingEngine::getVideoDriverInfo(video::E_DRIVER_TYPE 
 		{(int)video::EDT_OPENGL, {"opengl", "OpenGL"}},
 		{(int)video::EDT_OPENGL3, {"opengl3", "OpenGL 3+"}},
 		{(int)video::EDT_OGLES2, {"ogles2", "OpenGL ES2"}},
-#if __EMSCRIPTEN__
-                {(int)video::EDT_WEBGL1, {"webgl1", "WebGL 1"}},
-#endif
 	};
 	return driver_info_map.at((int)type);
 }

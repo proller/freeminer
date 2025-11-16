@@ -211,7 +211,7 @@ crypto_ror_u32(uint32_t v, size_t shift)
 /* Ensure that SHA_LONG and uint32_t are equivalent. */
 CTASSERT(sizeof(SHA_LONG) == sizeof(uint32_t));
 
-static void sha256_block_data_order(mt_SHA256_CTX *ctx, const void *_in, size_t num);
+static void sha256_block_data_order(SHA256_CTX *ctx, const void *_in, size_t num);
 
 static const SHA_LONG K256[64] = {
 	0x428a2f98UL, 0x71374491UL, 0xb5c0fbcfUL, 0xe9b5dba5UL,
@@ -298,7 +298,7 @@ sha256_round(SHA_LONG *a, SHA_LONG *b, SHA_LONG *c, SHA_LONG *d,
 }
 
 static void
-sha256_block_data_order(mt_SHA256_CTX *ctx, const void *_in, size_t num)
+sha256_block_data_order(SHA256_CTX *ctx, const void *_in, size_t num)
 {
 	const uint8_t *in = _in;
 	const SHA_LONG *in32;
@@ -421,7 +421,7 @@ sha256_block_data_order(mt_SHA256_CTX *ctx, const void *_in, size_t num)
 }
 
 int
-mt_SHA256_Init(mt_SHA256_CTX *c)
+SHA256_Init(SHA256_CTX *c)
 {
 	memset(c, 0, sizeof(*c));
 
@@ -441,7 +441,7 @@ mt_SHA256_Init(mt_SHA256_CTX *c)
 LCRYPTO_ALIAS(SHA256_Init);
 
 int
-mt_SHA256_Update(mt_SHA256_CTX *c, const void *data_, size_t len)
+SHA256_Update(SHA256_CTX *c, const void *data_, size_t len)
 {
 	const unsigned char *data = data_;
 	unsigned char *p;
@@ -496,14 +496,14 @@ mt_SHA256_Update(mt_SHA256_CTX *c, const void *data_, size_t len)
 LCRYPTO_ALIAS(SHA256_Update);
 
 void
-mt_SHA256_Transform(mt_SHA256_CTX *c, const unsigned char *data)
+SHA256_Transform(SHA256_CTX *c, const unsigned char *data)
 {
 	sha256_block_data_order(c, data, 1);
 }
 LCRYPTO_ALIAS(SHA256_Transform);
 
 int
-mt_SHA256_Final(unsigned char *md, mt_SHA256_CTX *c)
+SHA256_Final(unsigned char *md, SHA256_CTX *c)
 {
 	unsigned char *p = (unsigned char *)c->data;
 	size_t n = c->num;
@@ -557,17 +557,17 @@ mt_SHA256_Final(unsigned char *md, mt_SHA256_CTX *c)
 LCRYPTO_ALIAS(SHA256_Final);
 
 unsigned char *
-mt_SHA256(const unsigned char *d, size_t n, unsigned char *md)
+SHA256(const unsigned char *d, size_t n, unsigned char *md)
 {
-	mt_SHA256_CTX c;
+	SHA256_CTX c;
 	static unsigned char m[SHA256_DIGEST_LENGTH];
 
 	if (md == NULL)
 		md = m;
 
-	mt_SHA256_Init(&c);
-	mt_SHA256_Update(&c, d, n);
-	mt_SHA256_Final(md, &c);
+	SHA256_Init(&c);
+	SHA256_Update(&c, d, n);
+	SHA256_Final(md, &c);
 
 	memset(&c, 0, sizeof(c));
 

@@ -91,13 +91,12 @@ bool Address::operator==(const Address &other) const
 	return false;
 }
 
-void Address::ResolveAsync(const char *name, std::function<void(BaseException*)> resolve) {
-//#ifdef __EMSCRIPTEN_
+void Address::ResolveAsync(const char *name, Address *fallback, std::function<void(BaseException*)> resolve) {
         char *nameCopy = name ? strdup(name) : nullptr;
-	MainLoop::RunAsyncThenResume([this, nameCopy, resolve]() {
+	MainLoop::RunAsyncThenResume([this, nameCopy, fallback, resolve]() {
 		std::function<void()> ret;
 		try {
-			Resolve(nameCopy);
+			Resolve(nameCopy, fallback);
 		} catch (BaseException &e) {
 			if (nameCopy) free(nameCopy);
 			BaseException *savedExc = e.copy();

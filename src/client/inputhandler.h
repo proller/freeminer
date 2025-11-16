@@ -134,10 +134,6 @@ private:
 	// List of keys we listen for
 	std::unordered_map<KeyPress, GameKeyType> keysListenedFor;
 
-	// Track relative mouse movement
-	s32 relX = 0;
-	s32 relY = 0;
-
 	// Intentionally not reset by clearInput/releaseAllKeys.
 	bool fullscreen_is_down = false;
 
@@ -145,6 +141,10 @@ private:
 	bool esc_down = false;
 
 	PointerType last_pointer_type = PointerType::Mouse;
+
+	// Track relative mouse movement
+	s32 relX = 0;
+	s32 relY = 0;
 };
 
 class InputHandler
@@ -256,12 +256,12 @@ public:
 		m_receiver->reloadKeybindings();
 	}
 
+	virtual v2s32 getMousePos();
+	virtual void setMousePos(s32 x, s32 y);
+
 	virtual v2s32 getMouseMovement(bool reset) {
 		return m_receiver->getMouseMovement(reset);
 	}
-
-	virtual v2s32 getMousePos();
-	virtual void setMousePos(s32 x, s32 y);
 
 	virtual s32 getMouseWheel()
 	{

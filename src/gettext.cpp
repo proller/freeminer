@@ -158,6 +158,10 @@ void init_gettext(const char *path, const std::string &configured_language,
 #ifndef _MSC_VER
 		setenv("LANGUAGE", configured_language.c_str(), 1);
 
+#if defined(__EMSCRIPTEN__)
+		setenv("LANG", configured_language.c_str(), 1);
+#endif
+
 		// Reload locale with changed environment
 		setlocale(LC_ALL, "");
 #else

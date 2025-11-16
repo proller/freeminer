@@ -55,7 +55,7 @@ MapgenV6::MapgenV6(MapgenV6Params *params, EmergeParams *emerge)
 		// (5,2,5) generates very broken terrain
 		throw BaseException("MapgenV6: chunk size must be cubic");
 	}
-	if (csize.Y % 2 == 0) {
+	if (csize.Y % (MAP_BLOCKSIZE * 2) == 0) {
 		// weird ledges appear in some places
 		warningstream << "MapgenV6: chunk heights divisible by two are known "
 			"to be buggy." << std::endl;

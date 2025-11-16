@@ -305,7 +305,6 @@ bool GUIEngine::loadMainMenuScript()
 void GUIEngine::run(std::function<void()> resolve)
 {
 	IrrlichtDevice *device = m_rendering_engine->get_raw_device();
-	//video::IVideoDriver *
 	driver = device->getVideoDriver();
 
 	text_height = g_fontengine->getTextHeight();
@@ -335,6 +334,13 @@ void GUIEngine::run(std::function<void()> resolve)
 	initial_window_maximized = !g_settings->getBool("fullscreen") &&
 			g_settings->getBool("window_maximized");
 
+	last_window_info = ClientDynamicInfo::getCurrent();
+
+	dtime = 0.0f;
+	fps_control.reset();
+	framemarker = new FrameMarker("GUIEngine::run()-frame");
+	framemarker->start();
+
     run_loop(resolve);
 }
 
@@ -342,36 +348,19 @@ void GUIEngine::run(std::function<void()> resolve)
 	while (m_rendering_engine->run() && !m_startgame && !m_kill) {
 */
 void GUIEngine::run_loop(std::function<void()> resolve) {
-
 	IrrlichtDevice *device = m_rendering_engine->get_raw_device();
-
-	auto last_window_info = ClientDynamicInfo::getCurrent();
-
-	FpsControl fps_control;
-	//f32 
-	dtime = 0.0f;
-
-	fps_control.reset();
-	
-	auto framemarker = FrameMarker("GUIEngine::run()-frame").started();
-
-#ifndef __EMSCRIPTEN__
-	while (1) //m_rendering_engine->run() && !m_startgame && !m_kill) {
-#endif
-	{
-    // EXTRANEOUS INDENT
-           bool keep_going = m_rendering_engine->run() && (!m_startgame) && (!m_kill);
-		   if (!keep_going) {
-			   framemarker.end();
-			   m_script->beforeClose();
-			   RenderingEngine::autosaveScreensizeAndCo(initial_screen_size, initial_window_maximized);
-			   resolve();
-				return;
-		   }
-
-		framemarker.end();
+	// EXTRANEOUS INDENT
+		bool keep_going = m_rendering_engine->run() && !m_startgame && !m_kill;
+		if (!keep_going) {
+	framemarker->end();
+	m_script->beforeClose();
+	RenderingEngine::autosaveScreensizeAndCo(initial_screen_size, initial_window_maximized);
+			resolve();
+			return;
+		}
+		framemarker->end();
 		fps_control.limit(device, &dtime);
-		framemarker.start();
+		framemarker->start();
 
 		g_fontengine->handleReload();
 
@@ -417,14 +406,8 @@ void GUIEngine::run_loop(std::function<void()> resolve) {
 #ifdef __ANDROID__
 		m_menu->getAndroidUIInput();
 #endif
-	}
-	framemarker.end();
 
-	m_script->beforeClose();
-
-#ifdef __EMSCRIPTEN__
-	MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
-#endif
+		MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
 }
 
 /******************************************************************************/

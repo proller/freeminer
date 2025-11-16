@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: Portuguese (Brazil) (Minetest)\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2025-09-23 19:19+0200\n"
-"PO-Revision-Date: 2025-09-07 00:02+0000\n"
+"PO-Revision-Date: 2025-09-26 22:02+0000\n"
 "Last-Translator: Neil Rizen <danielsmmelo@gmail.com>\n"
 "Language-Team: Portuguese (Brazil) <https://hosted.weblate.org/projects/"
 "minetest/minetest/pt_BR/>\n"
@@ -580,7 +580,7 @@ msgstr "Instalar [$1]"
 
 #: builtin/mainmenu/content/dlg_package.lua
 msgid "Issue Tracker"
-msgstr "Sugerir Tópico"
+msgstr "Rastreador de Problemas"
 
 #: builtin/mainmenu/content/dlg_package.lua
 msgid "Reviews"
@@ -1728,7 +1728,7 @@ msgstr "Nome do servidor: "
 
 #: src/client/game_formspec.cpp
 msgid "Change Password"
-msgstr "Alterar a senha"
+msgstr "Alterar a Senha"
 
 #: src/client/game_formspec.cpp
 msgid "Continue"
@@ -1865,19 +1865,16 @@ msgid "Down Arrow"
 msgstr "Seta para Baixo"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "End Key"
-msgstr "Tecla Menu"
+msgstr "Tecla End"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Help Key"
-msgstr "Tecla Delete"
+msgstr "Tecla Help"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Home Key"
-msgstr "Tecla de Zoom"
+msgstr "Tecla Home"
 
 #: src/client/keycode.cpp
 msgid "Insert"
@@ -1888,9 +1885,8 @@ msgid "Left Arrow"
 msgstr "Seta Esquerda"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Left Click"
-msgstr "Ctrl Esquerdo"
+msgstr "Clique Esquerdo"
 
 #: src/client/keycode.cpp
 msgid "Left Control"
@@ -1915,15 +1911,15 @@ msgstr "Tecla Menu"
 
 #: src/client/keycode.cpp
 msgid "Middle Click"
-msgstr ""
+msgstr "Clique do Meio"
 
 #: src/client/keycode.cpp
 msgid "Mouse X1"
-msgstr ""
+msgstr "Mouse X1"
 
 #: src/client/keycode.cpp
 msgid "Mouse X2"
-msgstr ""
+msgstr "Mouse X2"
 
 #: src/client/keycode.cpp
 msgid "Num Lock"
@@ -2020,9 +2016,8 @@ msgid "Right Arrow"
 msgstr "Seta Direita"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Right Click"
-msgstr "Ctrl direito"
+msgstr "Clique Direito"
 
 #: src/client/keycode.cpp
 msgid "Right Control"
@@ -2046,9 +2041,8 @@ msgid "Scroll Lock"
 msgstr "Scroll Lock"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Select Key"
-msgstr "Tecla Delete"
+msgstr "Tecla Select"
 
 #: src/client/keycode.cpp
 msgid "Shift Key"
@@ -2059,9 +2053,8 @@ msgid "Space"
 msgstr "Espaço"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Tab Key"
-msgstr "Tecla de Parar"
+msgstr "Tecla Tab"
 
 #: src/client/keycode.cpp
 msgid "Up Arrow"
@@ -2497,7 +2490,6 @@ msgid "3D noise that determines number of dungeons per mapchunk."
 msgstr "Ruído 3D que determina o número de cavernas por pedaço de mapa."
 
 #: src/settings_translation_file.cpp
-#, fuzzy
 msgid ""
 "3D support.\n"
 "Currently supported:\n"
@@ -2510,10 +2502,9 @@ msgstr ""
 "Suporte 3D.\n"
 "Modos atualmente suportados:\n"
 "-    none: Nenhum efeito 3D.\n"
-"-    anaglyph: Sistema de cor Ciano/Magenta (Óculos 3D azul vermelho).\n"
-"-    interlaced: Sistema interlaçado (Óculos com lentes polarizadas).\n"
-"-    topbottom: Divide a tela em duas: uma em cima e outra em baixo.\n"
-"-    sidebyside: Divide a tela em duas: lado a lado.\n"
+"-    anaglyph: 3D com cores ciano/magenta.\n"
+"-    topbottom: Divide a tela em cima/embaixo.\n"
+"-    sidebyside: Divide a tela lado a lado.\n"
 "-    crossview: 3D de olhos cruzados"
 
 #: src/settings_translation_file.cpp
@@ -2888,7 +2879,7 @@ msgstr "Suavização da câmera no modo cinematográfico"
 
 #: src/settings_translation_file.cpp
 msgid "Capture Tracy zones"
-msgstr ""
+msgstr "Capturar zonas de Tracy"
 
 #: src/settings_translation_file.cpp
 msgid ""
@@ -2896,6 +2887,9 @@ msgid ""
 "You need to build with Tracy to use this, see doc/developing/profiling.md\n"
 "for details."
 msgstr ""
+"Capture zonas de Tracy com o uso do analisador.\n"
+"Você precisa ativar o Tracy para usar isso.\n"
+"Veja doc/developing/profiling.md para mais detalhes."
 
 #: src/settings_translation_file.cpp
 msgid "Cave noise"
@@ -3453,7 +3447,7 @@ msgstr "Opções de Desenvolvedor"
 
 #: src/settings_translation_file.cpp
 msgid "Disable if you only want to instrument with Tracy."
-msgstr ""
+msgstr "Desative se você quiser instrumentar com apenas o Tracy."
 
 #: src/settings_translation_file.cpp
 msgid "Disallow empty passwords"
@@ -4856,7 +4850,7 @@ msgstr "Threshold dos lagos no gerador de mundo plano"
 
 #: src/settings_translation_file.cpp
 msgid "Language"
-msgstr "Linguagem"
+msgstr "Idioma"
 
 #: src/settings_translation_file.cpp
 msgid "Large cave depth"
@@ -5439,9 +5433,8 @@ msgid "Maximum users"
 msgstr "Limite de usuários"
 
 #: src/settings_translation_file.cpp
-#, fuzzy
 msgid "Measure time samples"
-msgstr "Templos do deserto"
+msgstr "Medir amostras de tempo"
 
 #: src/settings_translation_file.cpp
 msgid "Message of the day"

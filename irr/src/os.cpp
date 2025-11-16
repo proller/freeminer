@@ -222,7 +222,10 @@ void Timer::initTimer()
 u32 Timer::getRealTime()
 {
 	double time = emscripten_get_now();
-	return (u32)(time);
+	// `time` is over 1.7e+12. If converted directly to u32,
+	// it will overflow and yield 0. Cast to u64 first
+	// to get correct wrapping.
+	return (u32)((u64)time);
 }
 } // end namespace os
 

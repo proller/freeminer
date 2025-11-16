@@ -17,11 +17,6 @@
 #endif
 
 #include <SDL.h>
-// DirectFB is removed in SDL3, thou distribution as Alpine currently ships SDL2
-// with enabled DirectFB, but requiring another fix at a top of SDL2.
-// We don't need DirectFB in Irrlicht/Minetest, so simply disable it here to prevent issues.
-#undef SDL_VIDEO_DRIVER_DIRECTFB
-#include <SDL_syswm.h>
 
 #include <memory>
 #include <unordered_map>
@@ -123,7 +118,7 @@ public:
 	class CCursorControl : public gui::ICursorControl
 	{
 	public:
-		CCursorControl(CIrrDeviceSDL *dev, bool *want_pointerlock) :
+		CCursorControl(CIrrDeviceSDL *dev, bool* want_pointerlock) :
 				Device(dev), IsVisible(true), WantPointerLock(want_pointerlock)
 		{
 			initCursors();
@@ -134,11 +129,10 @@ public:
 		{
 			IsVisible = visible;
 #ifdef _IRR_EMSCRIPTEN_PLATFORM_
-				// The main loop takes care of reconciling the browser state
-				// and the desired state.
-				*WantPointerLock = !visible;
+			// The main loop takes care of reconciling the browser state
+			// and the desired state below.
+			*WantPointerLock = !visible;
 #else
-
 			if (visible)
 				SDL_ShowCursor(SDL_ENABLE);
 			else {

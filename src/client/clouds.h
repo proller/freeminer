@@ -57,7 +57,7 @@ public:
 
 	virtual video::SMaterial& getMaterial(u32 i)
 	{
-		return m_meshbuffer->getMaterial();
+		return m_material;
 	}
 
 	/*
@@ -180,8 +180,6 @@ private:
 	video::SColorf m_color = video::SColorf(1.0f, 1.0f, 1.0f, 1.0f);
 public:
 	CloudParams m_params;
-private:
-	std::vector<bool> grid;
 };
 
 // fm:

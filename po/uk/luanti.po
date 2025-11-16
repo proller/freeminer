@@ -3,8 +3,8 @@ msgstr ""
 "Project-Id-Version: Ukrainian (Minetest)\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2025-09-23 19:19+0200\n"
-"PO-Revision-Date: 2025-08-14 09:02+0000\n"
-"Last-Translator: Yof <Yof@users.noreply.hosted.weblate.org>\n"
+"PO-Revision-Date: 2025-09-29 16:02+0000\n"
+"Last-Translator: Tarás Lavrentiev <fromkaniv@gmail.com>\n"
 "Language-Team: Ukrainian <https://hosted.weblate.org/projects/minetest/"
 "minetest/uk/>\n"
 "Language: uk\n"
@@ -13,7 +13,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
 "n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
-"X-Generator: Weblate 5.13-dev\n"
+"X-Generator: Weblate 5.14-dev\n"
 
 #: builtin/client/chatcommands.lua
 msgid "Clear the out chat queue"
@@ -975,7 +975,7 @@ msgstr "Назва відсутня"
 #: builtin/mainmenu/dlg_register.lua builtin/mainmenu/tab_local.lua
 #: builtin/mainmenu/tab_online.lua
 msgid "Name"
-msgstr "Ім'я"
+msgstr "Назва"
 
 #: builtin/mainmenu/dlg_register.lua builtin/mainmenu/tab_local.lua
 #: builtin/mainmenu/tab_online.lua
@@ -1093,7 +1093,7 @@ msgstr ""
 
 #: builtin/mainmenu/tab_about.lua
 msgid "About"
-msgstr "Про рушій"
+msgstr "Про це"
 
 #: builtin/mainmenu/tab_about.lua
 msgid "Active Contributors"
@@ -1855,19 +1855,16 @@ msgid "Down Arrow"
 msgstr "Вниз"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "End Key"
-msgstr "Menu"
+msgstr "Клавіша End"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Help Key"
-msgstr "Delete"
+msgstr "Клавіша Допомоги"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Home Key"
-msgstr "Zoom"
+msgstr "Клавіша Домівки"
 
 #: src/client/keycode.cpp
 msgid "Insert"
@@ -1878,9 +1875,8 @@ msgid "Left Arrow"
 msgstr "Вліво"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Left Click"
-msgstr "Лівий Ctrl"
+msgstr "Лівий клік"
 
 #: src/client/keycode.cpp
 msgid "Left Control"
@@ -1905,15 +1901,15 @@ msgstr "Menu"
 
 #: src/client/keycode.cpp
 msgid "Middle Click"
-msgstr ""
+msgstr "Середній клік"
 
 #: src/client/keycode.cpp
 msgid "Mouse X1"
-msgstr ""
+msgstr "Миша X1"
 
 #: src/client/keycode.cpp
 msgid "Mouse X2"
-msgstr ""
+msgstr "Миша X2"
 
 #: src/client/keycode.cpp
 msgid "Num Lock"
@@ -2010,9 +2006,8 @@ msgid "Right Arrow"
 msgstr "Вправо"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Right Click"
-msgstr "Правий Ctrl"
+msgstr "Правий клік"
 
 #: src/client/keycode.cpp
 msgid "Right Control"
@@ -2036,9 +2031,8 @@ msgid "Scroll Lock"
 msgstr "Scroll Lock"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Select Key"
-msgstr "Delete"
+msgstr "Клавіша Select"
 
 #: src/client/keycode.cpp
 msgid "Shift Key"
@@ -2049,9 +2043,8 @@ msgid "Space"
 msgstr "Пробіл"
 
 #: src/client/keycode.cpp
-#, fuzzy
 msgid "Tab Key"
-msgstr "Break"
+msgstr "Клавіша Tab"
 
 #: src/client/keycode.cpp
 msgid "Up Arrow"
@@ -2478,7 +2471,6 @@ msgid "3D noise that determines number of dungeons per mapchunk."
 msgstr "3D шум що визначає кількість підземель на фрагмент мапи."
 
 #: src/settings_translation_file.cpp
-#, fuzzy
 msgid ""
 "3D support.\n"
 "Currently supported:\n"
@@ -2492,7 +2484,6 @@ msgstr ""
 "Зараз підтримуються:\n"
 "-    none: 3d вимкнено.\n"
 "-    anaglyph: 3d з блакитно-пурпурними кольорами.\n"
-"-    interlaced: підтримка полярізаційних екранів.\n"
 "-    topbottom: поділ екрану вертикально.\n"
 "-    sidebyside: поділ екрану горизонтально.\n"
 "-    crossview: 3d на основі автостереограми"
@@ -2860,7 +2851,7 @@ msgstr "Згладжування руху камери у кінорежимі"
 
 #: src/settings_translation_file.cpp
 msgid "Capture Tracy zones"
-msgstr ""
+msgstr "Зона захоплення Tracy"
 
 #: src/settings_translation_file.cpp
 msgid ""
@@ -2868,6 +2859,10 @@ msgid ""
 "You need to build with Tracy to use this, see doc/developing/profiling.md\n"
 "for details."
 msgstr ""
+"Захоплюйте зони Tracy за допомогою інструментації профайлера.\n"
+"Вам потрібно збудувати з Tracy, щоб використовувати це, див. doc/developing/"
+"profiling.md\n"
+"для деталей."
 
 #: src/settings_translation_file.cpp
 msgid "Cave noise"
@@ -3423,7 +3418,7 @@ msgstr "Розробницькі налаштування"
 
 #: src/settings_translation_file.cpp
 msgid "Disable if you only want to instrument with Tracy."
-msgstr ""
+msgstr "Вимкніть, якщо ви хочете лише інструментувати з Tracy."
 
 #: src/settings_translation_file.cpp
 msgid "Disallow empty passwords"
@@ -5362,9 +5357,8 @@ msgid "Maximum users"
 msgstr "Найбільше користувачів"
 
 #: src/settings_translation_file.cpp
-#, fuzzy
 msgid "Measure time samples"
-msgstr "Пустельні храми"
+msgstr "Вимірювання зразків часу"
 
 #: src/settings_translation_file.cpp
 msgid "Message of the day"
@@ -6037,7 +6031,7 @@ msgstr ""
 
 #: src/settings_translation_file.cpp
 msgid "Screenshots"
-msgstr "Знімки екрана"
+msgstr "Скріншоти"
 
 #: src/settings_translation_file.cpp
 msgid "Seabed noise"

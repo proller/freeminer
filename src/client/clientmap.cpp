@@ -284,29 +284,6 @@ void ClientMap::OnRegisterSceneNode()
 	{
 		SceneManager->registerNodeForRendering(this, scene::ESNRP_SOLID);
 		SceneManager->registerNodeForRendering(this, scene::ESNRP_TRANSPARENT);
-
-		[[maybe_unused]] auto *m_drawlist = m_drawlist_current ? &m_drawlist_1 : &m_drawlist_0;
-
-#if __EMSCRIPTEN__
-		// Prepare meshes
-		video::IVideoDriver* driver = SceneManager->getVideoDriver();
-		for (auto &i : *m_drawlist) {
-			auto block = i.second;
-			auto mapBlockMesh = block->getLodMesh(0, true); // !! TODO
-			if (!mapBlockMesh)
-				continue;
-			for (int layer = 0; layer < MAX_TILE_LAYERS; layer++) {
-				scene::IMesh *mesh = mapBlockMesh->getMesh(layer);
-				assert(mesh);
-				u32 c = mesh->getMeshBufferCount();
-				for (u32 i = 0; i < c; i++) {
-					scene::IMeshBuffer *buf = mesh->getMeshBuffer(i);
-					driver->prepareMeshBuffer(buf);
-				}
-			}
-		}
-#endif
-		
 	}
 
 	ISceneNode::OnRegisterSceneNode();

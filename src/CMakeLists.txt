@@ -435,7 +435,7 @@ set(independent_SRCS
 	inventory.cpp
 	itemstackmetadata.cpp
 	log.cpp
-	mainloop.cpp
+	#mainloop.cpp
 	metadata.cpp
 	modchannels.cpp
 	nameidmapping.cpp
@@ -481,6 +481,7 @@ set(common_SRCS
 	itemdef.cpp
 	light.cpp
 	main.cpp
+	mainloop.cpp
 	map_settings_manager.cpp
 	map.cpp
 	mapblock.cpp

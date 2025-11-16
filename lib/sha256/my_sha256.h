@@ -83,18 +83,27 @@ extern "C" {
 					 * wide big-endian values. */
 #define SHA256_DIGEST_LENGTH	32
 
+#define SHA256_CTX      LUANTI_SHA256_CTX
+
 typedef struct SHA256state_st {
 	SHA_LONG h[8];
 	SHA_LONG Nl, Nh;
 	SHA_LONG data[SHA_LBLOCK];
 	unsigned int num, md_len;
-} mt_SHA256_CTX;
+} SHA256_CTX;
 
-int mt_SHA256_Init(mt_SHA256_CTX *c);
-int mt_SHA256_Update(mt_SHA256_CTX *c, const void *data, size_t len);
-int mt_SHA256_Final(unsigned char *md, mt_SHA256_CTX *c);
-unsigned char *mt_SHA256(const unsigned char *d, size_t n, unsigned char *md);
-void mt_SHA256_Transform(mt_SHA256_CTX *c, const unsigned char *data);
+// Symbols conflict with OpenSSL
+#define SHA256_Init      LUANTI_SHA256_Init
+#define SHA256_Update    LUANTI_SHA256_Update
+#define SHA256_Final     LUANTI_SHA256_Final
+#define SHA256           LUANTI_SHA256
+#define SHA256_Transform LUANTI_SHA256_Transform
+
+int SHA256_Init(SHA256_CTX *c);
+int SHA256_Update(SHA256_CTX *c, const void *data, size_t len);
+int SHA256_Final(unsigned char *md, SHA256_CTX *c);
+unsigned char *SHA256(const unsigned char *d, size_t n, unsigned char *md);
+void SHA256_Transform(SHA256_CTX *c, const unsigned char *data);
 
 #ifdef  __cplusplus
 }

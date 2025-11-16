@@ -627,8 +627,7 @@ ShaderInfo ShaderSource::generateShader(const std::string &name,
 	}
 
 	// Create shaders header
-	bool fully_programmable = driver->getDriverType() == video::EDT_OGLES2 || driver->getDriverType() == video::EDT_OPENGL3
-		|| driver->getDriverType() == video::EDT_WEBGL1;
+	bool fully_programmable = driver->getDriverType() == video::EDT_OGLES2 || driver->getDriverType() == video::EDT_OPENGL3;
 	std::ostringstream shaders_header;
 	shaders_header
 		<< std::noboolalpha
