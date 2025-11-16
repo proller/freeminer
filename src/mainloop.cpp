@@ -412,7 +412,7 @@ using namespace emloop_private;
 
 
 void MainLoop::RunAsyncThenResume(AsyncPayload payload) {
-    payload();
+    payload()();
     return;
 
     {

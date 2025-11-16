@@ -5138,8 +5138,6 @@ bool the_game(volatile std::sig_atomic_t *kill,
 		kill, input, rendering_engine, start_data,
 		error_message, reconnect_requested, chat_backend,
 		[game, &error_message, resolve, autoexit, &started](bool startup_ok, BaseException* exc) {
-			started = true;
-			game->runData.autoexit = autoexit;
 			if (exc) {
 				std::cout << "GOT EXCEPTION FROM STARTUP: " << exc->what() << std::endl;
 				the_game_handle_exception(game, &error_message, resolve, exc);

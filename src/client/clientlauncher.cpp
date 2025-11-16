@@ -514,7 +514,6 @@ bool ClientLauncher::launch_game(std::string &error_message,
 	} else {
 		after_main_menu(resolve);
 	}
-	resolve(true);
 	return true;
 }
 
@@ -578,15 +577,8 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 	if (!start_data.isSinglePlayer() && start_data.name.empty()) {
 		error_message = gettext("Please choose a name!");
 		errorstream << error_message << std::endl;
-
-#ifdef __EMSCRIPTEN__
-		start_data.name = std::string("Guest") + itos(myrand_range(1000000, 9999999));
-		//resolve(false);
-		//return;
-#else
-		//resolve(false);
-		//return;
-#endif
+		resolve(false);
+		return;
 	}
 
 	// If using simple singleplayer mode, override
@@ -653,7 +645,6 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 void ClientLauncher::main_menu(std::function<void()> resolve)
 {
 	ServerList::lan_get();
-
 
 	kill   = porting::signal_handler_killstatus();
 
