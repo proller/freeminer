@@ -26,7 +26,6 @@
 #include <mutex>
 #include "util/metricsbackend.h"
 
-class IGameDef;
 struct GameParams;
 class RemotePlayer;
 class PlayerDatabase;
@@ -291,15 +290,16 @@ public:
 	const std::vector<RemotePlayer *> getPlayers() const { return m_players; }
 	u32 getPlayerCount() const { return m_players.size(); }
 
+	static std::vector<std::string> getPlayerDatabaseBackends();
 	static bool migratePlayersDatabase(const GameParams &game_params,
 			const Settings &cmd_args);
 
 	AuthDatabase *getAuthDatabase() { return m_auth_database; }
+	static std::vector<std::string> getAuthDatabaseBackends();
 	static bool migrateAuthDatabase(const GameParams &game_params,
 			const Settings &cmd_args);
 
 // freeminer
-
 public:
 	KeyValueStorage &getKeyValueStorage(std::string name = "key_value_storage");
 	KeyValueStorage &getPlayerStorage() { return getKeyValueStorage("players"); };
@@ -308,14 +308,11 @@ public:
 
 	std::shared_ptr<epixel::FallingSAO> spawnFallingActiveObject(const std::string &nodeName, v3opos_t pos,
 			const MapNode &n, int fast = 2);
-private:
 
 	// is weather active in this environment?
-public:
 	bool m_use_weather = true;
 	bool m_use_weather_biome = true;
 	bool m_more_threads = true;
-public:
 	ABMHandler m_abmhandler;
 	uint8_t analyzeBlock(MapBlockPtr block);
 private:
@@ -326,8 +323,6 @@ public:
 	size_t blockStep(MapBlockPtr block, float dtime = 0, uint8_t activate = 0);
 	int analyzeBlocks(float dtime, unsigned int max_cycle_ms);
 	u32 m_game_time_start = 0;
-
-public:
 	size_t nodeUpdate(const v3pos_t &pos, u8 recursion_limit = 5, u8 fast = 2, bool destroy = false);
 
 private:
@@ -339,7 +334,6 @@ private:
 		bool destroy{false};
 	};
 	size_t nodeUpdateReal(const v3pos_t &pos, u8 recursion_limit = 5, u8 fast = 2, bool destroy = false);
-private:
 	void handleNodeDrops(const ContentFeatures &f, v3f pos, PlayerSAO* player=NULL);
 
 /*
@@ -377,7 +371,7 @@ public:
 	KeyValueCached blocks_with_abm;
 	size_t abm_world_last = 0;
 	size_t world_merge_last = 0;
-//end of freeminer
+// === end of freeminer
 
 
 

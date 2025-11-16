@@ -10,6 +10,10 @@
 #include "IrrlichtDevice.h"
 #include "ICursorControl.h"
 #include "os.h"
+namespace video
+{
+	class ITexture;
+}
 
 #ifdef _IRR_COMPILE_WITH_X11_
 

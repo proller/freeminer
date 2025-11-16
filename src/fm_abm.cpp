@@ -154,7 +154,7 @@ void ABMHandler::apply(MapBlock *block, int &blocks_scanned, int &abms_run,
 				}
 
 				if (!m_aabms[c]) {
-					if (block->content_only != CONTENT_IGNORE)
+					if (block->m_is_mono_block)
 						return;
 					continue;
 				}

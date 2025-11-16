@@ -9,6 +9,7 @@
 #include "filesys.h"
 #include "cpp_api/s_internal.h"
 #include "lua_api/l_areastore.h"
+#include "lua_api/l_async.h"
 #include "lua_api/l_auth.h"
 #include "lua_api/l_base.h"
 #include "lua_api/l_craft.h"
@@ -40,7 +41,7 @@ extern "C" {
 
 ServerScripting::ServerScripting(Server* server):
 		ScriptApiBase(ScriptingType::Server),
-		asyncEngine(server)
+		ScriptApiAsync(server)
 {
 	setGameDef(server);
 
@@ -119,23 +120,6 @@ void ServerScripting::initAsync()
 	asyncEngine.initialize(0);
 }
 
-void ServerScripting::stepAsync()
-{
-	const auto _script_lock = std::unique_lock(m_luastackmutex, std::try_to_lock);
-	if (!_script_lock.owns_lock()) {
-		return;
-	}
-
-	asyncEngine.step(getStack());
-}
-
-u32 ServerScripting::queueAsync(std::string &&serialized_func,
-	PackedValue *param, const std::string &mod_origin)
-{
-	return asyncEngine.queueAsyncJob(std::move(serialized_func),
-			param, mod_origin);
-}
-
 void ServerScripting::InitializeModApi(lua_State *L, int top)
 {
 
@@ -163,6 +147,7 @@ void ServerScripting::InitializeModApi(lua_State *L, int top)
 	ModChannelRef::Register(L);
 
 	// Initialize mod api modules
+	ModApiAsync::Initialize(L, top);
 	ModApiAuth::Initialize(L, top);
 	ModApiCraft::Initialize(L, top);
 	ModApiEnv::Initialize(L, top);

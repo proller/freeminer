@@ -461,8 +461,7 @@ void Client::connect(const Address &address, const std::string &address_name)
 	}
 
 	m_address_name = address_name;
-	// fmtodo merge: m_con.reset(new con_use::Connection(PROTOCOL_ID, is_simple_singleplayer_game ? MAX_PACKET_SIZE_SINGLEPLAYER : MAX_PACKET_SIZE, CONNECTION_TIMEOUT,address.isIPv6(), this));
-	m_con.reset(con::createMTP(CONNECTION_TIMEOUT, address.isIPv6(), this));
+	m_con.reset(con::createMTP(CONNECTION_TIMEOUT, address.isIPv6(), this, is_simple_singleplayer_game));
 
 	infostream << "Connecting to server at ";
 	address.print(infostream);

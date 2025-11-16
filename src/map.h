@@ -30,15 +30,15 @@ class MapSector;
 */
 class NodeMetadata;
 class IGameDef;
-class IRollbackManager;
+
 class MapDatabase;
 
+//class MapDatabase;
 #if !ENABLE_THREADS
-	#define MAP_NOTHREAD_LOCK(map) auto lock_map = map->m_nothread_locker.lock_unique_rec();
+	#define MAP_NOTHREAD_LOCK(map) const auto lock_map = map->m_nothread_locker.lock_unique_rec();
 #else
 	#define MAP_NOTHREAD_LOCK(map) ;
 #endif
-
 
 
 /*

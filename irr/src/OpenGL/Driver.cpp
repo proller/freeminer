@@ -139,7 +139,7 @@ void COpenGL3DriverBase::debugCb(GLenum source, GLenum type, GLuint id, GLenum s
 		ll = ELL_ERROR;
 	else if (severity == GL_DEBUG_SEVERITY_MEDIUM)
 		ll = ELL_WARNING;
-	char buf[300];
+	char buf[512];
 	snprintf_irr(buf, sizeof(buf), "%04x %04x %.*s", source, type, length, message);
 	os::Printer::log("GL", buf, ll);
 }
@@ -266,7 +266,6 @@ bool COpenGL3DriverBase::genericDriverInit(const core::dimension2d<u32> &screenS
 
 	GL.ClearDepthf(1.0f);
 
-	GL.Hint(GL_GENERATE_MIPMAP_HINT, GL_NICEST);
 	GL.FrontFace(GL_CW);
 
 	// create material renderers
@@ -277,9 +276,6 @@ bool COpenGL3DriverBase::genericDriverInit(const core::dimension2d<u32> &screenS
 
 	// set fog mode
 	setFog(FogColor, FogType, FogStart, FogEnd, FogDensity, PixelFog, RangeFog);
-
-	// create matrix for flipping textures
-	TextureFlipMatrix.buildTextureTransform(0.0f, core::vector2df(0, 0), core::vector2df(0, 1.0f), core::vector2df(1.0f, -1.0f));
 
 	// We need to reset once more at the beginning of the first rendering.
 	// This fixes problems with intermediate changes to the material during texture load.
@@ -1667,26 +1663,15 @@ ITexture *COpenGL3DriverBase::addRenderTargetTexture(const core::dimension2d<u32
 ITexture *COpenGL3DriverBase::addRenderTargetTextureMs(const core::dimension2d<u32> &size, u8 msaa,
 		const io::path &name, const ECOLOR_FORMAT format)
 {
-	// disable mip-mapping
-	bool generateMipLevels = getTextureCreationFlag(ETCF_CREATE_MIP_MAPS);
-	setTextureCreationFlag(ETCF_CREATE_MIP_MAPS, false);
-
 	COpenGL3Texture *renderTargetTexture = new COpenGL3Texture(name, size, msaa > 0 ? ETT_2D_MS : ETT_2D, format, this, msaa);
 	addTexture(renderTargetTexture);
 	renderTargetTexture->drop();
-
-	// restore mip-mapping
-	setTextureCreationFlag(ETCF_CREATE_MIP_MAPS, generateMipLevels);
 
 	return renderTargetTexture;
 }
 
 ITexture *COpenGL3DriverBase::addRenderTargetTextureCubemap(const u32 sideLen, const io::path &name, const ECOLOR_FORMAT format)
 {
-	// disable mip-mapping
-	bool generateMipLevels = getTextureCreationFlag(ETCF_CREATE_MIP_MAPS);
-	setTextureCreationFlag(ETCF_CREATE_MIP_MAPS, false);
-
 	bool supportForFBO = (Feature.ColorAttachment > 0);
 
 	const core::dimension2d<u32> size(sideLen, sideLen);
@@ -1700,9 +1685,6 @@ ITexture *COpenGL3DriverBase::addRenderTargetTextureCubemap(const u32 sideLen, c
 	COpenGL3Texture *renderTargetTexture = new COpenGL3Texture(name, destSize, ETT_CUBEMAP, format, this);
 	addTexture(renderTargetTexture);
 	renderTargetTexture->drop();
-
-	// restore mip-mapping
-	setTextureCreationFlag(ETCF_CREATE_MIP_MAPS, generateMipLevels);
 
 	return renderTargetTexture;
 }
@@ -1718,6 +1700,13 @@ bool COpenGL3DriverBase::setRenderTargetEx(IRenderTarget *target, u16 clearFlag,
 	if (target && target->getDriverType() != getDriverType()) {
 		os::Printer::log("Fatal Error: Tried to set a render target not owned by OpenGL 3 driver.", ELL_ERROR);
 		return false;
+	}
+
+	if (CurrentRenderTarget) {
+		// Update mip-map of the generated texture, if enabled.
+		auto textures = CurrentRenderTarget->getTexture();
+		for (size_t i = 0; i < textures.size(); ++i)
+			textures[i]->regenerateMipMapLevels();
 	}
 
 	core::dimension2d<u32> destRenderTargetSize(0, 0);

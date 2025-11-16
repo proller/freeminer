@@ -20,7 +20,6 @@ namespace video
 {
 struct VertexType;
 
-class COpenGL3FixedPipelineRenderer;
 class COpenGL3Renderer2D;
 
 class COpenGL3DriverBase : public CNullDriver, public IMaterialRendererServices, public COpenGL3ExtensionHandler
@@ -325,15 +324,13 @@ protected:
 	bool LockRenderStateMode;
 	u8 AntiAlias;
 
-	core::matrix4 TextureFlipMatrix;
-
 	using FColorConverter = void (*)(const void *source, s32 count, void *dest);
 	struct STextureFormatInfo
 	{
-		GLenum InternalFormat;
-		GLenum PixelFormat;
-		GLenum PixelType;
-		FColorConverter Converter;
+		GLenum InternalFormat = 0;
+		GLenum PixelFormat = 0;
+		GLenum PixelType = 0;
+		FColorConverter Converter = nullptr;
 	};
 	STextureFormatInfo TextureFormats[ECF_UNKNOWN] = {};
 

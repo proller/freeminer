@@ -1113,7 +1113,7 @@ bool ImageSource::generateImagePart(std::string_view part_of_name,
 						<< " for [combine" << std::endl;
 					continue;
 				}
-				infostream << "Adding \"" << filename<< "\" to combined "
+				tracestream << "Adding \"" << filename << "\" to combined "
 					<< pos_base << std::endl;
 
 				video::IImage *img = generateImage(filename, source_image_names);
@@ -1333,8 +1333,10 @@ bool ImageSource::generateImagePart(std::string_view part_of_name,
 			video::IImage *img = generateImage(filename, source_image_names);
 			if (img) {
 				core::dimension2d<u32> dim = img->getDimension();
-				if (!baseimg)
+				if (!baseimg) {
 					baseimg = driver->createImage(video::ECF_A8R8G8B8, dim);
+					baseimg->fill(video::SColor(0,0,0,0));
+				}
 
 				v2s32 clippos(0, 0);
 				clippos.Y = dim.Height * (100-percent) / 100;

@@ -216,15 +216,20 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 	{
 		const auto lock = block->lock_unique_rec();
 		block->far_step = step;
-		content_t content_only{};
-		packet.convert_safe(TOCLIENT_BLOCKDATA_CONTENT_ONLY, content_only);
-		block->content_only = content_only;
-		packet.convert_safe(
-				TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM1, block->content_only_param1);
-		packet.convert_safe(
-				TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM2, block->content_only_param2);
 
-		if (block->content_only == CONTENT_IGNORE) {
+		content_t content_only{CONTENT_IGNORE};
+		packet.convert_safe(TOCLIENT_BLOCKDATA_CONTENT_ONLY, content_only);
+		/*
+		if (content_only != CONTENT_IGNORE) {
+			block->data[0].param0 = content_only;
+			packet.convert_safe(
+					TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM1, block->data[0].param1);
+			packet.convert_safe(
+					TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM2, block->data[0].param2);
+		}
+*/
+		if (content_only == CONTENT_IGNORE) {
+			//block->m_is_mono_block = false;
 			try {
 				block->deSerialize(istr, m_server_ser_ver, false);
 			} catch (const std::exception &ex) {
@@ -239,8 +244,9 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 				return;
 			}
 		} else {
-			block->fill({block->content_only, block->content_only_param1,
-					block->content_only_param2});
+			//block->m_is_mono_block = true;
+			//block->fill(block->data[0]);
+			block->fill(content_only);
 		}
 		weather::heat_t heat = 0; // for convert to atomic
 		packet[TOCLIENT_BLOCKDATA_HEAT].convert(heat);
@@ -262,8 +268,7 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 
 	if (!step) {
 		updateMeshTimestampWithEdge(bpos);
-		if (!overload && block->content_only != CONTENT_IGNORE &&
-				block->content_only != CONTENT_AIR) {
+		if (!overload && block->m_is_mono_block && block->data[0].param0 != CONTENT_AIR) {
 			if (getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS))
 							.getDistanceFrom(bpos) <= 1)
 				addUpdateMeshTaskWithEdge(bpos);

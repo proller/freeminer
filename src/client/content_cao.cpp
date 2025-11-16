@@ -40,7 +40,6 @@
 #include <IMeshBuffer.h>
 #include <CMeshBuffer.h>
 
-class Settings;
 struct ToolCapabilities;
 
 std::unordered_map<u16, ClientActiveObject::Factory> ClientActiveObject::m_types;
@@ -957,17 +956,25 @@ void GenericCAO::updateNametag()
 
 	v3f pos;
 	pos.Y = m_prop.selectionbox.MaxEdge.Y + 0.3f;
+	// Add or update nametag
+	Nametag tmp{node, m_prop.nametag, m_prop.nametag_color,
+			m_prop.nametag_bgcolor, m_prop.nametag_fontsize, pos,
+			m_prop.nametag_scale_z};
+
+    // fm:
+	auto nametag_text_wide = utf8_to_wide(tmp.text);
+	if (nametag_text_wide.size() > 15) {
+		nametag_text_wide.resize(15);
+		nametag_text_wide += L".";
+		tmp.text = wide_to_utf8(nametag_text_wide);
+	}
+	// ===
+
 	if (!m_nametag) {
-		// Add nametag
-		m_nametag = m_client->getCamera()->addNametag(node,
-			m_prop.nametag, m_prop.nametag_color,
-			m_prop.nametag_bgcolor, pos);
+		m_nametag = m_client->getCamera()->addNametag(tmp);
+		assert(m_nametag);
 	} else {
-		// Update nametag
-		m_nametag->text = m_prop.nametag;
-		m_nametag->textcolor = m_prop.nametag_color;
-		m_nametag->bgcolor = m_prop.nametag_bgcolor;
-		m_nametag->pos = pos;
+		*m_nametag = tmp;
 	}
 }
 

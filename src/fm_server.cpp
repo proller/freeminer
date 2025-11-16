@@ -700,13 +700,13 @@ void Server::SendBlockFm(session_t peer_id, MapBlockPtr block, u8 ver,
 
 	PACK(TOCLIENT_BLOCKDATA_DATA, os.str());
 	PACK(TOCLIENT_BLOCKDATA_HEAT, (weather::heat_t)(block->heat + block->heat_add));
-	PACK(TOCLIENT_BLOCKDATA_HUMIDITY, (weather::humidity_t)(block->humidity + block->humidity_add));
+	PACK(TOCLIENT_BLOCKDATA_HUMIDITY,
+			(weather::humidity_t)(block->humidity + block->humidity_add));
 	PACK(TOCLIENT_BLOCKDATA_STEP, block->far_step);
 	PACK(TOCLIENT_BLOCKDATA_CONTENT_ONLY,
-			block->content_only.load(std::memory_order_relaxed));
-
-	PACK(TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM1, block->content_only_param1);
-	PACK(TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM2, block->content_only_param2);
+			block->m_is_mono_block ? block->data[0].param0 : CONTENT_IGNORE);
+	PACK(TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM1, block->data[0].param1);
+	PACK(TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM2, block->data[0].param2);
 
 	NetworkPacket pkt(TOCLIENT_BLOCKDATA_FM, buffer.size(), peer_id);
 	pkt.putLongString({buffer.data(), buffer.size()});

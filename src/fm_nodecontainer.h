@@ -37,9 +37,9 @@ public:
 	{
 		return getNodeRefUnsafe(p);
 	};
-    virtual void setNode(const v3pos_t &p, const MapNode &n, bool important = false) {};
+	virtual void setNode(const v3pos_t &p, const MapNode &n, bool important = false) {};
 	virtual void clear() {}
 	virtual void addArea(const VoxelArea &a) {};
-	virtual void copyFrom(MapNode *src, const VoxelArea &src_area, v3pos_t from_pos,
-			v3pos_t to_pos, const v3pos_t &size) {};
+	virtual void copyFrom(MapNode *src, bool is_mono_block, const VoxelArea &src_area,
+			v3pos_t from_pos, v3pos_t to_pos, const v3pos_t &size) {};
 };

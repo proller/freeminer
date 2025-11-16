@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Italian (Minetest)\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-07-11 19:59+0200\n"
+"POT-Creation-Date: 2025-09-23 19:19+0200\n"
 "PO-Revision-Date: 2025-05-31 06:01+0000\n"
 "Last-Translator: Zughy <zhu.gamedev@tutanota.com>\n"
 "Language-Team: Italian <https://hosted.weblate.org/projects/minetest/"
@@ -1251,10 +1251,6 @@ msgid "New"
 msgstr "Nuovo"
 
 #: builtin/mainmenu/tab_local.lua
-msgid "No world created or selected!"
-msgstr "Nessun mondo creato o selezionato!"
-
-#: builtin/mainmenu/tab_local.lua
 msgid "Play Game"
 msgstr "Avvia il gioco"
 
@@ -1867,10 +1863,6 @@ msgid "Profiler shown (page %d of %d)"
 msgstr "Profilatore visualizzato (pagina %d di %d)"
 
 #: src/client/keycode.cpp
-msgid "Apps"
-msgstr "Applicazioni"
-
-#: src/client/keycode.cpp
 msgid "Backspace"
 msgstr "Tasto di ritorno"
 
@@ -1904,44 +1896,19 @@ msgid "Down Arrow"
 msgstr "Freccia Giù"
 
 #: src/client/keycode.cpp
-msgid "End"
-msgstr "Fine"
+#, fuzzy
+msgid "End Key"
+msgstr "Menu"
 
 #: src/client/keycode.cpp
-msgid "Erase EOF"
-msgstr "Canc. EOF"
+#, fuzzy
+msgid "Help Key"
+msgstr "Rimuovi"
 
 #: src/client/keycode.cpp
-msgid "Execute"
-msgstr "Eseguire"
-
-#: src/client/keycode.cpp
-msgid "Help"
-msgstr "Aiuto"
-
-#: src/client/keycode.cpp
-msgid "Home"
-msgstr "Inizio"
-
-#: src/client/keycode.cpp
-msgid "IME Accept"
-msgstr "Accetta IME"
-
-#: src/client/keycode.cpp
-msgid "IME Convert"
-msgstr "Converti IME"
-
-#: src/client/keycode.cpp
-msgid "IME Escape"
-msgstr "Ritorno da IME"
-
-#: src/client/keycode.cpp
-msgid "IME Mode Change"
-msgstr "Cambia Modalità IME"
-
-#: src/client/keycode.cpp
-msgid "IME Nonconvert"
-msgstr "Non Convertire IME"
+#, fuzzy
+msgid "Home Key"
+msgstr "Ingrandimento"
 
 #: src/client/keycode.cpp
 msgid "Insert"
@@ -1953,8 +1920,9 @@ msgid "Left Arrow"
 msgstr "Control Sinistro"
 
 #: src/client/keycode.cpp
-msgid "Left Button"
-msgstr "Pulsante Sinistro"
+#, fuzzy
+msgid "Left Click"
+msgstr "Control Sinistro"
 
 #: src/client/keycode.cpp
 msgid "Left Control"
@@ -1968,19 +1936,27 @@ msgstr "Menu Sinistro"
 msgid "Left Shift"
 msgstr "Shift Sinistro"
 
+#. ~ Name of key
 #: src/client/keycode.cpp
 msgid "Left Windows"
 msgstr "Windows Sinistro"
 
-#. ~ Key name, common on Windows keyboards
 #: src/client/keycode.cpp
 #, fuzzy
 msgid "Menu Key"
 msgstr "Menu"
 
 #: src/client/keycode.cpp
-msgid "Middle Button"
-msgstr "Pulsante Centrale"
+msgid "Middle Click"
+msgstr ""
+
+#: src/client/keycode.cpp
+msgid "Mouse X1"
+msgstr ""
+
+#: src/client/keycode.cpp
+msgid "Mouse X2"
+msgstr ""
 
 #: src/client/keycode.cpp
 msgid "Num Lock"
@@ -2047,10 +2023,6 @@ msgid "Numpad 9"
 msgstr "Tastierino 9"
 
 #: src/client/keycode.cpp
-msgid "OEM Clear"
-msgstr "OEM Canc"
-
-#: src/client/keycode.cpp
 #, fuzzy
 msgid "Page Down"
 msgstr "Pag. giù"
@@ -2086,8 +2058,9 @@ msgid "Right Arrow"
 msgstr "Ctrl destro"
 
 #: src/client/keycode.cpp
-msgid "Right Button"
-msgstr "Pusante detro"
+#, fuzzy
+msgid "Right Click"
+msgstr "Ctrl destro"
 
 #: src/client/keycode.cpp
 msgid "Right Control"
@@ -2101,6 +2074,7 @@ msgstr "Menu destro"
 msgid "Right Shift"
 msgstr "Maiusc destro"
 
+#. ~ Name of key
 #: src/client/keycode.cpp
 msgid "Right Windows"
 msgstr "Windows destro"
@@ -2109,10 +2083,10 @@ msgstr "Windows destro"
 msgid "Scroll Lock"
 msgstr "Scroll Lock"
 
-#. ~ Key name
 #: src/client/keycode.cpp
-msgid "Select"
-msgstr "Selezione"
+#, fuzzy
+msgid "Select Key"
+msgstr "Rimuovi"
 
 #: src/client/keycode.cpp
 #, fuzzy
@@ -2120,37 +2094,17 @@ msgid "Shift Key"
 msgstr "Maiusc"
 
 #: src/client/keycode.cpp
-msgid "Sleep"
-msgstr "Sospensione"
-
-#: src/client/keycode.cpp
-msgid "Snapshot"
-msgstr "Stampa"
-
-#: src/client/keycode.cpp
 msgid "Space"
 msgstr "Spazio"
 
 #: src/client/keycode.cpp
-msgid "Tab"
-msgstr "Tab"
+#, fuzzy
+msgid "Tab Key"
+msgstr "Tasto furtivo"
 
 #: src/client/keycode.cpp
 msgid "Up Arrow"
 msgstr "Freccia Su"
-
-#: src/client/keycode.cpp
-msgid "X Button 1"
-msgstr "Pulsante X 1"
-
-#: src/client/keycode.cpp
-msgid "X Button 2"
-msgstr "Pulsante X 2"
-
-#: src/client/keycode.cpp
-#, fuzzy
-msgid "Zoom Key"
-msgstr "Ingrandimento"
 
 #: src/client/minimap.cpp
 msgid "Minimap hidden"
@@ -2596,12 +2550,11 @@ msgstr "Rumore 3D che stabilisce il numero di segrete per blocco di mondo."
 msgid ""
 "3D support.\n"
 "Currently supported:\n"
-"-    none: no 3d output.\n"
-"-    anaglyph: cyan/magenta color 3d.\n"
-"-    interlaced: odd/even line based polarization screen support.\n"
-"-    topbottom: split screen top/bottom.\n"
-"-    sidebyside: split screen side by side.\n"
-"-    crossview: Cross-eyed 3d"
+"-    none: no 3D output\n"
+"-    anaglyph: cyan/magenta color 3D\n"
+"-    topbottom: split screen top/bottom\n"
+"-    sidebyside: split screen side-by-side\n"
+"-    crossview: cross-eyed 3D"
 msgstr ""
 "Supporto 3D.\n"
 "Attualmente supportati:\n"
@@ -2722,8 +2675,8 @@ msgstr ""
 "Tasto per muoversi furtivamente.\n"
 "Usato anche per scendere, e per immergersi in acqua se aux1_descends è "
 "disattivato.\n"
-"Si veda http://irrlicht.sourceforge.net/docu/namespaceirr."
-"html#a54da2a0e231901735e3da1b0edf72eb3"
+"Si veda http://irrlicht.sourceforge.net/docu/"
+"namespaceirr.html#a54da2a0e231901735e3da1b0edf72eb3"
 
 #: src/settings_translation_file.cpp
 msgid ""
@@ -2977,6 +2930,17 @@ msgstr "Fluidità della telecamera"
 #: src/settings_translation_file.cpp
 msgid "Camera smoothing in cinematic mode"
 msgstr "Fluidità della telecamera in modalità cinematica"
+
+#: src/settings_translation_file.cpp
+msgid "Capture Tracy zones"
+msgstr ""
+
+#: src/settings_translation_file.cpp
+msgid ""
+"Capture Tracy zones with the profiler's instrumentation.\n"
+"You need to build with Tracy to use this, see doc/developing/profiling.md\n"
+"for details."
+msgstr ""
 
 #: src/settings_translation_file.cpp
 msgid "Cave noise"
@@ -3535,6 +3499,10 @@ msgstr ""
 #: src/settings_translation_file.cpp
 msgid "Developer Options"
 msgstr "Opzioni per sviluppatori"
+
+#: src/settings_translation_file.cpp
+msgid "Disable if you only want to instrument with Tracy."
+msgstr ""
 
 #: src/settings_translation_file.cpp
 msgid "Disallow empty passwords"
@@ -4652,8 +4620,8 @@ msgid ""
 "debug.txt is only moved if this setting is positive."
 msgstr ""
 "Se la dimensione del file debug.txt supera il numero di MB indicati in\n"
-"questa impostazione quando viene aperto, il file viene rinominato in debug."
-"txt.1,\n"
+"questa impostazione quando viene aperto, il file viene rinominato in "
+"debug.txt.1,\n"
 "eliminando un eventuale debug.txt.1 più vecchio.\n"
 "debug.txt viene rinominato solo se c'è questa impostazione."
 
@@ -5546,6 +5514,11 @@ msgstr ""
 #: src/settings_translation_file.cpp
 msgid "Maximum users"
 msgstr "Utenti massimi"
+
+#: src/settings_translation_file.cpp
+#, fuzzy
+msgid "Measure time samples"
+msgstr "Templi del deserto"
 
 #: src/settings_translation_file.cpp
 msgid "Message of the day"
@@ -7786,8 +7759,8 @@ msgid "Will also disable autoforward, when active."
 msgstr ""
 "Tasto per muovere indietro il giocatore.\n"
 "Disabiliterà anche l'avanzamento automatico, quando attivo.\n"
-"Si veda http://irrlicht.sourceforge.net/docu/namespaceirr."
-"html#a54da2a0e231901735e3da1b0edf72eb3"
+"Si veda http://irrlicht.sourceforge.net/docu/"
+"namespaceirr.html#a54da2a0e231901735e3da1b0edf72eb3"
 
 #: src/settings_translation_file.cpp
 msgid "Window maximized"
@@ -7909,172 +7882,68 @@ msgstr "Scadenza interattiva cURL"
 msgid "cURL parallel limit"
 msgstr "Limite parallelo cURL"
 
-#~ msgid "Key for decreasing the viewing range."
-#~ msgstr "Tasto per diminuire il raggio visivo."
+#~ msgid "Apps"
+#~ msgstr "Applicazioni"
 
-#~ msgid "Key for decreasing the volume."
-#~ msgstr "Tasto per abbassare il volume."
+#~ msgid "End"
+#~ msgstr "Fine"
 
-#~ msgid "Key for dropping the currently selected item."
-#~ msgstr "Tasto per gettare l'oggetto che si ha in mano."
+#~ msgid "Erase EOF"
+#~ msgstr "Canc. EOF"
 
-#~ msgid "Key for increasing the viewing range."
-#~ msgstr "Tasto per aumentare il raggio visivo."
+#~ msgid "Execute"
+#~ msgstr "Eseguire"
 
-#~ msgid "Key for increasing the volume."
-#~ msgstr "Tasto per alzare il volume."
+#~ msgid "Help"
+#~ msgstr "Aiuto"
 
-#~ msgid "Key for jumping."
-#~ msgstr "Tasto per saltare."
+#~ msgid "Home"
+#~ msgstr "Inizio"
 
-#~ msgid "Key for moving the player forward."
-#~ msgstr "Tasto per muovere il giocatore in avanti."
+#~ msgid "IME Accept"
+#~ msgstr "Accetta IME"
 
-#~ msgid "Key for moving the player left."
-#~ msgstr "Tasto per muovere il giocatore a sinistra."
+#~ msgid "IME Convert"
+#~ msgstr "Converti IME"
 
-#~ msgid "Key for moving the player right."
-#~ msgstr "Tasto per muovere il giocatore a destra."
+#~ msgid "IME Escape"
+#~ msgstr "Ritorno da IME"
 
-#~ msgid "Key for muting the game."
-#~ msgstr "Tasto per mutare il gioco."
+#~ msgid "IME Mode Change"
+#~ msgstr "Cambia Modalità IME"
 
-#~ msgid "Key for opening the chat window."
-#~ msgstr "Tasto per aprire la finestra della chat."
+#~ msgid "IME Nonconvert"
+#~ msgstr "Non Convertire IME"
 
-#~ msgid "Key for opening the inventory."
-#~ msgstr "Tasto per aprire l'inventario."
+#~ msgid "Left Button"
+#~ msgstr "Pulsante Sinistro"
 
-#~ msgid "Key for selecting the 11th hotbar slot."
-#~ msgstr "Tasto per selezionare l'11° casella della barra delle azioni."
+#~ msgid "Middle Button"
+#~ msgstr "Pulsante Centrale"
 
-#~ msgid "Key for selecting the 12th hotbar slot."
-#~ msgstr "Tasto per selezionare la 12° casella della barra delle azioni."
+#~ msgid "No world created or selected!"
+#~ msgstr "Nessun mondo creato o selezionato!"
 
-#~ msgid "Key for selecting the 13th hotbar slot."
-#~ msgstr "Tasto per selezionare la 13° casella della barra delle azioni."
+#~ msgid "OEM Clear"
+#~ msgstr "OEM Canc"
 
-#~ msgid "Key for selecting the 14th hotbar slot."
-#~ msgstr "Tasto per selezionare la 14° casella della barra delle azioni."
+#~ msgid "Right Button"
+#~ msgstr "Pusante detro"
 
-#~ msgid "Key for selecting the 15th hotbar slot."
-#~ msgstr "Tasto per selezionare la 15° casella della barra delle azioni."
+#~ msgid "Select"
+#~ msgstr "Selezione"
 
-#~ msgid "Key for selecting the 16th hotbar slot."
-#~ msgstr "Tasto per selezionare la 16° casella della barra delle azioni."
+#~ msgid "Sleep"
+#~ msgstr "Sospensione"
 
-#~ msgid "Key for selecting the 17th hotbar slot."
-#~ msgstr "Tasto per selezionare la 17° casella della barra delle azioni."
+#~ msgid "Snapshot"
+#~ msgstr "Stampa"
 
-#~ msgid "Key for selecting the 18th hotbar slot."
-#~ msgstr "Tasto per selezionare la 18° casella della barra delle azioni."
+#~ msgid "Tab"
+#~ msgstr "Tab"
 
-#~ msgid "Key for selecting the 19th hotbar slot."
-#~ msgstr "Tasto per selezionare la 19° casella della barra delle azioni."
+#~ msgid "X Button 1"
+#~ msgstr "Pulsante X 1"
 
-#~ msgid "Key for selecting the 20th hotbar slot."
-#~ msgstr "Tasto per selezionare la 20° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the 21st hotbar slot."
-#~ msgstr "Tasto per selezionare la 21° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the 22nd hotbar slot."
-#~ msgstr "Tasto per selezionare la 22° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the 23rd hotbar slot."
-#~ msgstr "Tasto per selezionare la 23° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the 24th hotbar slot."
-#~ msgstr "Tasto per selezionare la 24° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the 25th hotbar slot."
-#~ msgstr "Tasto per selezionare la 25° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the 26th hotbar slot."
-#~ msgstr "Tasto per selezionare la 26° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the 27th hotbar slot."
-#~ msgstr "Tasto per selezionare la 27° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the 28th hotbar slot."
-#~ msgstr "Tasto per selezionare la 28° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the 29th hotbar slot."
-#~ msgstr "Tasto per selezionare la 29° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the 30th hotbar slot."
-#~ msgstr "Tasto per selezionare la 30° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the 31st hotbar slot."
-#~ msgstr "Tasto per selezionare la 31° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the 32nd hotbar slot."
-#~ msgstr "Tasto per selezionare la 32° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the eighth hotbar slot."
-#~ msgstr "Tasto per selezionare l'8° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the fifth hotbar slot."
-#~ msgstr "Tasto per selezionare la 5° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the first hotbar slot."
-#~ msgstr "Tasto per selezionare la 1° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the fourth hotbar slot."
-#~ msgstr "Tasto per selezionare la 4° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the next item in the hotbar."
-#~ msgstr "Tasto per selezionare il prossimo oggetto nella barra delle azioni."
-
-#~ msgid "Key for selecting the ninth hotbar slot."
-#~ msgstr "Tasto per selezionare la 9° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the previous item in the hotbar."
-#~ msgstr ""
-#~ "Tasto per selezionare l'oggetto precedente nella barra delle azioni."
-
-#~ msgid "Key for selecting the second hotbar slot."
-#~ msgstr "Tasto per selezionare la 2° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the seventh hotbar slot."
-#~ msgstr "Tasto per selezionare la 7° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the sixth hotbar slot."
-#~ msgstr "Tasto per selezionare la 6° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the tenth hotbar slot."
-#~ msgstr "Tasto per selezionare la 10° casella della barra delle azioni."
-
-#~ msgid "Key for selecting the third hotbar slot."
-#~ msgstr "Tasto per selezionare la 3° casella della barra delle azioni."
-
-#~ msgid "Key for switching between first- and third-person camera."
-#~ msgstr "Tasto per ruotare tra prima e terza persona."
-
-#, fuzzy
-#~ msgid "Key for taking screenshots."
-#~ msgstr "Formato degli screenshot."
-
-#~ msgid "Key for toggling autoforward."
-#~ msgstr "Tasto per (dis)attivare l'avanzamento automatico."
-
-#~ msgid "Key for toggling cinematic mode."
-#~ msgstr "Tasto per attivare e disattivare la modalità cinematica."
-
-#~ msgid "Key for toggling display of minimap."
-#~ msgstr "Tasto per (dis)attivare la minimappa."
-
-#~ msgid "Key for toggling fast mode."
-#~ msgstr "Tasto per attivare e disattivare la modalità veloce."
-
-#~ msgid "Key for toggling flying."
-#~ msgstr "Tasto per (dis)attivare il volo."
-
-#~ msgid "Key for toggling fullscreen mode."
-#~ msgstr "Tasto per attivare e disattivare la modalità a schermo intero."
-
-#~ msgid "Key for toggling noclip mode."
-#~ msgstr "Tasto per attivare e disattivare la modalità incorporea."
-
-#~ msgid "Key for toggling pitch move mode."
-#~ msgstr "Tasto per attivare e disattivare il beccheggio."
+#~ msgid "X Button 2"
+#~ msgstr "Pulsante X 2"

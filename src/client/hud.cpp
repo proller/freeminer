@@ -310,11 +310,8 @@ void Hud::drawItems(v2s32 screen_pos, v2s32 screen_offset, s32 itemcount, v2f al
 
 bool Hud::hasElementOfType(HudElementType type)
 {
-	for (size_t i = 0; i != player->maxHudId(); i++) {
-		HudElement *e = player->getHud(i);
-		if (!e)
-			continue;
-		if (e->type == type)
+	for (HudElement *e : player->getHudElements()) {
+		if (e && e->type == type)
 			return true;
 	}
 	return false;
@@ -345,9 +342,13 @@ void Hud::drawLuaElements(const v3s16 &camera_offset)
 	const u32 text_height = g_fontengine->getTextHeight();
 	gui::IGUIFont *const font = g_fontengine->getFont();
 
-	// Reorder elements by z_index
 	std::vector<HudElement*> elems;
-	elems.reserve(player->maxHudId());
+
+	elems.reserve(player->getHudElements().size());
+	for (HudElement *e : player->getHudElements()) {
+		if (e)
+			elems.push_back(e);
+	}
 
 	// Add builtin elements if the server doesn't send them.
 	// Declared here such that they have the same lifetime as the elems vector
@@ -364,17 +365,11 @@ void Hud::drawLuaElements(const v3s16 &camera_offset)
 		elems.push_back(&hotbar);
 	}
 
-	for (size_t i = 0; i != player->maxHudId(); i++) {
-		HudElement *e = player->getHud(i);
-		if (!e)
-			continue;
-
-		auto it = elems.begin();
-		while (it != elems.end() && (*it)->z_index <= e->z_index)
-			++it;
-
-		elems.insert(it, e);
-	}
+	// Reorder by Z-index for rendering
+	// Note: we don't guarantee rendering in ID order, but it used to work so let's keep it.
+	std::stable_sort(elems.begin(), elems.end(), [] (HudElement *l, HudElement *r) {
+		return l->z_index < r->z_index;
+	});
 
 	for (HudElement *e : elems) {
 

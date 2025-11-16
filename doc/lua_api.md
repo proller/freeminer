@@ -177,8 +177,6 @@ The file is a key-value store of modpack details.
 * `textdomain`: Textdomain used to translate title and description. Defaults to modpack name.
   See [Translating content meta](#translating-content-meta).
 
-Note: to support 0.4.x, please also create an empty modpack.txt file.
-
 Mod directory structure
 -----------------------
 
@@ -3614,6 +3612,8 @@ Some types may inherit styles from parent types.
 * animated_image
     * noclip - boolean, set to true to allow the element to exceed formspec bounds.
 * box
+    * **Note**: In order for any of the styling options to take effect,
+                the `color` field in the box element must be left unspecified.
     * noclip - boolean, set to true to allow the element to exceed formspec bounds.
         * Defaults to false in formspec_version version 3 or higher
     * **Note**: `colors`, `bordercolors`, and `borderwidths` accept multiple input types:
@@ -3920,10 +3920,8 @@ The following functions provide escape sequences:
     * `color` is a ColorString
     * The escape sequence sets the text color to `color`
 * `core.colorize(color, message)`:
-    * Equivalent to:
-      `core.get_color_escape_sequence(color) ..
-      message ..
-      core.get_color_escape_sequence("#ffffff")`
+    * Equivalent to including the right color escape sequence in the front,
+      and resetting to `#fff` after the text (plus newline handling).
 * `core.get_background_escape_sequence(color)`
     * `color` is a ColorString
     * The escape sequence sets the background of the whole text element to
@@ -3934,6 +3932,10 @@ The following functions provide escape sequences:
     * Removes background colors added by `get_background_escape_sequence`.
 * `core.strip_colors(str)`
     * Removes all color escape sequences.
+* `core.strip_escapes(str)`
+    * Removes all escape sequences, including client-side translations and
+      any unknown or future escape sequences that Luanti might define.
+    * You can use this to clean text before logging or handing to an external system.
 
 
 Coordinate System
@@ -5841,6 +5843,12 @@ Utilities
       httpfetch_additional_methods = true,
       -- objects have get_guid method (5.13.0)
       object_guids = true,
+      -- The NodeTimer `on_timer` callback is passed additional `node` and `timeout` args (5.14.0)
+      on_timer_four_args = true,
+      -- `ParticleSpawner` definition supports `exclude_player` field (5.14.0)
+      particlespawner_exclude_player = true,
+      -- core.generate_decorations() supports `use_mapgen_biomes` parameter (5.14.0)
+      generate_decorations_biomes = true,
   }
   ```
 
@@ -5848,6 +5856,7 @@ Utilities
     * checks for *server-side* feature availability
     * `arg`: string or table in format `{foo=true, bar=true}`
     * `missing_features`: `{foo=true, bar=true}`
+
 * `core.get_player_information(player_name)`: Table containing information
   about a player. Example return value:
 
@@ -6148,34 +6157,34 @@ Call these functions only at load time!
     * Called every server step, usually interval of 0.1s.
     * `dtime` is the time since last execution in seconds.
 * `core.register_on_mods_loaded(function())`
-    * Called after mods have finished loading and before the media is cached or the
-      aliases handled.
+    * Called after all mods have finished loading and before the media is cached
+      or aliases are handled.
 * `core.register_on_shutdown(function())`
-    * Called before server shutdown
-    * Players that were kicked by the shutdown procedure are still fully accessible
-     in `core.get_connected_players()`.
+    * Called during server shutdown before players are kicked.
     * **Warning**: If the server terminates abnormally (i.e. crashes), the
-      registered callbacks **will likely not be run**. Data should be saved at
+      registered callbacks will likely **not run**. Data should be saved at
       semi-frequent intervals as well as on server shutdown.
 * `core.register_on_placenode(function(pos, newnode, placer, oldnode, itemstack, pointed_thing))`
-    * Called when a node has been placed
-    * If return `true` no item is taken from `itemstack`
+    * Called after a node has been placed.
+    * If `true` is returned no item is taken from `itemstack`
     * `placer` may be any valid ObjectRef or nil.
     * **Not recommended**; use `on_construct` or `after_place_node` in node
       definition whenever possible.
 * `core.register_on_dignode(function(pos, oldnode, digger))`
-    * Called when a node has been dug.
+    * Called after a node has been dug.
     * **Not recommended**; Use `on_destruct` or `after_dig_node` in node
       definition whenever possible.
 * `core.register_on_punchnode(function(pos, node, puncher, pointed_thing))`
     * Called when a node is punched
 * `core.register_on_generated(function(minp, maxp, blockseed))`
-    * Called after generating a piece of world between `minp` and `maxp`.
+    * Called after a piece of world between `minp` and `maxp` has been
+      generated and written into the map.
     * **Avoid using this** whenever possible. As with other callbacks this blocks
-      the main thread and introduces noticeable latency.
-      Consider [Mapgen environment](#mapgen-environment) for an alternative.
-* `core.register_on_newplayer(function(ObjectRef))`
+      the main thread and is prone to introduce noticeable latency/lag.
+      Consider [Mapgen environment](#mapgen-environment) as an alternative.
+* `core.register_on_newplayer(function(player))`
     * Called when a new player enters the world for the first time
+    * `player`: ObjectRef
 * `core.register_on_punchplayer(function(player, hitter, time_from_last_punch, tool_capabilities, dir, damage))`
     * Called when a player is punched
     * Note: This callback is invoked even if the punched player is dead.
@@ -6732,10 +6741,14 @@ Environment access
     * Generate all registered ores within the VoxelManip `vm` and in the area
       from `pos1` to `pos2`.
     * `pos1` and `pos2` are optional and default to mapchunk minp and maxp.
-* `core.generate_decorations(vm[, pos1, pos2])`
+* `core.generate_decorations(vm[, pos1, pos2, [use_mapgen_biomes]])`
     * Generate all registered decorations within the VoxelManip `vm` and in the
       area from `pos1` to `pos2`.
     * `pos1` and `pos2` are optional and default to mapchunk minp and maxp.
+    * `use_mapgen_biomes` (optional boolean). For use in on_generated callbacks only.
+       If set to true, decorations are placed in respect to the biome map of the current chunk.
+       `pos1` and `pos2` must match the positions of the current chunk, or an error will be raised.
+       default: `false`
 * `core.clear_objects([options])`
     * Clear all objects in the environment
     * Takes an optional table as an argument with the field `mode`.
@@ -7116,8 +7129,12 @@ Defaults for the `on_place` and `on_drop` item definition functions
 * `core.item_pickup(itemstack, picker, pointed_thing, time_from_last_punch, ...)`
     * Runs callbacks registered by `core.register_on_item_pickup` and adds
       the item to the picker's `"main"` inventory list.
-    * Parameters are the same as in `on_pickup`.
-    * Returns the leftover itemstack.
+    * Parameters and return value are the same as `on_pickup`.
+    * **Note**: is not called when wielded item overrides `on_pickup`
+* `core.item_secondary_use(itemstack, user)`
+    * Global secondary use callback. Does nothing.
+    * Parameters and return value are the same as `on_secondary_use`.
+    * **Note**: is not called when wielded item overrides `on_secondary_use`
 * `core.item_drop(itemstack, dropper, pos)`
     * Converts `itemstack` to an in-world Lua entity.
     * `itemstack` (`ItemStack`) is modified (cleared) on success.
@@ -7140,7 +7157,7 @@ Defaults for the `on_punch` and `on_dig` node definition callbacks
     * Calls functions registered by `core.register_on_punchnode()`
 * `core.node_dig(pos, node, digger)`
     * Checks if node can be dug, puts item into inventory, removes node
-    * Calls functions registered by `core.registered_on_dignodes()`
+    * Calls functions registered by `core.register_on_dignode()`
 
 Sounds
 ------
@@ -7205,11 +7222,11 @@ This allows you easy interoperability for delegating work to jobs.
     * When `func` returns the callback is called (in the normal environment)
       with all of the return values as arguments.
     * Optional: Variable number of arguments that are passed to `func`
+    * Returns an `AsyncJob` async job.
 * `core.register_async_dofile(path)`:
     * Register a path to a Lua file to be imported when an async environment
       is initialized. You can use this to preload code which you can then call
       later using `core.handle_async()`.
-
 
 ### List of APIs available in an async environment
 
@@ -7368,11 +7385,13 @@ Server
         * `filedata`: the data of the file to be sent [*]
         * `to_player`: name of the player the media should be sent to instead of
                        all players (optional)
-        * `ephemeral`: boolean that marks the media as ephemeral,
-                       it will not be cached on the client (optional, default false)
+        * `ephemeral`: if true the server will create a copy of the file and
+                       forget about it once delivered (optional boolean, default false)
+        * `client_cache`: hint whether the client should save the media in its cache
+                          (optional boolean, default `!ephemeral`, added in 5.14.0)
         * Exactly one of the parameters marked [*] must be specified.
     * `callback`: function with arguments `name`, which is a player name
-    * Pushes the specified media file to client(s). (details below)
+    * Pushes the specified media file to client(s) as detailed below.
       The file must be a supported image, sound or model format.
       Dynamically added media is not persisted between server restarts.
     * Returns false on error, true if the request was accepted
@@ -7381,19 +7400,17 @@ Server
     * Details/Notes:
       * If `ephemeral`=false and `to_player` is unset the file is added to the media
         sent to clients on startup, this means the media will appear even on
-        old clients if they rejoin the server.
+        old clients (<5.3.0) if they rejoin the server.
       * If `ephemeral`=false the file must not be modified, deleted, moved or
-        renamed after calling this function.
-      * Regardless of any use of `ephemeral`, adding media files with the same
-        name twice is not possible/guaranteed to work. An exception to this is the
-        use of `to_player` to send the same, already existent file to multiple
-        chosen players.
+        renamed after calling this function. This is allowed otherwise.
+      * Adding media files with the same name twice is not possible.
+        An exception to this is the use of `to_player` to send the same,
+        already existent file to multiple chosen players (`ephemeral`=false only).
       * You can also call this at startup time. In that case `callback` MUST
         be `nil` and you cannot use `ephemeral` or `to_player`, as these logically
         do not make sense.
     * Clients will attempt to fetch files added this way via remote media,
-      this can make transfer of bigger files painless (if set up). Nevertheless
-      it is advised not to use dynamic media for big media files.
+      this can make transfer of bigger files painless (if set up).
 
 IPC
 ---
@@ -7464,6 +7481,7 @@ Particles
 ---------
 
 * `core.add_particle(particle definition)`
+    * Spawn a single particle
     * Deprecated: `core.add_particle(pos, velocity, acceleration,
       expirationtime, size, collisiondetection, texture, playername)`
 
@@ -8044,6 +8062,15 @@ use the provided load and write functions for this.
   Returns success and, optionally, an error message.
 * `from_file(filename)`: Experimental. Like `from_string()`, but reads the data
   from a file.
+
+`AsyncJob`
+----------
+An `AsyncJob` is a reference to a job to be run in an async environment.
+
+### Methods
+* `cancel()`: try to cancel the job
+    * Returns whether the job was cancelled.
+    * A job can only be cancelled if it has not started.
 
 `InvRef`
 --------
@@ -9542,7 +9569,8 @@ Player properties need to be saved manually.
     stepheight = 0,
     -- If positive number, object will climb upwards when it moves
     -- horizontally against a `walkable` node, if the height difference
-    -- is within `stepheight`.
+    -- is within `stepheight` and if the object current max Y in the world
+    -- is greater or equal than the node min Y.
 
     automatic_face_movement_dir = 0.0,
     -- Automatically set yaw to movement direction, offset in degrees.
@@ -9574,6 +9602,16 @@ Player properties need to be saved manually.
     nametag_bgcolor = <ColorSpec>,
     -- Sets background color of nametag
     -- `false` will cause the background to be set automatically based on user settings.
+    -- Default: false
+
+    nametag_fontsize = 1,
+    -- Sets the font size of the nametag in pixels.
+    -- `false` will cause the size to be set automatically based on user settings.
+    -- Default: false
+
+    nametag_scale_z = false,
+    -- If enabled, the nametag will be scaled by Z in screen space, meaning it becomes
+    -- smaller the further away the object is.
     -- Default: false
 
     infotext = "",
@@ -9988,15 +10026,15 @@ Used by `core.register_node`, `core.register_craftitem`, and
         -- When item is eaten with `core.do_item_eat`
 
         punch_use = <SimpleSoundSpec>,
-        -- When item is used with the 'punch/mine' key pointing at a node or entity
+        -- When item is used with the 'punch/dig' key pointing at a node or entity
 
         punch_use_air = <SimpleSoundSpec>,
-        -- When item is used with the 'punch/mine' key pointing at nothing (air)
+        -- When item is used with the 'punch/dig' key pointing at nothing (air)
     },
 
     on_place = function(itemstack, placer, pointed_thing),
-    -- When the 'place' key was pressed with the item in hand
-    -- and a node was pointed at.
+    -- Called when the 'place' key was pressed with the item in hand
+    -- and pointing at a node.
     -- Shall place item and return the leftover itemstack
     -- or nil to not modify the inventory.
     -- The placer may be any ObjectRef or nil.
@@ -10007,7 +10045,7 @@ Used by `core.register_node`, `core.register_craftitem`, and
     -- Function must return either nil if inventory shall not be modified,
     -- or an itemstack to replace the original itemstack.
     -- The user may be any ObjectRef or nil.
-    -- default: nil
+    -- default: core.item_secondary_use
 
     on_drop = function(itemstack, dropper, pos),
     -- Shall drop item and return the leftover itemstack.
@@ -10025,28 +10063,26 @@ Used by `core.register_node`, `core.register_craftitem`, and
     --   luaentity) as `type="object"` `pointed_thing`.
     -- * `time_from_last_punch, ...` (optional): Other parameters from
     --   `luaentity:on_punch`.
-    -- default: `core.item_pickup`
+    -- default: core.item_pickup
 
     on_use = function(itemstack, user, pointed_thing),
-    -- default: nil
-    -- When user pressed the 'punch/mine' key with the item in hand.
+    -- Called when user presses the 'punch/dig' key with the item in hand.
     -- Function must return either nil if inventory shall not be modified,
     -- or an itemstack to replace the original itemstack.
     -- e.g. itemstack:take_item(); return itemstack
-    -- Otherwise, the function is free to do what it wants.
     -- The user may be any ObjectRef or nil.
-    -- The default functions handle regular use cases.
+    -- Note that defining this callback will prevent normal punching/digging
+    -- behavior on the client, as the interaction is instead "forwarded" to the
+    -- server.
+    -- default: nil
 
     after_use = function(itemstack, user, node, digparams),
-    -- default: nil
-    -- If defined, should return an itemstack and will be called instead of
-    -- wearing out the item (if tool). If returns nil, does nothing.
-    -- If after_use doesn't exist, it is the same as:
-    --   function(itemstack, user, node, digparams)
-    --     itemstack:add_wear(digparams.wear)
-    --     return itemstack
-    --   end
+    -- Called after a tool is used to dig a node and will replace the default
+    -- tool wear-out handling.
+    -- Shall return the leftover itemstack or nil to not
+    -- modify the dropped item.
     -- The user may be any ObjectRef or nil.
+    -- default: nil
 
     _custom_field = whatever,
     -- Add your own custom fields. By convention, all custom field names
@@ -10470,8 +10506,6 @@ Used by `core.register_node`.
     -- itemstack will hold clicker's wielded item.
     -- Shall return the leftover itemstack.
     -- Note: pointed_thing can be nil, if a mod calls this function.
-    -- This function does not get triggered by clients <=0.4.16 if the
-    -- "formspec" node metadata field is set.
 
     on_dig = function(pos, node, digger),
     -- default: core.node_dig
@@ -10479,10 +10513,12 @@ Used by `core.register_node`.
     -- return true if the node was dug successfully, false otherwise.
     -- Deprecated: returning nil is the same as returning true.
 
-    on_timer = function(pos, elapsed),
+    on_timer = function(pos, elapsed, node, timeout),
     -- default: nil
     -- called by NodeTimers, see core.get_node_timer and NodeTimerRef.
-    -- elapsed is the total time passed since the timer was started.
+    -- `elapsed`: total time passed since the timer was started.
+    -- `node`: node table (since 5.14)
+    -- `timeout`: timeout value of the just ended timer (since 5.14)
     -- return true to run the timer for another cycle with the same timeout
     -- value.
 
@@ -11472,6 +11508,9 @@ Used by `core.add_particle`.
     playername = "singleplayer",
     -- Optional, if specified spawns particle only on the player's client
 
+    -- Note that `exclude_player` is not supported here. You can use a single-use
+    -- particlespawner if needed.
+
     animation = {Tile Animation definition},
     -- Optional, specifies how to animate the particle texture
 
@@ -11535,6 +11574,9 @@ will be ignored.
     -- If time is 0 spawner has infinite lifespan and spawns the `amount` on
     -- a per-second basis.
 
+    size = 1,
+    -- Size of the particle.
+
     collisiondetection = false,
     -- If true collide with `walkable` nodes and, depending on the
     -- `object_collision` field, objects too.
@@ -11561,7 +11603,12 @@ will be ignored.
     -- following section.
 
     playername = "singleplayer",
-    -- Optional, if specified spawns particles only on the player's client
+    -- Optional, if specified spawns particles only for this player
+    -- Can't be used together with `exclude_player`.
+
+    exclude_player = "singleplayer",
+    -- Optional, if specified spawns particles not for this player
+    -- Added in v5.14.0. Can't be used together with `playername`.
 
     animation = {Tile Animation definition},
     -- Optional, specifies how to animate the particles' texture

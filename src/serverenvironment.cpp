@@ -630,8 +630,8 @@ void ServerEnvironment::activateBlock(MapBlock *block)
 		return;
 
 	// Run node timers
-	block->step((float)dtime_s, [&](v3s16 p, MapNode n, f32 d) -> bool {
-		return m_script->node_on_timer(p, n, d);
+	block->step((float)dtime_s, [&](v3s16 p, MapNode n, NodeTimer t) -> bool {
+		return m_script->node_on_timer(p, n, t.elapsed, t.timeout);
 	});
 }
 
@@ -1213,11 +1213,11 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 
 			if (!block->m_node_timers.m_uptime_last) // not very good place, but minimum modifications
 				block->m_node_timers.m_uptime_last = uptime - dtime;
-			const auto dtime_s = uptime - block->m_node_timers.m_uptime_last;
+			const auto dtime = uptime - block->m_node_timers.m_uptime_last;
 			block->m_node_timers.m_uptime_last = uptime;
 
-			block->step(dtime_s, [&](v3pos_t p, MapNode n, f32 d) -> bool {
-				return m_script->node_on_timer(p, n, d);
+			block->step(dtime, [&](v3s16 p, MapNode n, NodeTimer t) -> bool {
+				return m_script->node_on_timer(p, n, t.elapsed, t.timeout);
 			});
 
 			if (porting::getTimeMs() > end_ms) {
@@ -2186,6 +2186,21 @@ void ServerEnvironment::processActiveObjectRemove(ServerActiveObjectPtr obj)
    });
 }
 
+std::vector<std::string> ServerEnvironment::getPlayerDatabaseBackends()
+{
+	std::vector<std::string> ret;
+	ret.emplace_back("sqlite3");
+	ret.emplace_back("dummy");
+#if USE_POSTGRESQL
+	ret.emplace_back("postgresql");
+#endif
+#if USE_LEVELDB
+	ret.emplace_back("leveldb");
+#endif
+	ret.emplace_back("files");
+	return ret;
+}
+
 PlayerDatabase *ServerEnvironment::openPlayerDatabase(const std::string &name,
 		const std::string &savedir, const Settings &conf)
 {
@@ -2305,6 +2320,21 @@ bool ServerEnvironment::migratePlayersDatabase(const GameParams &game_params,
 		return false;
 	}
 	return true;
+}
+
+std::vector<std::string> ServerEnvironment::getAuthDatabaseBackends()
+{
+	std::vector<std::string> ret;
+	ret.emplace_back("sqlite3");
+	ret.emplace_back("dummy");
+#if USE_POSTGRESQL
+	ret.emplace_back("postgresql");
+#endif
+	ret.emplace_back("files");
+#if USE_LEVELDB
+	ret.emplace_back("leveldb");
+#endif
+	return ret;
 }
 
 AuthDatabase *ServerEnvironment::openAuthDatabase(

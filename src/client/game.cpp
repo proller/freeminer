@@ -967,46 +967,17 @@ Game::Game() :
 	m_chat_log_buf(g_logger),
 	m_game_ui(new GameUI())
 {
-	g_settings->registerChangedCallback("chat_log_level",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("doubletap_jump",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("toggle_sneak_key",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("toggle_aux1_key",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("enable_joysticks",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("enable_fog",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("mouse_sensitivity",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("joystick_frustum_sensitivity",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("repeat_place_time",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("repeat_dig_time",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("noclip",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("free_move",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("fog_start",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("cinematic",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("cinematic_camera_smoothing",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("camera_smoothing",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("invert_mouse",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("enable_hotbar_mouse_wheel",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("invert_hotbar_mouse_wheel",
-		&settingChangedCallback, this);
-	g_settings->registerChangedCallback("pause_on_lost_focus",
-		&settingChangedCallback, this);
+	clearTextureNameCache();
+
+	const char *settings[] = {
+		"chat_log_level", "doubletap_jump", "toggle_sneak_key", "toggle_aux1_key",
+		"enable_joysticks", "enable_fog", "mouse_sensitivity", "joystick_frustum_sensitivity",
+		"repeat_place_time", "repeat_dig_time", "noclip", "free_move", "fog_start",
+		"cinematic", "cinematic_camera_smoothing", "camera_smoothing", "invert_mouse",
+		"enable_hotbar_mouse_wheel", "invert_hotbar_mouse_wheel", "pause_on_lost_focus",
+	};
+	for (auto s : settings)
+		g_settings->registerChangedCallback(s, &settingChangedCallback, this);
 
 	readSettings();
 }
@@ -1639,13 +1610,15 @@ void Game::createClient_after_connect(std::function<void(bool,BaseException*)> r
 void Game::createClient_after_get(std::function<void(bool,BaseException*)> resolve) {
 	try { // CATCHALL
 
-	shader_src->addShaderConstantSetter(new NodeShaderConstantSetter());
+	shader_src->addShaderConstantSetter(
+		std::make_unique<NodeShaderConstantSetter>());
 
-	auto *scsf = new GameGlobalShaderUniformSetterFactory(client);
-	shader_src->addShaderUniformSetterFactory(scsf);
+	auto scsf_up = std::make_unique<GameGlobalShaderUniformSetterFactory>(client);
+	auto* scsf = scsf_up.get();
+	shader_src->addShaderUniformSetterFactory(std::move(scsf_up));
 
 	shader_src->addShaderUniformSetterFactory(
-		new FogShaderUniformSetterFactory());
+		std::make_unique<FogShaderUniformSetterFactory>());
 
 	ShadowRenderer::preInit(shader_src);
 

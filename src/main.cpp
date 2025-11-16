@@ -509,6 +509,22 @@ static void print_help(const OptionList &allowed_options)
 {
 	std::cout << _("Allowed options:") << std::endl;
 	print_allowed_options(allowed_options);
+	std::cout << std::endl;
+
+	std::pair<const char*, std::vector<std::string>> the_list[] = {
+		{"map", ServerMap::getDatabaseBackends()},
+		{"players", ServerEnvironment::getPlayerDatabaseBackends()},
+		{"auth", ServerEnvironment::getAuthDatabaseBackends()},
+		{"mod storage", Server::getModStorageDatabaseBackends()},
+	};
+
+	std::cout << "Supported database backends:";
+	for (auto &e : the_list) {
+		SORT_AND_UNIQUE(e.second);
+		std::cout << "\n  " << padStringRight(e.first, 16)
+			<< ": " << str_join(e.second, ", ");
+	}
+	std::cout << std::endl;
 }
 
 static void print_allowed_options(const OptionList &allowed_options)

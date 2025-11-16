@@ -17,8 +17,6 @@ class ClientEnvironment;
 struct MapNode;
 class GenericCAO;
 class ClientActiveObject;
-class ClientEnvironment;
-class IGameDef;
 struct CollisionInfo;
 struct collisionMoveResult;
 
@@ -123,7 +121,6 @@ public:
 		m_cao = toset;
 	}
 
-	u32 maxHudId() const { return hud.size(); }
 
 //freeminer:
 	bool zoom = false;

@@ -3,10 +3,11 @@
 // Copyright (C) 2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
 #include "mapblock.h"
+#include "mapnode.h"
 #include "profiler.h"
 #include "servermap.h"
 
-#include <atomic>
+#include <memory>
 #include <sstream>
 #include "map.h"
 #include "light.h"
@@ -121,6 +122,7 @@ void MapBlock::setNode(const v3pos_t &p, const MapNode &n, bool important)
 	const auto &f1 = nodedef->get(n.getContent());
 
 	const auto lock = lock_unique_rec();
+	expandNodesIfNeeded();
 
 	const auto &f0 = nodedef->get(data[index].getContent());
 
@@ -161,12 +163,17 @@ void MapBlock::pushElementsToCircuit(Circuit *circuit)
 
 bool MapBlock::analyzeContent()
 {
+	/*
+    // TODO: really need here?
+
 	const auto lock = try_lock_shared_rec();
 	if (!lock->owns_lock())
 		return false;
 	content_only = data[0].param0;
 	content_only_param1 = data[0].param1;
 	content_only_param2 = data[0].param2;
+	if (m_is_mono_block)
+		return true;
 	for (int i = 1; i < MAP_BLOCKSIZE * MAP_BLOCKSIZE * MAP_BLOCKSIZE; ++i) {
 		if (data[i].param0 != content_only || data[i].param1 != content_only_param1 ||
 				data[i].param2 != content_only_param2) {
@@ -175,7 +182,9 @@ bool MapBlock::analyzeContent()
 		}
 	}
 	return true;
-}
+	*/
+	return true;
+}	
 
 const MapBlock::mesh_type empty_mesh;
 #if CHECK_CLIENT_BUILD()
@@ -224,6 +233,7 @@ void MapBlock::incrementUsageTimer(float dtime)
 
 void MapBlock::setNodeNoLock(v3pos_t p, MapNode n, bool important)
 {
+	expandNodesIfNeeded();
 	data[p.Z * zstride + p.Y * ystride + p.X] = n;
 	raiseModified(MOD_STATE_WRITE_NEEDED, MOD_REASON_SET_NODE, important);
 }
@@ -259,13 +269,13 @@ enum
 MapBlock::MapBlock(v3s16 pos, IGameDef *gamedef):
 		m_pos(pos),
 		m_pos_relative(pos * MAP_BLOCKSIZE),
-		data(new MapNode[nodecount]),
-		m_gamedef(gamedef)
+		m_gamedef(gamedef),
+		m_is_mono_block(false)
 {
-	reallocate();
-/*	
-	assert(m_modified > MOD_STATE_CLEAN);
-*/
+	// We start with nodecount nodes, because in the vast
+	// majority of the cases a block is created just before
+	// it is de-serialized or generated.
+	reallocate(nodecount, MapNode(CONTENT_IGNORE));
 }
 
 MapBlock::~MapBlock()
@@ -288,7 +298,8 @@ MapBlock::~MapBlock()
 #endif
 */
 	delete[] data;
-	porting::TrackFreedMemory(sizeof(MapNode) * nodecount);
+	if (!m_is_mono_block)
+		porting::TrackFreedMemory(sizeof(MapNode) * nodecount);
 }
 
 static inline size_t get_max_objects_per_block()
@@ -341,7 +352,7 @@ bool MapBlock::saveStaticObject(u16 id, const StaticObject &obj, u32 reason)
 	return true;
 }
 
-void MapBlock::step(float dtime, const std::function<bool(v3s16, MapNode, f32)> &on_timer_cb)
+void MapBlock::step(float dtime, const std::function<bool(v3s16, MapNode, NodeTimer)> &on_timer_cb)
 {
 	// Run callbacks for elapsed node_timers
 	std::vector<NodeTimer> elapsed_timers = m_node_timers.step(dtime);
@@ -350,8 +361,10 @@ void MapBlock::step(float dtime, const std::function<bool(v3s16, MapNode, f32)> 
 	for (const auto &it : elapsed_timers) {
 		n = getNodeNoEx(it.position);
 		p = it.position + getPosRelative();
-		if (on_timer_cb(p, n, it.elapsed))
+		if (on_timer_cb(p, n, it)) {
+			// restart
 			setNodeTimer(NodeTimer(it.timeout, 0, it.position));
+		}
 		if (isOrphan())
 			return;
 	}
@@ -387,7 +400,7 @@ void MapBlock::copyTo(NodeContainer &dst)
 	VoxelArea data_area(v3s16(0,0,0), data_size - v3s16(1,1,1));
 
 	// Copy from data to VoxelManipulator
-	dst.copyFrom(data, data_area, v3s16(0,0,0),
+	dst.copyFrom(data, m_is_mono_block, data_area, v3s16(0,0,0),
 			getPosRelative(), data_size);
 }
 
@@ -397,9 +410,80 @@ void MapBlock::copyFrom(const VoxelManipulator &src)
 	v3s16 data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
 	VoxelArea data_area(v3s16(0,0,0), data_size - v3s16(1,1,1));
 
+	expandNodesIfNeeded();
 	// Copy from VoxelManipulator to data
 	src.copyTo(data, data_area, v3s16(0,0,0),
 			getPosRelative(), data_size);
+	tryShrinkNodes();
+}
+
+void MapBlock::reallocate(u32 count, MapNode n)
+{
+	const auto lock = lock_unique_rec();
+
+	assert(count == 1 || count == nodecount);
+	// For now monoblocks are disabled on the client.
+	// The client has known data races on the block's data (FIXME).
+	assert(!m_gamedef->isClient() || count == nodecount);
+
+	delete[] data;
+	if (data && !m_is_mono_block && count == 1)
+		porting::TrackFreedMemory(sizeof(MapNode) * nodecount);
+
+	data = new MapNode[count];
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#if __GNUC__ > 7
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
+#endif
+	if constexpr (!CONTENT_IGNORE) {
+		if (count > 1 && n.getContent() == CONTENT_IGNORE) {
+			memset(data, 0, count * sizeof(MapNode));
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+		} else
+
+	std::fill_n(data, count, n);
+
+	}
+
+	m_is_mono_block = (count == 1);
+}
+
+void MapBlock::tryShrinkNodes()
+{
+	// For now monoblocks are disabled on the client.
+	// The client has known data races on the block's data (FIXME).
+	if (m_gamedef->isClient())
+		return;
+
+	if (m_is_mono_block)
+		return;
+
+	MapNode n = data[0];
+	bool is_mono_block = true;
+	for (u32 i=1; i<nodecount; i++) {
+		if (n != data[i]) {
+			is_mono_block = false;
+			break;
+		}
+	}
+
+	if (is_mono_block) {
+		reallocate(1, n);
+		m_is_air = n.getContent() == CONTENT_AIR;
+		m_is_air_expired = false;
+	}
+}
+
+void MapBlock::expandNodesIfNeeded()
+{
+	if (m_is_mono_block) {
+		reallocate(nodecount, data[0]);
+	}
 }
 
 void MapBlock::actuallyUpdateIsAir()
@@ -409,6 +493,10 @@ void MapBlock::actuallyUpdateIsAir()
 
 	const auto lock = lock_shared_rec();
 
+	if (m_is_mono_block) {
+		m_is_air = data[0].getContent() == CONTENT_AIR;
+		return;
+	}
 	bool only_air = true;
 	for (u32 i = 0; i < nodecount; i++) {
 		MapNode &n = data[i];
@@ -436,12 +524,12 @@ void MapBlock::expireIsAirCache()
 // Note that there's no technical reason why we *have to* renumber the IDs,
 // but we do it anyway as it also helps compressability.
 void MapBlock::getBlockNodeIdMapping(NameIdMapping *nimap, MapNode *nodes,
-	const NodeDefManager *nodedef)
+	u32 count, const NodeDefManager *nodedef)
 {
 	IdIdMapping &mapping = IdIdMapping::giveClearedThreadLocalInstance();
 
 	content_t id_counter = 0;
-	for (u32 i = 0; i < MapBlock::nodecount; i++) {
+	for (u32 i = 0; i < count; i++) {
 		content_t global_id = nodes[i].getContent();
 		content_t id = CONTENT_IGNORE;
 
@@ -559,8 +647,8 @@ void MapBlock::serialize(std::ostream &os_compressed, u8 version, bool disk, int
 	}
 
 	// fmtodo: check version and dont pack data if more than 20150427 or 0.4.12.7+
-	if (!disk && use_content_only && content_only != CONTENT_IGNORE)
-		return;
+//	if (!disk && use_content_only && m_is_mono_block)
+//		return;
 
 	/*
 		Bulk node data
@@ -571,13 +659,13 @@ void MapBlock::serialize(std::ostream &os_compressed, u8 version, bool disk, int
 	const u8 params_width = 2;
 	if(disk)
 	{
-		MapNode *tmp_nodes = new MapNode[nodecount];
-		memcpy(tmp_nodes, data, nodecount * sizeof(MapNode));
-		getBlockNodeIdMapping(&nimap, tmp_nodes, m_gamedef->ndef());
+		const size_t size = m_is_mono_block ? 1 : nodecount;
+		std::unique_ptr<MapNode[]> tmp_nodes(new MapNode[size]);
+		std::copy_n(data, size, tmp_nodes.get());
+		getBlockNodeIdMapping(&nimap, tmp_nodes.get(), size, m_gamedef->ndef());
 
-		buf = MapNode::serializeBulk(version, tmp_nodes, nodecount,
-				content_width, params_width);
-		delete[] tmp_nodes;
+		buf = MapNode::serializeBulk(version, tmp_nodes.get(), nodecount,
+				content_width, params_width, m_is_mono_block);
 
 		// write timestamp and node/id mapping first
 		if (version >= 29) {
@@ -589,7 +677,7 @@ void MapBlock::serialize(std::ostream &os_compressed, u8 version, bool disk, int
 	else
 	{
 		buf = MapNode::serializeBulk(version, data, nodecount,
-				content_width, params_width);
+				content_width, params_width, m_is_mono_block);
 	}
 
 	writeU8(os, content_width);
@@ -671,6 +759,7 @@ bool MapBlock::deSerialize(std::istream &in_compressed, u8 version, bool disk)
 	TRACESTREAM(<<"MapBlock::deSerialize "<<getPos()<<std::endl);
 
 	m_is_air_expired = true;
+	expandNodesIfNeeded();
 
 	if(version <= 21)
 	{
@@ -710,22 +799,28 @@ bool MapBlock::deSerialize(std::istream &in_compressed, u8 version, bool disk)
 	}
 
 	if (!m_generated) {
-		static thread_local const auto fix_not_generated = g_settings->getBool("fix_not_generated");
-		if (!fix_not_generated)
+		static thread_local const auto fix_not_generated =
+				g_settings->getBool("fix_not_generated");
+		if (!fix_not_generated) {
+			errorstream << "MapBlock::deSerialize(): deserialize not generated block "
+						<< getPos() << std::endl;
+		}
 
-		errorstream<<"MapBlock::deSerialize(): deserialize not generated block "<<getPos()<<std::endl;
-
-		if (disk && fix_not_generated) m_generated = true; else 
-
-		return false;
+		if (disk && fix_not_generated) {
+			m_generated = true;
+		} else {
+			return false;
+		}
 	}
 
-	if (!disk && content_only != CONTENT_IGNORE) {
+/*
+	if (!disk && m_is_mono_block) {
 		auto n = MapNode(content_only, content_only_param1, content_only_param2);
 		for (u32 i = 0; i < MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; i++)
 			data[i] = n;
 		return true;
 	}
+*/
 
 	TRACESTREAM(<<"MapBlock::deSerialize "<<getPos()
 			<<": Bulk node data"<<std::endl);
@@ -818,9 +913,13 @@ bool MapBlock::deSerialize(std::istream &in_compressed, u8 version, bool disk)
 			m_node_timers.deSerialize(is, version);
 		}
 
-		u16 dummy;
-		m_is_air = nimap.size() == 1 && nimap.getId("air", dummy);
-		m_is_air_expired = false;
+		if (nimap.size() == 1) {
+			tryShrinkNodes();
+
+			u16 dummy;
+			m_is_air = nimap.getId("air", dummy);
+			m_is_air_expired = false;
+		}
 
 		analyzeContent();
 	}
