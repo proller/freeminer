@@ -26,6 +26,9 @@
 
 #ifdef _IRR_EMSCRIPTEN_PLATFORM_
 #include <emscripten.h>
+#else
+#define EMSCRIPTEN_KEEPALIVE
+#define EM_BOOL bool
 #endif
 
 #include "CSDLManager.h"
@@ -420,10 +423,12 @@ CIrrDeviceSDL::CIrrDeviceSDL(const SIrrlichtCreationParameters &param) :
 			Close = true;
 		}
 
+#if __EMSCRIPTEN__		
 		// This is an SDL hook to filter events, but we need to abuse it to make
 		// SDL events (keyboard/mouse) trigger re-entry for immediate processing.
 		SDL_NOOP_EVENT = SDL_RegisterEvents(1);
 		SDL_SetEventFilter(emloop_event_filter, NULL);
+#endif
 	}
 
 	// create keymap
