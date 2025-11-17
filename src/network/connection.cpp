@@ -21,6 +21,7 @@ namespace con
 IConnection *createMTP(float timeout, bool ipv6, PeerHandler *handler, bool simple_singleplayer_mode)
 {
 	constexpr auto MAX_PACKET_SIZE_SINGLEPLAYER = 65000;
+
 	// safe minimum across internet networks for ipv4 and ipv6
 	u32 MAX_PACKET_SIZE = simple_singleplayer_mode ? MAX_PACKET_SIZE_SINGLEPLAYER :
 #if __EMSCRIPTEN__

@@ -52,7 +52,7 @@ ConnectionMulti::ConnectionMulti(
 #endif
 #if USE_WEBSOCKET
 		m_con_ws(std::make_shared<con_ws::Connection>(
-				1000000, timeout, ipv6, peerhandler)),
+				100000, timeout, ipv6, peerhandler)),
 #endif
 #if USE_WEBSOCKET_SCTP
 		m_con_ws_sctp(std::make_shared<con_ws_sctp::Connection>(
