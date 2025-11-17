@@ -166,7 +166,7 @@ void ABMHandler::apply(MapBlock *block, int &blocks_scanned, int &abms_run,
 					auto &required_neighbors =
 							activate == 1 ? ir.abmws->required_neighbors_activate
 										  : ir.abmws->required_neighbors;
-					if (required_neighbors.count() > 0) {
+					if (!required_neighbors.empty()) {
 						v3pos_t p1;
 						int neighbors_range = i->abmws->neighbors_range;
 						for (p1.X = p.X - neighbors_range; p1.X <= p.X + neighbors_range;

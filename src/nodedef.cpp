@@ -219,7 +219,7 @@ void NodeBox::msgpack_unpack(msgpack::object o)
 	type = (NodeBoxType)type_tmp;
 
 	//if(type == NODEBOX_FIXED || type == NODEBOX_LEVELED)
-	if (packet.count(NODEBOX_S_FIXED))
+	if (packet.contains(NODEBOX_S_FIXED))
 		packet[NODEBOX_S_FIXED].convert(fixed);
 
 	if (type == NODEBOX_WALLMOUNTED) {
