@@ -19,10 +19,10 @@
 #include "settings.h"
 #include "log.h"
 
-//#ifdef __EMSCRIPTEN__
-//#include <emsocket.h>
+#ifdef __EMSCRIPTEN__
+#include <emsocket.h>
+#endif
 #include <mainloop.h>
-//#endif
 
 #ifdef _WIN32
 #include <windows.h>
@@ -107,7 +107,6 @@ void Address::ResolveAsync(const char *name, Address *fallback, std::function<vo
 		ret = [resolve]() { resolve(nullptr); };
 		return ret;
 	});
-//#endif
 }
 
 void Address::Resolve(const char *name, Address *fallback)
