@@ -631,7 +631,7 @@ uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 					g_settings->getU32("farmesh_all_changed");
 			const auto &use_farmesh_all_changed =
 					std::min(setting_farmesh_all_changed, farmesh_all_changed);
-			runFarAll(cbpos, cell_size_pow, farmesh_quality, false,
+			runFarAll(cbpos, cell_size_pow, farmesh, farmesh_quality, false,
 					[this, &ordered, &cbpos, &use_farmesh_all_changed](
 							const v3bpos_t &bpos, const bpos_t &size) -> bool {
 						if (!size) {

@@ -277,7 +277,8 @@ int FarMesh::go_container()
 	thread_local static const s16 farmesh_all_changed =
 			g_settings->getU32("farmesh_all_changed");
 
-	runFarAll(cbpos, draw_control.cell_size_pow, draw_control.farmesh_quality, 0,
+	runFarAll(cbpos, draw_control.cell_size_pow, draw_control.farmesh,
+			draw_control.farmesh_quality, 0,
 			[this, &cbpos](const v3bpos_t &bpos, const bpos_t &size) -> bool {
 				const block_step_t step = log(size) / log(2);
 
@@ -320,8 +321,8 @@ int FarMesh::go_flat()
 
 	// todo: maybe save blocks while cam pos not changed
 	std::array<std::unordered_set<v3bpos_t>, FARMESH_STEP_MAX> blocks;
-	runFarAll(cbpos, draw_control.cell_size_pow, draw_control.farmesh_quality,
-			cbpos.Y ?: 1,
+	runFarAll(cbpos, draw_control.cell_size_pow, draw_control.farmesh,
+			draw_control.farmesh_quality, cbpos.Y ?: 1,
 			[this, &draw_control, &blocks](
 					const v3bpos_t &bpos, const bpos_t &size) -> bool {
 				for (const auto &add : {
