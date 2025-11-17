@@ -95,8 +95,6 @@ private:
 	MutexedQueue<ConnectionEventPtr> m_event_queue;
 	MutexedQueue<ConnectionCommandPtr> m_command_queue;
 
-	//u32 m_protocol_id {PROTOCOL_ID};
-	u32 m_max_packet_size;
 	float m_timeout;
 	ENetHost *m_enet_host;
 	// ENetPeer *m_peer;
