@@ -643,8 +643,8 @@ bool getboolfield_default(lua_State *L, int table,
 	return result;
 }
 
-v3s16 getv3s16field_default(lua_State *L, int table,
-		const char *fieldname, v3s16 default_)
+v3pos_t getv3s16field_default(lua_State *L, int table,
+		const char *fieldname, v3pos_t default_)
 {
 	getv3intfield(L, table, fieldname, default_);
 	return default_;

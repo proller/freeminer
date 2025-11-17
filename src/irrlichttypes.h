@@ -25,12 +25,9 @@
 #define U32_MAX UINT32_MAX
 #define U64_MAX UINT64_MAX
 
-
-
-// fm:
-#define IRRLICHT_VERSION_10000 IRRLICHT_VERSION_MAJOR*10000 + IRRLICHT_VERSION_MINOR * 100 + IRRLICHT_VERSION_REVISION
-
 #if USE_POS32
+#define POS_MIN INT32_MIN
+#define POS_MAX INT32_MAX
 
 // Node position
 using pos_t = s32;
@@ -39,6 +36,8 @@ using pos_t = s32;
 using bpos_t = s32;
 
 #else
+#define POS_MIN INT16_MIN
+#define POS_MAX INT16_MAX
 using pos_t = s16;
 using bpos_t = s16;
 #endif

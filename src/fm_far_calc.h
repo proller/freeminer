@@ -24,6 +24,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <optional>
 #include "irr_v3d.h"
 #include "irrlichttypes.h"
+#include "mapblock.h"
 
 struct MapDrawControl;
 

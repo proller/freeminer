@@ -19,6 +19,7 @@
 #include "util/tracy_wrapper.h"
 #include "client/meshgen/collector.h"
 #include "client/renderingengine.h"
+#include "util/numeric.h"
 #include <array>
 #include <algorithm>
 #include <cmath>
@@ -49,16 +50,16 @@ MeshMakeData::MeshMakeData(const NodeDefManager *ndef,
 	assert(m_side_length > 0);
 }
 
-void MeshMakeData::fillBlockDataBegin(const v3s16 &blockpos)
+void MeshMakeData::fillBlockDataBegin(const v3bpos_t &blockpos)
 {
 	m_blockpos = blockpos;
 
-	v3s16 blockpos_nodes = m_blockpos*MAP_BLOCKSIZE;
+	v3pos_t blockpos_nodes = getBlockPosRelative(m_blockpos);
 
 	m_vmanip.clear();
 	// extra 1 block thick layer around the mesh
-	VoxelArea voxel_area(blockpos_nodes - v3s16(1,1,1) * MAP_BLOCKSIZE,
-			blockpos_nodes + v3s16(1,1,1) * (side_length_data + MAP_BLOCKSIZE) - v3s16(1,1,1));
+	VoxelArea voxel_area(blockpos_nodes - v3bpos_t(1,1,1) * MAP_BLOCKSIZE,
+			blockpos_nodes + v3bpos_t(1,1,1) * (side_length_data + MAP_BLOCKSIZE) - v3bpos_t(1,1,1));
 	m_vmanip.addArea(voxel_area);
 }
 
@@ -71,7 +72,7 @@ void MeshMakeData::fillSingleNode(MapNode data, MapNode padding)
 	m_vmanip.clear();
 	// area around 0,0,0 so that this positon has neighbors
 	const s16 sz = 3;
-	m_vmanip.addArea({v3s16(-sz), v3s16(sz)});
+	m_vmanip.addArea({v3pos_t(-sz), v3pos_t(sz)});
 
 	u32 count = m_vmanip.m_area.getVolume();
 	for (u32 i = 0; i < count; i++) {
@@ -82,10 +83,10 @@ void MeshMakeData::fillSingleNode(MapNode data, MapNode padding)
 	m_vmanip.setNodeNoEmerge({0, 0, 0}, data);
 }
 
-void MeshMakeData::setCrack(int crack_level, v3s16 crack_pos)
+void MeshMakeData::setCrack(int crack_level, v3pos_t crack_pos)
 {
 	if (crack_level >= 0)
-		m_crack_pos_relative = crack_pos - m_blockpos*MAP_BLOCKSIZE;
+		m_crack_pos_relative = crack_pos - getBlockPosRelative(m_blockpos);
 }
 
 /*
@@ -155,8 +156,8 @@ u16 getFaceLight(MapNode n, MapNode n2, const NodeDefManager *ndef)
 	Calculate smooth lighting at the XYZ- corner of p.
 	Both light banks
 */
-static u16 getSmoothLightCombined(const v3s16 &p,
-	const std::array<v3s16,8> &dirs, MeshMakeData *data)
+static u16 getSmoothLightCombined(const v3pos_t &p,
+	const std::array<v3pos_t,8> &dirs, MeshMakeData *data)
 {
 	const NodeDefManager *ndef = data->m_nodedef;
 
@@ -264,7 +265,7 @@ static u16 getSmoothLightCombined(const v3s16 &p,
 	Both light banks.
 	Node at p is solid, and thus the lighting is face-dependent.
 */
-u16 getSmoothLightSolid(const v3s16 &p, const v3s16 &face_dir, const v3s16 &corner, MeshMakeData *data)
+u16 getSmoothLightSolid(const v3pos_t &p, const v3pos_t &face_dir, const v3pos_t &corner, MeshMakeData *data)
 {
 	if (data->fscale > 1) {
 		const auto r = getSmoothLightTransparent(
@@ -282,20 +283,20 @@ u16 getSmoothLightSolid(const v3s16 &p, const v3s16 &face_dir, const v3s16 &corn
 	Both light banks.
 	Node at p is not solid, and the lighting is not face-dependent.
 */
-u16 getSmoothLightTransparent(const v3s16 &p, const v3s16 &corner, MeshMakeData *data)
+u16 getSmoothLightTransparent(const v3pos_t &p, const v3pos_t &corner, MeshMakeData *data)
 {
-	const std::array<v3s16,8> dirs = {{
+	const std::array<v3pos_t,8> dirs = {{
 		// Always shine light
-		v3s16(0,0,0),
-		v3s16(corner.X,0,0),
-		v3s16(0,corner.Y,0),
-		v3s16(0,0,corner.Z),
+		v3pos_t(0,0,0),
+		v3pos_t(corner.X,0,0),
+		v3pos_t(0,corner.Y,0),
+		v3pos_t(0,0,corner.Z),
 
 		// Can be obstructed
-		v3s16(corner.X,corner.Y,0),
-		v3s16(corner.X,0,corner.Z),
-		v3s16(0,corner.Y,corner.Z),
-		v3s16(corner.X,corner.Y,corner.Z)
+		v3pos_t(corner.X,corner.Y,0),
+		v3pos_t(corner.X,0,corner.Z),
+		v3pos_t(0,corner.Y,corner.Z),
+		v3pos_t(corner.X,corner.Y,corner.Z)
 	}};
 	return getSmoothLightCombined(p, dirs, data);
 }
@@ -353,7 +354,7 @@ void final_color_blend(video::SColor *result,
 /*
 	Gets nth node tile (0 <= n <= 5).
 */
-void getNodeTileN(MapNode mn, const v3s16 &p, u8 tileindex, MeshMakeData *data, TileSpec &tile)
+void getNodeTileN(MapNode mn, const v3pos_t &p, u8 tileindex, MeshMakeData *data, TileSpec &tile)
 {
 	const NodeDefManager *ndef = data->m_nodedef;
 	const ContentFeatures &f = ndef->get(mn);
@@ -373,7 +374,7 @@ void getNodeTileN(MapNode mn, const v3s16 &p, u8 tileindex, MeshMakeData *data, 
 /*
 	Gets node tile given a face direction.
 */
-void getNodeTile(MapNode mn, const v3s16 &p, const v3s16 &dir, MeshMakeData *data, TileSpec &tile)
+void getNodeTile(MapNode mn, const v3pos_t &p, const v3pos_t &dir, MeshMakeData *data, TileSpec &tile)
 {
 	const NodeDefManager *ndef = data->m_nodedef;
 
@@ -535,7 +536,7 @@ s32 MapBlockBspTree::buildTree(v3f normal, v3f origin, float delta, const std::v
 
 	if (!front_list.empty()) {
 		v3f next_normal = candidate_normal;
-		v3f next_origin = origin + delta * normal;
+		auto next_origin = origin + delta * normal;
 		float next_delta = candidate_delta;
 		if (next_delta < 5) {
 			const MeshTriangle *candidate = findSplitCandidate(front_list, *triangles);
@@ -630,20 +631,20 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data):
 		m = make_irr<scene::SMesh>();
 
 	auto mesh_grid = data->m_mesh_grid;
-	v3s16 bp = data->m_blockpos;
+	auto bp = data->m_blockpos;
 	// Only generate minimap mapblocks at grid aligned coordinates.
 	// FIXME: ^ doesn't really make sense. and in practice, bp is always aligned
 	if (fscale<=1) // || !data->block->getMesh())
 	if (mesh_grid.isMeshPos(bp) && data->m_generate_minimap) {
 		// meshgen area always fits into a grid cell
 		m_minimap_mapblocks.resize(mesh_grid.getCellVolume(), nullptr);
-		v3s16 ofs;
+		v3bpos_t ofs;
 
 		// See also client.cpp for the code that reads the array of minimap blocks.
 		for (ofs.Z = 0; ofs.Z < mesh_grid.cell_size; ofs.Z++)
 		for (ofs.Y = 0; ofs.Y < mesh_grid.cell_size; ofs.Y++)
 		for (ofs.X = 0; ofs.X < mesh_grid.cell_size; ofs.X++) {
-			v3s16 p = (bp + ofs) * MAP_BLOCKSIZE;
+			v3pos_t p = (bp + ofs) * MAP_BLOCKSIZE;
 			if (data->m_vmanip.getNodeNoEx(p).getContent() != CONTENT_IGNORE) {
 				MinimapMapblock *block = new MinimapMapblock;
 				m_minimap_mapblocks[mesh_grid.getOffsetIndex(ofs)] = block;
@@ -653,7 +654,7 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data):
 	}
 
 	// algin vertices to mesh grid, not meshgen area
-	v3f offset = intToFloat((data->m_blockpos - mesh_grid.getMeshPos(data->m_blockpos)) * MAP_BLOCKSIZE, BS);
+	v3f offset = oposToV3f(intToFloat((data->m_blockpos - mesh_grid.getMeshPos(data->m_blockpos)) * MAP_BLOCKSIZE, BS));
 
 	MeshCollector collector(m_bounding_sphere_center, offset);
 
@@ -873,15 +874,15 @@ bool MapBlockMesh::animate(bool faraway, float time, int crack,
 	return true;
 }
 
-void MapBlockMesh::updateTransparentBuffers(v3f camera_pos, v3s16 block_pos,
+void MapBlockMesh::updateTransparentBuffers(v3opos_t camera_pos, v3pos_t block_pos,
 		bool group_by_buffers)
 {
 	// nothing to do if the entire block is opaque
 	if (m_transparent_triangles.empty())
 		return;
 
-	v3f block_posf = intToFloat(block_pos * MAP_BLOCKSIZE, BS);
-	v3f rel_camera_pos = camera_pos - block_posf;
+	v3opos_t block_posf = intToFloat(block_pos * MAP_BLOCKSIZE, (opos_t)BS);
+	v3f rel_camera_pos = oposToV3f(camera_pos - block_posf);
 
 	std::vector<s32> triangle_refs;
 	m_bsp_tree.traverse(rel_camera_pos, triangle_refs);
@@ -1002,7 +1003,7 @@ video::SColor encode_light(u16 light, u8 emissive_light)
 
 u8 get_solid_sides(MeshMakeData *data)
 {
-	v3s16 blockpos_nodes = data->m_blockpos * MAP_BLOCKSIZE;
+	v3pos_t blockpos_nodes = data->m_blockpos * MAP_BLOCKSIZE;
 	const NodeDefManager *ndef = data->m_nodedef;
 
 	const u16 side = data->m_side_length;
@@ -1011,13 +1012,13 @@ u8 get_solid_sides(MeshMakeData *data)
 	u8 result = 0x3F; // all sides solid
 	for (s16 i = 0; i < side && result != 0; i++)
 	for (s16 j = 0; j < side && result != 0; j++) {
-		v3s16 positions[6] = {
-			v3s16(0, i, j),
-			v3s16(side - 1, i, j),
-			v3s16(i, 0, j),
-			v3s16(i, side - 1, j),
-			v3s16(i, j, 0),
-			v3s16(i, j, side - 1)
+		v3pos_t positions[6] = {
+			v3pos_t(0, i, j),
+			v3pos_t(side - 1, i, j),
+			v3pos_t(i, 0, j),
+			v3pos_t(i, side - 1, j),
+			v3pos_t(i, j, 0),
+			v3pos_t(i, j, side - 1)
 		};
 
 		for (u8 k = 0; k < 6; k++) {

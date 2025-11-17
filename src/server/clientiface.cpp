@@ -67,7 +67,7 @@ RemoteClient::RemoteClient() :
 {
 }
 
-void RemoteClient::ResendBlockIfOnWire(v3s16 p)
+void RemoteClient::ResendBlockIfOnWire(v3bpos_t p)
 {
 	// if this block is on wire, mark it for sending again as soon as possible
 	SetBlockNotSent(p);
@@ -123,7 +123,7 @@ int RemoteClient::GetNextBlocks (
 		return 0;
 	}
 
-	v3f playerpos = sao->getBasePosition();
+	auto playerpos = sao->getBasePosition();
 	// if the player is attached, get the velocity from the attached object
 	LuaEntitySAO *lsao = getAttachedObject(sao, env);
 	const v3f &playerspeed = lsao? lsao->getVelocity() : player->getSpeed();
@@ -131,14 +131,14 @@ int RemoteClient::GetNextBlocks (
 	if (playerspeed.getLength() > 1.0f * BS)
 		playerspeeddir = playerspeed / playerspeed.getLength();
 	// Predict to next block
-	v3f playerpos_predicted = playerpos + playerspeeddir * (MAP_BLOCKSIZE * BS);
+	v3opos_t playerpos_predicted = playerpos + v3fToOpos(playerspeeddir) * (MAP_BLOCKSIZE * BS);
 
-	v3s16 center_nodepos = floatToInt(playerpos_predicted, BS);
+	v3pos_t center_nodepos = floatToInt(playerpos_predicted, BS);
 
-	v3s16 center = getNodeBlockPos(center_nodepos);
+	v3bpos_t center = getNodeBlockPos(center_nodepos);
 
 	// Camera position and direction
-	v3f camera_pos = sao->getEyePosition();
+	auto camera_pos = sao->getEyePosition();
 	v3f camera_dir = v3f(0,0,1);
 	camera_dir.rotateYZBy(sao->getLookPitch());
 	camera_dir.rotateXZBy(sao->getRotation().Y);
@@ -239,7 +239,7 @@ int RemoteClient::GetNextBlocks (
 	s32 nearest_sent_d = -1;
 	//bool queue_is_full = false;
 
-	const v3s16 cam_pos_nodes = floatToInt(camera_pos, BS);
+	const v3pos_t cam_pos_nodes = floatToInt(camera_pos, BS);
 
 	s16 d;
 	for (d = d_start; d <= d_max; d++) {
@@ -250,7 +250,7 @@ int RemoteClient::GetNextBlocks (
 		const auto &list = FacePositionCache::getFacePositions(d);
 
 		for (auto li = list.begin(); li != list.end(); ++li) {
-			v3s16 p = *li + center;
+			auto p = *li + center;
 
 			/*
 				Send throttling
@@ -412,7 +412,7 @@ queue_full_break:
 }
 
 /*
-void RemoteClient::GotBlock(v3s16 p)
+void RemoteClient::GotBlock(v3bpos_t p)
 {
 	if (m_blocks_sending.erase(p) > 0) {
 		// only add to sent blocks if it actually was sending
@@ -430,7 +430,7 @@ void RemoteClient::SentBlock(v3bpos_t p, double time)
 }
 
 /*
-void RemoteClient::SentBlock(v3s16 p)
+void RemoteClient::SentBlock(v3bpos_t p)
 {
 	if (!m_blocks_sending.insert(p).second)
 		infostream<<"RemoteClient::SentBlock(): Sent block"
@@ -438,7 +438,7 @@ void RemoteClient::SentBlock(v3s16 p)
 }
 */
 
-void RemoteClient::SetBlockNotSent(v3s16 p, bool low_priority)
+void RemoteClient::SetBlockNotSent(v3bpos_t p, bool low_priority)
 {
 /*
 	++m_nearest_unsent_reset;
@@ -458,17 +458,17 @@ void RemoteClient::SetBlockNotSent(v3s16 p, bool low_priority)
 			// Using m_last_center is OK, as a change in center
 			// will reset m_nearest_unsent_d to 0 anyway (see getNextBlocks).
 			p -= m_last_center;
-			s16 this_d = std::max({std::abs(p.X), std::abs(p.Y), std::abs(p.Z)});
+			bpos_t this_d = std::max({std::abs(p.X), std::abs(p.Y), std::abs(p.Z)});
 			m_nearest_unsent_d = std::min(m_nearest_unsent_d, this_d);
 		}
 	}
 */
 }
 
-void RemoteClient::SetBlocksNotSent(const std::vector<v3s16> &blocks, bool low_priority)
+void RemoteClient::SetBlocksNotSent(const std::vector<v3bpos_t> &blocks, bool low_priority)
 {
 /*
-	for (v3s16 p : blocks) {
+	for (v3bpos_t p : blocks) {
 		SetBlockNotSent(p, low_priority);
 	}
 */
@@ -698,7 +698,7 @@ std::vector<session_t> ClientInterface::getClientIDs(ClientState min_state)
 	return reply;
 }
 
-void ClientInterface::markBlocksNotSent(const std::vector<v3s16> &positions, bool low_priority)
+void ClientInterface::markBlocksNotSent(const std::vector<v3bpos_t> &positions, bool low_priority)
 {
 	//RecursiveMutexAutoLock clientslock(m_clients_mutex);
 	for (const auto &client : m_clients) {

@@ -7,6 +7,7 @@
 #include "irrlichttypes.h"
 
 extern const u16 LATEST_PROTOCOL_VERSION;
+extern const u16 PROTOCOL_VERSION_32BIT;
 
 // Server's supported network protocol range
 constexpr u16 SERVER_PROTOCOL_VERSION_MIN = 37;
@@ -83,7 +84,7 @@ enum ToClientCommand : u16
 
 	TOCLIENT_ADDNODE = 0x21,
 	/*
-		v3s16 position
+		v3pos_t position
 		serialized mapnode
 		u8 keep_metadata
 	*/
@@ -769,8 +770,8 @@ enum ToServerCommand : u16
 	/*
 		[0] u16 command
 		[2] u8 count
-		[3] v3s16 pos_0
-		[3+6] v3s16 pos_1
+		[3] v3pos_t pos_0
+		[3+6] v3pos_t pos_1
 		...
 	*/
 
@@ -778,8 +779,8 @@ enum ToServerCommand : u16
 	/*
 		[0] u16 command
 		[2] u8 count
-		[3] v3s16 pos_0
-		[3+6] v3s16 pos_1
+		[3] v3pos_t pos_0
+		[3+6] v3pos_t pos_1
 		...
 	*/
 
@@ -832,7 +833,7 @@ enum ToServerCommand : u16
 
 	TOSERVER_NODEMETA_FIELDS = 0x3b,
 	/*
-		v3s16 p
+		v3pos_t p
 		u16 len
 		u8[len] form name (reserved for future use)
 		u16 number of fields

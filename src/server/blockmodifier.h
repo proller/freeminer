@@ -49,14 +49,14 @@ public:
 	// Whether to modify chance to simulate time lost by an unnattended block
 	virtual bool getSimpleCatchUp() = 0;
 	// get min Y for apply abm
-	virtual s16 getMinY() = 0;
+	virtual pos_t getMinY() = 0;
 	// get max Y for apply abm
-	virtual s16 getMaxY() = 0;
+	virtual pos_t getMaxY() = 0;
 	// This is called usually at interval for 1/chance of the nodes
 /*	
 	virtual void trigger(ServerEnvironment *env, v3s16 p, MapNode n){};
 */	
-	virtual void trigger(ServerEnvironment *env, v3s16 p, MapNode n,
+	virtual void trigger(ServerEnvironment *env, v3pos_t p, MapNode n,
 		u32 active_object_count, u32 active_object_count_wider
 		, v3pos_t neighbor_pos = {}, uint8_t activate = 0
 		){};
@@ -149,7 +149,7 @@ struct LoadingBlockModifierDef
 	/// @param positions set of node positions (block-relative!)
 	/// @param dtime_s game time since last deactivation
 	virtual void trigger(ServerEnvironment *env, MapBlock *block,
-		const std::unordered_set<v3s16> &positions, float dtime_s) {};
+		const std::unordered_set<v3pos_t> &positions, float dtime_s) {};
 };
 
 class LBMContentMapping

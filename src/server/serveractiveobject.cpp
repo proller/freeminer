@@ -6,11 +6,12 @@
 #include "inventory.h"
 #include "inventorymanager.h"
 #include "constants.h" // BS
+#include "irr_v3d.h"
 #include "serverenvironment.h"
 
 Queue<ActiveObjectMessage> dummy_queue;
 
-ServerActiveObject::ServerActiveObject(ServerEnvironment *env, v3f pos):
+ServerActiveObject::ServerActiveObject(ServerEnvironment *env, v3opos_t pos):
 
 // fm:
 	m_uptime_last(0),
@@ -23,7 +24,7 @@ ServerActiveObject::ServerActiveObject(ServerEnvironment *env, v3f pos):
 {
 }
 
-void ServerActiveObject::setBasePosition(v3f pos)
+void ServerActiveObject::setBasePosition(v3opos_t pos)
 {
     bool changed{};
 	{

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include "networkprotocol.h"
+#include "config.h"
 
 
 /*
@@ -73,8 +74,17 @@
 		[scheduled bump for 5.14.0]
 */
 
+// First version with 32bit support
+const u16 PROTOCOL_VERSION_32BIT = 147; // change to actual LATEST_PROTOCOL_VERSION+1 in future
+
+#if USE_POS32
+const u16 LATEST_PROTOCOL_VERSION = 148;
+#else
+
 // Note: Also update core.protocol_versions in builtin when bumping
 const u16 LATEST_PROTOCOL_VERSION = 50;
+
+#endif
 
 // See also formspec [Version History] in doc/lua_api.md
 const u16 FORMSPEC_API_VERSION = 10;

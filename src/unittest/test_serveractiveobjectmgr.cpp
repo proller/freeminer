@@ -40,7 +40,7 @@ public:
 		saomgr.removeObject(id);
 	}
 
-	void updateObjectPos(u16 id, const v3f &pos)
+	void updateObjectPos(u16 id, const v3opos_t &pos)
 	{
 		auto obj = saomgr.getActiveObject(id);
 		REQUIRE(obj != nullptr);
@@ -83,7 +83,7 @@ public:
 		return ids[index(random)];
 	}
 
-	void getObjectsInsideRadiusNaive(const v3f &pos, float radius,
+	void getObjectsInsideRadiusNaive(const v3opos_t &pos, float radius,
 			std::vector<ServerActiveObjectPtr> &result)
 	{
 		for (const auto &[id, obj] : saomgr.m_active_objects.iter()) {
@@ -93,7 +93,7 @@ public:
 		}
 	}
 
-	void getObjectsInAreaNaive(const aabb3f &box,
+	void getObjectsInAreaNaive(const aabb3o &box,
 			std::vector<ServerActiveObjectPtr> &result)
 	{
 		for (const auto &[id, obj] : saomgr.m_active_objects.iter()) {
@@ -131,7 +131,7 @@ public:
 		assert(missing.empty());
 	}
 
-	void compareObjectsInsideRadius(const v3f &pos, float radius)
+	void compareObjectsInsideRadius(const v3opos_t &pos, float radius)
 	{
 		std::vector<ServerActiveObjectPtr> actual, expected;
 		saomgr.getObjectsInsideRadius(pos, radius, actual, nullptr);
@@ -139,7 +139,7 @@ public:
 		compareObjects(actual, expected);
 	}
 
-	void compareObjectsInArea(const aabb3f &box)
+	void compareObjectsInArea(const aabb3o &box)
 	{
 		std::vector<ServerActiveObjectPtr> actual, expected;
 		saomgr.getObjectsInArea(box, actual, nullptr);
@@ -215,12 +215,12 @@ SECTION("remove object") {
 
 SECTION("get objects inside radius") {
 	server::ActiveObjectMgr saomgr;
-	static const v3f sao_pos[] = {
-			v3f(10, 40, 10),
-			v3f(740, 100, -304),
-			v3f(-200, 100, -304),
-			v3f(740, -740, -304),
-			v3f(1500, -740, -304),
+	static const v3opos_t sao_pos[] = {
+			v3opos_t(10, 40, 10),
+			v3opos_t(740, 100, -304),
+			v3opos_t(-200, 100, -304),
+			v3opos_t(740, -740, -304),
+			v3opos_t(1500, -740, -304),
 	};
 
 	for (const auto &p : sao_pos) {
@@ -228,15 +228,15 @@ SECTION("get objects inside radius") {
 	}
 
 	std::vector<ServerActiveObjectPtr> result;
-	saomgr.getObjectsInsideRadius(v3f(), 50, result, nullptr);
+	saomgr.getObjectsInsideRadius(v3opos_t(), 50, result, nullptr);
 	CHECK(result.size() == 1);
 
 	result.clear();
-	saomgr.getObjectsInsideRadius(v3f(), 750, result, nullptr);
+	saomgr.getObjectsInsideRadius(v3opos_t(), 750, result, nullptr);
 	CHECK(result.size() == 2);
 
 	result.clear();
-	saomgr.getObjectsInsideRadius(v3f(), 750000, result, nullptr);
+	saomgr.getObjectsInsideRadius(v3opos_t(), 750000, result, nullptr);
 	CHECK(result.size() == 5);
 
 	result.clear();
@@ -244,7 +244,7 @@ SECTION("get objects inside radius") {
 		return (obj->getBasePosition().X != 10);
 	};
 
-	saomgr.getObjectsInsideRadius(v3f(), 750000, result, include_obj_cb);
+	saomgr.getObjectsInsideRadius(v3opos_t(), 750000, result, include_obj_cb);
 	CHECK(result.size() == 4);
 
 	saomgr.clear();
@@ -252,12 +252,12 @@ SECTION("get objects inside radius") {
 
 SECTION("get added active objects around pos") {
 	server::ActiveObjectMgr saomgr;
-	static const v3f sao_pos[] = {
-			v3f(10, 40, 10),
-			v3f(740, 100, -304),
-			v3f(-200, 100, -304),
-			v3f(740, -740, -304),
-			v3f(1500, -740, -304),
+	static const v3opos_t sao_pos[] = {
+			v3opos_t(10, 40, 10),
+			v3opos_t(740, 100, -304),
+			v3opos_t(-200, 100, -304),
+			v3opos_t(740, -740, -304),
+			v3opos_t(1500, -740, -304),
 	};
 
 	for (const auto &p : sao_pos) {
@@ -266,12 +266,12 @@ SECTION("get added active objects around pos") {
 
 	std::vector<u16> result;
 	std::set<u16> cur_objects;
-	saomgr.getAddedActiveObjectsAroundPos(v3f(), "singleplayer", 100, 50, cur_objects, result);
+	saomgr.getAddedActiveObjectsAroundPos(v3opos_t(), "singleplayer", 100, 50, cur_objects, result);
 	CHECK(result.size() == 1);
 
 	result.clear();
 	cur_objects.clear();
-	saomgr.getAddedActiveObjectsAroundPos(v3f(), "singleplayer", 740, 50, cur_objects, result);
+	saomgr.getAddedActiveObjectsAroundPos(v3opos_t(), "singleplayer", 740, 50, cur_objects, result);
 	CHECK(result.size() == 2);
 
 	saomgr.clear();
@@ -282,7 +282,7 @@ SECTION("spatial index") {
 	std::mt19937 gen(0xABCDEF);
 	std::uniform_int_distribution<s32> coordinate(-1000, 1000);
 	const auto random_pos = [&]() {
-		return v3f(coordinate(gen), coordinate(gen), coordinate(gen));
+		return v3opos_t(coordinate(gen), coordinate(gen), coordinate(gen));
 	};
 
 	std::uniform_int_distribution<u32> percent(0, 99);
@@ -303,7 +303,7 @@ SECTION("spatial index") {
 		std::uniform_real_distribution<f32> radius(0, 100);
 		saomgr.compareObjectsInsideRadius(random_pos(), radius(gen));
 
-		aabb3f box(random_pos(), random_pos());
+		aabb3o box(random_pos(), random_pos());
 		box.repair();
 		saomgr.compareObjectsInArea(box);
 	};

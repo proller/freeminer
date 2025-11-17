@@ -429,7 +429,7 @@ local function create_world_buttonhandler(this, fields)
 			}
 
 -- fm:
-			if fields["mg_preset"] then
+			if fields["mg_preset"] and mg_preset[settings.mg_name][fields["mg_preset"]] then
 				for opt, val in pairs(mg_preset[settings.mg_name][fields["mg_preset"]]) do
 					settings[opt] = val;
 				end

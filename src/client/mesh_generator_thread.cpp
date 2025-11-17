@@ -6,6 +6,7 @@
 #include "client/clientmap.h"
 #include "fm_far_calc.h"
 #include "client/mapblock_mesh.h"
+#include "irr_v3d.h"
 #include "settings.h"
 #include "profiler.h"
 #include "client.h"
@@ -31,7 +32,7 @@ void QueuedMeshUpdate::retrieveBlocks(Map *map, u16 cell_size)
 	else
 		assert(map_blocks.size() == total); // must not change
 	size_t i = 0;
-	v3s16 pos;
+	v3bpos_t pos;
 	// order is not important, but it must be consistent
 	// note the extra margin!
 	for (pos.X = p.X - 1; pos.X <= p.X + cell_size; pos.X++)
@@ -51,7 +52,7 @@ void QueuedMeshUpdate::retrieveBlocks(Map *map, u16 cell_size)
 bool QueuedMeshUpdate::checkSkip(u16 cell_size)
 {
 	bool all_air = true;
-	const v3s16 p_max = p + v3s16(cell_size);
+	const v3bpos_t p_max = p + v3bpos_t(cell_size);
 	assert(!map_blocks.empty());
 	for (const auto &block : map_blocks) {
 		// ignore extra margin
@@ -105,7 +106,7 @@ MeshUpdateQueue::~MeshUpdateQueue()
 	}
 }
 
-bool MeshUpdateQueue::addBlock(Map *map, v3s16 p, bool ack_block_to_server,
+bool MeshUpdateQueue::addBlock(Map *map, v3bpos_t p, bool ack_block_to_server,
 	bool urgent, bool from_neighbor)
 {
 	// If block that causes update does not exist, skip.
@@ -116,7 +117,7 @@ bool MeshUpdateQueue::addBlock(Map *map, v3s16 p, bool ack_block_to_server,
 
 	// Mesh is placed at the corner block of a chunk
 	// (where all coordinate are divisible by the chunk size)
-	const v3s16 mesh_position = mesh_grid.getMeshPos(p);
+	const auto mesh_position = mesh_grid.getMeshPos(p);
 
 	MutexAutoLock lock(m_mutex);
 
@@ -202,7 +203,7 @@ QueuedMeshUpdate *MeshUpdateQueue::pop()
 	return result;
 }
 
-void MeshUpdateQueue::done(v3s16 pos)
+void MeshUpdateQueue::done(v3bpos_t pos)
 {
 	MutexAutoLock lock(m_mutex);
 	m_inflight_blocks.erase(pos);
@@ -319,7 +320,7 @@ MeshUpdateManager::MeshUpdateManager(Client *client):
 	m_workers.push_back(std::make_unique<MeshUpdateWorkerThread>(client, &m_queue_in_urgent, this));
 }
 
-void MeshUpdateManager::updateBlock(Map *map, v3s16 p, bool ack_block_to_server,
+void MeshUpdateManager::updateBlock(Map *map, v3bpos_t p, bool ack_block_to_server,
 		bool urgent, bool update_neighbors)
 {
 	if (static thread_local const bool headless_optimize =
@@ -338,10 +339,10 @@ void MeshUpdateManager::updateBlock(Map *map, v3s16 p, bool ack_block_to_server,
 	}
 	if (update_neighbors) {
 		if (many_neighbors) {
-			for (v3s16 dp : g_26dirs)
+			for (auto &dp : g_26dirs)
 				m_queue_in.addBlock(map, p + dp, false, urgent, true);
 		} else {
-			for (v3s16 dp : g_6dirs)
+			for (auto &dp : g_6dirs)
 				m_queue_in.addBlock(map, p + dp, false, urgent, true);
 		}
 	}

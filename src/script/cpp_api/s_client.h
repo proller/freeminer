@@ -36,8 +36,8 @@ public:
 	void on_hp_modification(int32_t newhp);
 	void environment_step(float dtime);
 
-	bool on_dignode(v3s16 p, MapNode node);
-	bool on_punchnode(v3s16 p, MapNode node);
+	bool on_dignode(v3pos_t p, MapNode node);
+	bool on_punchnode(v3pos_t p, MapNode node);
 	bool on_placenode(const PointedThing &pointed, const ItemDefinition &item);
 	bool on_item_use(const ItemStack &item, const PointedThing &pointed);
 

@@ -4,6 +4,7 @@
 
 #include "settings.h"
 #include "convert_json.h"
+#include "irr_v3d.h"
 #include "irrlichttypes_bloated.h"
 #include "exceptions.h"
 #include "threading/mutex_auto_lock.h"
@@ -855,6 +856,18 @@ bool Settings::getV3FNoEx(const std::string &name, std::optional<v3f> &val) cons
 	}
 }
 
+#if USE_OPOS64
+bool Settings::getV3FNoEx(const std::string &name, std::optional<v3opos_t> &val) const
+{
+	try {
+		// TODO: Read all float settings via double
+		val = v3fToOpos(*getV3F(name));
+		return true;
+	} catch (SettingNotFoundException &e) {
+		return false;
+	}
+}
+#endif
 
 bool Settings::getFlagStrNoEx(const std::string &name, u32 &val,
 	const FlagDesc *flagdesc) const

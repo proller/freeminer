@@ -24,7 +24,7 @@ class BiomeManager;
 
 typedef u16 biome_t;
 
-constexpr v3s16 MAX_MAP_GENERATION_LIMIT_V3(
+constexpr v3pos_t MAX_MAP_GENERATION_LIMIT_V3(
 	MAX_MAP_GENERATION_LIMIT,
 	MAX_MAP_GENERATION_LIMIT,
 	MAX_MAP_GENERATION_LIMIT
@@ -55,16 +55,16 @@ public:
 		c_dungeon_alt   = CONTENT_IGNORE,
 		c_dungeon_stair = CONTENT_IGNORE;
 
-	s16 depth_top       = 0;
-	s16 depth_filler    = -MAX_MAP_GENERATION_LIMIT;
-	s16 depth_water_top = 0;
-	s16 depth_riverbed  = 0;
+	pos_t depth_top       = 0;
+	pos_t depth_filler    = -MAX_MAP_GENERATION_LIMIT;
+	pos_t depth_water_top = 0;
+	pos_t depth_riverbed  = 0;
 
-	v3s16 min_pos = -MAX_MAP_GENERATION_LIMIT_V3;
-	v3s16 max_pos =  MAX_MAP_GENERATION_LIMIT_V3;
+	v3pos_t min_pos = -MAX_MAP_GENERATION_LIMIT_V3;
+	v3pos_t max_pos =  MAX_MAP_GENERATION_LIMIT_V3;
 	float heat_point     = 0.0f;
 	float humidity_point = 0.0f;
-	s16 vertical_blend = 0;
+	pos_t vertical_blend = 0;
 	float weight = 1.0f;
 
 	//freeminer:
@@ -102,7 +102,7 @@ public:
 	virtual BiomeGen *clone(BiomeManager *biomemgr) const = 0;
 
 	// Check that the internal chunk size is what the mapgen expects, just to be sure.
-	inline void assertChunkSize(v3s16 expect) const
+	inline void assertChunkSize(v3pos_t expect) const
 	{
 		FATAL_ERROR_IF(m_csize != expect, "Chunk size mismatches");
 	}
@@ -110,28 +110,28 @@ public:
 	// Calculates the biome at the exact position provided.  This function can
 	// be called at any time, but may be less efficient than the latter methods,
 	// depending on implementation.
-	virtual Biome *calcBiomeAtPoint(v3s16 pos) const = 0;
+	virtual Biome *calcBiomeAtPoint(v3pos_t pos) const = 0;
 
 	// Computes any intermediate results needed for biome generation.  Must be
 	// called before using any of: getBiomes, getBiomeAtPoint, or getBiomeAtIndex.
 	// Calling this invalidates the previous results stored in biomemap.
-	virtual void calcBiomeNoise(v3s16 pmin) = 0;
+	virtual void calcBiomeNoise(v3pos_t pmin) = 0;
 
 	// Gets all biomes in current chunk using each corresponding element of
 	// heightmap as the y position, then stores the results by biome index in
 	// biomemap (also returned)
-	virtual biome_t *getBiomes(s16 *heightmap, v3s16 pmin) = 0;
+	virtual biome_t *getBiomes(pos_t *heightmap, v3pos_t pmin) = 0;
 
 	// Gets a single biome at the specified position, which must be contained
 	// in the region formed by m_pmin and (m_pmin + m_csize - 1).
-	virtual Biome *getBiomeAtPoint(v3s16 pos) const = 0;
+	virtual Biome *getBiomeAtPoint(v3pos_t pos) const = 0;
 
 	// Same as above, but uses a raw numeric index correlating to the (x,z) position.
-	virtual Biome *getBiomeAtIndex(size_t index, v3s16 pos) const = 0;
+	virtual Biome *getBiomeAtIndex(size_t index, v3pos_t pos) const = 0;
 
 	// Returns the next lower y position at which the biome could change.
 	// You can use this to optimize calls to getBiomeAtIndex().
-	virtual s16 getNextTransitionY(s16 y) const {
+	virtual pos_t getNextTransitionY(pos_t y) const {
 		return y == S16_MIN ? y : (y - 1);
 	};
 
@@ -140,8 +140,8 @@ public:
 
 protected:
 	BiomeManager *m_bmgr = nullptr;
-	v3s16 m_pmin;
-	v3s16 m_csize;
+	v3pos_t m_pmin;
+	v3pos_t m_csize;
 };
 
 
@@ -174,7 +174,7 @@ struct BiomeParamsOriginal : public BiomeParams {
 class BiomeGenOriginal final : public BiomeGen {
 public:
 	BiomeGenOriginal(BiomeManager *biomemgr,
-		const BiomeParamsOriginal *params, v3s16 chunksize);
+		const BiomeParamsOriginal *params, v3pos_t chunksize);
 	virtual ~BiomeGenOriginal();
 
 	BiomeGenType getType() const { return BIOMEGEN_ORIGINAL; }
@@ -182,18 +182,18 @@ public:
 	BiomeGen *clone(BiomeManager *biomemgr) const;
 
 	// Slower, meant for Script API use
-	float calcHeatAtPoint(v3s16 pos) const;
-	float calcHumidityAtPoint(v3s16 pos) const;
-	Biome *calcBiomeAtPoint(v3s16 pos) const;
+	float calcHeatAtPoint(v3pos_t pos) const;
+	float calcHumidityAtPoint(v3pos_t pos) const;
+	Biome *calcBiomeAtPoint(v3pos_t pos) const;
 
-	void calcBiomeNoise(v3s16 pmin);
+	void calcBiomeNoise(v3pos_t pmin);
 
-	biome_t *getBiomes(s16 *heightmap, v3s16 pmin);
-	Biome *getBiomeAtPoint(v3s16 pos) const;
-	Biome *getBiomeAtIndex(size_t index, v3s16 pos) const;
+	biome_t *getBiomes(pos_t *heightmap, v3pos_t pmin);
+	Biome *getBiomeAtPoint(v3pos_t pos) const;
+	Biome *getBiomeAtIndex(size_t index, v3pos_t pos) const;
 
-	Biome *calcBiomeFromNoise(float heat, float humidity, v3s16 pos) const;
-	s16 getNextTransitionY(s16 y) const;
+	Biome *calcBiomeFromNoise(float heat, float humidity, v3pos_t pos) const;
+	pos_t getNextTransitionY(pos_t y) const;
 
 	float *heatmap;
 	float *humidmap;
@@ -208,7 +208,7 @@ private:
 
 	/// Y values at which biomes may transition.
 	/// This array may only be used for downwards scanning!
-	std::vector<s16> m_transitions_y;
+	std::vector<pos_t> m_transitions_y;
 };
 
 
@@ -251,7 +251,7 @@ public:
 	weather::humidity_t calcBlockHumidity(const v3pos_t &p, uint64_t seed, float timeofday, float totaltime, bool use_weather = 1);
 	//====
 
-	BiomeGen *createBiomeGen(BiomeGenType type, BiomeParams *params, v3s16 chunksize)
+	BiomeGen *createBiomeGen(BiomeGenType type, BiomeParams *params, v3pos_t chunksize)
 	{
 		switch (type) {
 		case BIOMEGEN_ORIGINAL:

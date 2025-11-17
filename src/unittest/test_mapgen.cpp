@@ -79,7 +79,7 @@ void TestMapgen::testBiomeGen(IGameDef *gamedef)
 
 	std::unique_ptr<BiomeParams> params(BiomeManager::createBiomeParams(BIOMEGEN_ORIGINAL));
 
-	constexpr v3s16 CSIZE(16, 16, 16); // misleading name. measured in nodes.
+	constexpr v3pos_t CSIZE(16, 16, 16); // misleading name. measured in nodes.
 	std::unique_ptr<BiomeGen> biomegen(
 		bmgr.createBiomeGen(BIOMEGEN_ORIGINAL, params.get(), CSIZE)
 	);
@@ -89,9 +89,9 @@ void TestMapgen::testBiomeGen(IGameDef *gamedef)
 		//   getBiomeAtIndex (Y only)
 		//   getNextTransitionY
 		const struct {
-			s16 check_y;
+			pos_t check_y;
 			const char *name;
-			s16 next_y;
+			pos_t next_y;
 		} expected_biomes[] = {
 			{ MAX_MAP_GENERATION_LIMIT, "deciduous_forest", 0 },
 			{ 1, "deciduous_forest", 0 },
@@ -101,9 +101,9 @@ void TestMapgen::testBiomeGen(IGameDef *gamedef)
 		for (const auto expected : expected_biomes) {
 			Biome *biome = biomegen->getBiomeAtIndex(
 				(1 * CSIZE.X) + 1, // index in CSIZE 2D noise map
-				v3s16(2000, expected.check_y, -1000) // absolute coordinates
+				v3pos_t(2000, expected.check_y, -1000) // absolute coordinates
 			);
-			s16 next_y = biomegen->getNextTransitionY(expected.check_y);
+			auto next_y = biomegen->getNextTransitionY(expected.check_y);
 
 			//UASSERTEQ(auto, biome->name, expected.name);
 			//UASSERTEQ(auto, next_y, expected.next_y);

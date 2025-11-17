@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 
+#include "irr_v3d.h"
 #include "irrlichttypes_bloated.h"
 
 extern "C" {
@@ -46,8 +47,8 @@ bool getintfield(lua_State *L, int table, const char *fieldname, T &result)
 }
 
 // Retrieve an v3s16 where all components are optional (falls back to default)
-v3s16 getv3s16field_default(lua_State *L, int table,
-		const char *fieldname, v3s16 default_);
+v3pos_t getv3s16field_default(lua_State *L, int table,
+		const char *fieldname, v3pos_t default_);
 
 bool getstringfield(lua_State *L, int table,
 		const char *fieldname, std::string &result);
@@ -116,7 +117,9 @@ void push_v3s16(lua_State *L, v3s16 p);
 void push_aabb3f(lua_State *L, aabb3f box, f32 divisor = 1.0f);
 void push_ARGB8(lua_State *L, video::SColor color);
 void pushFloatPos(lua_State *L, v3f p);
+void pushFloatPos(lua_State *L, v3d p);
 void push_v3f(lua_State *L, v3f p);
+void push_v3f(lua_State *L, v3d p);
 void push_v2f(lua_State *L, v2f p);
 void push_aabb3f_vector(lua_State *L, const std::vector<aabb3f> &boxes,
 		f32 divisor = 1.0f);
@@ -126,7 +129,7 @@ size_t write_array_slice_float(lua_State *L, int table_index, float *data,
 
 // This must match the implementation in builtin/game/misc_s.lua
 // Note that this returns a floating point result as Lua integers are 32-bit
-inline lua_Number hash_node_position(v3s16 pos)
+inline lua_Number hash_node_position(v3pos_t pos)
 {
 	return (((s64)pos.Z + 0x8000L) << 32)
 			| (((s64)pos.Y + 0x8000L) << 16)

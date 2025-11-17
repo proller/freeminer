@@ -122,7 +122,7 @@ void BiomeParamsOriginal::writeParams(Settings *settings) const
 ////////////////////////////////////////////////////////////////////////////////
 
 BiomeGenOriginal::BiomeGenOriginal(BiomeManager *biomemgr,
-	const BiomeParamsOriginal *params, v3s16 chunksize)
+	const BiomeParamsOriginal *params, v3pos_t chunksize)
 {
 	m_bmgr   = biomemgr;
 	m_params = params;
@@ -147,7 +147,7 @@ BiomeGenOriginal::BiomeGenOriginal(BiomeManager *biomemgr,
 	memset(biomemap, 0, sizeof(biome_t) * m_csize.X * m_csize.Z);
 
 	// Calculate cache of Y transition points
-	std::vector<s16> values;
+	std::vector<pos_t> values;
 	values.reserve(m_bmgr->getNumObjects() * 2);
 	for (size_t i = 0; i < m_bmgr->getNumObjects(); i++) {
 		Biome *b = (Biome *)m_bmgr->getRaw(i);
@@ -174,7 +174,7 @@ BiomeGenOriginal::~BiomeGenOriginal()
 	delete noise_humidity_blend;
 }
 
-s16 BiomeGenOriginal::getNextTransitionY(s16 y) const
+pos_t BiomeGenOriginal::getNextTransitionY(pos_t y) const
 {
 	// Find first value that is less than y using binary search
 	auto it = std::lower_bound(m_transitions_y.begin(), m_transitions_y.end(), y, std::greater_equal<>());
@@ -186,25 +186,25 @@ BiomeGen *BiomeGenOriginal::clone(BiomeManager *biomemgr) const
 	return new BiomeGenOriginal(biomemgr, m_params, m_csize);
 }
 
-float BiomeGenOriginal::calcHeatAtPoint(v3s16 pos) const
+float BiomeGenOriginal::calcHeatAtPoint(v3pos_t pos) const
 {
 	return NoiseFractal2D(&m_params->np_heat, pos.X, pos.Z, m_params->seed) +
 		NoiseFractal2D(&m_params->np_heat_blend, pos.X, pos.Z, m_params->seed);
 }
 
-float BiomeGenOriginal::calcHumidityAtPoint(v3s16 pos) const
+float BiomeGenOriginal::calcHumidityAtPoint(v3pos_t pos) const
 {
 	return NoiseFractal2D(&m_params->np_humidity, pos.X, pos.Z, m_params->seed) +
 		NoiseFractal2D(&m_params->np_humidity_blend, pos.X, pos.Z, m_params->seed);
 }
 
-Biome *BiomeGenOriginal::calcBiomeAtPoint(v3s16 pos) const
+Biome *BiomeGenOriginal::calcBiomeAtPoint(v3pos_t pos) const
 {
 	return calcBiomeFromNoise(calcHeatAtPoint(pos), calcHumidityAtPoint(pos), pos);
 }
 
 
-void BiomeGenOriginal::calcBiomeNoise(v3s16 pmin)
+void BiomeGenOriginal::calcBiomeNoise(v3pos_t pmin)
 {
 	m_pmin = pmin;
 
@@ -220,7 +220,7 @@ void BiomeGenOriginal::calcBiomeNoise(v3s16 pmin)
 }
 
 
-biome_t *BiomeGenOriginal::getBiomes(s16 *heightmap, v3s16 pmin)
+biome_t *BiomeGenOriginal::getBiomes(pos_t *heightmap, v3pos_t pmin)
 {
 	for (s16 zr = 0; zr < m_csize.Z; zr++)
 	for (s16 xr = 0; xr < m_csize.X; xr++) {
@@ -228,7 +228,7 @@ biome_t *BiomeGenOriginal::getBiomes(s16 *heightmap, v3s16 pmin)
 		Biome *biome = calcBiomeFromNoise(
 			noise_heat->result[i],
 			noise_humidity->result[i],
-			v3s16(pmin.X + xr, heightmap[i], pmin.Z + zr));
+			v3pos_t(pmin.X + xr, heightmap[i], pmin.Z + zr));
 
 		biomemap[i] = biome->index;
 	}
@@ -237,7 +237,7 @@ biome_t *BiomeGenOriginal::getBiomes(s16 *heightmap, v3s16 pmin)
 }
 
 
-Biome *BiomeGenOriginal::getBiomeAtPoint(v3s16 pos) const
+Biome *BiomeGenOriginal::getBiomeAtPoint(v3pos_t pos) const
 {
 	return getBiomeAtIndex(
 		(pos.Z - m_pmin.Z) * m_csize.X + (pos.X - m_pmin.X),
@@ -245,7 +245,7 @@ Biome *BiomeGenOriginal::getBiomeAtPoint(v3s16 pos) const
 }
 
 
-Biome *BiomeGenOriginal::getBiomeAtIndex(size_t index, v3s16 pos) const
+Biome *BiomeGenOriginal::getBiomeAtIndex(size_t index, v3pos_t pos) const
 {
 	return calcBiomeFromNoise(
 		noise_heat->result[index],
@@ -254,7 +254,7 @@ Biome *BiomeGenOriginal::getBiomeAtIndex(size_t index, v3s16 pos) const
 }
 
 
-Biome *BiomeGenOriginal::calcBiomeFromNoise(float heat, float humidity, v3s16 pos) const
+Biome *BiomeGenOriginal::calcBiomeFromNoise(float heat, float humidity, v3pos_t pos) const
 {
 	Biome *biome_closest = nullptr;
 	Biome *biome_closest_blend = nullptr;

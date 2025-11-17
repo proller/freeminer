@@ -1437,7 +1437,7 @@ static bool migrate_map_database(const GameParams &game_params, const Settings &
 	u64 last_update_time = 0;
 	volatile auto &kill = *porting::signal_handler_killstatus();
 
-	std::vector<v3s16> blocks;
+	std::vector<v3bpos_t> blocks;
 	old_db->listAllLoadableBlocks(blocks);
 	new_db->beginSave();
 	for (auto it = blocks.begin(); it != blocks.end(); ++it) {
@@ -1506,7 +1506,7 @@ static bool recompress_map_database(const GameParams &game_params, const Setting
 	const s16 map_compression_level = rangelim(g_settings->getS16("map_compression_level_disk"), -1, 9);
 
 	// This is ok because the server doesn't actually run
-	std::vector<v3s16> blocks;
+	std::vector<v3bpos_t> blocks;
 	db->listAllLoadableBlocks(blocks);
 	db->beginSave();
 	std::istringstream iss(std::ios_base::binary);
@@ -1525,7 +1525,7 @@ static bool recompress_map_database(const GameParams &game_params, const Setting
 		iss.clear();
 
 		{
-			MapBlock mb(v3s16(0,0,0), &server);
+			MapBlock mb(v3bpos_t(0,0,0), &server);
 			ServerMap::deSerializeBlock(&mb, iss);
 
 			oss.str("");

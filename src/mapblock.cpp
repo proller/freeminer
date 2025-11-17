@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <sstream>
+#include "irr_v3d.h"
 #include "map.h"
 #include "light.h"
 #include "nodedef.h"
@@ -266,7 +267,7 @@ enum
 	MapBlock
 */
 
-MapBlock::MapBlock(v3s16 pos, IGameDef *gamedef):
+MapBlock::MapBlock(v3bpos_t pos, IGameDef *gamedef):
 		m_pos(pos),
 		m_pos_relative(pos * MAP_BLOCKSIZE),
 		m_gamedef(gamedef),
@@ -352,12 +353,12 @@ bool MapBlock::saveStaticObject(u16 id, const StaticObject &obj, u32 reason)
 	return true;
 }
 
-void MapBlock::step(float dtime, const std::function<bool(v3s16, MapNode, NodeTimer)> &on_timer_cb)
+void MapBlock::step(float dtime, const std::function<bool(v3pos_t, MapNode, NodeTimer)> &on_timer_cb)
 {
 	// Run callbacks for elapsed node_timers
 	std::vector<NodeTimer> elapsed_timers = m_node_timers.step(dtime);
 	MapNode n;
-	v3s16 p;
+	v3pos_t p;
 	for (const auto &it : elapsed_timers) {
 		n = getNodeNoEx(it.position);
 		p = it.position + getPosRelative();
@@ -396,23 +397,23 @@ std::string MapBlock::getModifiedReasonString()
 void MapBlock::copyTo(NodeContainer &dst)
 {
 	const auto lock = lock_shared_rec();
-	v3s16 data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
-	VoxelArea data_area(v3s16(0,0,0), data_size - v3s16(1,1,1));
+	v3pos_t data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
+	VoxelArea data_area(v3pos_t(0,0,0), data_size - v3pos_t(1,1,1));
 
 	// Copy from data to VoxelManipulator
-	dst.copyFrom(data, m_is_mono_block, data_area, v3s16(0,0,0),
+	dst.copyFrom(data, m_is_mono_block, data_area, v3pos_t(0,0,0),
 			getPosRelative(), data_size);
 }
 
 void MapBlock::copyFrom(const VoxelManipulator &src)
 {
 	const auto lock = lock_unique_rec();
-	v3s16 data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
-	VoxelArea data_area(v3s16(0,0,0), data_size - v3s16(1,1,1));
+	v3pos_t data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
+	VoxelArea data_area(v3pos_t(0,0,0), data_size - v3pos_t(1,1,1));
 
 	expandNodesIfNeeded();
 	// Copy from VoxelManipulator to data
-	src.copyTo(data, data_area, v3s16(0,0,0),
+	src.copyTo(data, data_area, v3pos_t(0,0,0),
 			getPosRelative(), data_size);
 	tryShrinkNodes();
 }
@@ -1200,7 +1201,7 @@ std::string analyze_block(MapBlock *block)
 	const auto lock = block->lock_shared_rec();
 	std::ostringstream desc;
 
-	v3s16 p = block->getPos();
+	v3bpos_t p = block->getPos();
 	char spos[25];
 	porting::mt_snprintf(spos, sizeof(spos), "(%2d,%2d,%2d), ", p.X, p.Y, p.Z);
 	desc<<spos;
@@ -1240,7 +1241,7 @@ std::string analyze_block(MapBlock *block)
 	for(s16 y0=0; y0<MAP_BLOCKSIZE; y0++)
 	for(s16 x0=0; x0<MAP_BLOCKSIZE; x0++)
 	{
-		v3s16 p(x0,y0,z0);
+		v3pos_t p(x0,y0,z0);
 		MapNode n = block->getNodeNoEx(p);
 		content_t c = n.getContent();
 		if(c == CONTENT_IGNORE)

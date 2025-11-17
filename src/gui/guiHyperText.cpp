@@ -554,7 +554,7 @@ u32 ParsedText::parseTag(const wchar_t *text, u32 cursor)
 				std::string str = attrs["rotate"];
 				std::vector<std::string> parts = split(str, ',');
 				if (parts.size() == 3) {
-					m_element->rotation = v3s16 (
+					m_element->rotation = v3s16(
 							rangelim(stoi(parts[0]), -1000, 1000),
 							rangelim(stoi(parts[1]), -1000, 1000),
 							rangelim(stoi(parts[2]), -1000, 1000));

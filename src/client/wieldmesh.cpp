@@ -3,6 +3,7 @@
 // Copyright (C) 2010-2014 celeron55, Perttu Ahola <celeron55@gmail.com>
 
 #include "wieldmesh.h"
+#include "irr_v3d.h"
 #include "settings.h"
 #include "shader.h"
 #include "inventory.h"
@@ -310,7 +311,7 @@ static scene::SMesh *createGenericNodeMesh(Client *client, MapNode n,
 		n.setParam2(1);
 	}
 
-	MeshCollector collector(v3f(0), v3f());
+	MeshCollector collector(v3opos_t(0), v3f());
 	{
 		MeshMakeData mmd(client->ndef(), 1, MeshGrid{1});
 		mmd.fillSingleNode(n);

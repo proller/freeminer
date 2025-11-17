@@ -204,7 +204,7 @@ static scene::SMesh *generateNodeMesh(Client *client, MapNode n,
 	auto *ndef = client->ndef();
 	auto *shdsrc = client->getShaderSource();
 
-	MeshCollector collector(v3f(0), v3f());
+	MeshCollector collector(v3opos_t(0), v3f());
 	{
 		MeshMakeData mmd(ndef, 1, MeshGrid{1});
 		n.setParam1(0xff);
@@ -261,13 +261,13 @@ GenericCAO::GenericCAO(Client *client, ClientEnvironment *env):
 	}
 }
 
-bool GenericCAO::getCollisionBox(aabb3f *toset) const
+bool GenericCAO::getCollisionBox(aabb3o *toset) const
 {
 	if (m_prop.physical)
 	{
 		//update collision box
-		toset->MinEdge = m_prop.collisionbox.MinEdge * BS;
-		toset->MaxEdge = m_prop.collisionbox.MaxEdge * BS;
+		toset->MinEdge = v3fToOpos(m_prop.collisionbox.MinEdge) * BS;
+		toset->MaxEdge = v3fToOpos(m_prop.collisionbox.MaxEdge) * BS;
 
 		toset->MinEdge += m_position;
 		toset->MaxEdge += m_position;
@@ -303,7 +303,7 @@ void GenericCAO::processInitData(const std::string &data)
 	m_name = deSerializeString16(is);
 	m_is_player = readU8(is);
 	m_id = readU16(is);
-	m_position = readV3F32(is);
+	m_position = readV3O(is, m_client->getProtoVersion());
 	m_rotation = readV3F32(is);
 	m_hp = readU16(is);
 
@@ -355,7 +355,7 @@ void GenericCAO::updateParentChain() const
 		(*it)->updateAbsolutePosition();
 }
 
-const v3f GenericCAO::getPosition() const
+const v3opos_t GenericCAO::getPosition() const
 {
 	if (!getParent())
 		return pos_translator.val_current;
@@ -367,8 +367,8 @@ const v3f GenericCAO::getPosition() const
 		// A better solution might restrict this update to the local player only
 		// or keep player and camera position in sync.
 		GenericCAO::updateParentChain();
-		v3s16 camera_offset = m_env->getCameraOffset();
-		return m_matrixnode->getAbsolutePosition() +
+		v3pos_t camera_offset = m_env->getCameraOffset();
+		return v3fToOpos(m_matrixnode->getAbsolutePosition()) +
 				intToFloat(camera_offset, BS);
 	}
 
@@ -855,7 +855,7 @@ void GenericCAO::updateLight(u32 day_night_ratio)
 	u8 light_at_pos_intensity = 0;
 	bool pos_ok = false;
 
-	v3s16 pos[3];
+	v3pos_t pos[3];
 	u16 npos = getLightPosition(pos);
 	for (u16 i = 0; i < npos; i++) {
 		bool this_ok;
@@ -903,16 +903,16 @@ void GenericCAO::setNodeLight(const video::SColor &light_color)
 	}
 }
 
-u16 GenericCAO::getLightPosition(v3s16 *pos)
+u16 GenericCAO::getLightPosition(v3pos_t *pos)
 {
 	const auto &box = m_prop.collisionbox;
-	pos[0] = floatToInt(m_position + box.MinEdge * BS, BS);
-	pos[1] = floatToInt(m_position + box.MaxEdge * BS, BS);
+	pos[0] = oposToPos(m_position + v3fToOpos(box.MinEdge * BS), BS);
+	pos[1] = oposToPos(m_position + v3fToOpos(box.MaxEdge * BS), BS);
 
 	// Skip center pos if it falls into the same node as Min or MaxEdge
 	if ((box.MaxEdge - box.MinEdge).getLengthSQ() < 3.0f)
 		return 2;
-	pos[2] = floatToInt(m_position + box.getCenter() * BS, BS);
+	pos[2] = oposToPos(m_position + v3fToOpos(box.getCenter() * BS), BS);
 	return 3;
 }
 
@@ -987,10 +987,10 @@ void GenericCAO::updateNodePos()
 
 	if (node) {
 		assert(m_matrixnode);
-		v3s16 camera_offset = m_env->getCameraOffset();
-		v3f pos = pos_translator.val_current -
+		auto camera_offset = m_env->getCameraOffset();
+		v3opos_t pos = pos_translator.val_current -
 				intToFloat(camera_offset, BS);
-		getPosRotMatrix().setTranslation(pos);
+		getPosRotMatrix().setTranslation(oposToV3f(pos));
 		if (node != m_spritenode) { // rotate if not a sprite
 			v3f rot = m_is_local_player ? -m_rotation : -rot_translator.val_current;
 			setPitchYawRoll(getPosRotMatrix(), rot);
@@ -1116,15 +1116,15 @@ void GenericCAO::step(float dtime, ClientEnvironment *env)
 		pos_translator.val_target = m_position;
 	} else {
 		rot_translator.translate(dtime);
-		v3f lastpos = pos_translator.val_current;
+		auto lastpos = pos_translator.val_current;
 
 		if(m_prop.physical)
 		{
-			aabb3f box = m_prop.collisionbox;
+			auto box = m_prop.collisionbox;
 			box.MinEdge *= BS;
 			box.MaxEdge *= BS;
 			collisionMoveResult moveresult;
-			v3f p_pos = m_position;
+			auto p_pos = m_position;
 			v3f p_velocity = m_velocity;
 			moveresult = collisionMoveSimple(env,env->getGameDef(),
 					box, m_prop.stepheight, dtime,
@@ -1142,7 +1142,7 @@ void GenericCAO::step(float dtime, ClientEnvironment *env)
 			m_velocity *= 0.7;
 		}
 
-			m_position += dtime * m_velocity + 0.5 * dtime * dtime * m_acceleration;
+			m_position += v3fToOpos(dtime * m_velocity + 0.5 * dtime * dtime * m_acceleration);
 			m_velocity += dtime * m_acceleration;
 			pos_translator.update(m_position, pos_translator.aim_is_end,
 					pos_translator.anim_time);
@@ -1156,9 +1156,9 @@ void GenericCAO::step(float dtime, ClientEnvironment *env)
 			m_step_distance_counter = 0.0f;
 			if (!m_is_local_player && m_prop.makes_footstep_sound) {
 				const NodeDefManager *ndef = m_client->ndef();
-				v3f foot_pos = getPosition() * (1.0f/BS)
-						+ v3f(0.0f, m_prop.collisionbox.MinEdge.Y, 0.0f);
-				v3s16 node_below_pos = floatToInt(foot_pos + v3f(0.0f, -0.5f, 0.0f),
+				v3opos_t foot_pos = getPosition() * (1.0f/BS)
+						+ v3opos_t(0.0f, m_prop.collisionbox.MinEdge.Y, 0.0f);
+				v3pos_t node_below_pos = floatToInt(foot_pos + v3opos_t(0.0f, -0.5f, 0.0f),
 						1.0f);
 				MapNode n = m_env->getMap().getNodeTry(node_below_pos);
 				SoundSpec spec = ndef->get(n).sound_footstep;
@@ -1166,7 +1166,7 @@ void GenericCAO::step(float dtime, ClientEnvironment *env)
 				// somehow louder.
 				spec.gain *= 0.6f;
 				// The footstep-sound doesn't travel with the object. => vel=0
-				m_client->sound()->playSoundAt(0, spec, foot_pos, v3f(0.0f));
+				m_client->sound()->playSoundAt(0, spec, oposToV3f(foot_pos), v3f(0.0f));
 			}
 		}
 	}
@@ -1447,11 +1447,11 @@ void GenericCAO::updateAttachments()
 
 	if (!parent) { // Detach or don't attach
 		if (m_matrixnode) {
-			v3s16 camera_offset = m_env->getCameraOffset();
-			v3f old_pos = getPosition();
+			v3pos_t camera_offset = m_env->getCameraOffset();
+			auto old_pos = getPosition();
 
 			m_matrixnode->setParent(m_smgr->getRootSceneNode());
-			getPosRotMatrix().setTranslation(old_pos - intToFloat(camera_offset, BS));
+			getPosRotMatrix().setTranslation(oposToV3f(old_pos - intToFloat(camera_offset, BS)));
 			m_matrixnode->updateAbsolutePosition();
 		}
 	}
@@ -1565,7 +1565,7 @@ void GenericCAO::processMessage(const std::string &data)
 	} else if (cmd == AO_CMD_UPDATE_POSITION) {
 		// Not sent by the server if this object is an attachment.
 		// We might however get here if the server notices the object being detached before the client.
-		m_position = readV3F32(is);
+		m_position = readV3O(is); /* todo after write version: ,m_client->getProtoVersion() */
 		m_velocity = readV3F32(is);
 		m_acceleration = readV3F32(is);
 		m_rotation = readV3F32(is);
@@ -1777,7 +1777,7 @@ void GenericCAO::processMessage(const std::string &data)
 				// TODO: Execute defined fast response
 				// As there is no definition, make a smoke puff
 				ClientSimpleObject *simple = createSmokePuff(
-						m_smgr, m_env, m_position,
+						m_smgr, m_env, oposToV3f(m_position),
 						v2f(m_prop.visual_size.X, m_prop.visual_size.Y) * BS);
 				m_env->addSimpleObject(simple);
 			} else if (m_reset_textures_timer < 0 && !m_prop.damage_texture_modifier.empty()) {
@@ -1846,7 +1846,7 @@ bool GenericCAO::directReportPunch(v3f dir, const ItemStack *punchitem,
 			// TODO: Execute defined fast response
 			// As there is no definition, make a smoke puff
 			ClientSimpleObject *simple = createSmokePuff(
-					m_smgr, m_env, m_position,
+					m_smgr, m_env, oposToV3f(m_position),
 					v2f(m_prop.visual_size.X, m_prop.visual_size.Y) * BS);
 			m_env->addSimpleObject(simple);
 		}

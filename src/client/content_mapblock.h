@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "irr_v3d.h"
 #include "nodedef.h"
 
 struct MeshMakeData;
@@ -54,14 +55,14 @@ private:
 
 	const NodeDefManager *const nodedef;
 
-	const v3s16 blockpos_nodes;
+	const v3pos_t blockpos_nodes;
 
 // current node
 	struct {
 		v3pos_t pf;
 		v3pos_t pr;
 
-		v3s16 p; // relative to blockpos_nodes
+		v3pos_t p; // relative to blockpos_nodes
 		v3f origin; // p in BS space
 		MapNode n;
 		const ContentFeatures *f;
@@ -78,11 +79,11 @@ private:
 	void useTile(TileSpec *tile_ret, int index = 0, u8 set_flags = MATERIAL_FLAG_CRACK_OVERLAY,
 		u8 reset_flags = 0, bool special = false);
 	void getTile(int index, TileSpec *tile_ret);
-	void getTile(v3s16 direction, TileSpec *tile_ret);
+	void getTile(v3pos_t direction, TileSpec *tile_ret);
 	void getSpecialTile(int index, TileSpec *tile_ret, bool apply_crack = false);
 
 // face drawing
-	void drawQuad(const TileSpec &tile, v3f *vertices, const v3s16 &normal = v3s16(0, 0, 0),
+	void drawQuad(const TileSpec &tile, v3f *vertices, const v3pos_t &normal = v3pos_t(0, 0, 0),
 		float vertical_tiling = 1.0);
 
 // cuboid drawing!
@@ -130,7 +131,7 @@ private:
 		int raillike_group;
 	};
 	RaillikeData cur_rail;
-	bool isSameRail(v3s16 dir);
+	bool isSameRail(v3pos_t dir);
 
 // plantlike-specific
 	struct PlantlikeData {

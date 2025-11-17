@@ -173,10 +173,10 @@ public:
 	MapDatabaseSQLite3(const std::string &savedir);
 	virtual ~MapDatabaseSQLite3();
 
-	bool saveBlock(const v3s16 &pos, std::string_view data);
-	void loadBlock(const v3s16 &pos, std::string *block);
-	bool deleteBlock(const v3s16 &pos);
-	void listAllLoadableBlocks(std::vector<v3s16> &dst);
+	bool saveBlock(const v3bpos_t &pos, std::string_view data);
+	void loadBlock(const v3bpos_t &pos, std::string *block);
+	bool deleteBlock(const v3bpos_t &pos);
+	void listAllLoadableBlocks(std::vector<v3bpos_t> &dst);
 
 	PARENT_CLASS_FUNCS
 
@@ -187,7 +187,7 @@ protected:
 private:
 	/// @brief Bind block position into statement at column index
 	/// @return index of next column after position
-	int bindPos(sqlite3_stmt *stmt, v3s16 pos, int index = 1);
+	int bindPos(sqlite3_stmt *stmt, v3bpos_t pos, int index = 1);
 
 	bool m_new_format = false;
 

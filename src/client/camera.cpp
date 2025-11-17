@@ -299,10 +299,10 @@ void Camera::addArmInertia(f32 player_yaw)
 
 void Camera::updateOffset()
 {
-	v3f cp = m_camera_position / BS;
+	auto cp = m_camera_position / BS;
 
 	// Update offset if too far away from the center of the map
-	m_camera_offset = v3s16(
+	m_camera_offset = v3pos_t(
 		floorf(cp.X / CAMERA_OFFSET_STEP) * CAMERA_OFFSET_STEP,
 		floorf(cp.Y / CAMERA_OFFSET_STEP) * CAMERA_OFFSET_STEP,
 		floorf(cp.Z / CAMERA_OFFSET_STEP) * CAMERA_OFFSET_STEP
@@ -316,7 +316,7 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 	// Get player position
 	// Smooth the movement when walking up stairs
 	v3f old_player_position = m_playernode->getPosition();
-	v3f player_position = player->getPosition();
+	auto player_position = player->getPosition();
 
 	f32 yaw = player->getYaw();
 	f32 pitch = player->getPitch();
@@ -344,7 +344,7 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 	}
 
 	// Set player node transformation
-	m_playernode->setPosition(player_position);
+	m_playernode->setPosition(oposToV3f(player_position));
 	m_playernode->setRotation(v3f(0, -1 * yaw, 0));
 	m_playernode->updateAbsolutePosition();
 
@@ -404,7 +404,9 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 	}
 
 	// Compute absolute camera position and target
-	m_headnode->getAbsoluteTransformation().transformVect(m_camera_position, rel_cam_pos);
+	auto tmp = oposToV3f(m_camera_position); // TODO use offset?
+	m_headnode->getAbsoluteTransformation().transformVect(tmp, rel_cam_pos);
+	m_camera_position = v3fToOpos(tmp);
 	m_camera_direction = m_headnode->getAbsoluteTransformation()
 			.rotateAndScaleVect(rel_cam_target - rel_cam_pos);
 
@@ -414,7 +416,7 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 	// Reposition the camera for third person view
 	if (m_camera_mode > CAMERA_MODE_FIRST)
 	{
-		v3f my_cp = m_camera_position;
+		auto my_cp = m_camera_position;
 
 		if (m_camera_mode == CAMERA_MODE_THIRD_FRONT)
 			m_camera_direction *= -1;
@@ -454,12 +456,12 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 	}
 
 	// Set camera node transformation
-	m_cameranode->setPosition(m_camera_position - intToFloat(m_camera_offset, BS));
+	m_cameranode->setPosition(oposToV3f(m_camera_position - intToFloat(m_camera_offset, BS)));
 	m_cameranode->setUpVector(abs_cam_up);
 	m_cameranode->updateAbsolutePosition();
 	// *100 helps in large map coordinates
-	m_cameranode->setTarget(m_camera_position - intToFloat(m_camera_offset, BS)
-		+ 100 * m_camera_direction);
+	m_cameranode->setTarget(oposToV3f(m_camera_position - intToFloat(m_camera_offset, BS)
+		+ 100 * v3fToOpos(m_camera_direction)));
 
 	/*
 	 * Apply server-sent FOV, instantaneous or smooth transition.

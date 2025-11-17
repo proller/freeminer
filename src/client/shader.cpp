@@ -10,6 +10,7 @@
 #include "debug.h"
 #include "filesys.h"
 #include "util/container.h"
+#include "util/numeric.h"
 #include "util/thread.h"
 #include "settings.h"
 #include <ICameraSceneNode.h>

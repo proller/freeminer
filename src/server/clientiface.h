@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "irrlichttypes.h"
 #include "mapblock.h"
 #include "threading/concurrent_set.h"
 #include "threading/concurrent_unordered_map.h"
@@ -204,7 +205,7 @@ enum ClientStateEvent
 */
 struct PrioritySortedBlockTransfer
 {
-	PrioritySortedBlockTransfer(float a_priority, const v3s16 &a_pos, session_t a_peer_id)
+	PrioritySortedBlockTransfer(float a_priority, const v3bpos_t &a_pos, session_t a_peer_id)
 	{
 		priority = a_priority;
 		pos = a_pos;
@@ -215,7 +216,7 @@ struct PrioritySortedBlockTransfer
 		return priority < other.priority;
 	}
 	float priority;
-	v3s16 pos;
+	v3bpos_t pos;
 	session_t peer_id;
 };
 
@@ -287,8 +288,8 @@ public:
 
 	void SentBlock(v3bpos_t p, double time);
 
-	void SetBlockNotSent(v3s16 p, bool low_priority = false);
-	void SetBlocksNotSent(const std::vector<v3s16> &blocks, bool low_priority = false);
+	void SetBlockNotSent(v3bpos_t p, bool low_priority = false);
+	void SetBlocksNotSent(const std::vector<v3bpos_t> &blocks, bool low_priority = false);
 
 	/**
 	 * tell client about this block being modified right now.
@@ -296,13 +297,13 @@ public:
 	 * while modification is processed by server
 	 * @param p position of modified block
 	 */
-	void ResendBlockIfOnWire(v3s16 p);
+	void ResendBlockIfOnWire(v3bpos_t p);
 
 /*
 	u32 getSendingCount() const { return m_blocks_sending.size(); }
 */
 
-	bool isBlockSent(v3s16 p) const
+	bool isBlockSent(v3bpos_t p) const
 	{
 		const auto lock = m_blocks_sent.lock_shared_rec();
 		return m_blocks_sent.find(p) != m_blocks_sent.end();
@@ -401,17 +402,17 @@ private:
 	unsigned int m_nearest_unsent_reset_want = 0;
 	concurrent_unordered_map<v3bpos_t, double, v3posHash, v3posEqual> m_blocks_sent;
 
-	//std::unordered_set<v3s16> m_blocks_sent;
+	//std::unordered_set<v3bpos_t> m_blocks_sent;
 
 	/*
 		Cache of blocks that have been occlusion culled at the current distance.
 		As GetNextBlocks traverses the same distance multiple times, this saves
 		significant CPU time.
 	 */
-	std::unordered_set<v3s16> m_blocks_occ;
+	std::unordered_set<v3bpos_t> m_blocks_occ;
 
-	std::atomic_short m_nearest_unsent_d = 0;
-	v3s16 m_last_center;
+	std::atomic<pos_t> m_nearest_unsent_d = 0;
+	v3bpos_t m_last_center;
 	v3f m_last_camera_dir;
 
 	const u16 m_max_simul_sends;
@@ -435,7 +436,7 @@ private:
 		Block is added when it is sent with BLOCKDATA.
 		Block is removed when GOTBLOCKS is received.
 	*/
-	std::unordered_set<v3s16> m_blocks_sending;
+	std::unordered_set<v3bpos_t> m_blocks_sending;
 
 	/*
 		Count of excess GotBlocks().
@@ -505,7 +506,7 @@ public:
 	std::vector<session_t> getClientIDs(ClientState min_state=CS_Active);
 
 	/* mark blocks as not sent on all active clients */
-	void markBlocksNotSent(const std::vector<v3s16> &positions, bool low_priority = false);
+	void markBlocksNotSent(const std::vector<v3bpos_t> &positions, bool low_priority = false);
 
 	/* verify if server user limit was reached */
 	bool isUserLimitReached();

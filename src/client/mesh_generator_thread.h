@@ -9,6 +9,7 @@
 #include "mapblock.h"
 #include <unordered_map>
 #include <unordered_set>
+#include "irr_v3d.h"
 #include "mapblock_mesh.h"
 #include "threading/mutex_auto_lock.h"
 #include "util/thread.h"
@@ -21,10 +22,10 @@ class MapBlock;
 struct QueuedMeshUpdate
 {
 
-	v3s16 p = v3s16(-1337, -1337, -1337);
-	std::vector<v3s16> ack_list;
+	v3bpos_t p = v3bpos_t(-1337, -1337, -1337);
+	std::vector<v3bpos_t> ack_list;
 	int crack_level = -1;
-	v3s16 crack_pos;
+	v3pos_t crack_pos;
 	MeshMakeData *data = nullptr; // This is generated in MeshUpdateQueue::pop()
 	std::vector<MapBlockPtr> map_blocks;
 	bool urgent = false;
@@ -78,14 +79,14 @@ public:
 	 * @param urget High-priority?
 	 * @param from_neighbor was this update only necessary due to a neighbor change?
 	 */
-	bool addBlock(Map *map, v3s16 p, bool ack_to_server, bool urgent, bool from_neighbor);
+	bool addBlock(Map *map, v3bpos_t p, bool ack_to_server, bool urgent, bool from_neighbor);
 
 	// Returned pointer must be deleted
 	// Returns NULL if queue is empty
 	QueuedMeshUpdate *pop();
 
 	// Marks a position as finished, unblocking the next update
-	void done(v3s16 pos);
+	void done(v3bpos_t pos);
 
 	size_t size()
 	{
@@ -96,8 +97,8 @@ public:
 private:
 	Client *m_client;
 	std::vector<QueuedMeshUpdate *> m_queue;
-	std::unordered_set<v3s16> m_urgents;
-	std::unordered_set<v3s16> m_inflight_blocks;
+	std::unordered_set<v3bpos_t> m_urgents;
+	std::unordered_set<v3bpos_t> m_inflight_blocks;
 	std::mutex m_mutex;
 
 	// TODO: Add callback to update these when g_settings changes, and update all meshes
@@ -109,10 +110,10 @@ private:
 
 struct MeshUpdateResult
 {
-	v3s16 p = v3s16(-1338, -1338, -1338);
+	v3bpos_t p = v3bpos_t(-1338, -1338, -1338);
 	MapBlock::mesh_type mesh;
 	u8 solid_sides;
-	std::vector<v3s16> ack_list;
+	std::vector<v3bpos_t> ack_list;
 	bool urgent = false;
 	std::vector<MapBlockPtr> map_blocks;
 
@@ -145,7 +146,7 @@ public:
 
 	// Caches the block at p and its neighbors (if needed) and queues a mesh
 	// update for the block at p
-	void updateBlock(Map *map, v3s16 p, bool ack_block_to_server, bool urgent,
+	void updateBlock(Map *map, v3bpos_t p, bool ack_block_to_server, bool urgent,
 			bool update_neighbors = false);
 	void putResult(const MeshUpdateResult &r);
 	/// @note caller needs to refDrop() the affected map_blocks

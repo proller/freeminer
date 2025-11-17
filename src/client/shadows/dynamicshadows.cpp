@@ -9,6 +9,8 @@
 #include "client/clientenvironment.h"
 #include "client/clientmap.h"
 #include "client/camera.h"
+#include "irrlichttypes.h"
+#include "util/numeric.h"
 #include <IVideoDriver.h>
 
 using m4f = core::matrix4;
@@ -35,7 +37,7 @@ void DirectionalLight::createSplitMatrices(const Camera *cam)
 	assert(sfFar - sfNear > 0);
 
 	// adjusted camera positions
-	v3f cam_pos_world = cam->getPosition();
+	v3opos_t cam_pos_world = cam->getPosition();
 
 	// if world position is less than 1 node away from the captured
 	// world position then stick to the captured value, otherwise recapture.
@@ -48,11 +50,11 @@ void DirectionalLight::createSplitMatrices(const Camera *cam)
 			cam_pos_world.Y - cam->getOffset().Y * BS,
 			cam_pos_world.Z - cam->getOffset().Z * BS);
 	cam_pos_scene += look * sfNear;
-	cam_pos_world += look * sfNear;
+	cam_pos_world += v3fToOpos(look * sfNear);
 
 	// center point of light frustum
 	v3f center_scene = cam_pos_scene + look * 0.35 * (sfFar - sfNear);
-	v3f center_world = cam_pos_world + look * 0.35 * (sfFar - sfNear);
+	v3opos_t center_world = cam_pos_world + v3fToOpos(look) * 0.35 * (sfFar - sfNear);
 
 	// Create a vector to the frustum far corner
 	const v3f &viewUp = cam->getCameraNode()->getUpVector();
@@ -75,7 +77,7 @@ void DirectionalLight::createSplitMatrices(const Camera *cam)
 	if (core::equals(eye_displacement.crossProduct(up).getLengthSQ(), 0.f))
 		up = v3f(1.0f, 0.0f, 0.0f);
 	future_frustum.player = cam_pos_scene;
-	future_frustum.position = center_world - eye_displacement;
+	future_frustum.position = center_world - v3fToOpos(eye_displacement);
 	future_frustum.length = length;
 	future_frustum.radius = radius;
 	future_frustum.ViewMat.buildCameraLookAtMatrixLH(eye, center_scene, up);
@@ -118,7 +120,7 @@ void DirectionalLight::updateFrustum(const Camera *cam, Client *client)
 	createSplitMatrices(cam);
 	// get the draw list for shadows
 	client->getEnv().getClientMap().updateDrawListShadow(
-			getPosition(), getDirection(), future_frustum.radius, future_frustum.length);
+			getPosition(), v3fToOpos(getDirection()), future_frustum.radius, future_frustum.length);
 	should_update_map_shadow = true;
 	dirty = true;
 }
@@ -138,7 +140,7 @@ void DirectionalLight::setDirection(v3f dir)
 	direction.normalize();
 }
 
-v3f DirectionalLight::getPosition() const
+v3opos_t DirectionalLight::getPosition() const
 {
 	return shadow_frustum.position;
 }
