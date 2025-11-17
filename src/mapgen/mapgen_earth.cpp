@@ -222,7 +222,7 @@ MapgenEarth::MapgenEarth(MapgenEarthParams *params_, EmergeParams *emerge) :
 			}
 		}
 
-		if (std::filesystem::exists(heat_img)) {
+		if (std::filesystem::file_size(heat_img)) {
 			const auto lock = std::lock_guard(maps_holder->download_lock);
 			if (!maps_holder->heat_image) {
 				maps_holder->heat_image = std::make_unique<PngImage>(heat_img);
