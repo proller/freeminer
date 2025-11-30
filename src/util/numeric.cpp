@@ -43,6 +43,11 @@ int myrand_range(int min, int max)
 	return g_pcgrand.range(min, max);
 }
 
+long myrand_range(long min, long max)
+{
+	return g_pcgrand.range(min, max);
+}
+
 float myrand_range(float min, float max)
 {
 	return (max-min) * myrand_float() + min;

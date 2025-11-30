@@ -889,17 +889,17 @@ std::map<v3bpos_t, bool> MMVManip::getCoveredBlocks() const
 		return false;
 	};
 
-	auto bpmin = getNodeBlockPos(m_area.MinEdge);
-	auto bpmax = getNodeBlockPos(m_area.MaxEdge);
+	v3bpos_t bpmin = getNodeBlockPos(m_area.MinEdge);
+	v3bpos_t bpmax = getNodeBlockPos(m_area.MaxEdge);
 
 	if (bpmin * MAP_BLOCKSIZE != m_area.MinEdge)
 		throw BaseException("MMVManip not block-aligned");
 	if ((bpmax+1) * MAP_BLOCKSIZE - v3bpos_t(1) != m_area.MaxEdge)
 		throw BaseException("MMVManip not block-aligned");
 
-	for(auto z=bpmin.Z; z<=bpmax.Z; z++)
-	for(auto y=bpmin.Y; y<=bpmax.Y; y++)
-	for(auto x=bpmin.X; x<=bpmax.X; x++) {
+	for(bpos_t z=bpmin.Z; z<=bpmax.Z; z++)
+	for(bpos_t y=bpmin.Y; y<=bpmax.Y; y++)
+	for(bpos_t x=bpmin.X; x<=bpmax.X; x++) {
 		v3bpos_t bp(x,y,z);
 		ret[bp] = check_block(bp);
 	}

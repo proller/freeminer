@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (C) 2022 Minetest core developers & community
 
+#include "irr_v2d.h"
 #include "test.h"
 
 #include <cmath>
@@ -98,14 +99,14 @@ void TestScriptApi::testVectorMetatable(MyScriptApi *script)
 		return lua_toboolean(L, -1);
 	};
 
-	push_v3s16(L, {1, 2, 3});
+	push_v3s16(L, v3s16{1, 2, 3});
 	UASSERT(call_vector_check());
 
 	push_v3f(L, v3f{1, 2, 3});
 	UASSERT(call_vector_check());
 
 	// 2-component vectors must not have this metatable
-	push_v2s32(L, {0, 0});
+	push_v2s32(L, v2s32{0, 0});
 	UASSERT(!call_vector_check());
 
 	push_v2f(L, {0, 0});

@@ -4,36 +4,36 @@
 find_package(MsgPack REQUIRED)
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-	OPTION(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL)" 0)
-	OPTION(USE_MULTI "Enable MT+ENET+WSS networking" 1)
+    OPTION(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL)" 0)
+    OPTION(USE_MULTI "Enable MT+ENET+WSS networking" 1)
 endif()
 if(USE_MULTI)
-	#set(ENABLE_SCTP 1 CACHE BOOL "") # Maybe bugs
-	set(ENABLE_ENET 1 CACHE BOOL "")
-	#set(ENABLE_WEBSOCKET_SCTP 1 CACHE BOOL "") # NOT FINISHED
-        if (NOT ANDROID)
-	    	set(ENABLE_WEBSOCKET 1 CACHE BOOL "")
-        endif()
+    #set(ENABLE_SCTP 1 CACHE BOOL "") # Maybe bugs
+    set(ENABLE_ENET 1 CACHE BOOL "")
+    #set(ENABLE_WEBSOCKET_SCTP 1 CACHE BOOL "") # NOT FINISHED
+    if(NOT ANDROID)
+        set(ENABLE_WEBSOCKET 1 CACHE BOOL "")
+    endif()
 endif()
 
 
 if(ENABLE_WEBSOCKET OR ENABLE_WEBSOCKET_SCTP)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp/CMakeLists.txt)
-		find_package(Boost)
-		if(Boost_FOUND)
-			include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp)
-			# add_subdirectory(external/websocketpp)
-			# set(WEBSOCKETPP_LIBRARY websocketpp::websocketpp)
-			message(STATUS "Using websocket: ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp")
-			find_package(OpenSSL)
-			set(WEBSOCKETPP_LIBRARY ${WEBSOCKETPP_LIBRARY} OpenSSL::SSL)
-			set(USE_WEBSOCKET 1 CACHE BOOL "")
-			#TODO:
-			# set(USE_WEBSOCKET_SCTP 1 CACHE BOOL "")
-		endif()
-	else()
-		#set(USE_WEBSOCKET 0)
-		#set(USE_WEBSOCKET_SCTP 0)
+        find_package(Boost)
+        if(Boost_FOUND)
+            include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp)
+            # add_subdirectory(external/websocketpp)
+            # set(WEBSOCKETPP_LIBRARY websocketpp::websocketpp)
+            message(STATUS "Using websocket: ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp")
+            find_package(OpenSSL)
+            set(WEBSOCKETPP_LIBRARY ${WEBSOCKETPP_LIBRARY} OpenSSL::SSL)
+            set(USE_WEBSOCKET 1 CACHE BOOL "")
+            #TODO:
+            # set(USE_WEBSOCKET_SCTP 1 CACHE BOOL "")
+        endif()
+    else()
+        #set(USE_WEBSOCKET 0)
+        #set(USE_WEBSOCKET_SCTP 0)
     endif()
 endif()
 
@@ -43,42 +43,42 @@ if(ENABLE_SCTP AND NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp/usrsc
 endif()
 
 if(ENABLE_SCTP)
-        # from external/usrsctp/usrsctplib/CMakeLists.txt :
-	if(SCTP_DEBUG)
-		set(sctp_debug 1 CACHE INTERNAL "")
-		add_definitions(-DSCTP_DEBUG=1)
-	endif()
-	set(sctp_build_programs 0 CACHE INTERNAL "")
-	set(sctp_werror 0 CACHE INTERNAL "")
-	set(WERROR 0 CACHE INTERNAL "") #old
+    # from external/usrsctp/usrsctplib/CMakeLists.txt :
+    if(SCTP_DEBUG)
+        set(sctp_debug 1 CACHE INTERNAL "")
+        add_definitions(-DSCTP_DEBUG=1)
+    endif()
+    set(sctp_build_programs 0 CACHE INTERNAL "")
+    set(sctp_werror 0 CACHE INTERNAL "")
+    set(WERROR 0 CACHE INTERNAL "") #old
 
-	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp)
 
-	#include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp/usrsctplib)
-	set(SCTP_LIBRARY usrsctp)
+    #include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp/usrsctplib)
+    set(SCTP_LIBRARY usrsctp)
 
-	set(USE_SCTP 1)
+    set(USE_SCTP 1)
 
-	message(STATUS "Using sctp: ${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp ${SCTP_LIBRARY} SCTP_DEBUG=${SCTP_DEBUG}")
-#else()
-	#set(USE_SCTP 0)
+    message(STATUS "Using sctp: ${CMAKE_CURRENT_SOURCE_DIR}/external/usrsctp ${SCTP_LIBRARY} SCTP_DEBUG=${SCTP_DEBUG}")
+    #else()
+    #set(USE_SCTP 0)
 endif()
 
 if(ENABLE_ENET)
-	if(NOT ENABLE_SYSTEM_ENET AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/enet/include/enet/enet.h)
-		add_subdirectory(external/enet)
-		set(ENET_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/enet/include)
-		set(ENET_LIBRARY enet)
-	endif()
-	if(NOT ENET_LIBRARY)
-		find_library(ENET_LIBRARY NAMES enet)
-		find_path(ENET_INCLUDE_DIR enet/enet.h)
-	endif()
-	if(ENET_LIBRARY AND ENET_INCLUDE_DIR)
-		include_directories(${ENET_INCLUDE_DIR})
-		message(STATUS "Using enet: ${ENET_INCLUDE_DIR} ${ENET_LIBRARY}")
-		set(USE_ENET 1)
-	endif()
+    if(NOT ENABLE_SYSTEM_ENET AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/enet/include/enet/enet.h)
+        add_subdirectory(external/enet)
+        set(ENET_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/enet/include)
+        set(ENET_LIBRARY enet)
+    endif()
+    if(NOT ENET_LIBRARY)
+        find_library(ENET_LIBRARY NAMES enet)
+        find_path(ENET_INCLUDE_DIR enet/enet.h)
+    endif()
+    if(ENET_LIBRARY AND ENET_INCLUDE_DIR)
+        include_directories(${ENET_INCLUDE_DIR})
+        message(STATUS "Using enet: ${ENET_INCLUDE_DIR} ${ENET_LIBRARY}")
+        set(USE_ENET 1)
+    endif()
 endif()
 
 #set(TinyTIFF_BUILD_TESTS 0 CACHE INTERNAL "")
@@ -87,63 +87,108 @@ endif()
 
 option(ENABLE_TIFF "Enable tiff (feotiff for mapgen earth)" 1)
 if(ENABLE_TIFF AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/libtiff/CMakeLists.txt)
-	set(tiff-tools 0 CACHE INTERNAL "")
-	set(tiff-tests 0 CACHE INTERNAL "")
-	set(tiff-docs 0 CACHE INTERNAL "")
-	add_subdirectory(external/libtiff)
-	set(TIFF_LIRARY TIFF::tiff)
-	set(TIFF_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/external/libtiff/libtiff ${CMAKE_CURRENT_SOURCE_DIR}/external/libtiff/libtiff)
-	include_directories(BEFORE SYSTEM ${TIFF_INCLUDE_DIR})
-	message(STATUS "Using tiff: ${TIFF_INCLUDE_DIR} ${TIFF_LIRARY}")
-	set(USE_TIFF 1)
+    set(tiff-tools 0 CACHE INTERNAL "")
+    set(tiff-tests 0 CACHE INTERNAL "")
+    set(tiff-docs 0 CACHE INTERNAL "")
+    add_subdirectory(external/libtiff)
+    set(TIFF_LIRARY TIFF::tiff)
+    set(TIFF_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/external/libtiff/libtiff ${CMAKE_CURRENT_SOURCE_DIR}/external/libtiff/libtiff)
+    include_directories(BEFORE SYSTEM ${TIFF_INCLUDE_DIR})
+    message(STATUS "Using tiff: ${TIFF_INCLUDE_DIR} ${TIFF_LIRARY}")
+    set(USE_TIFF 1)
 endif()
 
 option(ENABLE_OSMIUM "Enable Osmium" 1)
 
-if (ENABLE_OSMIUM)
-	find_path(OSMIUM_INCLUDE_DIR osmium/osm.hpp)
-endif()
+# if(ENABLE_OSMIUM)
+#     find_path(OSMIUM_INCLUDE_DIR osmium/osm.hpp)
+# endif()
 
-if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/libosmium/CMakeLists.txt))
-	find_package(Boost)
-	if(Boost_FOUND)
-		set(BUILD_TESTING 0 CACHE INTERNAL "")
-		set(BUILD_DATA_TESTS 0 CACHE INTERNAL "")
-		set(BUILD_EXAMPLES 0 CACHE INTERNAL "")
-		set(BUILD_BENCHMARKS 0 CACHE INTERNAL "")
+if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/libosmium/CMakeLists.txt))
+    set(Boost_USE_STATIC_LIBS ${BUILD_STATIC_LIBS})
+    find_package(Boost COMPONENTS program_options)
+    if(Boost_FOUND)
+        set(BUILD_TESTING 0 CACHE INTERNAL "")
+        set(BUILD_DATA_TESTS 0 CACHE INTERNAL "")
+        set(BUILD_EXAMPLES 0 CACHE INTERNAL "")
+        set(BUILD_BENCHMARKS 0 CACHE INTERNAL "")
 
-		if (NOT OSMIUM_INCLUDE_DIR)
-			add_subdirectory(external/libosmium)
-			set(OSMIUM_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/libosmium/include)
-			include_directories(BEFORE SYSTEM ${OSMIUM_INCLUDE_DIR})
-		endif()
-		find_package(BZip2)
-		if(BZIP2_FOUND)
-			set (OSMIUM_LIRARY ${OSMIUM_LIRARY} BZip2::BZip2)
-		endif()
-		find_package(EXPAT)
-		if(EXPAT_FOUND)
-			set (OSMIUM_LIRARY ${OSMIUM_LIRARY} EXPAT::EXPAT)
-		endif()
-		set(USE_OSMIUM 1)
-		message(STATUS "Using osmium: ${OSMIUM_INCLUDE_DIR} : ${OSMIUM_LIRARY}")
-	endif()
+        if(NOT OSMIUM_INCLUDE_DIR)
+            add_subdirectory(mapgen/earth/libosmium)
+            set(OSMIUM_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/libosmium/include)
+            include_directories(BEFORE SYSTEM ${OSMIUM_INCLUDE_DIR})
+        endif()
+        find_package(BZip2)
+        if(BZIP2_FOUND)
+            set(OSMIUM_LIRARY ${OSMIUM_LIRARY} BZip2::BZip2)
+        endif()
+        find_package(EXPAT)
+        if(EXPAT_FOUND)
+            set(OSMIUM_LIRARY ${OSMIUM_LIRARY} EXPAT::EXPAT)
+        endif()
+        set(USE_OSMIUM 1)
+        message(STATUS "Using osmium: ${OSMIUM_INCLUDE_DIR} : ${OSMIUM_LIRARY}")
+
+        option(ENABLE_OSMIUM_TOOL "Enable Osmium tool" 1)
+        if(ENABLE_OSMIUM_TOOL)
+            set(USE_OSMIUM_TOOL 1)
+        endif()
+
+        if(USE_OSMIUM_TOOL)
+            add_subdirectory(mapgen/earth/json)
+            set(NLOHMANN_INCLUDE_DIR mapgen/earth/json/include)
+            include_directories(BEFORE SYSTEM ${NLOHMANN_INCLUDE_DIR})
+            set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/osmium-tool/cmake/Modules/")
+            add_subdirectory(mapgen/earth/osmium-tool)
+            set(OSMIUM_TOOL_LIBRARY osmium-tool-lib)
+            set(OSMIUM_TOOL_SRC mapgen/earth/osmium-tool/src/)
+            add_library(${OSMIUM_TOOL_LIBRARY}
+                ${OSMIUM_TOOL_SRC}command_extract.cpp
+
+                ${PROJECT_BINARY_DIR}/${OSMIUM_TOOL_SRC}/version.cpp
+
+                ${OSMIUM_TOOL_SRC}cmd.cpp
+                ${OSMIUM_TOOL_SRC}cmd_factory.cpp
+                ${OSMIUM_TOOL_SRC}id_file.cpp
+                ${OSMIUM_TOOL_SRC}io.cpp
+                ${OSMIUM_TOOL_SRC}util.cpp
+                ${OSMIUM_TOOL_SRC}command_help.cpp
+                ${OSMIUM_TOOL_SRC}option_clean.cpp
+                ${OSMIUM_TOOL_SRC}export/export_format_json.cpp
+                ${OSMIUM_TOOL_SRC}export/export_format_pg.cpp
+                ${OSMIUM_TOOL_SRC}export/export_format_text.cpp
+                ${OSMIUM_TOOL_SRC}export/export_handler.cpp
+                ${OSMIUM_TOOL_SRC}extract/extract_bbox.cpp
+                ${OSMIUM_TOOL_SRC}extract/extract.cpp
+                ${OSMIUM_TOOL_SRC}extract/extract_polygon.cpp
+                ${OSMIUM_TOOL_SRC}extract/geojson_file_parser.cpp
+                ${OSMIUM_TOOL_SRC}extract/geometry_util.cpp
+                ${OSMIUM_TOOL_SRC}extract/osm_file_parser.cpp
+                ${OSMIUM_TOOL_SRC}extract/poly_file_parser.cpp
+                ${OSMIUM_TOOL_SRC}extract/strategy_complete_ways.cpp
+                ${OSMIUM_TOOL_SRC}extract/strategy_complete_ways_with_history.cpp
+                ${OSMIUM_TOOL_SRC}extract/strategy_simple.cpp
+                ${OSMIUM_TOOL_SRC}extract/strategy_smart.cpp
+            )
+        endif()
+        message(STATUS "Using osmiumtool ${USE_OSMIUM_TOOL} : ${OSMIUM_TOOL_LIBRARY}")
+    endif()
 endif()
 
 option(ENABLE_ICONV "Enable utf8 convert via iconv " FALSE)
 
 if(ENABLE_ICONV)
-	find_package(Iconv)
-	if(ICONV_INCLUDE_DIR)
-		set(USE_ICONV 1)
-		message(STATUS "iconv.h found: ${ICONV_INCLUDE_DIR}")
-	else()
-		message(STATUS "iconv.h NOT found")
-	endif()
+    find_package(Iconv)
+    if(ICONV_INCLUDE_DIR)
+        set(USE_ICONV 1)
+        message(STATUS "iconv.h found: ${ICONV_INCLUDE_DIR}")
+    else()
+        message(STATUS "iconv.h NOT found")
+    endif()
 endif()
 
 if(NOT USE_ICONV)
-	set(USE_ICONV 0)
+    set(USE_ICONV 0)
 endif()
 
 #option(ENABLE_MANDELBULBER "Use Mandelbulber source to generate more fractals in math mapgen" OFF)
@@ -152,72 +197,75 @@ set(USE_MANDELBULBER 1)
 
 option(ENABLE_IPV4_DEFAULT "Do not use ipv6 dual socket " FALSE)
 if(ENABLE_IPV4_DEFAULT)
-	set(USE_IPV4_DEFAULT 1)
+    set(USE_IPV4_DEFAULT 1)
 else()
-	set(USE_IPV4_DEFAULT 0)
+    set(USE_IPV4_DEFAULT 0)
 endif()
 
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND ${CMAKE_VERSION} VERSION_GREATER "3.11.0")
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND ${CMAKE_VERSION} VERSION_GREATER "3.11.0")
     set(USE_DEBUG_DUMP ON CACHE BOOL "")
 endif()
 
-if (USE_DEBUG_DUMP)
+if(USE_DEBUG_DUMP)
     #get_target_property(MAGIC_ENUM_INCLUDE_DIR ch_contrib::magic_enum INTERFACE_INCLUDE_DIRECTORIES)
     # CMake generator expression will do insane quoting when it encounters special character like quotes, spaces, etc.
     # Prefixing "SHELL:" will force it to use the original text.
     #set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${MAGIC_ENUM_INCLUDE_DIR}\" -include \"${ClickHouse_SOURCE_DIR}/base/base/dump.h\"")
-    set (INCLUDE_DEBUG_HELPERS "SHELL:-I\"${CMAKE_CURRENT_SOURCE_DIR}/debug/\" -include \"${CMAKE_CURRENT_SOURCE_DIR}/debug/dump.h\"")
+    set(INCLUDE_DEBUG_HELPERS "SHELL:-I\"${CMAKE_CURRENT_SOURCE_DIR}/debug/\" -include \"${CMAKE_CURRENT_SOURCE_DIR}/debug/dump.h\"")
     #set (INCLUDE_DEBUG_HELPERS "SHELL:-include \"${CMAKE_CURRENT_SOURCE_DIR}/util/dump.h\"")
     # Use generator expression as we don't want to pollute CMAKE_CXX_FLAGS, which will interfere with CMake check system.
     add_compile_options($<$<COMPILE_LANGUAGE:CXX>:${INCLUDE_DEBUG_HELPERS}>)
-	if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-		add_definitions(-DDUMP_STREAM=actionstream)
-	else()
-		add_definitions(-DDUMP_STREAM=verbosestream)
-	endif()
-endif ()
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        add_definitions(-DDUMP_STREAM=actionstream)
+    else()
+        #add_definitions(-DDUMP_STREAM=verbosestream)
+        add_definitions(-DDUMP_STREAM=actionstream)
+    endif()
+endif()
 
 set(FMcommon_SRCS ${FMcommon_SRCS}
-	circuit_element_virtual.cpp
-	circuit_element.cpp
-	circuit.cpp
-	fm_abm_world.cpp
-	fm_bitset.cpp
-	fm_liquid.cpp
-	fm_map.cpp
-	fm_server.cpp
-	fm_world_merge.cpp
-	fm_far_calc.cpp
-	key_value_storage.cpp
-	log_types.cpp
-	stat.cpp
-	content_abm_grow_tree.cpp
-	content_abm.cpp
-	fm_abm.cpp
-	fm_clientiface.cpp
-	fm_serverenvironment.cpp
-	)
+    circuit_element_virtual.cpp
+    circuit_element.cpp
+    circuit.cpp
+    fm_abm_world.cpp
+    fm_bitset.cpp
+    fm_liquid.cpp
+    fm_map.cpp
+    fm_server.cpp
+    fm_world_merge.cpp
+    fm_far_calc.cpp
+    key_value_storage.cpp
+    log_types.cpp
+    stat.cpp
+    content_abm_grow_tree.cpp
+    content_abm.cpp
+    fm_abm.cpp
+    fm_clientiface.cpp
+    fm_serverenvironment.cpp
+)
+
+set(FREEMINER_COMMON_LIBRARIES
+    ${MSGPACK_LIBRARY}
+    ${ENET_LIBRARY}
+    ${SCTP_LIBRARY}
+    ${WEBSOCKETPP_LIBRARY}
+    ${TIFF_LIRARY}
+    ${OSMIUM_TOOL_LIBRARY}
+    ${Boost_PROGRAM_OPTIONS_LIBRARY}
+    ${Boost_LIBRARIES}
+    ${OSMIUM_LIRARY}
+)
 
 set(FREEMINER_CLIENT_LIBRARIES
-		${MSGPACK_LIBRARY}
-		${ENET_LIBRARY}
-		${SCTP_LIBRARY}
-		${WEBSOCKETPP_LIBRARY}
-		${TIFF_LIRARY}
-		${OSMIUM_LIRARY}
+    ${FREEMINER_COMMON_LIBRARIES}
 )
 
 find_package(PNG REQUIRED)
 
 set(FREEMINER_SERVER_LIBRARIES
-		${MSGPACK_LIBRARY}
-		${ENET_LIBRARY}
-		${SCTP_LIBRARY}
-		${WEBSOCKETPP_LIBRARY}
-		${TIFF_LIRARY}
-		${OSMIUM_LIRARY}
-        ${PNG_LIBRARY}
+    ${FREEMINER_COMMON_LIBRARIES}
+    ${PNG_LIBRARY}
 )
 
 # == end freeminer:

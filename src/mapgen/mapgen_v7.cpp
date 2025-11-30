@@ -280,7 +280,7 @@ void MapgenV7Params::setDefaultSettings(Settings *settings)
 ////////////////////////////////////////////////////////////////////////////////
 
 
-int MapgenV7::getSpawnLevelAtPoint(v2pos_t p)
+pos_t MapgenV7::getSpawnLevelAtPoint(v2pos_t p)
 {
 	// If rivers are enabled, first check if in a river
 	if (spflags & MGV7_RIDGES) {

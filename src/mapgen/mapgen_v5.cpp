@@ -170,7 +170,7 @@ void MapgenV5Params::setDefaultSettings(Settings *settings)
 /////////////////////////////////////////////////////////////////
 
 
-int MapgenV5::getSpawnLevelAtPoint(v2pos_t p)
+pos_t MapgenV5::getSpawnLevelAtPoint(v2pos_t p)
 {
 
 	float f = 0.55 + NoiseFractal2D(&noise_factor->np, p.X, p.Y, seed);
@@ -294,11 +294,11 @@ void MapgenV5::makeChunk(BlockMakeData *data)
 }
 
 
-int MapgenV5::generateBaseTerrain()
+pos_t MapgenV5::generateBaseTerrain()
 {
 	u32 index = 0;
 	u32 index2d = 0;
-	int stone_surface_max_y = -MAX_MAP_GENERATION_LIMIT;
+	pos_t stone_surface_max_y = -MAX_MAP_GENERATION_LIMIT;
 
 	noise_factor->noiseMap2D(node_min.X, node_min.Z);
 	noise_height->noiseMap2D(node_min.X, node_min.Z);

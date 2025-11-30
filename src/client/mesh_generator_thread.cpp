@@ -242,8 +242,6 @@ void MeshUpdateQueue::fillDataFromMapBlocks(QueuedMeshUpdate *q)
 				data->timestamp = std::max(data->timestamp, bts);
 			}
 		}
-
-
 	}
 
 	data->setCrack(q->crack_level, q->crack_pos);

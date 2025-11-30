@@ -70,7 +70,7 @@ void MapgenSinglenode::makeChunk(BlockMakeData *data)
 }
 
 
-int MapgenSinglenode::getSpawnLevelAtPoint(v2pos_t p)
+pos_t MapgenSinglenode::getSpawnLevelAtPoint(v2pos_t p)
 {
 	return 0;
 }

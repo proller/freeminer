@@ -378,6 +378,11 @@ REALINLINE f64 squareroot(const f64 f)
 	return sqrt(f);
 }
 
+REALINLINE f128 squareroot(const f128 f)
+{
+	return sqrtl(f);
+}
+
 // calculate: sqrt ( x )
 REALINLINE s32 squareroot(const s32 f)
 {

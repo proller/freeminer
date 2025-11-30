@@ -43,6 +43,8 @@ typedef float f32;
 /** This is a typedef for double, it ensures portability of the engine. */
 typedef double f64;
 
+typedef long double f128;
+
 //! Note: cannot assume that positional arguments are supported (not on Windows)
 #define snprintf_irr snprintf
 

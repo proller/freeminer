@@ -433,23 +433,7 @@ void MapBlock::reallocate(u32 count, MapNode n)
 
 	data = new MapNode[count];
 
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic push
-#if __GNUC__ > 7
-#pragma GCC diagnostic ignored "-Wclass-memaccess"
-#endif
-#endif
-	if constexpr (!CONTENT_IGNORE) {
-		if (count > 1 && n.getContent() == CONTENT_IGNORE) {
-			memset(data, 0, count * sizeof(MapNode));
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
-		} else
-
 	std::fill_n(data, count, n);
-
-	}
 
 	m_is_mono_block = (count == 1);
 }

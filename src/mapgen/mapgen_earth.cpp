@@ -28,6 +28,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <string>
 #include <system_error>
 #include <tuple>
+#include <filesystem>
 
 #include "constants.h"
 #include "debug/dump.h"
@@ -56,7 +57,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "voxelalgorithms.h"
 #if USE_OSMIUM
 #include "earth/osmium-inl.h"
-#include <filesystem>
 #include <osmium/area/assembler.hpp>
 #include <osmium/area/multipolygon_manager.hpp>
 #include <osmium/dynamic_handler.hpp>
@@ -69,6 +69,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <osmium/osm/node.hpp>
 #include <osmium/osm/way.hpp>
 #include <osmium/tags/tags_filter.hpp>
+#if USE_OSMIUM_TOOL
+#include "mapgen/earth/osmium-tool/src/command_extract.hpp"
+#endif
 #endif
 
 std::unique_ptr<maps_holder_t> MapgenEarth::maps_holder;
@@ -301,12 +304,12 @@ pos_t MapgenEarth::get_height(pos_t x, pos_t z)
 	return ceil(y / scale.Y) - center.Y;
 }
 
-int MapgenEarth::getSpawnLevelAtPoint(v2pos_t p)
+pos_t MapgenEarth::getSpawnLevelAtPoint(v2pos_t p)
 {
 	return std::max(2, get_height(p.X, p.Y) + 2);
 }
 
-int MapgenEarth::getGroundLevelAtPoint(v2pos_t p)
+pos_t MapgenEarth::getGroundLevelAtPoint(v2pos_t p)
 {
 	return get_height(p.X, p.Y); // + MGV6_AVERAGE_MUD_AMOUNT;
 }
@@ -443,13 +446,26 @@ void MapgenEarth::generateBuildings()
 					return true;
 				}
 
-				std::stringstream cmd;
-				// TODO: use osmium tool as lib
-				// --option types=multipolygon,route
-				cmd << "osmium extract --output-format pbf --strategy smart --option types=any "
-					<< "--bbox " << bbox << " --output " << filename << ".tmp" << " "
-					<< path_name;
-				exec_to_string(cmd.str());
+#if USE_OSMIUM_TOOL
+				{
+					verbosestream << "Extracting " << bbox << "\n";
+					CommandExtract extract{{}};
+					const std::vector<std::string> arguments{"--output-format", "pbf",
+							"--strategy", "smart", "--option", "types=any", "--bbox",
+							bbox, "--output", filename + ".tmp", path_name};
+					extract.setup(arguments);
+					extract.run();
+				}
+#else
+				{
+					std::stringstream cmd;
+					cmd << "osmium extract --output-format pbf --strategy smart --option types=any "
+						<< "--bbox " << bbox << " --output " << filename << ".tmp" << " "
+						<< path_name;
+					exec_to_string(cmd.str());
+				}
+#endif
+
 				if (!std::filesystem::exists(filename + ".tmp")) {
 					return false;
 				}

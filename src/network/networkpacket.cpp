@@ -8,6 +8,7 @@
 #include <sstream>
 #include "log.h"
 #include "networkexceptions.h"
+#include "util/numeric.h"
 #include "util/serialize.h"
 #include "networkprotocol.h"
 
@@ -320,16 +321,6 @@ NetworkPacket& NetworkPacket::operator<<(float src)
 	return *this;
 }
 
-NetworkPacket& NetworkPacket::operator<<(double src)
-{
-	checkDataSize(sizeof(src));
-
-	writeF64(&m_data[m_read_offset], src);
-
-	m_read_offset += sizeof(src);
-	return *this;
-}
-
 NetworkPacket& NetworkPacket::operator>>(bool& dst)
 {
 	checkReadOffset(m_read_offset, 1);
@@ -390,17 +381,6 @@ NetworkPacket& NetworkPacket::operator>>(float& dst)
 	return *this;
 }
 
-NetworkPacket& NetworkPacket::operator>>(double& dst)
-{
-	checkReadOffset(m_read_offset, sizeof(dst));
-
-	dst = readF64(&m_data[m_read_offset]);
-
-	m_read_offset += sizeof(dst);
-	return *this;
-}
-
-
 NetworkPacket& NetworkPacket::operator>>(v2f& dst)
 {
 	checkReadOffset(m_read_offset, 8);
@@ -420,25 +400,6 @@ NetworkPacket& NetworkPacket::operator>>(v3f& dst)
 	m_read_offset += 12;
 	return *this;
 }
-
-#if USE_OPOS64
-NetworkPacket& NetworkPacket::operator>>(v3opos_t& dst)
-{
-	if (m_proto_ver < PROTOCOL_VERSION_32BIT) {
-		v3f tmp;
-		*this >> tmp;
-		dst = v3fToOpos(tmp);
-		return *this;
-	}
-
-	checkReadOffset(m_read_offset, sizeof(dst));
-
-	dst = readV3F64(&m_data[m_read_offset]);
-
-	m_read_offset += sizeof(dst);
-	return *this;
-}
-#endif
 
 NetworkPacket& NetworkPacket::operator>>(s16& dst)
 {
@@ -535,21 +496,6 @@ NetworkPacket& NetworkPacket::operator<<(v3f src)
 	*this << (float) src.Z;
 	return *this;
 }
-
-#if USE_OPOS64
-NetworkPacket& NetworkPacket::operator<<(v3opos_t src)
-{
-	if (m_proto_ver < PROTOCOL_VERSION_32BIT) {
-		*this << oposToV3f(src);
-		return *this;
-	}
-
-	*this << (double)src.X;
-	*this << (double)src.Y;
-	*this << (double)src.Z;
-	return *this;
-}
-#endif
 
 NetworkPacket& NetworkPacket::operator<<(v3s16 src)
 {
@@ -682,3 +628,150 @@ int NetworkPacket::packet_unpack() {
 	m_command = command;
 	return 1;
 }
+
+NetworkPacket& NetworkPacket::operator>>(s64& dst)
+{
+	checkReadOffset(m_read_offset, 4);
+
+	dst = readS64(&m_data[m_read_offset]);
+
+	m_read_offset += 4;
+	return *this;
+}
+
+NetworkPacket& NetworkPacket::operator<<(s64 src)
+{
+	*this << (u64) src;
+	return *this;
+}
+
+NetworkPacket& NetworkPacket::operator>>(v3s64& dst)
+{
+	checkReadOffset(m_read_offset, 24);
+
+	dst = readV3S64(&m_data[m_read_offset]);
+
+	m_read_offset += 24;
+	return *this;
+}
+
+NetworkPacket& NetworkPacket::operator<<(v3s64 src)
+{
+	*this << (s64) src.X;
+	*this << (s64) src.Y;
+	*this << (s64) src.Z;
+	return *this;
+}
+
+NetworkPacket& NetworkPacket::operator<<(double src)
+{
+	checkDataSize(sizeof(src));
+
+	writeF64(&m_data[m_read_offset], src);
+
+	m_read_offset += sizeof(src);
+	return *this;
+}
+
+
+NetworkPacket& NetworkPacket::operator>>(double& dst)
+{
+	checkReadOffset(m_read_offset, sizeof(dst));
+
+	dst = readF64(&m_data[m_read_offset]);
+
+	m_read_offset += sizeof(dst);
+	return *this;
+}
+
+NetworkPacket& NetworkPacket::operator>>(v3d& dst)
+{
+	checkReadOffset(m_read_offset, sizeof(dst));
+
+	dst = readV3F64(&m_data[m_read_offset]);
+
+	m_read_offset += sizeof(dst);
+	return *this;
+}
+
+NetworkPacket& NetworkPacket::operator<<(const v3d src)
+{
+	*this << (double)src.X;
+	*this << (double)src.Y;
+	*this << (double)src.Z;
+	return *this;
+}
+
+#if USE_OPOS64 == 64
+NetworkPacket& NetworkPacket::operator>>(v3opos_t& dst)
+{
+	if (m_proto_ver < PROTOCOL_VERSION_32BIT) {
+		v3f tmp;
+		*this >> tmp;
+		dst = v3fToOpos(tmp);
+		return *this;
+	}
+
+	checkReadOffset(m_read_offset, sizeof(dst));
+
+	dst = readV3F64(&m_data[m_read_offset]);
+
+	m_read_offset += sizeof(dst);
+	return *this;
+}
+#endif
+
+NetworkPacket& NetworkPacket::operator<<(const long double src)
+{
+	checkDataSize(sizeof(src));
+
+	writeF128(&m_data[m_read_offset], src);
+
+	m_read_offset += sizeof(src);
+	return *this;
+}
+
+
+NetworkPacket& NetworkPacket::operator>>(long double& dst)
+{
+	checkReadOffset(m_read_offset, sizeof(dst));
+
+	dst = readF128(&m_data[m_read_offset]);
+
+	m_read_offset += sizeof(dst);
+	return *this;
+}
+
+#if USE_OPOS64 == 64
+NetworkPacket& NetworkPacket::operator<<(v3opos_t src)
+{
+	if (m_proto_ver < PROTOCOL_VERSION_32BIT) {
+		*this << oposToV3f(src);
+		return *this;
+	}
+
+	*this << (double)src.X;
+	*this << (double)src.Y;
+	*this << (double)src.Z;
+	return *this;
+}
+#endif
+
+NetworkPacket& NetworkPacket::operator>>(v3f128& dst)
+{
+	checkReadOffset(m_read_offset, sizeof(dst));
+
+	dst = readV3F128(&m_data[m_read_offset]);
+
+	m_read_offset += sizeof(dst);
+	return *this;
+}
+
+NetworkPacket& NetworkPacket::operator<<(const v3f128 src)
+{
+	*this << (long double)src.X;
+	*this << (long double)src.Y;
+	*this << (long double)src.Z;
+	return *this;
+}
+

@@ -169,7 +169,7 @@ void MapgenFractalParams::setDefaultSettings(Settings *settings)
 /////////////////////////////////////////////////////////////////
 
 
-int MapgenFractal::getSpawnLevelAtPoint(v2pos_t p)
+pos_t MapgenFractal::getSpawnLevelAtPoint(v2pos_t p)
 {
 	bool solid_below = false; // Fractal node is present below to spawn on
 	u8 air_count = 0; // Consecutive air nodes above a fractal node

@@ -1,0 +1,1 @@
+../../src/mapgen/earth/osmium-tool/cmake/FindLZ4.cmake

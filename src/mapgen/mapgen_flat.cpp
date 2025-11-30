@@ -159,7 +159,7 @@ void MapgenFlatParams::setDefaultSettings(Settings *settings)
 /////////////////////////////////////////////////////////////////
 
 
-int MapgenFlat::getSpawnLevelAtPoint(v2pos_t p)
+pos_t MapgenFlat::getSpawnLevelAtPoint(v2pos_t p)
 {
 	pos_t stone_level = ground_level;
 	float n_terrain =

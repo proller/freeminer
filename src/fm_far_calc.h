@@ -61,3 +61,4 @@ v3bpos_t playerBlockAlign(
 void runFarAll(const v3bpos_t &ppos, uint8_t cell_size_pow, int farmesh,
 		uint8_t farmesh_quality, pos_t two_d,
 		const std::function<bool(const v3bpos_t &, const bpos_t &)> &func);
+int rangeToStep(const int range);

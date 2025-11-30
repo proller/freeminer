@@ -277,7 +277,7 @@ void MapgenValleys::makeChunk(BlockMakeData *data)
 }
 
 
-int MapgenValleys::getSpawnLevelAtPoint(v2pos_t p)
+pos_t MapgenValleys::getSpawnLevelAtPoint(v2pos_t p)
 {
 	// Check if in a river channel
 	float n_rivers = NoiseFractal2D(&noise_rivers->np, p.X, p.Y, seed);

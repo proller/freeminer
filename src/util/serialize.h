@@ -7,10 +7,10 @@
 #include "irrlichttypes_bloated.h"
 #include "exceptions.h" // for SerializationError
 #include "ieee_float.h"
-#include "network/networkprotocol.h"
-#include "numeric.h"
 
 #include "config.h"
+#include "network/networkprotocol.h"
+#include "util/numeric.h"
 #include <cstring> // for memcpy
 #include <cassert>
 #include <iostream>
@@ -211,14 +211,6 @@ inline f32 readF32(const u8 *data)
 	throw SerializationError("readF32: Unreachable code");
 }
 
-inline f64 readF64(const u8 *data)
-{
-	u64 u = readU64(data);
-	f64 f;
-	memcpy(&f, &u, 8);
-	return f;
-}
-
 inline video::SColor readARGB8(const u8 *data)
 {
 	video::SColor p(readU32(data));
@@ -285,15 +277,6 @@ inline v3f readV3F32(const u8 *data)
 	return p;
 }
 
-inline v3d readV3F64(const u8 *data)
-{
-	v3d p;
-	p.X = readF64(&data[0]);
-	p.Y = readF64(&data[8]);
-	p.Z = readF64(&data[16]);
-	return p;
-}
-
 /////////////// write routines ////////////////
 
 inline void writeU8(u8 *data, u8 i)
@@ -349,13 +332,6 @@ inline void writeF32(u8 *data, f32 i)
 	throw SerializationError("writeF32: Unreachable code");
 }
 
-inline void writeF64(u8 *data, double i)
-{
-	u64 u;
-	memcpy(&u, &i, 8);
-	return writeU64(data, u);
-}
-
 inline void writeARGB8(u8 *data, video::SColor p)
 {
 	writeU32(data, p.color);
@@ -407,11 +383,73 @@ inline void writeV3F32(u8 *data, v3f p)
 	writeF32(&data[8], p.Z);
 }
 
-inline void writeV3F64(u8 *data, v3d p)
+inline f64 readF64(const u8 *data)
 {
-	writeF64(&data[0], p.X);
-	writeF64(&data[8], p.Y);
-	writeF64(&data[16], p.Z);
+	u64 u = readU64(data);
+	f64 f;
+	memcpy(&f, &u, 8);
+	return f;
+}
+
+inline v3d readV3F64(const u8 *data)
+{
+	v3d p;
+	p.X = readF64(&data[0]);
+	p.Y = readF64(&data[8]);
+	p.Z = readF64(&data[16]);
+	return p;
+}
+
+inline void writeF64(u8 *data, double i)
+{
+	u64 u;
+	memcpy(&u, &i, 8);
+	return writeU64(data, u);
+}
+
+
+inline v3s64 readV3S64(const u8 *data)
+{
+	v3s64 p;
+	p.X = readS64(&data[0]);
+	p.Y = readS64(&data[4]);
+	p.Z = readS64(&data[8]);
+	return p;
+}
+
+inline void writeV3S64(u8 *data, v3s64 p)
+{
+	writeS64(&data[0], p.X);
+	writeS64(&data[4], p.Y);
+	writeS64(&data[8], p.Z);
+}
+
+inline long double readF128(const u8 *data)
+{
+	long double val;
+	memcpy(&val, data, 16);
+	return val;
+}
+
+inline v3f128 readV3F128(const u8 *data)
+{
+	v3f128 p;
+	p.X = readF128(&data[0]);
+	p.Y = readF128(&data[16]);
+	p.Z = readF128(&data[32]);
+	return p;
+}
+
+inline void writeF128(u8 *data, long double i)
+{
+	memcpy(data, &i, 16);
+}
+
+inline void writeV3F128(u8 *data, v3f128 p)
+{
+	writeF128(&data[0], p.X);
+	writeF128(&data[16], p.Y);
+	writeF128(&data[32], p.Z);
 }
 
 ////
@@ -451,7 +489,6 @@ MAKE_STREAM_READ_FXN(v3s32, V3S32,   12);
 MAKE_STREAM_READ_FXN(v3f,   V3F1000, 12);
 MAKE_STREAM_READ_FXN(v2f,   V2F32,    8);
 MAKE_STREAM_READ_FXN(v3f,   V3F32,   12);
-MAKE_STREAM_READ_FXN(v3d,   V3F64,   24);
 MAKE_STREAM_READ_FXN(video::SColor, ARGB8, 4);
 
 MAKE_STREAM_WRITE_FXN(u8,    U8,       1);
@@ -471,11 +508,20 @@ MAKE_STREAM_WRITE_FXN(v3s32, V3S32,   12);
 MAKE_STREAM_WRITE_FXN(v3f,   V3F1000, 12);
 MAKE_STREAM_WRITE_FXN(v2f,   V2F32,    8);
 MAKE_STREAM_WRITE_FXN(v3f,   V3F32,   12);
-MAKE_STREAM_WRITE_FXN(v3d,   V3F64,   24);
 MAKE_STREAM_WRITE_FXN(video::SColor, ARGB8, 4);
 
+MAKE_STREAM_READ_FXN(v3d,   V3F64,   24);
+MAKE_STREAM_READ_FXN(v3s64, V3S64,   24);
+MAKE_STREAM_WRITE_FXN(v3s64, V3S64,   24);
+MAKE_STREAM_READ_FXN(v3f128, V3F128,  48);
+MAKE_STREAM_WRITE_FXN(v3f128, V3F128, 48);
+
 inline pos_t readPOS(std::istream &is, const u16 proto_ver = 0) {
-#if USE_POS32
+#if USE_POS32 == 64
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+		return readS64(is);
+	return readS16(is);
+#elif USE_POS32
 	if (proto_ver >= PROTOCOL_VERSION_32BIT)
 		return readS32(is);
 	return readS16(is);
@@ -485,7 +531,11 @@ inline pos_t readPOS(std::istream &is, const u16 proto_ver = 0) {
 }
 
 inline void writePOS(std::ostream &os, pos_t i, const u16 proto_ver = 0) {
-#if USE_POS32
+#if USE_POS32 == 64
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+		return writeS64(os, i);
+	return writeS16(os, i);
+#elif USE_POS32
 	if (proto_ver >= PROTOCOL_VERSION_32BIT)
 		return writeS32(os, i);
 	return writeS16(os, i);
@@ -495,7 +545,11 @@ inline void writePOS(std::ostream &os, pos_t i, const u16 proto_ver = 0) {
 }
 
 inline v3pos_t readV3Pos(std::istream &is, const u16 proto_ver = 0) {
-#if USE_POS32
+#if USE_POS32 == 64
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+	    return readV3S64(is);
+    return s16ToPos(readV3S16(is));
+#elif USE_POS32
 	if (proto_ver >= PROTOCOL_VERSION_32BIT)
 	    return readV3S32(is);
     return s16ToPos(readV3S16(is));
@@ -505,9 +559,13 @@ inline v3pos_t readV3Pos(std::istream &is, const u16 proto_ver = 0) {
 }
 
 inline void writeV3Pos(std::ostream &os, v3pos_t p, const u16 proto_ver = 0) {
-#if USE_POS32
+#if USE_POS32 == 64
 	if (proto_ver >= PROTOCOL_VERSION_32BIT)
-	    return writeV3S32(os, p);
+        return writeV3S64(os, p);
+    return writeV3S16(os, posToS16(p));
+#elif USE_POS32
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+        return writeV3S32(os, p);
     return writeV3S16(os, posToS16(p));
 #else
     return writeV3S16(os, p);
@@ -515,7 +573,11 @@ inline void writeV3Pos(std::ostream &os, v3pos_t p, const u16 proto_ver = 0) {
 }
 
 inline v3opos_t readV3O(std::istream &is, const u16 proto_ver = 0) {
-#if USE_OPOS64
+#if USE_OPOS64 == 128
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+	    return readV3F128(is);
+    return v3fToOpos(readV3F32(is));
+#elif USE_OPOS64
 	if (proto_ver >= PROTOCOL_VERSION_32BIT)
 	    return readV3F64(is);
     return v3fToOpos(readV3F32(is));
@@ -525,7 +587,11 @@ inline v3opos_t readV3O(std::istream &is, const u16 proto_ver = 0) {
 }
 
 inline void writeV3O(std::ostream &os, v3opos_t p, const u16 proto_ver = 0) {
-#if USE_OPOS64
+#if USE_OPOS64 == 128
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+	    return writeV3F128(os, p);
+    return writeV3F32(os, oposToV3f(p));
+#elif USE_OPOS64
 	if (proto_ver >= PROTOCOL_VERSION_32BIT)
 	    return writeV3F64(os, p);
     return writeV3F32(os, oposToV3f(p));

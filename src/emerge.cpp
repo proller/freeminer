@@ -813,7 +813,7 @@ void *EmergeThread::run()
 		runCompletionCallbacks(pos, action, bedata.callbacks);
 
 		if (block) {
-			//modified_blocks[pos] = block;
+			modified_blocks[pos] = block;
 		} else if (allow_gen) {
 			verbosestream<<"nothing generated at "<<pos<< " emerge action="<< action <<std::endl;
 		}

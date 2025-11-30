@@ -626,7 +626,7 @@ uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 			auto cbpos = floatToInt(playerpos, BS * MAP_BLOCKSIZE);
 
 			const auto cell_size = 1; // FMTODO from remoteclient
-			const auto cell_size_pow = log(cell_size) / log(2);
+			const auto cell_size_pow = rangeToStep(cell_size);
 			thread_local static const pos_t setting_farmesh_all_changed =
 					g_settings->getU32("farmesh_all_changed");
 			const auto &use_farmesh_all_changed =
@@ -644,7 +644,7 @@ uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 							return false;
 						}
 
-						block_step_t step = log(size) / log(2);
+						block_step_t step = rangeToStep(size);
 						if (far_blocks_requested.size() < step) {
 							far_blocks_requested.resize(step);
 						}

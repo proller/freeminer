@@ -359,7 +359,7 @@ void ServerMap::finishBlockMake(BlockMakeData *data,
 	const auto full_bpmin = bpmin - EMERGE_EXTRA_BORDER;
 	const auto full_bpmax = bpmax + EMERGE_EXTRA_BORDER;
 
-	v3pos_t bp;
+	v3bpos_t bp;
 	for (bp.X = full_bpmin.X; bp.X <= full_bpmax.X; bp.X++)
 	for (bp.Z = full_bpmin.Z; bp.Z <= full_bpmax.Z; bp.Z++)
 	for (bp.Y = full_bpmin.Y; bp.Y <= full_bpmax.Y; bp.Y++) {
@@ -374,15 +374,16 @@ void ServerMap::finishBlockMake(BlockMakeData *data,
 
 		/* Border blocks are grabbed during
 		   generation but mustn't be marked generated. */
-		if (bp.X >= bpmin.X && bp.X <= bpmax.X
-				&& bp.Y >= bpmin.Y && bp.Y <= bpmax.Y
-				&& bp.Z >= bpmin.Z && bp.Z <= bpmax.Z) {
+        if (bp.X >= bpmin.X && bp.X <= bpmax.X
+           				&& bp.Y >= bpmin.Y && bp.Y <= bpmax.Y
+           				&& bp.Z >= bpmin.Z && bp.Z <= bpmax.Z) {
 			block->setGenerated(true);
 			// Set timestamp to ensure correct application
 			// of LBMs and other stuff.
 			block->setTimestampNoChangedFlag(now);
 		}
-        updateBlockHeat(senv, bp * MAP_BLOCKSIZE, block);
+
+		updateBlockHeat(senv, bp * MAP_BLOCKSIZE, block);
         updateBlockHumidity(senv, bp * MAP_BLOCKSIZE, block);
    	    changed_blocks_for_merge.emplace(bp);
 	}

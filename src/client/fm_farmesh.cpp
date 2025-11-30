@@ -280,7 +280,7 @@ int FarMesh::go_container()
 	runFarAll(cbpos, draw_control.cell_size_pow, draw_control.farmesh,
 			draw_control.farmesh_quality, 0,
 			[this, &cbpos](const v3bpos_t &bpos, const bpos_t &size) -> bool {
-				const block_step_t step = log(size) / log(2);
+				const block_step_t step = rangeToStep(size);
 
 				if (step >= FARMESH_STEP_MAX) {
 					return false;
@@ -445,7 +445,7 @@ int FarMesh::go_direction(const size_t dir_n)
 				break;
 			}
 
-			const int step_aligned_pow = ceil(log(step_width) / log(2)) - align_reduce;
+			const int step_aligned_pow =   rangeToStep(step_width) - align_reduce; // ceil ?
 			const auto pos_int = align_shift(
 					floatToInt(pos, BS), step_aligned_pow > 0 ? step_aligned_pow : 0);
 
@@ -487,7 +487,7 @@ int FarMesh::go_direction(const size_t dir_n)
 					//DUMP(actual_blockpos, blockpos, blocks);
 					//for (const auto bp : seven_blocks)
 					const bpos_t blocks =
-							pow(2, block_step + log(draw_control.cell_size) / log(2));
+							pow(2, block_step + rangeToStep(draw_control.cell_size);
 					//const bpos_t blocks =					pow(2, block_step);
 					DUMP("mis", actual_blockpos, blockpos, pos_int, block_step,
 							/*block_step_m1,*/ blocks);

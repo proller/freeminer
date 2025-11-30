@@ -113,19 +113,11 @@ public:
 	NetworkPacket &operator>>(float &dst);
 	NetworkPacket &operator<<(float src);
 
-	NetworkPacket &operator>>(double &dst);
-	NetworkPacket &operator<<(double src);
-
 	NetworkPacket &operator>>(v2f &dst);
 	NetworkPacket &operator<<(v2f src);
 
 	NetworkPacket &operator>>(v3f &dst);
 	NetworkPacket &operator<<(v3f src);
-
-#if USE_OPOS64
-	NetworkPacket &operator>>(v3opos_t &dst);
-	NetworkPacket &operator<<(v3opos_t src);
-#endif
 
 	NetworkPacket &operator>>(s16 &dst);
 	NetworkPacket &operator<<(s16 src);
@@ -142,9 +134,32 @@ public:
 	void writeV3S32(const v3s32 &src);
 	v3s32 readV3S32();
 
-#if USE_POS32
+#if USE_POS32 == 32
 	NetworkPacket &operator>>(v3pos_t &dst);
 	NetworkPacket &operator<<(v3pos_t src);
+#endif
+
+	NetworkPacket &operator>>(s64 &dst);
+	NetworkPacket &operator<<(s64 src);
+
+	NetworkPacket &operator>>(v3s64 &dst);
+	NetworkPacket &operator<<(v3s64 src);
+
+	NetworkPacket &operator>>(double &dst);
+	NetworkPacket &operator<<(const double src);
+
+	NetworkPacket &operator>>(v3d &dst);
+	NetworkPacket &operator<<(const v3d src);
+
+	NetworkPacket &operator>>(long double &dst);
+	NetworkPacket &operator<<(const long double src);
+
+	NetworkPacket &operator>>(v3f128 &dst);
+	NetworkPacket &operator<<(const v3f128 src);
+
+#if USE_OPOS64 == 64
+	NetworkPacket &operator>>(v3opos_t &dst);
+	NetworkPacket &operator<<(v3opos_t src);
 #endif
 
 	NetworkPacket &operator>>(video::SColor &dst);

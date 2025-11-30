@@ -720,7 +720,7 @@ typedef std::vector<MapBlock*> MapBlockVect;
 
 inline bool objectpos_over_limit(v3f p)
 {
-	const float max_limit_bs = (MAX_MAP_GENERATION_LIMIT + 0.5f) * BS;
+	const float max_limit_bs = (MAX_MAP_GENERATION_LIMITF + 0.5f) * BS;
 	return p.X < -max_limit_bs ||
 		p.X >  max_limit_bs ||
 		p.Y < -max_limit_bs ||
@@ -732,7 +732,7 @@ inline bool objectpos_over_limit(v3f p)
 #if USE_OPOS64
 inline bool objectpos_over_limit(v3opos_t p)
 {
-	const opos_t max_limit_bs = MAX_MAP_GENERATION_LIMIT * BS;
+	const opos_t max_limit_bs = MAX_MAP_GENERATION_LIMITF * BS;
 	return p.X < -max_limit_bs ||
 		p.X >  max_limit_bs ||
 		p.Y < -max_limit_bs ||
@@ -782,3 +782,7 @@ std::string analyze_block(MapBlock *block);
 using MapBlockPtr = std::shared_ptr<MapBlock>;
 // using MapBlockPtr = MapBlock *;
 
+inline std::string analyze_block(const MapBlockPtr &block)
+{
+	return analyze_block(block.get());
+};

@@ -379,7 +379,7 @@ void MapgenIndev::generateExperimental()
 {
 }
 
-int MapgenIndev::generateGround()
+pos_t MapgenIndev::generateGround()
 {
 	//TimeTaker timer1("Generating ground level");
 	MapNode n_air(CONTENT_AIR), n_water_source(c_water_source);

@@ -60,7 +60,7 @@ public:
 	virtual MapgenType getType() const { return MAPGEN_FLAT; }
 
 	virtual void makeChunk(BlockMakeData *data);
-	int getSpawnLevelAtPoint(v2pos_t p);
+	pos_t getSpawnLevelAtPoint(v2pos_t p);
 	pos_t generateTerrain();
 
 private:

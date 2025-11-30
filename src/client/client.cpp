@@ -33,6 +33,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <string>
 #include "client.h"
 #include "client/fontengine.h"
+#include "fm_far_calc.h"
 #include "network/clientopcodes.h"
 #include "network/connection.h"
 #include "network/networkpacket.h"
@@ -181,9 +182,9 @@ Client::Client(
 	m_cache_save_interval = g_settings->getU16("server_map_save_interval");
 	m_mesh_grid = { g_settings->getU16("client_mesh_chunk") };
 	control.cell_size = m_mesh_grid.cell_size;
-	control.cell_size_pow =	log(control.cell_size) / log(2);
+	control.cell_size_pow =	rangeToStep(control.cell_size);
 	control.farmesh_quality = g_settings->getU16("farmesh_quality");
-	control.farmesh_quality_pow = log(control.farmesh_quality) / log(2);
+	control.farmesh_quality_pow = rangeToStep(control.farmesh_quality);
 	control.farmesh_stable = g_settings->getU16("farmesh_stable");
 	control.farmesh_all_changed = g_settings->getPos("farmesh_all_changed");
 }

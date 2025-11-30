@@ -100,8 +100,8 @@ public:
 
 	int generateTerrain() override;
 	void generateBuildings() override;
-	int getSpawnLevelAtPoint(v2pos_t p) override;
-	int getGroundLevelAtPoint(v2pos_t p) override;
+	pos_t getSpawnLevelAtPoint(v2pos_t p) override;
+	pos_t getGroundLevelAtPoint(v2pos_t p) override;
 
 	v3d scale{1, 1, 1};
 	v3d center{0, 0, 0};

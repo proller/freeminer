@@ -83,7 +83,7 @@ public:
 
 	virtual void makeChunk(BlockMakeData *data);
 	virtual
-	int getSpawnLevelAtPoint(v2pos_t p);
+	pos_t getSpawnLevelAtPoint(v2pos_t p);
 
 	float baseTerrainLevelAtPoint(pos_t x, pos_t z);
 	float baseTerrainLevelFromMap(int index);

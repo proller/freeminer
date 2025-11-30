@@ -21,6 +21,7 @@
 #cmakedefine01 USE_MANDELBULBER
 #cmakedefine01 USE_MULTI
 #cmakedefine01 USE_OSMIUM
+#cmakedefine01 USE_OSMIUM_TOOL
 #cmakedefine01 USE_SCTP
 #cmakedefine01 USE_SQLITE3
 #cmakedefine01 USE_TIFF
@@ -60,8 +61,8 @@
 #cmakedefine01 USE_SYSTEM_JSONCPP
 #cmakedefine01 USE_REDIS
 #cmakedefine01 USE_OPENSSL
-#cmakedefine01 USE_POS32
-#cmakedefine01 USE_OPOS64
+#define USE_POS32 @USE_POS32@
+#define USE_OPOS64 @USE_OPOS64@
 #cmakedefine01 HAVE_ENDIAN_H
 #cmakedefine01 HAVE_STRLCPY
 #cmakedefine01 HAVE_MALLOC_TRIM

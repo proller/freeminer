@@ -156,7 +156,6 @@ public:
 	u32 getU32(const std::string &name) const;
 	s32 getS32(const std::string &name) const;
 	u64 getU64(const std::string &name) const;
-	pos_t getPos(const std::string &name) const;
 	float getFloat(const std::string &name) const;
 	float getFloat(const std::string &name, float min, float max) const;
 	v2f getV2F(const std::string &name) const;
@@ -187,7 +186,6 @@ public:
 	bool getS16NoEx(const std::string &name, s16 &val) const;
 	bool getU32NoEx(const std::string &name, u32 &val) const;
 	bool getS32NoEx(const std::string &name, s32 &val) const;
-	bool getPosNoEx(const std::string &name, pos_t &val) const;
 	bool getU64NoEx(const std::string &name, u64 &val) const;
 	bool getFloatNoEx(const std::string &name, float &val) const;
 	bool getFloatNoEx(const std::string &name, double &val) const;
@@ -222,13 +220,18 @@ public:
 	bool setU16(const std::string &name, u16 value);
 	bool setS32(const std::string &name, s32 value);
 	bool setU64(const std::string &name, u64 value);
-	bool setPos(const std::string &name, pos_t value);
 	bool setFloat(const std::string &name, float value);
 	bool setV2F(const std::string &name, v2f value);
 	bool setV3F(const std::string &name, v3f value);
 	bool setFlagStr(const std::string &name, u32 flags,
 		const FlagDesc *flagdesc = nullptr, u32 flagmask = U32_MAX);
 	bool setNoiseParams(const std::string &name, const NoiseParams &np);
+
+	s64 getS64(const std::string &name) const;
+	pos_t getPos(const std::string &name) const;
+	bool getS64NoEx(const std::string &name, s64 &val) const;
+	bool getPosNoEx(const std::string &name, pos_t &val) const;
+	bool setPos(const std::string &name, pos_t value);
 
 	// remove a setting
 	bool remove(const std::string &name);

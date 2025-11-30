@@ -129,8 +129,8 @@ public:
 	virtual MapgenType getType() const { return MAPGEN_V6; }
 
 	void makeChunk(BlockMakeData *data);
-	int getGroundLevelAtPoint(v2pos_t p);
-	int getSpawnLevelAtPoint(v2pos_t p);
+	pos_t getGroundLevelAtPoint(v2pos_t p);
+	pos_t getSpawnLevelAtPoint(v2pos_t p);
 
 	float baseTerrainLevel(float terrain_base, float terrain_higher,
 		float steepness, float height_select);
@@ -152,7 +152,8 @@ public:
 	u32 get_blockseed(u64 seed, v3pos_t p);
 
 	virtual void calculateNoise();
-	virtual int generateGround();
+	virtual 
+	pos_t generateGround();
 	void addMud();
 	void flowMud(pos_t &mudflow_minpos, pos_t &mudflow_maxpos);
 	void moveMud(u32 remove_index, u32 place_index,

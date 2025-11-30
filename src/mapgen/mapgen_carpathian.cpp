@@ -325,7 +325,7 @@ void MapgenCarpathian::makeChunk(BlockMakeData *data)
 ////////////////////////////////////////////////////////////////////////////////
 
 
-int MapgenCarpathian::getSpawnLevelAtPoint(v2pos_t p)
+pos_t MapgenCarpathian::getSpawnLevelAtPoint(v2pos_t p)
 {
 	// If rivers are enabled, first check if in a river channel
 	if (spflags & MGCARPATHIAN_RIVERS) {

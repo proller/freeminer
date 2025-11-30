@@ -15,7 +15,7 @@
 	url = https://github.com/msgpack/msgpack-c.git
 [submodule "src/external/websocketpp"]
 	path = src/external/websocketpp
-	url = https://github.com/hanyeol/websocketpp.git
+	url = https://github.com/FelixHommel/websocketpp.git
 [submodule "src/external/leveldb"]
 	path = src/external/leveldb
 	url = https://github.com/google/leveldb
@@ -28,3 +28,12 @@
 [submodule "src/mapgen/earth/arnis-cpp"]
 	path = src/mapgen/earth/arnis-cpp
 	url = https://github.com/freeminer/arnis-cpp
+[submodule "src/mapgen/earth/osmium-tool"]
+	path = src/mapgen/earth/osmium-tool
+	url = https://github.com/osmcode/osmium-tool.git
+[submodule "src/mapgen/earth/libosmium"]
+	path = src/mapgen/earth/libosmium
+	url = https://github.com/osmcode/libosmium.git
+[submodule "src/mapgen/earth/json"]
+	path = src/mapgen/earth/json
+	url = https://github.com/nlohmann/json.git

@@ -884,7 +884,7 @@ int ModApiMapgen::l_get_mapgen_edges(lua_State *L)
 	} else {
 		std::string mapgen_limit_str;
 		settingsmgr->getMapSetting("mapgen_limit", &mapgen_limit_str);
-		mapgen_limit = stoi(mapgen_limit_str, 0, MAX_MAP_GENERATION_LIMIT);
+		mapgen_limit = stol(mapgen_limit_str, 0);
 	}
 
 	s16 chunksize;
@@ -917,7 +917,7 @@ int ModApiMapgen::l_get_mapgen_chunksize(lua_State *L)
 	settingsmgr->getMapSetting("chunksize", &chunksize_str);
 	s16 chunksize = stoi(chunksize_str, 1, 10);
 
-	push_v3s16(L, {chunksize, chunksize, chunksize});
+	push_v3s16(L, v3s16{chunksize, chunksize, chunksize});
 	return 1;
 }
 
@@ -1408,7 +1408,7 @@ int ModApiMapgen::l_register_ore(lua_State *L)
 	//// Get y_min/y_max
 
 	{
-		int ymin;
+		pos_t ymin;
 		if (getintfield(L, index, "y_min", ymin)) {
 		} else if (getintfield(L, index, "height_min", ymin)) {
 			log_deprecated(L, "Field \"height_min\" on ore " + ore->name +
@@ -1420,7 +1420,7 @@ int ModApiMapgen::l_register_ore(lua_State *L)
 	}
 
 	{
-		int ymax;
+		pos_t ymax;
 		if (getintfield(L, index, "y_max", ymax)) {
 		} else if (getintfield(L, index, "height_max", ymax)) {
 			log_deprecated(L, "Field \"height_max\" on ore " + ore->name +

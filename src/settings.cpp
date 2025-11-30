@@ -1344,3 +1344,17 @@ bool Settings::getBoolNoEx(const std::string &name, bool &val) const
 		return false;
 	}
 }
+s64 Settings::getS64(const std::string &name) const
+{
+	return stol(get(name));
+}
+
+bool Settings::getS64NoEx(const std::string &name, s64 &val) const
+{
+	try {
+		val = getS64(name);
+		return true;
+	} catch (SettingNotFoundException &e) {
+		return false;
+	}
+}

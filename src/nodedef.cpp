@@ -31,7 +31,7 @@
 #include <cmath>
 
 #include "client/texturesource.h"
-
+#include <ISceneManager.h>
 /*
 	NodeBox
 */
