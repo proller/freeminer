@@ -699,9 +699,14 @@ void Server::start()
 		std::cerr << "  ___ " << g_version_hash << std::endl;
 	}
 
-
    actionstream << "\033[1mfree\033[1;33mminer \033[1;36mv" << g_version_hash
 				<< "\033[0m \t"
+#if USE_POS32
+				<< " map" << USE_POS32 << " \t"
+#endif
+#if USE_OPOS64
+				<< " obj" << USE_OPOS64 << " \t"
+#endif
 #if ENABLE_THREADS
 				<< " threads \t"
 #endif
@@ -726,12 +731,17 @@ void Server::start()
 				<< " msan \t"
 #endif
 #endif
+#if defined(__has_feature)
+#if __has_feature(undefined_behavior_sanitizer)
+				<< " ubsan \t"
+#endif
+#endif
 #if USE_MULTI
 				<< " multi: \t"
 #endif
 #if MINETEST_PROTO && MINETEST_TRANSPORT
-				<< " mt " << SERVER_PROTOCOL_VERSION_MIN << "-"
-				<< LATEST_PROTOCOL_VERSION << "\t"
+				<< " mt " << SERVER_PROTOCOL_VERSION_MIN << "-" << LATEST_PROTOCOL_VERSION
+				<< "\t"
 #endif
 #if USE_SCTP
 				<< " sctp \t"
@@ -759,12 +769,12 @@ void Server::start()
 #endif
 				<< std::endl;
 
-	actionstream << "World at [" << m_path_world << "]" << std::endl;
-	actionstream << "Server for gameid=\"" << m_gamespec.id
-			<< "\" mapgen=\"" << Mapgen::getMapgenName(m_emerge->mgparams->mgtype)
-			<< "\" listening on ";
-	m_bind_addr.print(actionstream);
-	actionstream << "." << std::endl;
+   actionstream << "World at [" << m_path_world << "]" << std::endl;
+   actionstream << "Server for gameid=\"" << m_gamespec.id << "\" mapgen=\""
+				<< Mapgen::getMapgenName(m_emerge->mgparams->mgtype)
+				<< "\" listening on ";
+   m_bind_addr.print(actionstream);
+   actionstream << "." << std::endl;
 }
 
 void Server::stop()

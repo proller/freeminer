@@ -595,7 +595,7 @@ void MapBlock::correctBlockNodeIds(const NameIdMapping *nimap, MapNode *nodes,
 	}
 }
 
-void MapBlock::serialize(std::ostream &os_compressed, u8 version, bool disk, int compression_level, bool use_content_only)
+void MapBlock::serialize(std::ostream &os_compressed, u8 version, bool disk, int compression_level)
 {
 	if (!ser_ver_supported_write(version))
 		throw VersionMismatchException("ERROR: MapBlock format not supported");
@@ -630,10 +630,6 @@ void MapBlock::serialize(std::ostream &os_compressed, u8 version, bool disk, int
 	if (version >= 27) {
 		writeU16(os, m_lighting_complete);
 	}
-
-	// fmtodo: check version and dont pack data if more than 20150427 or 0.4.12.7+
-//	if (!disk && use_content_only && m_is_mono_block)
-//		return;
 
 	/*
 		Bulk node data
@@ -798,15 +794,6 @@ bool MapBlock::deSerialize(std::istream &in_compressed, u8 version, bool disk)
 		}
 	}
 
-/*
-	if (!disk && m_is_mono_block) {
-		auto n = MapNode(content_only, content_only_param1, content_only_param2);
-		for (u32 i = 0; i < MAP_BLOCKSIZE*MAP_BLOCKSIZE*MAP_BLOCKSIZE; i++)
-			data[i] = n;
-		return true;
-	}
-*/
-
 	TRACESTREAM(<<"MapBlock::deSerialize "<<getPos()
 			<<": Bulk node data"<<std::endl);
 	u8 content_width = readU8(is);
@@ -910,15 +897,23 @@ bool MapBlock::deSerialize(std::istream &in_compressed, u8 version, bool disk)
 	}
 
 	if (flags & (1 << 7)) {
+		size_t size = 0;
 		std::string data = deSerializeString32(is);
+		size = data.size();
 		if (!data.empty()) {
 			msgpack::unpacked msg;
 			msgpack::unpack(msg, data.data(), data.size());
-			auto &obj = msg.get();
-			auto packet = obj.as<MsgpackPacket>();
+			auto packet = msg.get().as<MsgpackPacket>();
 			const auto it = packet.find(MAPBLOCK_LIGHT_POINTS);
 			if (it != packet.end()) {
-				it->second.convert(m_light_points);
+				try {
+					it->second.convert(m_light_points);
+				} catch (const std::exception &ex) {
+					verbosestream << "MapBlock::deSerialize freeminer: pos=" << getPos()
+								  << " size=" << data.size()
+								  << " packet=" << packet.size() << " ex=" << ex.what()
+								  << std::endl;
+				}
 			}
 		}
 	}

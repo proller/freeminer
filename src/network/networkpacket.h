@@ -148,8 +148,10 @@ public:
 	NetworkPacket &operator>>(double &dst);
 	NetworkPacket &operator<<(const double src);
 
+#if !USE_OPOS64
 	NetworkPacket &operator>>(v3d &dst);
 	NetworkPacket &operator<<(const v3d src);
+#endif
 
 	NetworkPacket &operator>>(long double &dst);
 	NetworkPacket &operator<<(const long double src);

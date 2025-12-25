@@ -695,7 +695,7 @@ void Server::SendBlockFm(session_t peer_id, MapBlockPtr block, u8 ver,
 	PACK(TOCLIENT_BLOCKDATA_POS, block->getPos());
 
 	std::ostringstream os(std::ios_base::binary);
-	block->serialize(os, ver, false, net_compression_level, net_proto_version >= 1);
+	block->serialize(os, ver, false, net_compression_level);
 	block->serializeNetworkSpecific(os);
 
 	PACK(TOCLIENT_BLOCKDATA_DATA, os.str());

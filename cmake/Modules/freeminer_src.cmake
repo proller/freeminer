@@ -112,6 +112,9 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
         set(BUILD_DATA_TESTS 0 CACHE INTERNAL "")
         set(BUILD_EXAMPLES 0 CACHE INTERNAL "")
         set(BUILD_BENCHMARKS 0 CACHE INTERNAL "")
+        set(Osmium_USE_GEOS 0 CACHE INTERNAL "")
+        set(Osmium_USE_GDAL 0 CACHE INTERNAL "")
+        set(CPPCHECK 0 CACHE INTERNAL "")
 
         if(NOT OSMIUM_INCLUDE_DIR)
             add_subdirectory(mapgen/earth/libosmium)

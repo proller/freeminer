@@ -407,6 +407,12 @@ inline void writeF64(u8 *data, double i)
 	return writeU64(data, u);
 }
 
+inline void writeV3F64(u8 *data, v3d p)
+{
+	writeF64(&data[0], p.X);
+	writeF64(&data[8], p.Y);
+	writeF64(&data[16], p.Z);
+}
 
 inline v3s64 readV3S64(const u8 *data)
 {
@@ -515,6 +521,7 @@ MAKE_STREAM_READ_FXN(v3s64, V3S64,   24);
 MAKE_STREAM_WRITE_FXN(v3s64, V3S64,   24);
 MAKE_STREAM_READ_FXN(v3f128, V3F128,  48);
 MAKE_STREAM_WRITE_FXN(v3f128, V3F128, 48);
+MAKE_STREAM_WRITE_FXN(v3d,  V3F64,   24);
 
 inline pos_t readPOS(std::istream &is, const u16 proto_ver = 0) {
 #if USE_POS32 == 64

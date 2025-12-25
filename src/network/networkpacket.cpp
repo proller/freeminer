@@ -684,6 +684,7 @@ NetworkPacket& NetworkPacket::operator>>(double& dst)
 	return *this;
 }
 
+#if !USE_OPOS64
 NetworkPacket& NetworkPacket::operator>>(v3d& dst)
 {
 	checkReadOffset(m_read_offset, sizeof(dst));
@@ -701,6 +702,7 @@ NetworkPacket& NetworkPacket::operator<<(const v3d src)
 	*this << (double)src.Z;
 	return *this;
 }
+#endif
 
 #if USE_OPOS64 == 64
 NetworkPacket& NetworkPacket::operator>>(v3opos_t& dst)

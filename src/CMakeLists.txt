@@ -47,7 +47,11 @@ if(NOT (BUILD_CLIENT OR BUILD_SERVER OR NO_BUILD))
 endif()
 
 option(USE_POS32 "32 bit node/block positions (experimental, not compatible with 16 bit)" 32)
-option(USE_OPOS64 "64 bit object positions (experimental, not compatible with 32 bit)" ${USE_POS32})
+if (USE_POS32)
+	option(USE_OPOS64 "64 bit object positions (experimental, not compatible with 32 bit)" 64)
+else()
+	option(USE_OPOS64 "64 bit object positions (experimental, not compatible with 32 bit)" 0)
+endif()
 
 option(PRECOMPILE_HEADERS "Precompile some headers (experimental; requires CMake 3.16 or later)" FALSE)
 set(PRECOMPILED_HEADERS_PATH "" CACHE FILEPATH "Path to a file listing all headers to precompile")
