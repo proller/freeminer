@@ -4,6 +4,7 @@
 
 #include "staticobject.h"
 #include "constants.h"
+#include "util/numeric.h"
 #include "util/serialize.h"
 #include "server/serveractiveobject.h"
 #include "log_types.h"

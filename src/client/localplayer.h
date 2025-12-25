@@ -9,6 +9,7 @@
 #include "environment.h"
 #include "constants.h"
 #include "lighting.h"
+#include "util/numeric.h"
 #include <string>
 
 class Client;
