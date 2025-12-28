@@ -17,8 +17,6 @@ class ClientEnvironment;
 struct MapNode;
 class GenericCAO;
 class ClientActiveObject;
-class ClientEnvironment;
-class IGameDef;
 struct CollisionInfo;
 struct collisionMoveResult;
 
@@ -105,6 +103,8 @@ public:
 
 	std::string hotbar_image = "";
 	std::string hotbar_selected_image = "";
+	/// Temporary player inventory formspec. Empty value = feature inactive.
+	std::string inventory_formspec_override;
 
 	video::SColor light_color = video::SColor(255, 255, 255, 255);
 
@@ -121,7 +121,6 @@ public:
 		m_cao = toset;
 	}
 
-	u32 maxHudId() const { return hud.size(); }
 
 //freeminer:
 	bool zoom = false;

@@ -307,36 +307,45 @@ Biome *BiomeGenOriginal::calcBiomeFromNoise(float heat, float humidity, v3s16 po
 }
 
 // Freeminer Weather
-s16 BiomeManager::calcBlockHeat(v3pos_t p, uint64_t seed, float timeofday, float totaltime, bool use_weather) {
+weather::heat_t BiomeManager::calcBlockHeat(const v3pos_t &p, uint64_t seed,
+		float timeofday, float totaltime, bool use_weather)
+{
 	//variant 1: full random
 	//f32 heat = NoisePerlin3D(np_heat, p.X, env->getGameTime()/100, p.Z, seed);
 
 	//variant 2: season change based on default heat map
-	auto heat = NoiseFractal2D(&(mapgen_params->bparams->np_heat), p.X, p.Z, seed); // -30..20..70
+	auto heat = NoiseFractal2D(
+			&(mapgen_params->bparams->np_heat), p.X, p.Z, seed); // -30..20..70
 	// auto heat =calcHeatAtPoint(p);
 
 	if (use_weather) {
 		f32 seasonv = totaltime;
 		seasonv /= 86400 * year_days; // season change speed
-		seasonv += (f32)p.X / weather_heat_width; // you can walk to area with other season
+		seasonv +=
+				(f32)p.X / weather_heat_width; // you can walk to area with other season
 		seasonv = sin(seasonv * M_PI);
 		//heat += (weather_heat_season * (heat < offset ? 2 : 0.5)) * seasonv; // -60..0..30
-		heat += (weather_heat_season) * seasonv; // -60..0..30
+		heat += (weather_heat_season)*seasonv; // -60..0..30
 
 		// daily change, hotter at sun +4, colder at night -4
-		heat += weather_heat_daily * (sin(cycle_shift(timeofday, -0.25) * M_PI) - 0.5); //-64..0..34
+		heat += weather_heat_daily *
+				(sin(cycle_shift(timeofday, -0.25) * M_PI) - 0.5); //-64..0..34
 	}
 	heat += p.Y / weather_heat_height; // upper=colder, lower=hotter, 3c per 1000
 
-	if (weather_hot_core && p.Y < -(WEATHER_LIMIT-weather_hot_core))
-		heat += 6000 * (1.0-((float)(p.Y - -WEATHER_LIMIT)/weather_hot_core)); //hot core, later via realms
+	if (weather_hot_core && p.Y < -(WEATHER_LIMIT - weather_hot_core))
+		heat += 6000 * (1.0 - ((float)(p.Y - -WEATHER_LIMIT) /
+									  weather_hot_core)); //hot core, later via realms
 
 	return heat;
 }
 
-s16 BiomeManager::calcBlockHumidity(v3pos_t p, uint64_t seed, float timeofday, float totaltime, bool use_weather) {
+weather::humidity_t BiomeManager::calcBlockHumidity(const v3pos_t &p, uint64_t seed,
+		float timeofday, float totaltime, bool use_weather)
+{
 
-	auto humidity = NoiseFractal2D(&(mapgen_params->bparams->np_humidity), p.X, p.Z, seed);
+	auto humidity =
+			NoiseFractal2D(&(mapgen_params->bparams->np_humidity), p.X, p.Z, seed);
 	// auto humidity = calcHumidityAtPoint(p);
 
 	if (use_weather) {
@@ -344,7 +353,8 @@ s16 BiomeManager::calcBlockHumidity(v3pos_t p, uint64_t seed, float timeofday, f
 		seasonv /= 86400 * weather_humidity_days; // bad weather change speed (2 days)
 		seasonv += (f32)p.Z / weather_humidity_width;
 		humidity += weather_humidity_season * sin(seasonv * M_PI);
-		humidity += weather_humidity_daily * (sin(cycle_shift(timeofday, -0.1) * M_PI) - 0.5);
+		humidity +=
+				weather_humidity_daily * (sin(cycle_shift(timeofday, -0.1) * M_PI) - 0.5);
 	}
 	humidity += p.Y / weather_humidity_height; // upper=dry, lower=wet, 3c per 1000
 

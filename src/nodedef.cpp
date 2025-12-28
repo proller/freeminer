@@ -4,7 +4,6 @@
 
 #include "nodedef.h"
 
-#include "SAnimatedMesh.h"
 #include "itemdef.h"
 #if CHECK_CLIENT_BUILD()
 #include "client/mesh.h"
@@ -32,7 +31,7 @@
 #include <cmath>
 
 #include "client/texturesource.h"
-
+#include <ISceneManager.h>
 /*
 	NodeBox
 */
@@ -220,7 +219,7 @@ void NodeBox::msgpack_unpack(msgpack::object o)
 	type = (NodeBoxType)type_tmp;
 
 	//if(type == NODEBOX_FIXED || type == NODEBOX_LEVELED)
-	if (packet.count(NODEBOX_S_FIXED))
+	if (packet.contains(NODEBOX_S_FIXED))
 		packet[NODEBOX_S_FIXED].convert(fixed);
 
 	if (type == NODEBOX_WALLMOUNTED) {
@@ -1186,8 +1185,16 @@ void ContentFeatures::updateTextures(ITextureSource *tsrc, IShaderSource *shdsrc
 
 	if (tsrc)
 	// minimap pixel color = average color of top tile
-	if (tsettings.enable_minimap && !tdef[0].name.empty() && drawtype != NDT_AIRLIKE)
-		minimap_color = tsrc->getTextureAverageColor(tdef[0].name);
+	if (tsettings.enable_minimap && drawtype != NDT_AIRLIKE && !tdef[0].name.empty())
+	{
+		if (!tdef_overlay[0].name.empty()) {
+			// Merge overlay and base texture
+			std::string combined = tdef[0].name + "^(" + tdef_overlay[0].name + ")";
+			minimap_color = tsrc->getTextureAverageColor(combined);
+		} else {
+			minimap_color = tsrc->getTextureAverageColor(tdef[0].name);
+		}
+	}
 
 	// Tiles (fill in f->tiles[])
 	bool any_polygon_offset = false;
@@ -1246,13 +1253,6 @@ void ContentFeatures::updateTextures(ITextureSource *tsrc, IShaderSource *shdsrc
 		// Note: By freshly reading, we get an unencumbered mesh.
 		if (scene::IMesh *src_mesh = client->getMesh(mesh)) {
 			bool apply_bs = false;
-			// For frame-animated meshes, always get the first frame,
-			// which holds a model for which we can eventually get the static pose.
-			while (auto *src_meshes = dynamic_cast<scene::SAnimatedMesh *>(src_mesh)) {
-				src_mesh = src_meshes->getMesh(0.0f);
-				src_mesh->grab();
-				src_meshes->drop();
-			}
 			if (auto *skinned_mesh = dynamic_cast<scene::SkinnedMesh *>(src_mesh)) {
 				// Compatibility: Animated meshes, as well as static gltf meshes, are not scaled by BS.
 				// See https://github.com/luanti-org/luanti/pull/16112#issuecomment-2881860329

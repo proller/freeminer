@@ -52,6 +52,7 @@ local function test_dynamic_media(cb, player)
 	local ok = core.dynamic_add_media({
 		filepath = path,
 		to_player = player:get_player_name(),
+		client_cache = false,
 	}, function(name)
 		if not call_ok then
 			return cb("impossible condition")
@@ -66,18 +67,6 @@ local function test_dynamic_media(cb, player)
 	-- if the callback isn't called this test will just hang :shrug:
 end
 unittests.register("test_dynamic_media", test_dynamic_media, {async=true, player=true})
-
-local function test_v3f_metatable(player)
-	assert(vector.check(player:get_pos()))
-end
-unittests.register("test_v3f_metatable", test_v3f_metatable, {player=true})
-
-local function test_v3s16_metatable(player, pos)
-	local node = core.get_node(pos)
-	local found_pos = core.find_node_near(pos, 0, node.name, true)
-	assert(vector.check(found_pos))
-end
-unittests.register("test_v3s16_metatable", test_v3s16_metatable, {map=true})
 
 local function test_clear_meta(_, pos)
 	local ref = core.get_meta(pos)

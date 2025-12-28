@@ -110,7 +110,7 @@ void ShadowRenderer::disable()
 void ShadowRenderer::preInit(IWritableShaderSource *shsrc)
 {
 	if (g_settings->getBool("enable_dynamic_shadows")) {
-		shsrc->addShaderUniformSetterFactory(new ShadowUniformSetterFactory());
+		shsrc->addShaderUniformSetterFactory(std::make_unique<ShadowUniformSetterFactory>());
 	}
 }
 
@@ -413,7 +413,7 @@ video::ITexture *ShadowRenderer::getSMTexture(const std::string &shadow_map_name
 				shadow_map_name.c_str(), texture_format);
 	}
 
-	return m_driver->getTexture(shadow_map_name.c_str());
+	return m_driver->findTexture(shadow_map_name.c_str());
 }
 
 void ShadowRenderer::renderShadowMap(video::ITexture *target,
@@ -690,7 +690,7 @@ std::string ShadowRenderer::readShaderFile(const std::string &path)
 	return prefix + content;
 }
 
-ShadowRenderer *createShadowRenderer(IrrlichtDevice *device, Client *client)
+std::unique_ptr<ShadowRenderer> createShadowRenderer(IrrlichtDevice *device, Client *client)
 {
 	if (!g_settings->getBool("enable_dynamic_shadows"))
 		return nullptr;
@@ -704,7 +704,7 @@ ShadowRenderer *createShadowRenderer(IrrlichtDevice *device, Client *client)
 		return nullptr;
 	}
 
-	ShadowRenderer *shadow_renderer = new ShadowRenderer(device, client);
+	auto shadow_renderer = std::make_unique<ShadowRenderer>(device, client);
 	shadow_renderer->initialize();
 	return shadow_renderer;
 }

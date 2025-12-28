@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "fm_weather.h"
 #include "irr_v3d.h"
 #include "mapblock.h"
 #include "threading/concurrent_set.h"
@@ -21,7 +22,6 @@ class Server;
 
 class Settings;
 class MapDatabase;
-class IRollbackManager;
 class EmergeManager;
 class ServerEnvironment;
 struct BlockMakeData;
@@ -51,15 +51,12 @@ class ServerMap : public Map
 {
 public:
 
-
-    // freeminer:
-	using humidity_t = s16;
-	using heat_t = s16;
-	virtual heat_t updateBlockHeat(ServerEnvironment *env, const v3pos_t &p,
-			MapBlock *block = nullptr, unordered_map_v3pos<heat_t> *cache = nullptr,
+	// freeminer:
+	virtual weather::heat_t updateBlockHeat(ServerEnvironment *env, const v3pos_t &p,
+			MapBlock *block = nullptr, unordered_map_v3bpos<weather::heat_t> *cache = nullptr,
 			bool block_add = true);
-	virtual humidity_t updateBlockHumidity(ServerEnvironment *env, const v3pos_t &p,
-			MapBlock *block = nullptr, unordered_map_v3pos<humidity_t> *cache = nullptr,
+	virtual weather::humidity_t updateBlockHumidity(ServerEnvironment *env, const v3pos_t &p,
+			MapBlock *block = nullptr, unordered_map_v3bpos<weather::humidity_t> *cache = nullptr,
 			bool block_add = true);
 
 	size_t transforming_liquid_size();
@@ -86,7 +83,7 @@ public:
 	std::mutex m_lighting_modified_mutex;
 	std::map<v3bpos_t, int> m_lighting_modified_blocks;
 	std::map<unsigned int, lighting_map_t> m_lighting_modified_blocks_range;
-	void lighting_modified_add(const v3pos_t &pos, int range = 5);
+	void lighting_modified_add(const v3bpos_t &pos, int range = 5);
 
 	void unspreadLight(enum LightBank bank, std::map<v3pos_t, u8> &from_nodes,
 			std::set<v3pos_t> &light_sources,
@@ -150,6 +147,7 @@ public:
 	/// @param now current game time
 	void finishBlockMake(BlockMakeData *data,
 		std::map<v3s16, MapBlock*> *changed_blocks, u32 now);
+	void cancelBlockMake(BlockMakeData *data);
 
 	/*
 		Get a block from somewhere.
@@ -186,6 +184,7 @@ public:
 	/*
 		Database functions
 	*/
+	static std::vector<std::string> getDatabaseBackends();
 	static MapDatabase *createDatabase(const std::string &name, const std::string &savedir, Settings &conf);
 
 	// Call these before and after saving of blocks
@@ -258,6 +257,9 @@ protected:
 
 private:
 	friend class ModApiMapgen; // for m_transforming_liquid
+
+	// extra border area during mapgen (in blocks)
+	constexpr static v3s16 EMERGE_EXTRA_BORDER{1, 1, 1};
 
 	// Emerge manager
 	EmergeManager *m_emerge;

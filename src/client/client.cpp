@@ -33,6 +33,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <string>
 #include "client.h"
 #include "client/fontengine.h"
+#include "fm_far_calc.h"
 #include "network/clientopcodes.h"
 #include "network/connection.h"
 #include "network/networkpacket.h"
@@ -162,7 +163,7 @@ Client::Client(
 	m_last_chat_message_sent(time(NULL)),
 	m_password(password),
 	m_chosen_auth_mech(AUTH_MECHANISM_NONE),
-	m_media_downloader(new ClientMediaDownloader()),
+	m_media_downloader(std::make_unique<ClientMediaDownloader>()),
 	m_state(LC_Created),
 	m_modchannel_mgr(new ModChannelMgr())
 {
@@ -175,15 +176,15 @@ Client::Client(
 	m_mod_storage_database->beginSave();
 
 	if (g_settings->getBool("enable_minimap")) {
-		m_minimap = new Minimap(this);
+		m_minimap = std::make_unique<Minimap>(this);
 	}
 
 	m_cache_save_interval = g_settings->getU16("server_map_save_interval");
 	m_mesh_grid = { g_settings->getU16("client_mesh_chunk") };
 	control.cell_size = m_mesh_grid.cell_size;
-	control.cell_size_pow =	log(control.cell_size) / log(2);
+	control.cell_size_pow =	rangeToStep(control.cell_size);
 	control.farmesh_quality = g_settings->getU16("farmesh_quality");
-	control.farmesh_quality_pow = log(control.farmesh_quality) / log(2);
+	control.farmesh_quality_pow = rangeToStep(control.farmesh_quality);
 	control.farmesh_stable = g_settings->getU16("farmesh_stable");
 	control.farmesh_all_changed = g_settings->getPos("farmesh_all_changed");
 }
@@ -262,6 +263,9 @@ void Client::loadMods()
 	// complain about mods with unsatisfied dependencies
 	if (!modconf.isConsistent()) {
 		errorstream << modconf.getUnsatisfiedModsError() << std::endl;
+		delete m_script;
+		m_script = nullptr;
+		m_env.setScript(nullptr);
 		return;
 	}
 
@@ -293,7 +297,7 @@ void Client::loadMods()
 	if (m_camera)
 		m_script->on_camera_ready(m_camera);
 	if (m_minimap)
-		m_script->on_minimap_ready(m_minimap);
+		m_script->on_minimap_ready(m_minimap.get());
 }
 
 void Client::scanModSubfolder(const std::string &mod_name, const std::string &mod_path,
@@ -359,11 +363,13 @@ void Client::Stop()
 	if (m_localdb) {
 		actionstream << "Local map saving ended" << std::endl;
 		m_localdb->endSave();
+		m_localdb.reset();
 	}
 
 	// TODO: correct order:
 	mesh_thread_pool.wait_until_empty();
 	farmesh_async.wait();
+	mesh_thread_pool.wait_until_nothing_in_flight();
 	mesh_thread_pool.wait_until_empty();
 	farmesh.reset();
 	farmesh_async.wait();
@@ -374,9 +380,6 @@ void Client::Stop()
 
 	if (m_mods_loaded)
 		delete m_script;
-
-	if (m_localdb)
-		delete m_localdb;
 }
 
 bool Client::isShutdown()
@@ -395,6 +398,7 @@ Client::~Client()
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
 	}
+	mesh_thread_pool.wait_until_nothing_in_flight();
 	mesh_thread_pool.wait_until_empty(); // before ~ClientMap()
 
 	deleteAuthData();
@@ -406,6 +410,9 @@ Client::~Client()
 	updateDrawList_async.wait();
 	update_shadows_async.wait();
 
+	mesh_thread_pool.wait_until_nothing_in_flight();
+    mesh_thread_pool.wait_until_empty(); // before ~ClientMap()
+
 /*	
 	MeshUpdateResult r;
 	while (m_mesh_update_manager->getNextResult(r)) {
@@ -415,7 +422,6 @@ Client::~Client()
 		delete r.mesh;
 	}
 */
-	delete m_inventory_from_server;
 
 	// Delete detached inventories
 	for (auto &m_detached_inventorie : m_detached_inventories) {
@@ -429,10 +435,8 @@ Client::~Client()
 
 	guiScalingCacheClear();
 
-	delete m_minimap;
-	m_minimap = nullptr;
-
-	delete m_media_downloader;
+	m_minimap.reset();
+	m_media_downloader.reset();
 
 	// Write the changes and delete
 	if (m_mod_storage_database)
@@ -458,8 +462,7 @@ void Client::connect(const Address &address, const std::string &address_name)
 	}
 
 	m_address_name = address_name;
-	// fmtodo merge: m_con.reset(new con_use::Connection(PROTOCOL_ID, is_simple_singleplayer_game ? MAX_PACKET_SIZE_SINGLEPLAYER : MAX_PACKET_SIZE, CONNECTION_TIMEOUT,address.isIPv6(), this));
-	m_con.reset(con::createMTP(CONNECTION_TIMEOUT, address.isIPv6(), this));
+	m_con.reset(con::createMTP(CONNECTION_TIMEOUT, address.isIPv6(), this, is_simple_singleplayer_game));
 
 	infostream << "Connecting to server at ";
 	address.print(infostream);
@@ -731,12 +734,7 @@ void Client::step(float dtime)
 						do_mapper_update = false;
 
 /*
-					bool is_empty = true;
-					for (int l = 0; l < MAX_TILE_LAYERS; l++)
-						if (r.mesh->getMesh(l)->getMeshBufferCount() != 0)
-							is_empty = false;
-
-					if (is_empty) {
+					if (r.mesh->isEmpty()) {
 						delete r.mesh;
 					} else {
 						// Replace with the new mesh
@@ -808,8 +806,7 @@ void Client::step(float dtime)
 	if (m_media_downloader && m_media_downloader->isStarted()) {
 		m_media_downloader->step(this);
 		if (m_media_downloader->isDone()) {
-			delete m_media_downloader;
-			m_media_downloader = NULL;
+			m_media_downloader.reset();
 		}
 	}
 	{
@@ -991,10 +988,10 @@ bool Client::loadMedia(const std::string &data, const std::string &filename,
 	};
 	name = removeStringEnd(filename, model_ext);
 	if (!name.empty()) {
-		verbosestream<<"Client: Storing model into memory: "
-				<<"\""<<filename<<"\""<<std::endl;
+		TRACESTREAM(<<"Client: Storing model into memory "
+				"\""<<filename<<"\""<<std::endl);
 		if(m_mesh_data.count(filename))
-			errorstream<<"Multiple models with name \""<<filename.c_str()
+			errorstream<<"Multiple models with name \""<<filename
 					<<"\" found; replacing previous model"<<std::endl;
 		m_mesh_data[filename] = data;
 		return true;
@@ -1075,7 +1072,7 @@ void Client::initLocalMapSaving(const Address &address, const std::string &hostn
 		return;
 	}
 	if (m_localdb) {
-		infostream << "Local map saving already running" << std::endl;
+		infostream << "Local map saving already initialized" << std::endl;
 		return;
 	}
 
@@ -1098,6 +1095,7 @@ void Client::initLocalMapSaving(const Address &address, const std::string &hostn
 
 	fs::CreateAllDirs(world_path);
 
+// fm:
 	SubgameSpec gamespec;
     std::string conf_path = world_path + DIR_DELIM + "world.mt";
 	Settings conf;
@@ -1121,18 +1119,21 @@ void Client::initLocalMapSaving(const Address &address, const std::string &hostn
 	}
 
 	std::string backend = conf.get("backend");
-	m_localdb = ServerMap::createDatabase(backend, world_path, conf);
+	m_localdb.reset(ServerMap::createDatabase(backend, world_path, conf));
 
 	if (!conf.updateConfigFile(conf_path.c_str()))
 		errorstream << __FUNCTION__ << ": Failed to update " << conf_path << std::endl;
 
 	m_world_path = world_path;
+// ===
 
+	// m_localdb = std::make_unique<MapDatabaseSQLite3>(world_path);
 	m_localdb->beginSave();
 	actionstream << "Local map saving started, map will be saved at '" << world_path << "'" << std::endl;
 
 	if (!m_simple_singleplayer_mode) {
-		far_dbases[0].reset(m_localdb, [](auto) {});
+		//far_dbases[0].reset(m_localdb, [](auto) {});
+		far_dbases[0] = m_localdb;
 		if (!merger) {
 			merger.reset(new WorldMerger{
 					.get_time_func{[this]() {
@@ -2232,39 +2233,38 @@ float Client::getCurRate()
 
 void Client::makeScreenshot(const std::string & name)
 {
-	irr::video::IVideoDriver *driver = m_rendering_engine->get_video_driver();
-	irr::video::IImage* const raw_image = driver->createScreenShot();
+	video::IVideoDriver *driver = m_rendering_engine->get_video_driver();
+	video::IImage* const raw_image = driver->createScreenShot();
 
-	if (!raw_image)
+	if (!raw_image) {
+		errorstream << "Could not take screenshot" << std::endl;
 		return;
+	}
 
 	const struct tm tm = mt_localtime();
 
-	char timetstamp_c[64];
-	strftime(timetstamp_c, sizeof(timetstamp_c), "%Y%m%d_%H%M%S", &tm);
+	char timestamp_c[64];
+	strftime(timestamp_c, sizeof(timestamp_c), "%Y%m%d_%H%M%S", &tm);
 
-	std::string screenshot_dir;
-
-	if (fs::IsPathAbsolute(g_settings->get("screenshot_path")))
-		screenshot_dir = g_settings->get("screenshot_path");
-	else
-		screenshot_dir = porting::path_user + DIR_DELIM + g_settings->get("screenshot_path");
+	std::string screenshot_dir = g_settings->get("screenshot_path");
+	if (!fs::IsPathAbsolute(screenshot_dir))
+		screenshot_dir = porting::path_user + DIR_DELIM + screenshot_dir;
 
 	std::string filename_base = screenshot_dir
 			+ DIR_DELIM
 			+ std::string(name)
-			+ std::string(timetstamp_c);
+			+ timestamp_c;
 	std::string filename_ext = "." + g_settings->get("screenshot_format");
-	std::string filename;
 
 	// Create the directory if it doesn't already exist.
 	// Otherwise, saving the screenshot would fail.
-	fs::CreateDir(screenshot_dir);
+	fs::CreateAllDirs(screenshot_dir);
 
 	u32 quality = (u32)g_settings->getS32("screenshot_quality");
-	quality = MYMIN(MYMAX(quality, 0), 100) / 100.0 * 255;
+	quality = rangelim(quality, 0, 100) / 100.0f * 255;
 
 	// Try to find a unique filename
+	std::string filename;
 	unsigned serial = 0;
 
 	while (serial < SCREENSHOT_MAX_SERIAL_TRIES) {
@@ -2277,22 +2277,22 @@ void Client::makeScreenshot(const std::string & name)
 	if (serial == SCREENSHOT_MAX_SERIAL_TRIES) {
 		errorstream << "Could not find suitable filename for screenshot" << std::endl;
 	} else {
-		irr::video::IImage* const image =
+		video::IImage* const image =
 				driver->createImage(video::ECF_R8G8B8, raw_image->getDimension());
 
 		if (image) {
 			raw_image->copyTo(image);
 
-			std::ostringstream sstr;
+			std::string msg;
 			if (driver->writeImageToFile(image, filename.c_str(), quality)) {
-				if (name == "screenshot_")
-					sstr << "Saved screenshot to '" << filename << "'";
+			  if (name == "screenshot_")
+				msg = fmtgettext("Saved screenshot to \"%s\"", filename.c_str());
 			} else {
-				sstr << "Failed to save screenshot '" << filename << "'";
+				msg = fmtgettext("Failed to save screenshot to \"%s\"", filename.c_str());
 			}
 			pushToChatQueue(new ChatMessage(CHATMESSAGE_TYPE_SYSTEM,
-					utf8_to_wide(sstr.str())));
-			infostream << sstr.str() << std::endl;
+					utf8_to_wide(msg)));
+			infostream << msg << std::endl;
 			image->drop();
 		}
 	}

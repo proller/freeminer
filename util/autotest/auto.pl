@@ -83,7 +83,8 @@ $0 ----world_sand
 $0 -mg_name=earth -mg_earth='{"center":{"z":36.822183, "y":0, "x":30.583390}}' bot
 #$0 -mg_name=earth -mg_earth='{"scale":{"z":10000, "y":0.01, "x":10000}}' bot
 $0 -mg_name=earth -mg_earth='{"scale":{"z":10000, "y":100, "x":10000}}' bot
-$0 -mg_name=earth -mg_earth='{"center":{"z":27.9878279,"y":0,"x":86.923833}}' -static_spawnpoint='(130,8842,56)' bot  # everest
+$0 -mg_name=earth -mg_earth='{"center":{"z":27.9878279,"y":0,"x":86.923833}}' -static_spawnpoint='(130,8842,56)' bot  # Everest
+$0 -mg_name=earth -mg_earth='{"center":{"z":22.28422,"x":114.15996,"y":0} }' bot  # HongKong
 
 $0 ---cmake_minetest=1 ---build_name=_minetest ----headless ----headless_optimize --address=cool.server.org --port=30001 ---clients_num=25 clients
 
@@ -214,7 +215,8 @@ our $options = {
         profiler_max_page       => 1,
         profiler_page           => 1,
         debug_log_level         => 'info',
-        movement_speed_fast     => 10000,
+        movement_speed_fast     => 100000,
+        movement_acceleration_fast => 100,
         max_block_send_distance => 100,
         default_privs           => 'interact, shout, teleport, settime, privs, fly, noclip, fast, debug',
         default_privs_creative  => 'interact, shout, teleport, settime, privs, fly, noclip, fast, debug',
@@ -412,7 +414,7 @@ $commands = {
         file_append(
             "$config->{logdir}/run.sh",
             join "\n",
-            qq{# } . join(' ', $0, map { /[\s"]/ ? "'" . $_ . "'" : $_ } @ARGV),
+            qq{# } . join(' ', $0, map { /[()\s"]/ ? "'" . $_ . "'" : $_ } @ARGV),
             qq{cd "$build_dir"},
             ""
         );
@@ -473,8 +475,8 @@ $commands = {
         sy qq{rm -rf $config->{world} } if $config->{world_clear} and $config->{world};
         $config->{pid_file} = $config->{pid_path} . ($options->{pass}{name} || 'freeminer') . '.pid';
         return
-          sytee $config->{runner},
-          $commands->{env}(),
+          sytee $commands->{env}(),
+          $config->{runner},
           qq{@_},
           $commands->{executable}(),
           qq{$config->{go} --logfile $config->{logdir}/autotest.$g->{task_name}.game.log},
@@ -483,8 +485,8 @@ $commands = {
         0;
     },
     run_test => sub {
-        sy $config->{runner},
-          $commands->{env}(),
+        sy $commands->{env}(),
+          $config->{runner},
           qq{@_},
           $commands->{executable}(),
           qq{--run-unittests --logfile $config->{logdir}/autotest.$g->{task_name}.test.log},
@@ -493,13 +495,14 @@ $commands = {
     set_bot         => {'----bot' => 1, '----bot_random' => 1,},
     run_bot         => ['set_bot', 'set_client', 'run_single'],
     valgrind => sub {
-        local $config->{runner} = $config->{runner} . " valgrind @_";
-        commands_run($config->{run_task});
+        $g->{keep_config} = 1;
+        $config->{runner} = $config->{runner} . " valgrind @_";
+        0;
     },
     run_server_simple => sub {
         my $fork = $config->{server_bg} ? '&' : '';
         $commands->{world_name}();
-        sytee $config->{runner}, $commands->{env}(), qq{@_}, $commands->{executable}(), qq{--server}, 
+        sytee $commands->{env}(), $config->{runner},  qq{@_}, $commands->{executable}(), qq{--server}, 
         options_make($options->{pass}{config} ? () : [qw(gameid world worldname port config autoexit verbose)]),
         $fork,
           qq{$config->{logdir}/autotest.$g->{task_name}.server.out.log};
@@ -507,8 +510,8 @@ $commands = {
     run_server => sub {
         $commands->{world_name}();
         my $cmd = join ' ',
-          $config->{runner},
           $commands->{env}(),
+          $config->{runner},
           qq{@_},
           $commands->{executable}(),
           ($config->{executable_name} eq 'freeminer' ? qq{--server} : ()),
@@ -530,8 +533,8 @@ $commands = {
             for ($config->{clients_start} .. $config->{clients_num}) {
                 Time::HiRes::sleep($config->{clients_spawn_sleep} // 0.2);
                 sf
-                  $config->{runner},
                   $commands->{env}(),
+                  $config->{runner},
                   qq{@_},
                   $commands->{executable}(),
                   qq{--name $config->{name}$_ --go --autoexit $autoexit --logfile $config->{logdir}/autotest.$g->{task_name}.game.log},
@@ -648,7 +651,7 @@ our $tasks = {
     (
         map {
             'valgrind_' . $_ => [
-                'debug', 'build',
+                #'debug', 'build',
                 ['valgrind', '--tool=' . $_],
             ],
         } @{$config->{valgrind_tools}}
@@ -685,8 +688,11 @@ our $tasks = {
             ' env ASAN_OPTIONS=abort_on_error=1 '
           . $config->{runner}
           . $config->{gdb}
-          . q{ -ex 'set debuginfod enabled on' }
-          . q{ -ex 'run' -ex 't a a bt' }
+          . q{ --quiet }
+          . ($config->{gdb_stay} ? '' : q{ --batch })
+          . q { -iex='set auto-load safe-path /' }
+          . q{ -iex='set debuginfod enabled on' }
+          . q{ -ex 'run' -ex 'backtrace' -ex 'thread apply all backtrace' }
           . ($config->{gdb_stay} ? '' : q{ -ex 'cont' -ex 'quit' })
           . q{ --args };
         #@_ = ('debug') if !@_;

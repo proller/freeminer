@@ -65,16 +65,18 @@ height::height_t hgts::get(height_hgt::ll_t lat, height_hgt::ll_t lon)
 
 	const auto lat1 = height::lat_start(lat); // + 90 % 180;
 	const auto lon1 = height::lon_start(lon);
+	{
+		const auto &map1_lat1 = map1[lat1];
+		if (const auto it = map1_lat1.find(lon1); it != map1_lat1.end()) {
+			prev_layer_height = it->second->get(lat, lon);
 
-	if (map1[lat1].contains(lon1)) {
-		prev_layer_height = map1[lat1][lon1]->get(lat, lon);
-
-		if constexpr (layers) {
-			if (prev_layer_height) {
+			if constexpr (layers) {
+				if (prev_layer_height) {
+					return prev_layer_height;
+				}
+			} else {
 				return prev_layer_height;
 			}
-		} else {
-			return prev_layer_height;
 		}
 	}
 
@@ -90,8 +92,11 @@ height::height_t hgts::get(height_hgt::ll_t lat, height_hgt::ll_t lon)
 	//DUMP((long)this, "notfound, will load", lat, lon, lat1, lon1, lat90, lon90, map1[lat1].contains(lon1), prev_layer_height);
 	const auto lock = std::unique_lock(mutex);
 
-	if (map1[lat1].contains(lon1)) {
-		prev_layer_height = map1[lat1][lon1]->get(lat, lon);
+	const auto &map1_lat1 = map1[lat1];
+
+	if (const auto it = map1_lat1.find(lon1); it != map1_lat1.end()) {
+		prev_layer_height = it->second->get(lat, lon);
+
 		if constexpr (layers) {
 			if (prev_layer_height) {
 				return prev_layer_height;
@@ -123,15 +128,15 @@ height::height_t hgts::get(height_hgt::ll_t lat, height_hgt::ll_t lon)
 	};
 
 	if (lat <= 90 && lat >= -90 && lon <= 180 && lon >= -180) {
-		// DUMP("insert", (long)this, lat, lon, folder, map1.size(), map1[lat1].size());
-		if (!map1[lat1].contains(lon1)) {
+		// DUMP("insert", (long)this, lat, lon, folder, map1.size(), map1_lat1.size());
+		if (!map1_lat1.contains(lon1)) {
 			auto hgt = std::make_shared<height_hgt>(folder, lat, lon);
 			const int lat_dec = hgt->lat_start(lat);
 			const int lon_dec = hgt->lon_start(lon);
 			if (hgt->load(lat, lon)) {
 				map1[lat_dec][lon_dec] = std::move(hgt);
 				prev_layer_height = map1[lat_dec][lon_dec]->get(lat, lon);
-				DUMP("hgt ok", lat, lon, lat_dec, lon_dec, prev_layer_height);
+				//DUMP("hgt ok", lat, lon, lat_dec, lon_dec, prev_layer_height);
 
 				if constexpr (layers) {
 					if (prev_layer_height) {
@@ -181,7 +186,7 @@ height::height_t hgts::get(height_hgt::ll_t lat, height_hgt::ll_t lon)
 		}
 	}
 	if (!map90[lat90].contains(lon90)) {
-		place_dummy90(lat90, lon90);
+		return place_dummy90(lat90, lon90);
 	}
 	return map90[lat90][lon90]->get(lat, lon);
 }
@@ -259,8 +264,7 @@ bool height_hgt::load(ll_t lat, ll_t lon)
 		//DUMP(lat_dec, lon_dec);
 		return false;
 	}
-	DUMP((long long)this, lat_dec, lon_dec, lat_loading, lon_loading, lat_loaded,
-			lon_loaded);
+	//DUMP((long long)this, lat_dec, lon_dec, lat_loading, lon_loading, lat_loaded, lon_loaded);
 	TimeTaker timer("hgt load");
 
 	lat_loading = lat_dec;
@@ -459,9 +463,7 @@ bool height_hgt::load(ll_t lat, ll_t lon)
 	}
 	lat_loaded = lat_dec;
 	lon_loaded = lon_dec;
-	DUMP("loadok", (long long)this, heights.size(), lat_loaded, lon_loaded, filesize,
-			zipname, filename, seconds_per_px_x, get(lat_dec, lon_dec), heights[0],
-			heights.back(), heights[side_length_x]);
+	//DUMP("loadok", (long long)this, heights.size(), lat_loaded, lon_loaded, filesize, zipname, filename, seconds_per_px_x, get(lat_dec, lon_dec), heights[0], heights.back(), heights[side_length_x]);
 	return true;
 }
 
@@ -968,7 +970,7 @@ height::height_t height::get(ll_t lat, ll_t lon)
 				//lat_seconds, lon_seconds,
 				seconds_per_px_x, seconds_per_px_y, lat, lon, lat_loaded, lon_loaded,
 				(lat - lat_loaded), pixel_per_deg_x, (lon - lon_loaded), pixel_per_deg_y);
-		//return height[2]; // debug not interpolated
+	//return height[2]; // debug not interpolated
 #endif
 
 	// ratio where X lays

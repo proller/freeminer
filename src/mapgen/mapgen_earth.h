@@ -21,22 +21,29 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <string>
-#include "filesys.h"
-#include "mapgen/earth/hgt.h"
-#include "mapgen/mapgen.h"
+
+#include "earth/hgt.h"
 #include "mapgen/mapgen_v7.h"
 #include "porting.h"
+#include "filesys.h"
 #include "threading/concurrent_map.h"
+#include "threading/concurrent_vector.h"
+#include "util/lrucache.hpp"
+
+class PngImage;
+
+typedef core::vector2d<double> v2d;
 
 //using ll_t = float;
 using ll_t = double;
 struct ll
 {
-	ll_t lat = 0;
-	ll_t lon = 0;
+	ll_t lat{};
+	ll_t lon{};
 };
 
 inline std::ostream &operator<<(std::ostream &s, const ll &p)
@@ -47,8 +54,8 @@ inline std::ostream &operator<<(std::ostream &s, const ll &p)
 
 struct MapgenEarthParams : public MapgenV7Params
 {
-	MapgenEarthParams(){};
-	~MapgenEarthParams(){};
+	MapgenEarthParams() {};
+	~MapgenEarthParams() {};
 
 	Json::Value params;
 
@@ -62,17 +69,22 @@ class MapgenEarth;
 class handler_i
 {
 public:
-	virtual void apply() = 0;
+	virtual void apply(MapgenEarth *) = 0;
 };
 
 struct maps_holder_t
 {
-	hgts hgt_reader{porting::path_cache + DIR_DELIM + "earth"};
+    const std::string data_root {porting::path_cache + DIR_DELIM + "earth"};
+	hgts hgt_reader{ data_root };
 	using osm_ptr = std::shared_ptr<handler_i>;
-	concurrent_shared_map<std::string, osm_ptr> osm_by_path;
-	concurrent_shared_map<std::string, osm_ptr> osm_bbox;
+	lru_cache<std::string, osm_ptr, 50> osm_bbox;
+	std::mutex download_lock;
+	std::mutex osm_bbox_lock;
 	std::mutex osm_http_lock;
 	std::mutex osm_extract_lock;
+	std::unique_ptr<PngImage> heat_image;
+	concurrent_shared_vector<std::string> files_to_delete;
+	~maps_holder_t();
 };
 
 class MapgenEarth : public MapgenV7
@@ -103,7 +115,21 @@ public:
 
 	pos_t get_height(pos_t x, pos_t z);
 	ll pos_to_ll(pos_t x, pos_t z);
+	ll pos_to_ll(const v3pos_t &p);
 	v2pos_t ll_to_pos(const ll &l);
-	void bresenham(
-			pos_t xa, pos_t za, pos_t xb, pos_t zb, pos_t y, pos_t h, const MapNode &n);
+
+	weather::heat_t calcBlockHeat(const v3pos_t &p, uint64_t seed, float timeofday,
+			float totaltime, bool use_weather) override;
+	weather::humidity_t calcBlockHumidity(const v3pos_t &p, uint64_t seed,
+			float timeofday, float totaltime, bool use_weather) override;
+
+	struct Stat
+	{
+		std::atomic_int set{};
+		std::atomic_int miss{};
+		std::atomic_int level{};
+		std::atomic_int check{};
+		std::atomic_int fill{};
+		void clean() { set = miss = level = check = fill = 0; }
+	} stat;
 };

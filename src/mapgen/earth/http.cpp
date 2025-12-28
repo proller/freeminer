@@ -4,6 +4,7 @@
 #include <thread>
 #include <fstream>
 #include "debug/dump.h"
+#include "filesys.h"
 #include "httpfetch.h"
 #include "log.h"
 #include "settings.h"
@@ -50,12 +51,16 @@ size_t http_to_file(const std::string &url, const std::string &path)
 	return std::filesystem::file_size(path);
 };
 
-size_t multi_http_to_file(const std::string &name,
-		const std::vector<std::string> &links, const std::string &path)
+size_t multi_http_to_file(
+		const std::string &name, const std::vector<std::string> &links, std::string path)
 {
+	if (path.empty()) {
+		path = porting::path_cache + DIR_DELIM + "earth" + "/" + name;
+	}
+
 	static concurrent_set<std::string> http_failed;
 	if (http_failed.contains(name)) {
-		return std::filesystem::file_size(path);
+		return std::filesystem::exists(path) ? std::filesystem::file_size(path) : 0;
 	}
 
 	if (std::filesystem::exists(path)) {
@@ -70,7 +75,7 @@ size_t multi_http_to_file(const std::string &name,
 
 	http_failed.insert(name);
 
-	errorstream
+	infostream
 			<< "Not found " << name << "\n"
 			<< "try to download manually: \n"
 			<< "curl -o " << path << " "
@@ -83,8 +88,21 @@ size_t multi_http_to_file(const std::string &name,
 	return std::filesystem::file_size(path);
 };
 
-size_t multi_http_to_file(
-		const std::vector<std::string> &links, const std::string &path)
+size_t multi_http_to_file_cdn(
+		const std::string &name, std::vector<std::string> links, const std::string &path)
+{
+	links.insert(links.begin(),
+#if defined(__EMSCRIPTEN__)
+			"/"
+#else
+			"http://cdn.freeminer.org/"
+#endif
+			"earth/" +
+					name);
+	return multi_http_to_file(name, links, path);
+}
+
+size_t multi_http_to_file(const std::vector<std::string> &links, const std::string &path)
 {
 	static concurrent_set<std::string> http_failed;
 	if (http_failed.contains(path)) {
@@ -103,7 +121,7 @@ size_t multi_http_to_file(
 
 	http_failed.emplace(path);
 
-	errorstream
+	infostream
 			<< "Not found " << path << "\n"
 			<< "try to download manually: \n"
 			<< "curl -o " << path << " "
@@ -115,6 +133,7 @@ size_t multi_http_to_file(
 	std::ofstream(path, std::ios_base::binary) << ""; // create zero file
 	return std::filesystem::file_size(path);
 };
+
 
 std::string exec_to_string(const std::string &cmd)
 {

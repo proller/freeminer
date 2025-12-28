@@ -23,6 +23,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <cstdint>
 #include <future>
+#include <memory>
 #include <unordered_set>
 #include "servermap.h"
 #include "mapblock.h"
@@ -39,6 +40,7 @@ public:
 	uint32_t world_merge_throttle{};
 	uint32_t world_merge_max_clients{};
 	int16_t world_merge_load_all{}; // -1 : auto;  0 : disable;   1 : force
+	bool farlights{true};
 	bool partial{};
 	uint32_t lazy_up{};
 	const NodeDefManager *const ndef{};
@@ -46,7 +48,7 @@ public:
 	ServerMap::far_dbases_t &far_dbases;
 	std::unordered_set<v3bpos_t> changed_blocks_for_merge;
 	int16_t m_map_compression_level{7};
-	MapDatabase *const dbase{};
+	const std::shared_ptr<MapDatabase> dbase{};
 	std::string save_dir;
 	std::future<void> last_async;
 	~WorldMerger();
@@ -54,9 +56,14 @@ public:
 	bool stop();
 	bool throttle();
 
-	void merge_one_block(MapDatabase *dbase, MapDatabase *dbase_up,
-			const v3bpos_t &bpos_aligned, block_step_t step);
+	struct one_block_stat_t
+	{
+		size_t lights_count{};
+		size_t lights_used{};
+	};
 
+	one_block_stat_t merge_one_block(MapDatabase *dbase, MapDatabase *dbase_up,
+			const v3bpos_t &bpos_aligned, block_step_t step);
 	bool merge_one_step(block_step_t step, std::unordered_set<v3bpos_t> &blocks_todo);
 	bool merge_list(std::unordered_set<v3bpos_t> &blocks_todo);
 	bool merge_all();

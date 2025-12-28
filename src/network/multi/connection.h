@@ -74,7 +74,7 @@ private:
 #if MINETEST_TRANSPORT
 	std::shared_ptr<IConnection> m_con;
 #endif
-	bool dummy;
+	[[maybe_unused]] bool dummy;
 	enum class proto_name
 	{
 		none = 0,

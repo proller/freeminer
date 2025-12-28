@@ -218,7 +218,13 @@ void ClientMap::onSettingChanged(std::string_view name, bool all)
 
 ClientMap::~ClientMap()
 {
+	verbosestream << FUNCTION_NAME << std::endl;
+
 	g_settings->deregisterAllChangedCallbacks(this);
+
+	// avoid refcount warning from ~Map()
+	clearDrawList();
+	clearDrawListShadow();
 
 	for (auto &it : m_dynamic_buffers)
 		it.second.drop();
@@ -371,28 +377,37 @@ private:
 	v3s16 volume;
 };
 
-void ClientMap::updateDrawList(float dtime, unsigned int max_cycle_ms)
+void ClientMap::clearDrawList()
 {
 	auto & m_drawlist = m_drawlist_0;
-	const auto speedf = m_client->getEnv().getLocalPlayerSpeedLength();
 
-	ScopeProfiler sp(g_profiler, "CM::updateDrawList()", SPT_AVG);
 
-	m_needs_update_drawlist = false;
-
-	for (auto &i : m_drawlist) {
+    for (auto &i : m_drawlist) {
 		auto block = i.second;
 		block->refDrop();
 	}
 	m_drawlist.clear();
 
-	for (auto &block : m_keeplist) {
+	for (auto &block : m_keeplist)
 		block->refDrop();
-	}
 	m_keeplist.clear();
 
-	//const v3s16 cam_pos_nodes = floatToInt(m_camera_position, BS);
-	v3pos_t cam_pos_nodes = m_camera_position_node;
+	m_needs_update_drawlist = true;
+}
+
+void ClientMap::updateDrawList(float dtime, unsigned int max_cycle_ms)
+{
+	ScopeProfiler sp(g_profiler, "CM::updateDrawList()", SPT_AVG);
+
+	clearDrawList();
+
+	auto & m_drawlist = m_drawlist_0;
+	const auto speedf = m_client->getEnv().getLocalPlayerSpeedLength();
+
+	m_needs_update_drawlist = false;
+
+	// const v3s16 cam_pos_nodes = floatToInt(m_camera_position, BS);
+	const v3pos_t cam_pos_nodes = m_camera_position_node;
 
 	v3pos_t p_blocks_min;
 	v3pos_t p_blocks_max;
@@ -1373,11 +1388,14 @@ static u32 transformBuffersToDrawOrder(
 				new_buffer = true;
 			else if (tmp->getVertexCount() + buf->getVertexCount() > U16_MAX)
 				new_buffer = true;
+			else if (tmp->getPrimitiveType() != buf->getPrimitiveType())
+				new_buffer = true;
 			if (new_buffer) {
 				finish_buf();
 				tmp = new scene::SMeshBuffer();
+				tmp->setPrimitiveType(buf->getPrimitiveType());
 				put_buffers.buf.push_back(tmp);
-				assert(tmp->getPrimitiveType() == buf->getPrimitiveType());
+				//assert(tmp->getPrimitiveType() == buf->getPrimitiveType());
 				tmp->Material = buf->getMaterial();
 				// preallocate approximately
 				tmp->Vertices->Data.reserve(MYMIN(U16_MAX, total_vtx));
@@ -1995,6 +2013,18 @@ void ClientMap::renderMapShadows(video::IVideoDriver *driver,
 	g_profiler->avg(prefix + "material swaps [#]", material_swaps);
 }
 
+void ClientMap::clearDrawListShadow()
+{
+	auto &m_drawlist_shadow =
+			!m_drawlist_shadow_current ? m_drawlist_shadow_1 : m_drawlist_shadow_0;
+
+	for (auto &i : m_drawlist_shadow) {
+		auto & block = i.second;
+		block->refDrop();
+	}
+	m_drawlist_shadow.clear();
+}
+
 /*
 	Custom update draw list for the pov of shadow light.
 */
@@ -2007,11 +2037,7 @@ void ClientMap::updateDrawListShadow(v3f shadow_light_pos, v3f shadow_light_dir,
 
 	ScopeProfiler sp(g_profiler, "CM::updateDrawListShadow()", SPT_AVG);
 
-	for (auto &i : m_drawlist_shadow) {
-		auto block = i.second;
-		block->refDrop();
-	}
-	m_drawlist_shadow.clear();
+	clearDrawListShadow();
 
 	// Number of blocks currently loaded by the client
 	u32 blocks_loaded = 0;

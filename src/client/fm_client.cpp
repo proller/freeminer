@@ -3,22 +3,26 @@
 #include <future>
 #include <memory>
 #include "client.h"
-#include "fm_far_calc.h"
 #include "client/mapblock_mesh.h"
 #include "clientmap.h"
 #include "emerge.h"
+#include "filesys.h"
+#include "fm_far_calc.h"
+#include "fm_weather.h"
 #include "fm_world_merge.h"
 #include "irr_v3d.h"
 #include "log.h"
-#include "mapblock.h"
-#include "network/fm_networkprotocol.h"
-#include "server.h"
-#include "filesys.h"
 #include "map.h"
+#include "mapblock.h"
 #include "mapgen/mapgen.h"
+#include "network/fm_networkprotocol.h"
 #include "network/networkpacket.h"
+#include "server.h"
 #include "threading/lock.h"
 #include "util/directiontables.h"
+#include <atomic>
+#include <exception>
+#include <memory>
 
 void Client::updateMeshTimestampWithEdge(const v3bpos_t &blockpos)
 {
@@ -135,6 +139,11 @@ void Client::MakeEmerge(const Settings &settings, const MapgenType &mgtype)
 			try {
 				m_localserver = std::make_unique<Server>(
 						"farmesh", findSubgame(game), false, Address{}, true);
+				// auto m_env = new ServerEnvironment({}, //std::move(startup_server_map),
+				// 		m_localserver.get(), &m_metrics_backend		   //	m_metrics_backend.get()
+				// );
+				// m_localserver->m_env = m_env;
+
 				break;
 			} catch (const std::exception &ex) {
 				errorstream << "Failed to make local mapgen server with game " << game
@@ -151,6 +160,7 @@ void Client::MakeEmerge(const Settings &settings, const MapgenType &mgtype)
 		g_settings->set("num_emerge_threads", "1");
 		m_emerge = std::make_unique<EmergeManager>(
 				m_localserver.get(), m_localserver->m_metrics_backend.get());
+		// m_emerge->env = &m_localserver->getEnv();
 		m_emerge->initMapgens(m_mapgen_params.get());
 		g_settings->set("num_emerge_threads", num_emerge_threads);
 	}
@@ -203,39 +213,48 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 		if (!block)
 			block = m_env.getMap().createBlankBlock(bpos);
 	}
-	const auto lock = block->lock_unique_rec();
-	block->far_step = step;
-	content_t content_only{};
-	packet.convert_safe(TOCLIENT_BLOCKDATA_CONTENT_ONLY, content_only);
-	block->content_only = content_only;
-	packet.convert_safe(
-			TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM1, block->content_only_param1);
-	packet.convert_safe(
-			TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM2, block->content_only_param2);
+	{
+		const auto lock = block->lock_unique_rec();
+		block->far_step = step;
 
-	if (block->content_only == CONTENT_IGNORE) {
-		try {
-			block->deSerialize(istr, m_server_ser_ver, false);
-		} catch (const std::exception &ex) {
-			errorstream << "fm block deSerialize fail " << bpos << " " << block->far_step
-						<< " : " << ex.what() << " : " << pkt->getSize() << " "
-						<< packet.size() << " v=" << (short)m_server_ser_ver << "\n";
-#if !NDEBUG
-			errorstream << "bad data " << istr.str().size() << " : " << istr.str()
-						<< "\n";
-#endif
-			return;
+		content_t content_only{CONTENT_IGNORE};
+		packet.convert_safe(TOCLIENT_BLOCKDATA_CONTENT_ONLY, content_only);
+		/*
+		if (content_only != CONTENT_IGNORE) {
+			block->data[0].param0 = content_only;
+			packet.convert_safe(
+					TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM1, block->data[0].param1);
+			packet.convert_safe(
+					TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM2, block->data[0].param2);
 		}
-	} else {
-		block->fill({block->content_only, block->content_only_param1,
-				block->content_only_param2});
+*/
+		if (content_only == CONTENT_IGNORE) {
+			//block->m_is_mono_block = false;
+			try {
+				block->deSerialize(istr, m_server_ser_ver, false);
+			} catch (const std::exception &ex) {
+				errorstream << "fm block deSerialize fail " << bpos << " "
+							<< block->far_step << " : " << ex.what() << " : "
+							<< pkt->getSize() << " " << packet.size()
+							<< " v=" << (short)m_server_ser_ver << "\n";
+#if !NDEBUG
+				errorstream << "bad data " << istr.str().size() << " : " << istr.str()
+							<< "\n";
+#endif
+				return;
+			}
+		} else {
+			//block->m_is_mono_block = true;
+			//block->fill(block->data[0]);
+			block->fill(content_only);
+		}
+		weather::heat_t heat = 0; // for convert to atomic
+		packet[TOCLIENT_BLOCKDATA_HEAT].convert(heat);
+		block->heat = heat;
+		weather::humidity_t humidity = 0;
+		packet[TOCLIENT_BLOCKDATA_HUMIDITY].convert(humidity);
+		block->humidity = humidity;
 	}
-	s32 h = 0; // for convert to atomic
-	packet[TOCLIENT_BLOCKDATA_HEAT].convert(h);
-	block->heat = h;
-	h = 0;
-	packet[TOCLIENT_BLOCKDATA_HUMIDITY].convert(h);
-	block->humidity = h;
 
 	if (m_localdb && !is_simple_singleplayer_game) {
 		if (const auto db = GetFarDatabase({}, far_dbases, m_world_path, step); db) {
@@ -249,11 +268,10 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 
 	if (!step) {
 		updateMeshTimestampWithEdge(bpos);
-		if (!overload && block->content_only != CONTENT_IGNORE &&
-				block->content_only != CONTENT_AIR) {
+		if (!overload && block->m_is_mono_block && block->data[0].param0 != CONTENT_AIR) {
 			if (getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS))
 							.getDistanceFrom(bpos) <= 1)
-			addUpdateMeshTaskWithEdge(bpos);
+				addUpdateMeshTaskWithEdge(bpos);
 		}
 	} else {
 		static thread_local const auto settings_farmesh_server =
@@ -290,7 +308,7 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 			}
 			createFarMesh(block);
 			auto &far_blocks = client_map.m_far_blocks;
-			
+
 			const auto lock = far_blocks.lock_unique_rec();
 			if (const auto &it = far_blocks.find(bpos); it != far_blocks.end()) {
 				if (it->second->far_step != block->far_step) {

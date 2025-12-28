@@ -391,13 +391,14 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 			// bool surely_not_found_on_disk = false;
 			// bool block_is_invalid = false;
 			if (block) {
-				if (d >= 2 && block->content_only == CONTENT_AIR) {
+				if (d >= 2 && block->m_is_mono_block &&
+						block->data[0].param0 == CONTENT_AIR) {
 					uint8_t not_air = 0;
 					for (const auto &dir : g_6dirs) {
 						if (const auto *block_near =
 										env->getMap().getBlockNoCreateNoEx(p + dir)) {
-							if (block_near->content_only &&
-									block_near->content_only != CONTENT_AIR) {
+							if (block_near->m_is_mono_block &&
+									block_near->data[0].param0 != CONTENT_AIR) {
 								++not_air;
 								break;
 							}
@@ -507,7 +508,7 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 
 			dest.push_back(q);
 
-			if (block->content_only == CONTENT_AIR)
+			if (block->m_is_mono_block && block->data[0].param0 == CONTENT_AIR)
 				++num_blocks_air;
 			else
 				num_blocks_selected += 1;
@@ -567,7 +568,8 @@ queue_full_break:
 
 uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 {
-	const static thread_local auto client_unload_unused_data_timeout = g_settings->getFloat("client_unload_unused_data_timeout");
+	const static thread_local auto client_unload_unused_data_timeout =
+			g_settings->getFloat("client_unload_unused_data_timeout");
 	uint16_t sent_cnt{};
 	TRY_UNIQUE_LOCK(far_blocks_requested_mutex)
 	{
@@ -576,7 +578,9 @@ uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 		for (auto &far_blocks : far_blocks_requested) {
 			for (auto &[bpos, step_sent] : far_blocks) {
 				auto &[step, sent_ts] = step_sent;
-				if (sent_ts < 0 || (sent_ts && sent_ts + client_unload_unused_data_timeout > uptime)) {
+				if (sent_ts < 0 ||
+						(sent_ts &&
+								sent_ts + client_unload_unused_data_timeout > uptime)) {
 					continue;
 				}
 				if (step >= FARMESH_STEP_MAX - 1) {
@@ -622,12 +626,12 @@ uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 			auto cbpos = floatToInt(playerpos, BS * MAP_BLOCKSIZE);
 
 			const auto cell_size = 1; // FMTODO from remoteclient
-			const auto cell_size_pow = log(cell_size) / log(2);
+			const auto cell_size_pow = rangeToStep(cell_size);
 			thread_local static const s16 setting_farmesh_all_changed =
 					g_settings->getU32("farmesh_all_changed");
 			const auto &use_farmesh_all_changed =
 					std::min(setting_farmesh_all_changed, farmesh_all_changed);
-			runFarAll(cbpos, cell_size_pow, farmesh_quality, false,
+			runFarAll(cbpos, cell_size_pow, farmesh, farmesh_quality, false,
 					[this, &ordered, &cbpos, &use_farmesh_all_changed](
 							const v3bpos_t &bpos, const bpos_t &size) -> bool {
 						if (!size) {
@@ -640,7 +644,7 @@ uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 							return false;
 						}
 
-						block_step_t step = log(size) / log(2);
+						block_step_t step = rangeToStep(size);
 						if (far_blocks_requested.size() < step) {
 							far_blocks_requested.resize(step);
 						}

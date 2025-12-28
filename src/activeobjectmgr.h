@@ -10,7 +10,6 @@
 #include "util/basic_macros.h"
 #include "threading/concurrent_unordered_map.h"
 
-class TestClientActiveObjectMgr;
 class TestServerActiveObjectMgr;
 
 template <typename T>

@@ -47,7 +47,7 @@ thread_local v3bpos_t block_cache_p;
 }
 #endif
 
-std::atomic_uint ServerMap::time_life {};
+std::atomic_uint ServerMap::time_life{};
 
 // TODO: REMOVE THIS func and use Map::getBlock
 MapBlockPtr Map::getBlock(v3bpos_t p, bool trylock, bool nocache)
@@ -77,7 +77,8 @@ MapBlockPtr Map::getBlock(v3bpos_t p, bool trylock, bool nocache)
 
 	MapBlockPtr block;
 	{
-		const auto lock = trylock ? m_blocks.try_lock_shared_rec() : m_blocks.lock_shared_rec();
+		const auto lock =
+				trylock ? m_blocks.try_lock_shared_rec() : m_blocks.lock_shared_rec();
 		if (!lock->owns_lock())
 			return nullptr;
 		const auto &n = m_blocks.find(p);
@@ -123,6 +124,8 @@ MapBlockPtr Map::createBlankBlock(const v3pos_t &p)
 {
 	m_db_miss.erase(p);
 
+	const auto lock = m_blocks.lock_unique_rec();
+
 	auto block = getBlock(p, false, true);
 	if (block != NULL) {
 		infostream << "Block already created p=" << block->getPos() << std::endl;
@@ -130,8 +133,6 @@ MapBlockPtr Map::createBlankBlock(const v3pos_t &p)
 	}
 
 	block = createBlankBlockNoInsert(p);
-
-	const auto lock = m_blocks.lock_unique_rec();
 
 	m_blocks.insert_or_assign(p, block);
 
@@ -238,7 +239,7 @@ MapNode Map::getNodeNoLock(v3POS p) //dont use
 }
 */
 
-s16 Map::getHeat(const v3pos_t &p, bool no_random)
+s16 Map::getHeat(const v3bpos_t &p, bool no_random)
 {
 	MapBlock *block = getBlockNoCreateNoEx(getNodeBlockPos(p));
 	if (block != NULL) {
@@ -249,7 +250,7 @@ s16 Map::getHeat(const v3pos_t &p, bool no_random)
 	return 0;
 }
 
-s16 Map::getHumidity(const v3pos_t &p, bool no_random)
+s16 Map::getHumidity(const v3bpos_t &p, bool no_random)
 {
 	MapBlock *block = getBlockNoCreateNoEx(getNodeBlockPos(p));
 	if (block != NULL) {
@@ -260,8 +261,8 @@ s16 Map::getHumidity(const v3pos_t &p, bool no_random)
 	return 0;
 }
 
-ServerMap::heat_t ServerMap::updateBlockHeat(ServerEnvironment *env, const v3pos_t &p,
-		MapBlock *block, unordered_map_v3pos<ServerMap::heat_t> *cache, bool block_add)
+weather::heat_t ServerMap::updateBlockHeat(ServerEnvironment *env, const v3pos_t &p,
+		MapBlock *block, unordered_map_v3bpos<weather::heat_t> *cache, bool block_add)
 {
 	const auto bp = getNodeBlockPos(p);
 	const auto gametime = env->getGameTime();
@@ -274,8 +275,10 @@ ServerMap::heat_t ServerMap::updateBlockHeat(ServerEnvironment *env, const v3pos
 	if (cache && cache->contains(bp)) {
 		return cache->at(bp); // + myrand_range(0, 1);
 	}
-	auto value = m_emerge->biomemgr->calcBlockHeat(p, getSeed(), env->getTimeOfDayF(),
-			gametime * env->m_time_of_day_speed, env->m_use_weather);
+	auto value =
+			m_emerge->getFirstMapgen()->calcBlockHeat(p, getSeed(), env->getTimeOfDayF(),
+					gametime * env->m_time_of_day_speed, env->m_use_weather);
+	//auto value = m_emerge->biomemgr->calcBlockHeat(p, getSeed(), env->getTimeOfDayF(), gametime * env->m_time_of_day_speed, env->m_use_weather);
 
 	if (!block) {
 		block = getBlockNoCreateNoEx(bp); //, true);
@@ -283,7 +286,7 @@ ServerMap::heat_t ServerMap::updateBlockHeat(ServerEnvironment *env, const v3pos
 
 	{
 		int8_t blocks_around = 0;
-		heat_t sum = 0;
+		weather::heat_t sum = 0;
 		for (const auto &dir : g_6dirs) {
 			if (auto nblock = getBlockNoCreateNoEx(bp + dir, true)) {
 				sum += nblock->humidity;
@@ -313,9 +316,9 @@ ServerMap::heat_t ServerMap::updateBlockHeat(ServerEnvironment *env, const v3pos
 	return value; // + myrand_range(0, 1);
 }
 
-ServerMap::humidity_t ServerMap::updateBlockHumidity(ServerEnvironment *env,
+weather::humidity_t ServerMap::updateBlockHumidity(ServerEnvironment *env,
 		const v3pos_t &p, MapBlock *block,
-		unordered_map_v3pos<ServerMap::humidity_t> *cache, bool block_add)
+		unordered_map_v3bpos<weather::humidity_t> *cache, bool block_add)
 {
 	const auto bp = getNodeBlockPos(p);
 	const auto gametime = env->getGameTime();
@@ -328,8 +331,11 @@ ServerMap::humidity_t ServerMap::updateBlockHumidity(ServerEnvironment *env,
 	if (cache && cache->count(bp)) {
 		return cache->at(bp) + myrand_range(0, 1);
 	}
-	auto value = m_emerge->biomemgr->calcBlockHumidity(p, getSeed(), env->getTimeOfDayF(),
-			gametime * env->m_time_of_day_speed, env->m_use_weather);
+
+	auto value =
+			m_emerge->getFirstMapgen()->calcBlockHumidity(p, getSeed(), env->getTimeOfDayF(),
+					gametime * env->m_time_of_day_speed, env->m_use_weather);
+	//auto value = m_emerge->biomemgr->calcBlockHumidity(p, getSeed(), env->getTimeOfDayF(),gametime * env->m_time_of_day_speed, env->m_use_weather);
 
 	if (!block) {
 		block = getBlockNoCreateNoEx(bp); //, true);
@@ -337,7 +343,7 @@ ServerMap::humidity_t ServerMap::updateBlockHumidity(ServerEnvironment *env,
 
 	{
 		int8_t blocks_around = 0;
-		humidity_t sum = 0;
+		weather::humidity_t sum = 0;
 		for (const auto &dir : g_6dirs) {
 			if (auto nblock = getBlockNoCreateNoEx(bp + dir, true)) {
 				sum += nblock->humidity;
@@ -369,7 +375,7 @@ ServerMap::humidity_t ServerMap::updateBlockHumidity(ServerEnvironment *env,
 int ServerMap::getSurface(const v3pos_t &basepos, int searchup, bool walkable_only)
 {
 
-	s16 max = MYMIN(searchup + basepos.Y, 0x7FFF);
+	pos_t max = MYMIN(searchup + basepos.Y, 0x7FFF);
 
 	MapNode last_node = getNode(basepos);
 	MapNode node = last_node;
@@ -507,6 +513,8 @@ u32 Map::timerUpdate(float uptime, float unload_timeout, s32 max_loaded_blocks,
 				}
 				if (block->getUsageTimer() > unload_timeout) { // block->refGet() <= 0 &&
 					const v3bpos_t p = block->getPos();
+					changed_blocks_for_merge.emplace(p);
+
 					// infostream<<" deleting block p="<<p<<"
 					// ustimer="<<block->getUsageTimer() <<" to="<< unload_timeout<<"
 					// inc="<<(uptime - block->m_uptime_timer_last)<<"
@@ -1323,7 +1331,7 @@ bool ServerMap::propagateSunlight(
 }
 //#endif
 
-void ServerMap::lighting_modified_add(const v3pos_t &pos, int range)
+void ServerMap::lighting_modified_add(const v3bpos_t &pos, int range)
 {
 	MutexAutoLock lock(m_lighting_modified_mutex);
 	if (m_lighting_modified_blocks.contains(pos)) {
@@ -1408,7 +1416,7 @@ MapNode Map::getNodeNoEx(v3pos_t p) {
  * Get the ground level by searching for a non CONTENT_AIR node in a column from top to
  * bottom
  */
-s16 ServerMap::findGroundLevel(v2pos_t p2d, bool cacheBlocks)
+pos_t ServerMap::findGroundLevel(v2pos_t p2d, bool cacheBlocks)
 {
 
 	pos_t level;
@@ -1640,7 +1648,7 @@ s32 ServerMap::save(ModifiedState save_level, float dedicated_server_step, bool 
 				//modprofiler.add(block->getModifiedReasonString(), 1);
 
 				const auto lock = breakable ? block->try_lock_unique_rec()
-									  : block->lock_unique_rec();
+											: block->lock_unique_rec();
 				if (!lock->owns_lock())
 					continue;
 

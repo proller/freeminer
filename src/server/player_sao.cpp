@@ -16,6 +16,7 @@ PlayerSAO::PlayerSAO(ServerEnvironment *env_, RemotePlayer *player_, session_t p
 		bool is_singleplayer):
 	UnitSAO(env_, v3f(0,0,0)),
 	m_player(player_),
+	m_player_name(player_->getName()),
 	m_peer_id_initial(peer_id_),
 	m_is_singleplayer(is_singleplayer)
 {
@@ -49,13 +50,6 @@ PlayerSAO::PlayerSAO(ServerEnvironment *env_, RemotePlayer *player_, session_t p
 
 	if (!g_settings->getBool("enable_damage"))
 		m_armor_groups["immortal"] = 1;
-}
-
-PlayerSAO::~PlayerSAO()
-{
-	/*if (!m_player)
-		return;
-	--m_player->refs;*/
 }
 
 void PlayerSAO::finalize(RemotePlayer *player, const std::set<std::string> &privs)

@@ -4,21 +4,21 @@
 #include "serverenvironment.h"
 #include "util/timetaker.h"
 
-size_t ServerEnvironment::blockStep(MapBlockPtr block, float dtime, uint8_t activate)
+size_t ServerEnvironment::blockStep(MapBlockPtr block, float dtime_s, uint8_t activate)
 {
 	if (!block)
 		return {};
 
 	u32 stamp = block->getTimestamp();
-	if (!dtime && m_game_time > stamp && stamp != BLOCK_TIMESTAMP_UNDEFINED)
-		dtime = m_game_time - stamp;
+	if (!dtime_s && m_game_time > stamp && stamp != BLOCK_TIMESTAMP_UNDEFINED)
+		dtime_s = m_game_time - stamp;
 
 	// Set current time as timestamp
 	block->setTimestampNoChangedFlag(m_game_time);
 
 	if (!block->m_node_timers
 					.m_uptime_last) // not very good place, but minimum modifications
-		block->m_node_timers.m_uptime_last = m_game_time - dtime;
+		block->m_node_timers.m_uptime_last = m_game_time - dtime_s;
 	const auto dtime_n = m_game_time - block->m_node_timers.m_uptime_last;
 	block->m_node_timers.m_uptime_last = m_game_time;
 	// DUMP("abm random ", block->getPos(), dtime_s, dtime_n,, stamp, block->getTimestamp(), block->m_node_timers.m_uptime_last, m_game_time);
@@ -27,8 +27,8 @@ size_t ServerEnvironment::blockStep(MapBlockPtr block, float dtime, uint8_t acti
 	if (block->isOrphan())
 		return {};
 
-	block->step((float)dtime, [&](v3pos_t p, MapNode n, f32 d) -> bool {
-		return !block->isOrphan() && m_script->node_on_timer(p, n, d);
+	block->step((float)dtime_s, [&](v3pos_t p, MapNode n, NodeTimer t) -> bool {
+		return m_script->node_on_timer(p, n, t.elapsed, t.timeout);
 	});
 
 	size_t triggers_run = 0;

@@ -77,6 +77,6 @@ public:
 };
 
 // MTP = Minetest Protocol
-IConnection *createMTP(float timeout, bool ipv6, PeerHandler *handler);
+IConnection *createMTP(float timeout, bool ipv6, PeerHandler *handler, bool simple_singleplayer_mode);
 
 } // namespace

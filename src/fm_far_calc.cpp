@@ -21,6 +21,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "fm_far_calc.h"
 #include <cstdint>
+#include <optional>
+#include <bit>
 
 #include "client/clientmap.h"
 #include "irr_v3d.h"
@@ -45,7 +47,7 @@ block_step_t getLodStep(const MapDrawControl &draw_control,
 		// 		return i;
 		// }
 
-/*
+		/*
 		if (range >= cells + draw_control.lodmesh * 64) // cell_size = 4
 			return 8;
 		if (range >= cells + draw_control.lodmesh * 32)
@@ -68,6 +70,13 @@ block_step_t getLodStep(const MapDrawControl &draw_control,
 	return 0;
 };
 
+int rangeToStep(const int range)
+{
+	return log(range) / log(2);
+	const unsigned int r = static_cast<unsigned int>(range);
+	return r ? static_cast<int>(std::bit_width(r) - 1) : 0;
+};
+
 block_step_t getFarStepBad(const MapDrawControl &draw_control,
 		const v3bpos_t &playerblockpos, const v3bpos_t &blockpos)
 {
@@ -82,16 +91,16 @@ block_step_t getFarStepBad(const MapDrawControl &draw_control,
 	if (range <= 1)
 		return 1;
 
-	int skip = log(range) / log(2);
-	//skip += log(draw_control.cell_size) / log(2);
+	int skip = rangeToStep(range);
+	//skip += rangeToStep(draw_control.cell_size);
 	range = radius_box(v3pos_t((playerblockpos.X >> skip) << skip,
 							   (playerblockpos.Y >> skip) << skip,
 							   (playerblockpos.Z >> skip) << skip),
 			v3pos_t((blockpos.X >> skip) << skip, (blockpos.Y >> skip) << skip,
 					(blockpos.Z >> skip) << skip));
-	range >>= next_step + int(log(draw_control.cell_size) / log(2)); // TODO: configurable
+	range >>= next_step + rangeToStep(draw_control.cell_size); // TODO: configurable
 	if (range > 1) {
-		skip = log(range) / log(2);
+		skip = rangeToStep(range);
 	}
 	if (skip > FARMESH_STEP_MAX)
 		skip = FARMESH_STEP_MAX;
@@ -198,30 +207,61 @@ std::optional<child_t> find(const v3tpos_t &block_pos, const v3tpos_t &player_po
 	return {};
 }
 
-#if USE_POS32
-const auto tree_pow = FARMESH_STEP_MAX;
-#else
-const auto tree_pow = 12;
-#endif
-const auto tree_size = 1 << tree_pow;
-const auto tree_align = tree_pow - 1;
-const auto tree_align_size = 1 << (tree_align);
-const auto external_pow = tree_pow - 2;
+const auto nearest_pow2 = [](const int v) -> int8_t {
+	if (v == 0)
+		return 0;
+	int p = 1;
+	int8_t n = 0;
+	while (p < v) {
+		p <<= 1;
+		++n;
+	}
+	return n;
+};
 
+struct tree_params_t
+{
+	const int16_t tree_pow;
+	const int tree_size = 1 << tree_pow;
+	const int16_t tree_align = tree_pow - 1;
+	const int tree_align_size = 1 << (tree_align);
+	const int16_t external_pow = tree_pow - 2;
+
+#if USE_POS32
+	static constexpr int16_t tree_pow_max = FARMESH_STEP_MAX;
+#else
+	static constexpr int16_t tree_pow_max = 12;
+#endif
+};
+
+const auto farmesh_to_tree_pow = [](const int farmesh) {
+	return std::min<int16_t>(tree_params_t::tree_pow_max,
+			nearest_pow2(farmesh) - 1); // -2 ? TODO: test and tune
+};
+
+child_t tree_params_to_child(
+		const tree_params_t &tree_params, const v3bpos_t &ppos, pos_t two_d = {})
+{
+	return {.pos = v3tpos_t((((tpos_t)ppos.X >> tree_params.tree_align)
+									<< tree_params.tree_align) -
+									(tree_params.tree_align_size >> 1),
+					two_d
+							?: (((tpos_t)(ppos.Y) >> tree_params.tree_align)
+									   << tree_params.tree_align) -
+									   (tree_params.tree_align_size >> 1),
+					(((tpos_t)(ppos.Z) >> tree_params.tree_align)
+							<< tree_params.tree_align) -
+							(tree_params.tree_align_size >> 1)),
+			.size{tree_params.tree_size}};
+}
 block_step_t getFarStepCellSize(const MapDrawControl &draw_control, const v3bpos_t &ppos,
 		const v3bpos_t &blockpos, uint8_t cell_size_pow)
 {
 	const auto blockpos_aligned_cell = align_shift(blockpos, cell_size_pow);
+	const tree_params_t tree_params{.tree_pow{farmesh_to_tree_pow(draw_control.farmesh)}};
 
-	const auto start = child_t{.pos = v3tpos_t(
-									   // TODO: cast to type larger than pos_t_type
-									   (((tpos_t)ppos.X >> tree_align) << tree_align) -
-											   (tree_align_size >> 1),
-									   (((tpos_t)ppos.Y >> tree_align) << tree_align) -
-											   (tree_align_size >> 1),
-									   (((tpos_t)ppos.Z >> tree_align) << tree_align) -
-											   (tree_align_size >> 1)),
-			.size = tree_size};
+	const auto start = tree_params_to_child(tree_params, ppos);
+
 	const auto res = find(
 			{blockpos_aligned_cell.X, blockpos_aligned_cell.Y, blockpos_aligned_cell.Z},
 			{ppos.X, ppos.Y, ppos.Z}, start, cell_size_pow, draw_control.farmesh_quality);
@@ -237,7 +277,7 @@ block_step_t getFarStepCellSize(const MapDrawControl &draw_control, const v3bpos
 			return {};
 #endif
 */
-		const auto step1 = int(log(res->size) / log(2));
+		const auto step1 = rangeToStep(res->size);
 		if (cell_size_pow >= step1) {
 			return 0;
 		}
@@ -255,20 +295,16 @@ block_step_t getFarStep(const MapDrawControl &draw_control, const v3bpos_t &ppos
 }
 
 v3bpos_t getFarActual(const v3bpos_t &blockpos, const v3bpos_t &ppos, block_step_t step,
-		const MapDrawControl &draw_control)
+		const MapDrawControl &draw_control, const std::optional<uint8_t> &cell_size_pow)
 {
-	const auto blockpos_aligned_cell = align_shift(blockpos, draw_control.cell_size_pow);
-	const auto start =
-			child_t{.pos = v3tpos_t((((tpos_t)ppos.X >> tree_align) << tree_align) -
-											(tree_align_size >> 1),
-							(((tpos_t)ppos.Y >> tree_align) << tree_align) -
-									(tree_align_size >> 1),
-							(((tpos_t)ppos.Z >> tree_align) << tree_align) -
-									(tree_align_size >> 1)),
-					.size = tree_size};
+	const auto blockpos_aligned_cell =
+			align_shift(blockpos, cell_size_pow.value_or(draw_control.cell_size_pow));
+	tree_params_t tree_params{.tree_pow{farmesh_to_tree_pow(draw_control.farmesh)}};
+	const auto start = tree_params_to_child(tree_params, ppos);
 	const auto res = find(
 			{blockpos_aligned_cell.X, blockpos_aligned_cell.Y, blockpos_aligned_cell.Z},
-			{ppos.X, ppos.Y, ppos.Z}, start, draw_control.cell_size_pow,
+			{ppos.X, ppos.Y, ppos.Z}, start,
+			cell_size_pow.value_or(draw_control.cell_size_pow),
 			draw_control.farmesh_quality);
 
 	if (res) {
@@ -288,7 +324,7 @@ v3bpos_t getFarActual(const v3bpos_t &blockpos, const v3bpos_t &ppos, block_step
 		return v3bpos_t(res->pos.X, res->pos.Y, res->pos.Z);
 #endif
 	}
-	const auto ext_align = external_pow; // + cell_size_pow;
+	const auto ext_align = tree_params.external_pow; // + cell_size_pow;
 	return v3bpos_t((blockpos.X >> ext_align) << ext_align,
 			(blockpos.Y >> ext_align) << ext_align,
 			(blockpos.Z >> ext_align) << ext_align);
@@ -365,20 +401,13 @@ void each(const each_param_t &param, const child_t &child)
 	}
 }
 
-void runFarAll(const v3bpos_t &ppos, uint8_t cell_size_pow, uint8_t farmesh_quality,
-		pos_t two_d, const std::function<bool(const v3bpos_t &, const bpos_t &)> &func)
+void runFarAll(const v3bpos_t &ppos, uint8_t cell_size_pow, int farmesh,
+		uint8_t farmesh_quality, pos_t two_d,
+		const std::function<bool(const v3bpos_t &, const bpos_t &)> &func)
 {
 
-	const auto start =
-			child_t{.pos = v3tpos_t((((tpos_t)ppos.X >> tree_align) << tree_align) -
-											(tree_align_size >> 1),
-							two_d
-									?: (((tpos_t)(ppos.Y) >> tree_align) << tree_align) -
-											   (tree_align_size >> 1),
-							(((tpos_t)(ppos.Z) >> tree_align) << tree_align) -
-									(tree_align_size >> 1)),
-					.size{tree_size}};
-
+	tree_params_t tree_params{.tree_pow{farmesh_to_tree_pow(farmesh)}};
+	const auto start = tree_params_to_child(tree_params, ppos, two_d);
 	const auto func_convert = [&func](const child_t &child) {
 		return func(v3bpos_t(child.pos.X, child.pos.Y, child.pos.Z), child.size);
 	};

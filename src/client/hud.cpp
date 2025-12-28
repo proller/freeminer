@@ -310,11 +310,8 @@ void Hud::drawItems(v2s32 screen_pos, v2s32 screen_offset, s32 itemcount, v2f al
 
 bool Hud::hasElementOfType(HudElementType type)
 {
-	for (size_t i = 0; i != player->maxHudId(); i++) {
-		HudElement *e = player->getHud(i);
-		if (!e)
-			continue;
-		if (e->type == type)
+	for (HudElement *e : player->getHudElements()) {
+		if (e && e->type == type)
 			return true;
 	}
 	return false;
@@ -345,9 +342,13 @@ void Hud::drawLuaElements(const v3s16 &camera_offset)
 	const u32 text_height = g_fontengine->getTextHeight();
 	gui::IGUIFont *const font = g_fontengine->getFont();
 
-	// Reorder elements by z_index
 	std::vector<HudElement*> elems;
-	elems.reserve(player->maxHudId());
+
+	elems.reserve(player->getHudElements().size());
+	for (HudElement *e : player->getHudElements()) {
+		if (e)
+			elems.push_back(e);
+	}
 
 	// Add builtin elements if the server doesn't send them.
 	// Declared here such that they have the same lifetime as the elems vector
@@ -364,17 +365,11 @@ void Hud::drawLuaElements(const v3s16 &camera_offset)
 		elems.push_back(&hotbar);
 	}
 
-	for (size_t i = 0; i != player->maxHudId(); i++) {
-		HudElement *e = player->getHud(i);
-		if (!e)
-			continue;
-
-		auto it = elems.begin();
-		while (it != elems.end() && (*it)->z_index <= e->z_index)
-			++it;
-
-		elems.insert(it, e);
-	}
+	// Reorder by Z-index for rendering
+	// Note: we don't guarantee rendering in ID order, but it used to work so let's keep it.
+	std::stable_sort(elems.begin(), elems.end(), [] (HudElement *l, HudElement *r) {
+		return l->z_index < r->z_index;
+	});
 
 	for (HudElement *e : elems) {
 
@@ -397,9 +392,9 @@ void Hud::drawLuaElements(const v3s16 &camera_offset)
 					(e->style & HUD_STYLE_MONO) ? FM_Mono : FM_Unspecified,
 					e->style & HUD_STYLE_BOLD, e->style & HUD_STYLE_ITALIC));
 
-				irr::gui::CGUITTFont *ttfont = nullptr;
-				if (textfont->getType() == irr::gui::EGFT_CUSTOM)
-					ttfont = static_cast<irr::gui::CGUITTFont *>(textfont);
+				gui::CGUITTFont *ttfont = nullptr;
+				if (textfont->getType() == gui::EGFT_CUSTOM)
+					ttfont = static_cast<gui::CGUITTFont *>(textfont);
 
 				video::SColor color(255, (e->number >> 16) & 0xFF,
 										 (e->number >> 8)  & 0xFF,
@@ -939,7 +934,7 @@ void Hud::drawBlockBounds()
 
 	u16 mesh_chunk_size = std::max<u16>(1, g_settings->getU16("client_mesh_chunk"));
 
-	v3s16 pos = player->getStandingNodePos();
+	// 3s16 pos = player->getStandingNodePos();
 
 	if (m_block_bounds_mode == BLOCK_BOUNDS_FAR_DRAWN) {
 		const auto offset = intToFloat(client->getCamera()->getOffset(), BS);

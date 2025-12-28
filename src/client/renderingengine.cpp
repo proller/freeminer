@@ -36,7 +36,7 @@ void FpsControl::reset()
 
 void FpsControl::limit(IrrlichtDevice *device, f32 *dtime)
 {
-	const float fps_limit = device->isWindowFocused()
+	static thread_local const float fps_limit = device->isWindowFocused()
 			? g_settings->getFloat("fps_max")
 			: g_settings->getFloat("fps_max_unfocused");
 	const u64 frametime_min = 1000000.0f / std::max(fps_limit, 1.0f);
@@ -130,7 +130,7 @@ static inline auto getVideoDriverName(video::E_DRIVER_TYPE driver)
 	return RenderingEngine::getVideoDriverInfo(driver).friendly_name;
 }
 
-static irr::IrrlichtDevice *createDevice(SIrrlichtCreationParameters params, std::optional<video::E_DRIVER_TYPE> requested_driver)
+static IrrlichtDevice *createDevice(SIrrlichtCreationParameters params, std::optional<video::E_DRIVER_TYPE> requested_driver)
 {
 	if (requested_driver) {
 		params.DriverType = *requested_driver;
@@ -189,7 +189,7 @@ RenderingEngine::RenderingEngine(MyEventReceiver *receiver)
 
 	SIrrlichtCreationParameters params = SIrrlichtCreationParameters();
 	if (tracestream)
-		params.LoggingLevel = irr::ELL_DEBUG;
+		params.LoggingLevel = ELL_DEBUG;
 	params.WindowSize = core::dimension2d<u32>(screen_w, screen_h);
 	params.AntiAlias = fsaa;
 	params.Fullscreen = fullscreen;
@@ -312,7 +312,7 @@ void RenderingEngine::draw_load_screen(const std::wstring &text,
 
 	driver->setFog(RenderingEngine::MENU_SKY_COLOR);
 	driver->beginScene(true, true, RenderingEngine::MENU_SKY_COLOR);
-	if (g_settings->getBool("menu_clouds")) {
+	if (static thread_local const auto menu_clouds = g_settings->getBool("menu_clouds"); menu_clouds) {
 		g_menuclouds->step(dtime * 3);
 		g_menucloudsmgr->drawAll();
 	}
@@ -408,7 +408,7 @@ void RenderingEngine::draw_scene(video::SColor skycolor, bool show_hud,
 	core->draw(skycolor, show_hud, draw_wield_tool, draw_crosshair);
 }
 
-const VideoDriverInfo &RenderingEngine::getVideoDriverInfo(irr::video::E_DRIVER_TYPE type)
+const VideoDriverInfo &RenderingEngine::getVideoDriverInfo(video::E_DRIVER_TYPE type)
 {
 	static const std::unordered_map<int, VideoDriverInfo> driver_info_map = {
 		{(int)video::EDT_NULL,   {"null",   "NULL Driver"}},
@@ -433,7 +433,7 @@ float RenderingEngine::getDisplayDensity()
 }
 
 void RenderingEngine::autosaveScreensizeAndCo(
-		const irr::core::dimension2d<u32> initial_screen_size,
+		const core::dimension2d<u32> initial_screen_size,
 		const bool initial_window_maximized)
 {
 	if (!g_settings->getBool("autosave_screensize"))
@@ -447,11 +447,11 @@ void RenderingEngine::autosaveScreensizeAndCo(
 	// Don't save the fullscreen size, we want the windowed size.
 	bool fullscreen = RenderingEngine::get_raw_device()->isFullscreen();
 	// Screen size
-	const irr::core::dimension2d<u32> current_screen_size =
+	const core::dimension2d<u32> current_screen_size =
 		RenderingEngine::get_video_driver()->getScreenSize();
 	// Don't replace good value with (0, 0)
 	if (!fullscreen &&
-			current_screen_size != irr::core::dimension2d<u32>(0, 0) &&
+			current_screen_size != core::dimension2d<u32>(0, 0) &&
 			current_screen_size != initial_screen_size) {
 		g_settings->setU16("screen_w", current_screen_size.Width);
 		g_settings->setU16("screen_h", current_screen_size.Height);

@@ -7,6 +7,7 @@
 #include <cmath>
 #include "irr_v3d.h"
 #include "mapgen.h"
+#include "servermap.h"
 #include "voxel.h"
 #include "noise.h"
 #include "gamedef.h"
@@ -84,6 +85,12 @@ struct MapgenDesc {
 // Of the remaining, v5 last due to age, v7 first due to being the default.
 // The order of 'enum MapgenType' in mapgen.h must match this order.
 static MapgenDesc g_reg_mapgens[] = {
+// fm:
+	{"earth",       true},
+	{"math",       true},
+	{"indev",      true},
+// ===
+
 	{"v7",         true},
 	{"valleys",    true},
 	{"carpathian", true},
@@ -92,10 +99,6 @@ static MapgenDesc g_reg_mapgens[] = {
 	{"fractal",    true},
 	{"singlenode", true},
 	{"v6",         true},
-
-	{"indev",      true},
-	{"math",       true},
-	{"earth",       true},
 };
 
 static_assert(
@@ -1259,4 +1262,14 @@ const MapNode &Mapgen::visible_content(const v3pos_t &p, bool use_weather)
 		   : heat < 10 ? visible_surface
 		   : heat < 40 ? (humidity < 20 ? visible_surface_dry : visible_surface_green)
 					   : visible_surface_hot;
+}
+
+weather::heat_t Mapgen::calcBlockHeat(const v3pos_t &p, uint64_t seed, float timeofday, float totaltime, bool use_weather)
+{
+	return m_emerge->biomemgr->calcBlockHeat(p, seed, timeofday, totaltime, use_weather);
+}
+
+weather::humidity_t Mapgen::calcBlockHumidity(const v3pos_t &p, uint64_t seed, float timeofday, float totaltime, bool use_weather)
+{
+	return m_emerge->biomemgr->calcBlockHumidity(p, seed, timeofday, totaltime, use_weather);
 }
