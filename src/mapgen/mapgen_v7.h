@@ -94,10 +94,11 @@ public:
 
 	virtual int generateTerrain();
 
-private:
+protected:
 	s16 mount_zero_level;
 	s16 floatland_ymin;
 	s16 floatland_ymax;
+private:
 	s16 floatland_taper;
 	float float_taper_exp;
 	float floatland_density;
@@ -115,6 +116,7 @@ private:
 	Noise *noise_ridge;
 
 	//freeminer:
+protected:
 	MapgenV7Params *sp{};
 	//virtual void generateExperimental();
 	// freeminer:
