@@ -6,17 +6,23 @@ if(USE_OSMIUM)
         ${CMAKE_CURRENT_SOURCE_DIR}/arnis_adapter.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/blocks.cpp
     )
+    message(STATUS "Using osmium + arnis")
 endif()
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/luanti-earth/native/src/voxelizer.h")
-    option(USE_VOXEL_EARTH "Use voxel earth" 1)
+    option(USE_VOXEL_EARTH "Earth: Use voxel earth" 1)
 endif()
 
 set(mapgen_earth_SRCS ${mapgen_earth_SRCS}
     ${CMAKE_CURRENT_SOURCE_DIR}/hgt.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/http.cpp
-    # ${CMAKE_CURRENT_SOURCE_DIR}/tinygltf/tiny_gltf.cc
 )
+
+if(USE_VOXEL_EARTH OR USE_OSMIUM_TOOL)
+    add_subdirectory(json)
+    set(NLOHMANN_INCLUDE_DIR json/include)
+    include_directories(BEFORE SYSTEM ${NLOHMANN_INCLUDE_DIR})
+endif()
 
 if(USE_VOXEL_EARTH)
     set(TINYGLTF_BUILD_LOADER_EXAMPLE 0 CACHE INTERNAL "")
@@ -24,43 +30,14 @@ if(USE_VOXEL_EARTH)
     set(TINYGLTF_INSTALL_VENDOR 0 CACHE INTERNAL "")
 
     include_directories(tinygltf)
-    #add_subdirectory(tinygltf)
+
+    set(HAVE_NLOHMANN_JSON 1 CACHE INTERNAL "")
     add_subdirectory(luanti-earth/native)
-    set(FREEMINER_CLIENT_LIBRARIES ${FREEMINER_CLIENT_LIBRARIES} earth_native PARENT_SCOPE )
-    set(FREEMINER_SERVER_LIBRARIES ${FREEMINER_SERVER_LIBRARIES} earth_native PARENT_SCOPE )
+    set(FREEMINER_CLIENT_LIBRARIES ${FREEMINER_CLIENT_LIBRARIES} earth_native PARENT_SCOPE)
+    set(FREEMINER_SERVER_LIBRARIES ${FREEMINER_SERVER_LIBRARIES} earth_native PARENT_SCOPE)
 endif()
 
-if(1)
-message(WARNING "mapgen_earth_SRCS=${mapgen_earth_SRCS}")
-    set(freeminer_mapgen_SRCS ${freeminer_mapgen_SRCS}
-        ${mapgen_earth_SRCS}
-        PARENT_SCOPE
-    )
-endif()
-
-if(0)
-    add_library(mapgen_earth
-        ${mapgen_earth_SRCS}
-    )
-
-    if(USE_VOXEL_EARTH)
-        #target_include_directories(mapgen_earth PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tinygltf)
-    endif()
-
-
-    target_compile_definitions(mapgen_earth PRIVATE "MT_BUILDTARGET=1")
-
-    #  ${CMAKE_SOURCE_DIR}/irr/include
-    target_include_directories(mapgen_earth PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_BINARY_DIR}/src)
-    target_link_libraries(
-        mapgen_earth
-        #${ZLIB_LIBRARIES}
-        IrrlichtMt::IrrlichtMt
-        #${ZSTD_LIBRARY}
-        #${SOUND_LIBRARIES}
-        #${LUA_LIBRARY}
-        #${GMP_LIBRARY}
-        ${JSON_LIBRARY}
-    )
-
-endif()
+set(freeminer_mapgen_SRCS ${freeminer_mapgen_SRCS}
+    ${mapgen_earth_SRCS}
+    PARENT_SCOPE
+)

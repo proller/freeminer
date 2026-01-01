@@ -99,7 +99,7 @@ if(ENABLE_TIFF AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/libtiff/CMakeList
     set(USE_TIFF 1)
 endif()
 
-option(ENABLE_OSMIUM "Enable Osmium" 1)
+option(ENABLE_OSMIUM "Enable Osmium" 0)
 
 # if(ENABLE_OSMIUM)
 #     find_path(OSMIUM_INCLUDE_DIR osmium/osm.hpp)
