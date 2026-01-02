@@ -99,6 +99,13 @@ if(ENABLE_TIFF AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/libtiff/CMakeList
     set(USE_TIFF 1)
 endif()
 
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/json/include/nlohmann/json.hpp")
+    add_subdirectory(mapgen/earth/json)
+    set(NLOHMANN_INCLUDE_DIR mapgen/earth/json/include)
+    include_directories(BEFORE SYSTEM ${NLOHMANN_INCLUDE_DIR})
+    message(STATUS "Using nlohmann json : ${NLOHMANN_INCLUDE_DIR}")
+endif()
+
 option(ENABLE_OSMIUM "Enable Osmium" 0)
 
 # if(ENABLE_OSMIUM)
@@ -141,9 +148,6 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
         endif()
 
         if(USE_OSMIUM_TOOL)
-            add_subdirectory(mapgen/earth/json)
-            set(NLOHMANN_INCLUDE_DIR mapgen/earth/json/include)
-            include_directories(BEFORE SYSTEM ${NLOHMANN_INCLUDE_DIR})
             set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/osmium-tool/cmake/Modules/")
             add_subdirectory(mapgen/earth/osmium-tool)
             set(OSMIUM_TOOL_LIBRARY osmium-tool-lib)

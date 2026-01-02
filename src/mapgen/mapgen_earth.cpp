@@ -32,10 +32,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "constants.h"
 #include "emerge.h"
-#if USE_VOXEL_EARTH
-#include "mapgen/earth/luanti-earth/native/src/downloader.h"
-#include "mapgen/earth/luanti-earth/native/src/voxelizer.h"
-#endif
 #include "mapgen/earth/png_holder.h"
 #include "mapgen/earth/rgb_temp.h"
 #include "mapgen/mg_decoration.h"
@@ -77,6 +73,12 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mapgen/earth/osmium-tool/src/command_extract.hpp"
 #endif
 #endif
+#if USE_VOXEL_EARTH
+#include "mapgen/earth/luanti-earth/native/src/downloader.h"
+#include "mapgen/earth/luanti-earth/native/src/voxelizer.h"
+#endif
+
+#undef stoi
 
 std::unique_ptr<maps_holder_t> MapgenEarth::maps_holder;
 
@@ -436,13 +438,13 @@ void MapgenEarth::start_download_and_voxelize(double lat, double lon, double ele
 		auto tiles = downloader.downloadTiles(lat, lon, elevation, radius);
 		Voxelizer voxelizer;
 		Vec3 origin = cartesianFromDegrees(lat, lon, elevation);
-		DUMP(node_min, node_max, lat, lon, origin.X, origin.Y, origin.Z, tiles.size());
+		// DUMP(node_min, node_max, lat, lon, origin.X, origin.Y, origin.Z, tiles.size());
 		const auto mg = this;
 		int set = 0, miss = 0;
 		for (const auto &tile : tiles) {
 			VoxelGrid grid = voxelizer.voxelize(
 					tile.data, resolution, origin.X, origin.Y, origin.Z);
-			DUMP(grid.voxels.size(), origin);
+			// DUMP(grid.voxels.size(), origin);
 			for (const auto &v : grid.voxels) {
 				const v3pos_t pos_rel{static_cast<pos_t>(v.x), static_cast<pos_t>(v.y),
 						static_cast<pos_t>(v.z)};
@@ -459,9 +461,9 @@ void MapgenEarth::start_download_and_voxelize(double lat, double lon, double ele
 				}
 			}
 		}
-		DUMP(node_min, set, miss, tiles.size());
+		// DUMP(node_min, set, miss, tiles.size());
 	} catch (const std::exception &e) {
-		DUMP(e.what());
+		errorstream << "Voxel earth exception: " << e.what() << "\n";
 	}
 #endif
 }
@@ -708,10 +710,10 @@ void MapgenEarth::makeChunk(BlockMakeData *data)
 		const auto radius = csize.X;
 		const auto resolution = csize.X;
 		const auto elevation = node_min.Y + csize.Y / 2;
-		DUMP("R", radius, resolution, elevation, node_min, tc);
-		if (elevation > 0) {
-			start_download_and_voxelize(tc.lat, tc.lon,
-					elevation, radius, resolution, key);
+		// DUMP("R", radius, resolution, elevation, node_min, tc);
+		if (elevation >= 0) {
+			start_download_and_voxelize(
+					tc.lat, tc.lon, elevation, radius, resolution, key);
 		}
 	} else
 #else

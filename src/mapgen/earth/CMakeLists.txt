@@ -18,12 +18,6 @@ set(mapgen_earth_SRCS ${mapgen_earth_SRCS}
     ${CMAKE_CURRENT_SOURCE_DIR}/http.cpp
 )
 
-if(USE_VOXEL_EARTH OR USE_OSMIUM_TOOL)
-    add_subdirectory(json)
-    set(NLOHMANN_INCLUDE_DIR json/include)
-    include_directories(BEFORE SYSTEM ${NLOHMANN_INCLUDE_DIR})
-endif()
-
 if(USE_VOXEL_EARTH)
     set(TINYGLTF_BUILD_LOADER_EXAMPLE 0 CACHE INTERNAL "")
     set(TINYGLTF_INSTALL 0 CACHE INTERNAL "")
@@ -35,6 +29,7 @@ if(USE_VOXEL_EARTH)
     add_subdirectory(luanti-earth/native)
     set(FREEMINER_CLIENT_LIBRARIES ${FREEMINER_CLIENT_LIBRARIES} earth_native PARENT_SCOPE)
     set(FREEMINER_SERVER_LIBRARIES ${FREEMINER_SERVER_LIBRARIES} earth_native PARENT_SCOPE)
+    message(STATUS "Earth: Using voxel-earth")
 endif()
 
 set(freeminer_mapgen_SRCS ${freeminer_mapgen_SRCS}
