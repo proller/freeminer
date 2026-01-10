@@ -52,6 +52,8 @@ cd $builddir
 [ -d build ] && rm -rf build
 
 cmake_args=(
+	-DFETCH_DEPS=1
+
 	-DCMAKE_TOOLCHAIN_FILE=$toolchain_file
 	-DCMAKE_INSTALL_PREFIX=/tmp
 	-DBUILD_CLIENT=1 -DBUILD_SERVER=0
