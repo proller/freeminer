@@ -30,6 +30,7 @@ if(FETCH_DEPS)
         # GIT_TAG "bzip2-1.0.8" # CMake support not available
         GIT_SHALLOW TRUE
 
+        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/bzip2
         OVERRIDE_FIND_PACKAGE TRUE
         USES_TERMINAL_DOWNLOAD TRUE
         GIT_PROGRESS TRUE
@@ -53,6 +54,8 @@ if(FETCH_DEPS)
         GIT_REPOSITORY https://github.com/boostorg/boost.git
         GIT_TAG boost-1.90.0
         GIT_SHALLOW TRUE
+
+        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/boost
         OVERRIDE_FIND_PACKAGE TRUE # needed to find correct Boost
         USES_TERMINAL_DOWNLOAD TRUE
         GIT_PROGRESS TRUE
@@ -98,10 +101,54 @@ if(ENABLE_WEBSOCKET OR ENABLE_WEBSOCKET_SCTP)
             include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp)
             #add_subdirectory(external/websocketpp)
             #set(WEBSOCKETPP_LIBRARY websocketpp::websocketpp)
-            message(STATUS "Using websocket: ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp")
             find_package(OpenSSL)
-            set(WEBSOCKETPP_LIBRARY ${WEBSOCKETPP_LIBRARY} OpenSSL::SSL Boost::headers)
+
+            if(NOT TARGET OpenSSL::SSL AND FETCH_DEPS)
+                # https://stackoverflow.com/questions/66829315/how-to-use-cmake-fetchcontent-to-link-openssl
+
+                include(ExternalProject)
+                set(OPENSSL_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/openssl)
+                set(OPENSSL_INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl)
+                set(OPENSSL_INCLUDE_DIR ${OPENSSL_INSTALL_DIR}/include)
+                set(OPENSSL_CONFIGURE_COMMAND ${OPENSSL_SOURCE_DIR}/config)
+                ExternalProject_Add(
+                    OpenSSL
+                    SOURCE_DIR ${OPENSSL_SOURCE_DIR}
+                    GIT_REPOSITORY https://github.com/openssl/openssl.git
+                    GIT_TAG openssl-3.6.0 # OpenSSL_1_1_1n
+                    USES_TERMINAL_DOWNLOAD TRUE
+                    CONFIGURE_COMMAND
+                    ${OPENSSL_CONFIGURE_COMMAND}
+                    --prefix=${OPENSSL_INSTALL_DIR}
+                    --openssldir=${OPENSSL_INSTALL_DIR}
+                    BUILD_COMMAND make
+                    TEST_COMMAND ""
+                    INSTALL_COMMAND make install
+                    INSTALL_DIR ${OPENSSL_INSTALL_DIR}
+                )
+                # We cannot use find_library because ExternalProject_Add() is performed at build time.
+                # And to please the property INTERFACE_INCLUDE_DIRECTORIES,
+                # we make the include directory in advance.
+                file(MAKE_DIRECTORY ${OPENSSL_INCLUDE_DIR})
+
+                add_library(OpenSSL::SSL STATIC IMPORTED GLOBAL)
+                set_property(TARGET OpenSSL::SSL PROPERTY IMPORTED_LOCATION ${OPENSSL_INSTALL_DIR}/lib/libssl.${OPENSSL_LIBRARY_SUFFIX})
+                set_property(TARGET OpenSSL::SSL PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${OPENSSL_INCLUDE_DIR})
+                add_dependencies(OpenSSL::SSL OpenSSL)
+
+                add_library(OpenSSL::Crypto STATIC IMPORTED GLOBAL)
+                set_property(TARGET OpenSSL::Crypto PROPERTY IMPORTED_LOCATION ${OPENSSL_INSTALL_DIR}/lib/libcrypto.${OPENSSL_LIBRARY_SUFFIX})
+                set_property(TARGET OpenSSL::Crypto PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${OPENSSL_INCLUDE_DIR})
+                add_dependencies(OpenSSL::Crypto OpenSSL)
+            endif()
+
+            if(OPENSSL_FOUND)
+                set(WEBSOCKETPP_LIBRARY ${WEBSOCKETPP_LIBRARY} OpenSSL::SSL)
+            endif()
+
+            set(WEBSOCKETPP_LIBRARY ${WEBSOCKETPP_LIBRARY} Boost::headers)
             set(USE_WEBSOCKET 1 CACHE BOOL "")
+            message(STATUS "Using websocket ${USE_WEBSOCKET}: ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp : ${WEBSOCKETPP_LIBRARY}")
             #TODO:
             # set(USE_WEBSOCKET_SCTP 1 CACHE BOOL "")
             set(FREEMINER_COMMON_LIBRARIES ${FREEMINER_COMMON_LIBRARIES} ${WEBSOCKETPP_LIBRARY})
@@ -192,6 +239,7 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
             SOURCE_SUBDIR build/cmake
             SYSTEM TRUE
 
+            SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/lz4
             GIT_SHALLOW TRUE
             OVERRIDE_FIND_PACKAGE TRUE
             USES_TERMINAL_DOWNLOAD TRUE
@@ -208,6 +256,7 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
             SOURCE_SUBDIR cmake
             GIT_SUBMODULES_RECURSE OFF
 
+            SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/protozero
             GIT_SHALLOW TRUE
             OVERRIDE_FIND_PACKAGE TRUE
             USES_TERMINAL_DOWNLOAD TRUE
@@ -225,6 +274,7 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
             GIT_TAG R_2_7_3
             SOURCE_SUBDIR expat/
 
+            SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/expat
             GIT_SHALLOW TRUE
             OVERRIDE_FIND_PACKAGE TRUE
             USES_TERMINAL_DOWNLOAD TRUE
@@ -303,7 +353,7 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
                 FetchContent_Declare(libosmium
                     GIT_REPOSITORY https://github.com/osmcode/libosmium
                     GIT_TAG v2.22.0
-                    #SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/contrib/libosmium
+                    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/libosmium
                     SOURCE_SUBDIR cmake
                     GIT_SUBMODULES_RECURSE OFF
 
