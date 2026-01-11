@@ -35,7 +35,7 @@ static void workOnMetadata(const MBContainer &vec)
 {
 	for (MapBlock *block : vec) {
 #if CHECK_CLIENT_BUILD()
-		bool foo = !!block->mesh;
+		bool foo = !!block->getLodMesh(0);
 #else
 		bool foo = true;
 #endif

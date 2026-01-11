@@ -18,16 +18,18 @@ public:
 		s16 block_y = p.Y;
 
 		MapSector *sector = getSectorNoGenerate(p2d);
+/*
 		if (!sector) {
 			sector = new MapSector(this, p2d, m_gamedef);
 			m_sectors[p2d] = sector;
 		}
+*/
 
-		MapBlock *block = sector->getBlockNoCreateNoEx(block_y);
+		MapBlock *block = sector->getBlockNoCreateNoEx(p /*block_y*/);
 		if (block)
 			return block;
 
-		return sector->createBlankBlock(block_y);
+		return sector->createBlankBlock(p).get();
 	}
 
 };

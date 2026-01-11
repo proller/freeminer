@@ -604,12 +604,6 @@ include_directories(SYSTEM
 	"$<$<PLATFORM_ID:Android>:${SDL2_INCLUDE_DIRS}>"
 )
 
-#freeminer includes:
-include_directories(
-	${MSGPACK_INCLUDE_DIR}
-    ${PNG_INCLUDE_DIR}
-)
-
 if(USE_GETTEXT)
 	include_directories(${GETTEXT_INCLUDE_DIR})
 endif()

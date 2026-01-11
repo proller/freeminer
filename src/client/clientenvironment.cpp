@@ -163,8 +163,8 @@ void ClientEnvironment::step(f32 dtime, double uptime, unsigned int max_cycle_ms
 
 				resistance_factor = 0.97; // todo maybe depend on speed; 0.96 = ~100 nps max
 				resistance_factor += (1.0 - resistance_factor) *
-									(1 - (MAX_MAP_GENERATION_LIMIT - pf.Y / BS) /
-													MAX_MAP_GENERATION_LIMIT);
+									(1 - (FARSCALE_LIMIT - pf.Y / BS) /
+													FARSCALE_LIMIT);
 			}
 
 			// Liquid floating / sinking

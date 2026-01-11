@@ -9,11 +9,9 @@
 #include <set>
 #include <map>
 #include "irr_v3d.h"
-#include "threading/concurrent_set.h"
 #include "threading/concurrent_unordered_map.h"
 #include "threading/concurrent_unordered_set.h"
 #include "util/unordered_map_hash.h"
-#include <list>
 
 #include "irrlichttypes_bloated.h"
 #include "mapblock.h"
@@ -121,6 +119,8 @@ public:
 class Map : public NodeContainer
 {
 public:
+    using MapSector = Map;
+
 	Map(IGameDef *gamedef);
 	virtual ~Map();
 	DISABLE_CLASS_COPY(Map);
@@ -129,6 +129,17 @@ public:
 	void removeEventReceiver(MapEventReceiver *event_receiver);
 	// event shall be deleted by caller after the call.
 	void dispatchEvent(const MapEditEvent &event);
+
+	// On failure returns NULL
+	MapSector * getSectorNoGenerateNoLock(v2s16 p2d);
+	// Same as the above (there exists no lock anymore)
+	MapSector * getSectorNoGenerate(v2s16 p2d);
+
+	/*
+		This is overloaded by ClientMap and ServerMap to allow
+		their differing fetch methods.
+	*/
+	virtual MapSector * emergeSector(v2s16 p){ return NULL; }
 
 	// Returns InvalidPositionException if not found
 	MapBlock * getBlockNoCreate(v3s16 p);
@@ -460,3 +471,5 @@ protected:
 public:
 	Map *m_map = nullptr;
 };
+
+using MapSector = Map::MapSector;

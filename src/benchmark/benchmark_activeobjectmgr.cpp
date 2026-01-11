@@ -55,9 +55,9 @@ void benchGetObjectsInsideRadius(Catch::Benchmark::Chronometer &meter)
 {
 	server::ActiveObjectMgr mgr;
 	size_t x;
-	std::vector<ServerActiveObject*> result;
+	std::vector<ServerActiveObjectPtr> result;
 
-	auto cb = [&x] (ServerActiveObject *obj) -> bool {
+	auto cb = [&x] (const ServerActiveObjectPtr &obj) -> bool {
 		x += obj->m_static_exists ? 0 : 1;
 		return false;
 	};
@@ -77,9 +77,9 @@ void benchGetObjectsInArea(Catch::Benchmark::Chronometer &meter)
 {
 	server::ActiveObjectMgr mgr;
 	size_t x;
-	std::vector<ServerActiveObject*> result;
+	std::vector<ServerActiveObjectPtr> result;
 
-	auto cb = [&x] (ServerActiveObject *obj) -> bool {
+	auto cb = [&x] (const ServerActiveObjectPtr &obj) -> bool {
 		x += obj->m_static_exists ? 0 : 1;
 		return false;
 	};

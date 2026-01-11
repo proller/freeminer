@@ -6,7 +6,7 @@
 our $help = qq{
 $0 [-config_variables] [--freeminer_params] [---this_script_params] [---verbose] [----presets] [cmds]
 
-#simple task
+# simple task
 $0 valgrind_massif
 
 # run one task with headless config
@@ -15,18 +15,18 @@ $0 ----headless gdb
 # pass options to app
 $0 -num_emerge_threads=1 tsan bot
 
-#run all tasks except interactive
+# run all tasks except interactive
 $0 all
 
-#manual play with gdb trace if segfault
+# manual play with gdb trace if segfault
 $0 gdb go
 
-#normal play
+# normal play
 $0 go
 
-#build with latests installed clang and play
+# build with latests installed clang and play
 $0 ---cmake_clang=1 ---cmake_libcxx=1 go
-#build with clang-3.8 and play
+# build with clang-3.8 and play
 $0 ---cmake_clang=-3.8 go
 
 # run server with debug in gdb
@@ -85,6 +85,7 @@ $0 -mg_name=earth -mg_earth='{"center":{"z":36.822183, "y":0, "x":30.583390}}' b
 $0 -mg_name=earth -mg_earth='{"scale":{"z":10000, "y":100, "x":10000}}' bot
 $0 -mg_name=earth -mg_earth='{"center":{"z":27.9878279,"y":0,"x":86.923833}}' -static_spawnpoint='(130,8842,56)' bot  # Everest
 $0 -mg_name=earth -mg_earth='{"center":{"z":22.28422,"x":114.15996,"y":0} }' bot  # HongKong
+$0 -mg_name=earth -static_spawnpoint='(12709494,35,2484615)' bot  # HongKong
 
 $0 ---cmake_minetest=1 ---build_name=_minetest ----headless ----headless_optimize --address=cool.server.org --port=30001 ---clients_num=25 clients
 
@@ -104,6 +105,8 @@ $0 ----mg_math_tglag ----server_optimize ----far -static_spawnpoint='(24100,3000
 $0 ----fall1 -continuous_forward=1 bot
 
 ASAN_OPTIONS=detect_container_overflow=0 $0 ---cmake_leveldb=0 -DENABLE_SYSTEM_JSONCPP=0 -DENABLE_WEBSOCKET=0 -keymap_toggle_block_bounds=KEY_F9 ----fall2 set_client asan build_client run_single
+
+$0 -DBUILD_BENCHMARKS=1 go --run-benchmarks  
 };
 
 no if $] >= 5.017011, warnings => 'experimental::smartmatch';
@@ -404,7 +407,8 @@ $commands = {
     cmake_prepare => sub {
         $config->{cmake_clang} //= 1 if $config->{clang_version};
         $config->{clang_version} = $config->{cmake_clang} if $config->{cmake_clang} and $config->{cmake_clang} ne '1';
-        $config->{cmake_libcxx} //= 1                     if $config->{cmake_clang};
+        # Fix boost redownload:
+        # $config->{cmake_libcxx} //= 1                     if $config->{cmake_clang};
         $g->{build_names}{x_clang} = $config->{clang_version} if $config->{cmake_clang};
         my $build_dir = $commands->{build_dir}();
         chdir $config->{root_path};
