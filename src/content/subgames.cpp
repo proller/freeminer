@@ -413,6 +413,7 @@ void loadGameConfAndInitWorld(const std::string &path, const std::string &name,
 
 		mgr.setMapSetting("seed", g_settings->get("fixed_map_seed"));
 
+#if 0
 		/////
 		Settings gameconf;
 		std::string gameconf_path = gamespec.path + DIR_DELIM "game.conf";
@@ -449,7 +450,7 @@ void loadGameConfAndInitWorld(const std::string &path, const std::string &name,
 		}
 		mgr.setMapSetting("mg_name", mg_name);
 		/////
-
+#endif
 
 		mgr.makeMapgenParams();
 		mgr.saveMapMeta();
