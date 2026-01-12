@@ -20,6 +20,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <memory>
@@ -281,11 +282,14 @@ const MapNode &MapgenEarth::visible_content(const v3pos_t &p, bool use_weather)
 					   : visible_surface_hot;
 }
 
+//constexpr double EARTH_RADIUS = 6378137.0;
+//constexpr double EQUATOR_LEN = EARTH_RADIUS * 3.14159265358979323846 * 2;
+
 constexpr double EQUATOR_LEN{40075696.0};
 ll MapgenEarth::pos_to_ll(const pos_t x, const pos_t z)
 {
-	const auto lon = ((ll_t)x * scale.X) / (EQUATOR_LEN / 360) + center.X;
-	const auto lat = ((ll_t)z * scale.Z) / (EQUATOR_LEN / 360) + center.Z;
+	const auto lon = ((ll_t)x * scale.X) / (EQUATOR_LEN / 360.0) + center.X;
+	const auto lat = ((ll_t)z * scale.Z) / (EQUATOR_LEN / 360.0) + center.Z;
 	if (lat < 90 && lat > -90 && lon < 180 && lon > -180) {
 		return {(ll_t)lat, (ll_t)lon};
 	} else {
@@ -424,6 +428,7 @@ static Vec3 cartesianFromDegrees(double lat, double lon, double h = 0)
 }
 
 #include "earth/voxel_importer.cpp"
+#include "earth/CpuVoxelizer.cpp"
 #endif
 
 void MapgenEarth::start_download_and_voxelize(double lat, double lon, double elevation,
@@ -436,14 +441,36 @@ void MapgenEarth::start_download_and_voxelize(double lat, double lon, double ele
 		TileDownloader downloader(
 				apiKeyStr, maps_holder->data_root + DIR_DELIM + "voxel_earth");
 		auto tiles = downloader.downloadTiles(lat, lon, elevation, radius);
-		Voxelizer voxelizer;
+		//Voxelizer voxelizer;
 		Vec3 origin = cartesianFromDegrees(lat, lon, elevation);
 		// DUMP(node_min, node_max, lat, lon, origin.X, origin.Y, origin.Z, tiles.size());
 		const auto mg = this;
+
+		CpuVoxelizer voxelizer{csize.X * 2, true, true};
+
 		int set = 0, miss = 0;
 		for (const auto &tile : tiles) {
-			VoxelGrid grid = voxelizer.voxelize(
-					tile.data, resolution, origin.X, origin.Y, origin.Z);
+			const auto callback = [&, this](const int &x, const int &y, const int &z,
+										  const uint8_t &r, const uint8_t &g,
+										  const uint8_t &b, const uint8_t &a) {
+				{
+					const v3pos_t pos_rel{static_cast<pos_t>(x), static_cast<pos_t>(y),
+							//+ csize.Y/2
+							static_cast<pos_t>(z)};
+					const auto pos = node_min + pos_rel;
+					if (mg->vm->exists(pos)) {
+						const auto block_name = voxel_importer::rgb_to_block(r, g, b);
+						const auto id = ndef->getId(block_name);
+						MapNode node{id, LIGHT_SUN};
+						mg->vm->setNode(pos, node);
+						++set;
+					} else {
+						++miss;
+					}
+				}
+			};
+			const auto stats = voxelizer.voxelizeSingleGLB(tile, callback);
+			/*
 			// DUMP(grid.voxels.size(), origin);
 			for (const auto &v : grid.voxels) {
 				const v3pos_t pos_rel{static_cast<pos_t>(v.x), static_cast<pos_t>(v.y),
@@ -460,6 +487,7 @@ void MapgenEarth::start_download_and_voxelize(double lat, double lon, double ele
 					++miss;
 				}
 			}
+*/
 		}
 		// DUMP(node_min, set, miss, tiles.size());
 	} catch (const std::exception &e) {
@@ -703,15 +731,21 @@ void MapgenEarth::makeChunk(BlockMakeData *data)
 	if (voxel_earth) {
 		// Generate base and mountain terrain
 		const auto stone_surface_max_y = generateTerrain();
+		const auto tc_min = pos_to_ll(node_min.X, node_min.Z);
+		const auto tc_max = pos_to_ll(node_max.X, node_max.Z);
 
 		const auto tc = pos_to_ll(node_min + csize / 2);
-		std::string key;
-		g_settings->getNoEx("voxel_earth_api_key", key);
-		const auto radius = csize.X;
+		static std::string key;
+		if (key.empty()) {
+			g_settings->getNoEx("voxel_earth_api_key", key);
+		}
+		const auto origin_min = cartesianFromDegrees(tc_min.lat, tc_min.lon, node_min.Y);
+		const auto origin_max = cartesianFromDegrees(tc_max.lat, tc_max.lon, node_max.Y);
+		const auto origin_diff = origin_max - origin_min;
+		const auto radius = csize.X / 2;
 		const auto resolution = csize.X;
 		const auto elevation = node_min.Y + csize.Y / 2;
-		// DUMP("R", radius, resolution, elevation, node_min, tc);
-		if (elevation >= 0) {
+		{
 			start_download_and_voxelize(
 					tc.lat, tc.lon, elevation, radius, resolution, key);
 		}
