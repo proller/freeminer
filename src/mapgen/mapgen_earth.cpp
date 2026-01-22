@@ -441,23 +441,28 @@ void MapgenEarth::start_download_and_voxelize(double lat, double lon, double ele
 		TileDownloader downloader(
 				apiKeyStr, maps_holder->data_root + DIR_DELIM + "voxel_earth");
 		auto tiles = downloader.downloadTiles(lat, lon, elevation, radius);
-		//Voxelizer voxelizer;
+		bool use_java_voxelizer = false;
+		g_settings->getBoolNoEx("use_java_voxelizer", use_java_voxelizer);
+		bool use_native_voxelizer = !use_java_voxelizer;
+		g_settings->getBoolNoEx("use_native_voxelizer", use_native_voxelizer);
+
+		Voxelizer voxelizer;
+		CpuVoxelizer cpuvoxelizer{csize.X * 2, true, true};
 		Vec3 origin = cartesianFromDegrees(lat, lon, elevation);
 		// DUMP(node_min, node_max, lat, lon, origin.X, origin.Y, origin.Z, tiles.size());
 		const auto mg = this;
 
-		CpuVoxelizer voxelizer{csize.X * 2, true, true};
-
 		int set = 0, miss = 0;
 		for (const auto &tile : tiles) {
-			const auto callback = [&, this](const int &x, const int &y, const int &z,
-										  const uint8_t &r, const uint8_t &g,
-										  const uint8_t &b, const uint8_t &a) {
-				{
+			if (use_java_voxelizer) {
+				const auto callback = [&, this](const int &x, const int &y, const int &z,
+											  const uint8_t &r, const uint8_t &g,
+											  const uint8_t &b, const uint8_t &a) {
 					const v3pos_t pos_rel{static_cast<pos_t>(x), static_cast<pos_t>(y),
 							//+ csize.Y/2
 							static_cast<pos_t>(z)};
 					const auto pos = node_min + pos_rel;
+
 					if (mg->vm->exists(pos)) {
 						const auto block_name = voxel_importer::rgb_to_block(r, g, b);
 						const auto id = ndef->getId(block_name);
@@ -467,29 +472,32 @@ void MapgenEarth::start_download_and_voxelize(double lat, double lon, double ele
 					} else {
 						++miss;
 					}
-				}
-			};
-			const auto stats = voxelizer.voxelizeSingleGLB(tile, callback);
-			/*
-			// DUMP(grid.voxels.size(), origin);
-			for (const auto &v : grid.voxels) {
-				const v3pos_t pos_rel{static_cast<pos_t>(v.x), static_cast<pos_t>(v.y),
-						static_cast<pos_t>(v.z)};
-				const auto pos = node_min + pos_rel;
+				};
+				const auto stats = cpuvoxelizer.voxelizeSingleGLB(tile, callback);
+			}
 
-				if (mg->vm->exists(pos)) {
-					const auto block_name = voxel_importer::rgb_to_block(v.r, v.g, v.b);
-					const auto id = ndef->getId(block_name);
-					MapNode node{id, LIGHT_SUN};
-					mg->vm->setNode(pos, node);
-					++set;
-				} else {
-					++miss;
+			if (use_native_voxelizer) {
+				VoxelGrid grid = voxelizer.voxelize(
+						tile, resolution, origin.X, origin.Y, origin.Z);
+				for (const auto &v : grid.voxels) {
+					const v3pos_t pos_rel{static_cast<pos_t>(v.x),
+							static_cast<pos_t>(v.y),
+							//+ csize.Y/2
+							static_cast<pos_t>(v.z)};
+					const auto pos = node_min + pos_rel;
+					if (mg->vm->exists(pos)) {
+						const auto block_name =
+								voxel_importer::rgb_to_block(v.r, v.g, v.b);
+						const auto id = ndef->getId(block_name);
+						MapNode node{id, LIGHT_SUN};
+						mg->vm->setNode(pos, node);
+						++set;
+					} else {
+						++miss;
+					}
 				}
 			}
-*/
 		}
-		// DUMP(node_min, set, miss, tiles.size());
 	} catch (const std::exception &e) {
 		errorstream << "Voxel earth exception: " << e.what() << "\n";
 	}

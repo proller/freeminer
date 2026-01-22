@@ -40,7 +40,7 @@ if(USE_VOXEL_EARTH)
     set(FREEMINER_SERVER_LIBRARIES ${FREEMINER_SERVER_LIBRARIES} earth_native PARENT_SCOPE)
 
     list(APPEND mapgen_earth_SRCS
-        ${CMAKE_CURRENT_SOURCE_DIR}/voxel_earth.cpp
+        #${CMAKE_CURRENT_SOURCE_DIR}/voxel_earth.cpp
     )
     message(STATUS "Earth: Using voxel-earth")
 endif()
