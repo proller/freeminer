@@ -22,7 +22,7 @@
 
 #include "CpuVoxelizer.h"
 #include "mapgen/earth/luanti-earth/native/src/downloader.h"
-#include "tinygltf/tiny_gltf.h"
+#include "tiny_gltf.h"
 
 #include <algorithm>
 #include <cstdint>

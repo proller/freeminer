@@ -21,9 +21,10 @@ else()
     option(FETCH_DEPS "Compile deps (boost,...) in place" 0)
 endif()
 
+set(FETCHCONTENT_UPDATES_DISCONNECTED 1)
+set(FETCHCONTENT_QUIET 0) # Needed to print downloading progress
+
 if(FETCH_DEPS)
-    set(FETCHCONTENT_UPDATES_DISCONNECTED 1)
-    set(FETCHCONTENT_QUIET 0) # Needed to print downloading progress
     include(FetchContent)
     set(ENABLE_LIB_ONLY ON CACHE BOOL "")
     set(ENABLE_TESTS OFF CACHE BOOL "")
@@ -77,7 +78,6 @@ if(FETCH_DEPS)
     )
 
     include(FetchContent)
-    set(FETCHCONTENT_QUIET FALSE) # Needed to print downloading progress
     FetchContent_Declare(
         Boost
         GIT_REPOSITORY https://github.com/boostorg/boost.git
@@ -233,11 +233,33 @@ option(ENABLE_OSMIUM "Enable Osmium" 0)
 #     find_path(OSMIUM_INCLUDE_DIR osmium/osm.hpp)
 # endif()
 
+if(1)
+    include(FetchContent)
+    FetchContent_Declare(
+        tinygltf
+        GIT_REPOSITORY https://github.com/syoyo/tinygltf.git
+        GIT_TAG v2.9.7
+        GIT_SUBMODULES_RECURSE OFF
+        # SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/tinygltf
+        GIT_SHALLOW TRUE
+        OVERRIDE_FIND_PACKAGE TRUE
+        USES_TERMINAL_DOWNLOAD TRUE
+        GIT_PROGRESS TRUE
+        DOWNLOAD_EXTRACT_TIMESTAMP ON
+        EXCLUDE_FROM_ALL
+    )
+    FetchContent_MakeAvailable(tinygltf)
+
+    set(TINYGLTF_INCLUDE_DIR ${tinygltf_SOURCE_DIR})
+    include_directories(${TINYGLTF_INCLUDE_DIR})
+
+endif()
+
+
 if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/libosmium/CMakeLists.txt))
 
     if(FETCH_DEPS)
         include(FetchContent)
-        set(FETCHCONTENT_QUIET FALSE) # Needed to print downloading progress
 
         FetchContent_Declare(lz4
             URL https://github.com/lz4/lz4/archive/refs/tags/v1.10.0.tar.gz
