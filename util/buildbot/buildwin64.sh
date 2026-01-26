@@ -53,6 +53,8 @@ cd $builddir
 
 cmake_args=(
 	-DFETCH_DEPS=1
+	-DFETCH_OPENSSL=1
+	-DENABLE_WEBSOCKET=0
 
 	-DCMAKE_TOOLCHAIN_FILE=$toolchain_file
 	-DCMAKE_INSTALL_PREFIX=/tmp

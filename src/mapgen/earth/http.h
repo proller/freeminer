@@ -8,7 +8,7 @@ size_t multi_http_to_file(const std::string &zipfile,
 		const std::vector<std::string> &links, std::string zipfull = {});
 size_t multi_http_to_file(
 		const std::vector<std::string> &links, const std::string &zipfull);
-size_t multi_http_to_file_cdn(const std::string &name, std::vector<std::string> links,
-		const std::string &path = {});
+size_t multi_http_to_file_cdn(const std::string &dir, const std::string &name,
+		std::vector<std::string> links, const std::string &path = {});
 
 std::string exec_to_string(const std::string &cmd);

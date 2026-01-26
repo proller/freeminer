@@ -93,7 +93,7 @@ private:
 	static constexpr uint16_t grid_size_xy{grid_size_x * grid_size_y};
 
 	static constexpr uint8_t wait_server_far_block{
-			3}; // minimum 1 ; maybe make dynamic depend on avg server ask/response time, or on fast mode
+			1}; // minimum 1 ; maybe make dynamic depend on avg server ask/response time, or on fast mode
 
 	Mapgen *mg{};
 

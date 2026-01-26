@@ -1,7 +1,5 @@
-
-# == freeminer:
-
 find_package(MsgPack REQUIRED)
+include_directories(${MSGPACK_INCLUDE_DIR})
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     option(ENABLE_SCTP "Enable SCTP networking (EXPERIMENTAL)" 0)
@@ -16,13 +14,19 @@ if(USE_MULTI)
     endif()
 endif()
 
-option(FETCH_DEPS "Compile deps (boost,...) in place" 0)
+if(ANDROID OR WIN32 OR EMSCRIPTEN OR USE_LIBCXX)
+    option(FETCH_DEPS "Compile deps (boost,...) in place" 1)
+else()
+    option(FETCH_DEPS "Compile deps (boost,...) in place" 0)
+endif()
 
 if(FETCH_DEPS)
+    set(FETCHCONTENT_UPDATES_DISCONNECTED 1)
+    set(FETCHCONTENT_QUIET 0) # Needed to print downloading progress
     include(FetchContent)
-    set(FETCHCONTENT_QUIET FALSE) # Needed to print downloading progress
     set(ENABLE_LIB_ONLY ON CACHE BOOL "")
     set(ENABLE_TESTS OFF CACHE BOOL "")
+    set(ENABLE_STATIC_LIB ON CACHE BOOL "")
     FetchContent_Declare(
         BZip2
         GIT_REPOSITORY "https://gitlab.com/bzip2/bzip2.git"
@@ -30,22 +34,47 @@ if(FETCH_DEPS)
         # GIT_TAG "bzip2-1.0.8" # CMake support not available
         GIT_SHALLOW TRUE
 
-        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/bzip2
+        # SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/bzip2
         OVERRIDE_FIND_PACKAGE TRUE
         USES_TERMINAL_DOWNLOAD TRUE
         GIT_PROGRESS TRUE
         DOWNLOAD_EXTRACT_TIMESTAMP ON
+        EXCLUDE_FROM_ALL
     )
     FetchContent_MakeAvailable(BZip2)
     set(BZIP2_FOUND 1 CACHE BOOL "")
-    add_library(BZip2::BZip2 ALIAS bz2)
+    add_library(BZip2::BZip2 ALIAS bz2_static)
     set(BZIP2_INCLUDE_DIR "${bzip2_SOURCE_DIR}" CACHE INTERNAL "")
-    target_include_directories(bz2 PUBLIC ${BZIP2_INCLUDE_DIR})
+    target_include_directories(bz2_static PUBLIC ${BZIP2_INCLUDE_DIR})
+endif()
+
+if(FETCH_OPENSSL AND FETCH_DEPS AND NOT TARGET OpenSSL::SSL)
+    FetchContent_Declare(
+        openssl-cmake
+        # URL https://github.com/jimmy-park/openssl-cmake/archive/main.tar.gz
+        GIT_REPOSITORY https://github.com/jimmy-park/openssl-cmake
+        GIT_TAG main
+        SOURCE_SUBDIR cmake
+        GIT_SUBMODULES_RECURSE OFF
+        # SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/openssl-cmake
+        GIT_SHALLOW TRUE
+        OVERRIDE_FIND_PACKAGE TRUE
+        USES_TERMINAL_DOWNLOAD TRUE
+        GIT_PROGRESS TRUE
+        DOWNLOAD_EXTRACT_TIMESTAMP ON
+        EXCLUDE_FROM_ALL
+    )
+    FetchContent_MakeAvailable(openssl-cmake)
 endif()
 
 if(FETCH_DEPS)
     set(BOOST_ENABLE_CMAKE ON)
-    set(BOOST_INCLUDE_LIBRARIES program_options)
+    set(BOOST_INCLUDE_LIBRARIES
+        program_options
+        asio
+        thread
+        geometry
+    )
 
     include(FetchContent)
     set(FETCHCONTENT_QUIET FALSE) # Needed to print downloading progress
@@ -55,7 +84,7 @@ if(FETCH_DEPS)
         GIT_TAG boost-1.90.0
         GIT_SHALLOW TRUE
 
-        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/boost
+        # SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/boost
         OVERRIDE_FIND_PACKAGE TRUE # needed to find correct Boost
         USES_TERMINAL_DOWNLOAD TRUE
         GIT_PROGRESS TRUE
@@ -63,84 +92,22 @@ if(FETCH_DEPS)
         EXCLUDE_FROM_ALL
     )
     FetchContent_MakeAvailable(Boost)
+    set(Boost_FOUND 1 CACHE INTERNAL "")
+    set(Boost_INCLUDE_DIRS "${BOOST_LIBRARY_INCLUDES} ${boost_SOURCE_DIR}/libs/numeric/conversion/include" CACHE INTERNAL "")
 endif()
 
 if(ENABLE_WEBSOCKET OR ENABLE_WEBSOCKET_SCTP)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp/CMakeLists.txt)
         find_package(Boost)
         if(Boost_FOUND)
-
             if(boost_SOURCE_DIR)
-                include_directories(BEFORE SYSTEM
-                    ${boost_SOURCE_DIR}/libs/align/include
-                    ${boost_SOURCE_DIR}/libs/asio/include
-                    ${boost_SOURCE_DIR}/libs/assert/include
-                    ${boost_SOURCE_DIR}/libs/bind/include
-                    ${boost_SOURCE_DIR}/libs/config/include
-                    ${boost_SOURCE_DIR}/libs/container_hash/include
-                    ${boost_SOURCE_DIR}/libs/container/include
-                    ${boost_SOURCE_DIR}/libs/core/include
-                    ${boost_SOURCE_DIR}/libs/date_time/include
-                    ${boost_SOURCE_DIR}/libs/describe/include
-                    ${boost_SOURCE_DIR}/libs/detail/include
-                    ${boost_SOURCE_DIR}/libs/function/include
-                    ${boost_SOURCE_DIR}/libs/lexical_cast/include
-                    ${boost_SOURCE_DIR}/libs/move/include
-                    ${boost_SOURCE_DIR}/libs/mp11/include
-                    ${boost_SOURCE_DIR}/libs/mpl/include
-                    ${boost_SOURCE_DIR}/libs/numeric/conversion/include
-                    ${boost_SOURCE_DIR}/libs/smart_ptr/include
-                    ${boost_SOURCE_DIR}/libs/static_assert/include
-                    ${boost_SOURCE_DIR}/libs/system/include
-                    ${boost_SOURCE_DIR}/libs/throw_exception/include
-                    ${boost_SOURCE_DIR}/libs/type_index/include
-                    ${boost_SOURCE_DIR}/libs/type_traits/include
-                )
+                include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
             endif()
 
             include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp)
             #add_subdirectory(external/websocketpp)
             #set(WEBSOCKETPP_LIBRARY websocketpp::websocketpp)
             find_package(OpenSSL)
-
-            if(NOT TARGET OpenSSL::SSL AND FETCH_DEPS)
-                # https://stackoverflow.com/questions/66829315/how-to-use-cmake-fetchcontent-to-link-openssl
-
-                include(ExternalProject)
-                set(OPENSSL_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/openssl)
-                set(OPENSSL_INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/openssl)
-                set(OPENSSL_INCLUDE_DIR ${OPENSSL_INSTALL_DIR}/include)
-                set(OPENSSL_CONFIGURE_COMMAND ${OPENSSL_SOURCE_DIR}/config)
-                ExternalProject_Add(
-                    OpenSSL
-                    SOURCE_DIR ${OPENSSL_SOURCE_DIR}
-                    GIT_REPOSITORY https://github.com/openssl/openssl.git
-                    GIT_TAG openssl-3.6.0 # OpenSSL_1_1_1n
-                    USES_TERMINAL_DOWNLOAD TRUE
-                    CONFIGURE_COMMAND
-                    ${OPENSSL_CONFIGURE_COMMAND}
-                    --prefix=${OPENSSL_INSTALL_DIR}
-                    --openssldir=${OPENSSL_INSTALL_DIR}
-                    BUILD_COMMAND make
-                    TEST_COMMAND ""
-                    INSTALL_COMMAND make install
-                    INSTALL_DIR ${OPENSSL_INSTALL_DIR}
-                )
-                # We cannot use find_library because ExternalProject_Add() is performed at build time.
-                # And to please the property INTERFACE_INCLUDE_DIRECTORIES,
-                # we make the include directory in advance.
-                file(MAKE_DIRECTORY ${OPENSSL_INCLUDE_DIR})
-
-                add_library(OpenSSL::SSL STATIC IMPORTED GLOBAL)
-                set_property(TARGET OpenSSL::SSL PROPERTY IMPORTED_LOCATION ${OPENSSL_INSTALL_DIR}/lib/libssl.${OPENSSL_LIBRARY_SUFFIX})
-                set_property(TARGET OpenSSL::SSL PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${OPENSSL_INCLUDE_DIR})
-                add_dependencies(OpenSSL::SSL OpenSSL)
-
-                add_library(OpenSSL::Crypto STATIC IMPORTED GLOBAL)
-                set_property(TARGET OpenSSL::Crypto PROPERTY IMPORTED_LOCATION ${OPENSSL_INSTALL_DIR}/lib/libcrypto.${OPENSSL_LIBRARY_SUFFIX})
-                set_property(TARGET OpenSSL::Crypto PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${OPENSSL_INCLUDE_DIR})
-                add_dependencies(OpenSSL::Crypto OpenSSL)
-            endif()
 
             if(OPENSSL_FOUND)
                 set(WEBSOCKETPP_LIBRARY ${WEBSOCKETPP_LIBRARY} OpenSSL::SSL)
@@ -197,9 +164,9 @@ if(ENABLE_ENET)
     endif()
     if(ENET_LIBRARY AND ENET_INCLUDE_DIR)
         include_directories(${ENET_INCLUDE_DIR})
-        message(STATUS "Using enet: ${ENET_INCLUDE_DIR} ${ENET_LIBRARY}")
         set(USE_ENET 1)
-        set(FREEMINER_COMMON_LIBRARIES ${FREEMINER_COMMON_LIBRARIES} ${ENET_LIBRARY})
+        list(APPEND FREEMINER_COMMON_LIBRARIES ${ENET_LIBRARY})
+        message(STATUS "Using enet ${USE_ENET}: ${ENET_INCLUDE_DIR} ${ENET_LIBRARY}")
     endif()
 endif()
 
@@ -239,7 +206,7 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
             SOURCE_SUBDIR build/cmake
             SYSTEM TRUE
 
-            SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/lz4
+            # SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/lz4
             GIT_SHALLOW TRUE
             OVERRIDE_FIND_PACKAGE TRUE
             USES_TERMINAL_DOWNLOAD TRUE
@@ -249,14 +216,15 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
 
         )
         FetchContent_MakeAvailable(lz4)
+        set(LZ4_LIBRARIES lz4_static CACHE INTERNAL "")
 
         FetchContent_Declare(protozero
             GIT_REPOSITORY https://github.com/mapbox/protozero
             GIT_TAG v1.8.1
             SOURCE_SUBDIR cmake
-            GIT_SUBMODULES_RECURSE OFF
 
-            SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/protozero
+            GIT_SUBMODULES_RECURSE OFF
+            # SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/protozero
             GIT_SHALLOW TRUE
             OVERRIDE_FIND_PACKAGE TRUE
             USES_TERMINAL_DOWNLOAD TRUE
@@ -265,8 +233,8 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
             EXCLUDE_FROM_ALL
         )
         FetchContent_MakeAvailable(protozero)
-
-        set(PROTOZERO_INCLUDE_DIR "${protozero_SOURCE_DIR}")
+        set(PROTOZERO_INCLUDE_DIR "${protozero_SOURCE_DIR}/include")
+        set(PROTOZERO_FOUND 1 CACHE INTERNAL "")
 
         FetchContent_Declare(
             expat
@@ -274,21 +242,20 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
             GIT_TAG R_2_7_3
             SOURCE_SUBDIR expat/
 
-            SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/expat
+            # SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/expat
             GIT_SHALLOW TRUE
             OVERRIDE_FIND_PACKAGE TRUE
             USES_TERMINAL_DOWNLOAD TRUE
             GIT_PROGRESS TRUE
             DOWNLOAD_EXTRACT_TIMESTAMP ON
             EXCLUDE_FROM_ALL
-
         )
         FetchContent_MakeAvailable(expat)
-
+        set(EXPAT_FOUND 1 CACHE INTERNAL "")
         add_library(EXPAT::EXPAT ALIAS expat)
     endif()
     set(Boost_USE_STATIC_LIBS ${BUILD_STATIC_LIBS})
-    find_package(Boost COMPONENTS program_options)
+    find_package(Boost COMPONENTS program_options geometry)
     if(Boost_FOUND)
         set(BUILD_TESTING 0 CACHE INTERNAL "")
         set(BUILD_DATA_TESTS 0 CACHE INTERNAL "")
@@ -300,60 +267,29 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
 
         if(NOT OSMIUM_INCLUDE_DIR)
             if(boost_SOURCE_DIR)
+                include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
                 include_directories(BEFORE SYSTEM
-                    ${boost_SOURCE_DIR}/libs/any/include
-                    ${boost_SOURCE_DIR}/libs/assert/include
-                    ${boost_SOURCE_DIR}/libs/config/include
-                    ${boost_SOURCE_DIR}/libs/container_hash/include
-                    ${boost_SOURCE_DIR}/libs/container/include
-                    ${boost_SOURCE_DIR}/libs/core/include
-                    ${boost_SOURCE_DIR}/libs/integer/include
-                    ${boost_SOURCE_DIR}/libs/iterator/include
-                    ${boost_SOURCE_DIR}/libs/lexical_cast/include
-                    ${boost_SOURCE_DIR}/libs/move/include
-                    ${boost_SOURCE_DIR}/libs/preprocessor/include
-                    ${boost_SOURCE_DIR}/libs/program_options/include
-                    ${boost_SOURCE_DIR}/libs/range/include
-                    ${boost_SOURCE_DIR}/libs/static_assert/include
-                    ${boost_SOURCE_DIR}/libs/throw_exception/include
-                    ${boost_SOURCE_DIR}/libs/type_index/include
-                    ${boost_SOURCE_DIR}/libs/type_traits/include
-                    ${boost_SOURCE_DIR}/libs/utility/include
-                    ${boost_SOURCE_DIR}/libs/variant/include
-
-                    ${boost_SOURCE_DIR}/libs/algorithm/include
-                    ${boost_SOURCE_DIR}/libs/array/include
-                    ${boost_SOURCE_DIR}/libs/bind/include
-                    ${boost_SOURCE_DIR}/libs/conversion/include
-                    ${boost_SOURCE_DIR}/libs/detail/include
-                    ${boost_SOURCE_DIR}/libs/function/include
-                    ${boost_SOURCE_DIR}/libs/geometry/include
-                    ${boost_SOURCE_DIR}/libs/graph/include
-                    ${boost_SOURCE_DIR}/libs/math/include
-                    ${boost_SOURCE_DIR}/libs/mpl/include
-                    ${boost_SOURCE_DIR}/libs/multi_index/include
-                    ${boost_SOURCE_DIR}/libs/multiprecision/include
                     ${boost_SOURCE_DIR}/libs/numeric/conversion/include
-                    ${boost_SOURCE_DIR}/libs/parameter/include
-                    ${boost_SOURCE_DIR}/libs/property_map/include
-                    ${boost_SOURCE_DIR}/libs/qvm/include
-                    ${boost_SOURCE_DIR}/libs/rational/include
-                    ${boost_SOURCE_DIR}/libs/smart_ptr/include
-                    ${boost_SOURCE_DIR}/libs/tokenizer/include
-                    ${boost_SOURCE_DIR}/libs/tti/include
-                    ${boost_SOURCE_DIR}/libs/unordered/include
                 )
             endif()
+            if(FETCH_DEPS)
+                set(FETCH_OSMIUM 1 CACHE INTERNAL "")
+            endif()
 
+            set(Osmium_DEBUG 1 CACHE INTERNAL "")
             # TODO: support system installed libosmium
-            if(NOT FETCH_DEPS)
+            if(NOT FETCH_OSMIUM AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/libosmium/CMakeLists.txt)
+                list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/libosmium/cmake")
+                set(Osmium_USE_LZ4 1 CACHE INTERNAL "")
                 add_subdirectory(mapgen/earth/libosmium)
-                set(OSMIUM_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/libosmium/include)
+                set(OSMIUM_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/libosmium/include ${Boost_INCLUDE_DIRS})
+                find_package(BZip2)
+                find_package(EXPAT)
             else()
                 FetchContent_Declare(libosmium
                     GIT_REPOSITORY https://github.com/osmcode/libosmium
                     GIT_TAG v2.22.0
-                    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/libosmium
+                    # SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/libosmium
                     SOURCE_SUBDIR cmake
                     GIT_SUBMODULES_RECURSE OFF
 
@@ -366,27 +302,26 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
 
                 )
                 FetchContent_MakeAvailable(libosmium)
-                set(OSMIUM_INCLUDE_DIR ${libosmium_SOURCE_DIR}/include ${PROTOZERO_INCLUDE_DIR}/include)
+                list(APPEND OSMIUM_INCLUDE_DIR ${libosmium_SOURCE_DIR}/include)
+            endif()
+
+            list(APPEND OSMIUM_INCLUDE_DIR ${PROTOZERO_INCLUDE_DIR})
+            list(APPEND OSMIUM_LIRARY Boost::headers)
+            if(BZIP2_FOUND)
+                list(APPEND OSMIUM_LIRARY BZip2::BZip2)
+            endif()
+            if(EXPAT_FOUND)
+                list(APPEND OSMIUM_LIRARY EXPAT::EXPAT)
             endif()
 
             include_directories(BEFORE SYSTEM ${OSMIUM_INCLUDE_DIR})
-
         endif()
-        find_package(BZip2)
-        if(BZIP2_FOUND)
-            set(OSMIUM_LIRARY ${OSMIUM_LIRARY} BZip2::BZip2)
-        endif()
-        find_package(EXPAT)
-        if(EXPAT_FOUND)
-            set(OSMIUM_LIRARY ${OSMIUM_LIRARY} EXPAT::EXPAT)
-        endif()
-        set(OSMIUM_LIRARY ${OSMIUM_LIRARY} Boost::headers)
         set(USE_OSMIUM 1)
-        message(STATUS "Using osmium: ${OSMIUM_INCLUDE_DIR} : ${OSMIUM_LIRARY}")
-        set(FREEMINER_COMMON_LIBRARIES ${FREEMINER_COMMON_LIBRARIES} ${OSMIUM_LIRARY})
+        message(STATUS "Using osmium ${USE_OSMIUM}: ${OSMIUM_INCLUDE_DIR} : ${OSMIUM_LIRARY}")
+        list(APPEND FREEMINER_COMMON_LIBRARIES ${OSMIUM_LIRARY})
 
         option(ENABLE_OSMIUM_TOOL "Enable Osmium tool" 1)
-        if(ENABLE_OSMIUM_TOOL)
+        if(ENABLE_OSMIUM_TOOL AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/osmium-tool/CMakeLists.txt)
             set(USE_OSMIUM_TOOL 1)
         endif()
 
@@ -394,7 +329,7 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
             add_subdirectory(mapgen/earth/json)
             set(NLOHMANN_INCLUDE_DIR mapgen/earth/json/include)
             include_directories(BEFORE SYSTEM ${NLOHMANN_INCLUDE_DIR})
-            set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/osmium-tool/cmake/Modules/")
+            list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/osmium-tool/cmake/Modules/")
             # add_subdirectory(mapgen/earth/osmium-tool)
             set(OSMIUM_TOOL_SRC mapgen/earth/osmium-tool/src/)
 
@@ -402,29 +337,29 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
 
             add_library(osmium-tool-lib
                 ${PROJECT_BINARY_DIR}/${OSMIUM_TOOL_SRC}/version.cpp
-                ${OSMIUM_TOOL_SRC}command_extract.cpp
-                ${OSMIUM_TOOL_SRC}cmd.cpp
                 ${OSMIUM_TOOL_SRC}cmd_factory.cpp
-                ${OSMIUM_TOOL_SRC}id_file.cpp
-                ${OSMIUM_TOOL_SRC}io.cpp
-                ${OSMIUM_TOOL_SRC}util.cpp
+                ${OSMIUM_TOOL_SRC}cmd.cpp
+                ${OSMIUM_TOOL_SRC}command_extract.cpp
                 ${OSMIUM_TOOL_SRC}command_help.cpp
-                ${OSMIUM_TOOL_SRC}option_clean.cpp
                 ${OSMIUM_TOOL_SRC}export/export_format_json.cpp
                 ${OSMIUM_TOOL_SRC}export/export_format_pg.cpp
                 ${OSMIUM_TOOL_SRC}export/export_format_text.cpp
                 ${OSMIUM_TOOL_SRC}export/export_handler.cpp
                 ${OSMIUM_TOOL_SRC}extract/extract_bbox.cpp
-                ${OSMIUM_TOOL_SRC}extract/extract.cpp
                 ${OSMIUM_TOOL_SRC}extract/extract_polygon.cpp
+                ${OSMIUM_TOOL_SRC}extract/extract.cpp
                 ${OSMIUM_TOOL_SRC}extract/geojson_file_parser.cpp
                 ${OSMIUM_TOOL_SRC}extract/geometry_util.cpp
                 ${OSMIUM_TOOL_SRC}extract/osm_file_parser.cpp
                 ${OSMIUM_TOOL_SRC}extract/poly_file_parser.cpp
-                ${OSMIUM_TOOL_SRC}extract/strategy_complete_ways.cpp
                 ${OSMIUM_TOOL_SRC}extract/strategy_complete_ways_with_history.cpp
+                ${OSMIUM_TOOL_SRC}extract/strategy_complete_ways.cpp
                 ${OSMIUM_TOOL_SRC}extract/strategy_simple.cpp
                 ${OSMIUM_TOOL_SRC}extract/strategy_smart.cpp
+                ${OSMIUM_TOOL_SRC}id_file.cpp
+                ${OSMIUM_TOOL_SRC}io.cpp
+                ${OSMIUM_TOOL_SRC}option_clean.cpp
+                ${OSMIUM_TOOL_SRC}util.cpp
             )
             target_link_libraries(osmium-tool-lib
                 PRIVATE ${OSMIUM_LIRARY}
@@ -432,7 +367,7 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
             target_include_directories(osmium-tool-lib PRIVATE ${OSMIUM_INCLUDE_DIR})
 
             set(OSMIUM_TOOL_LIBRARY osmium-tool-lib)
-            set(FREEMINER_COMMON_LIBRARIES ${FREEMINER_COMMON_LIBRARIES} ${OSMIUM_TOOL_LIBRARY})
+            list(APPEND FREEMINER_COMMON_LIBRARIES ${OSMIUM_TOOL_LIBRARY})
 
         endif()
         message(STATUS "Using osmiumtool ${USE_OSMIUM_TOOL} : ${OSMIUM_TOOL_LIBRARY}")
@@ -509,19 +444,25 @@ set(FMcommon_SRCS ${FMcommon_SRCS}
     fm_serverenvironment.cpp
 )
 
-set(FREEMINER_COMMON_LIBRARIES ${FREEMINER_COMMON_LIBRARIES}
+list(APPEND FREEMINER_COMMON_LIBRARIES
     ${MSGPACK_LIBRARY}
 )
 
-set(FREEMINER_CLIENT_LIBRARIES
+list(APPEND FREEMINER_CLIENT_LIBRARIES
     ${FREEMINER_COMMON_LIBRARIES}
 )
 
-find_package(PNG REQUIRED)
+if(NOT PNG_LIBRARY)
+    find_package(PNG REQUIRED)
+endif()
 
-set(FREEMINER_SERVER_LIBRARIES
+message(STATUS "Using server PNG: ${PNG_LIBRARY}  : ${PNG_INCLUDE_DIR} : ? ${PNG_PNG_INCLUDE_DIR}")
+if(NOT PNG_INCLUDE_DIR AND PNG_PNG_INCLUDE_DIR)
+    set(PNG_INCLUDE_DIR ${PNG_PNG_INCLUDE_DIR} CACHE INTERNAL "")
+endif()
+include_directories(${PNG_INCLUDE_DIR})
+
+list(APPEND FREEMINER_SERVER_LIBRARIES
     ${FREEMINER_COMMON_LIBRARIES}
     ${PNG_LIBRARY}
 )
-
-# == end freeminer:

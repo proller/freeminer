@@ -445,7 +445,7 @@ int FarMesh::go_direction(const size_t dir_n)
 				break;
 			}
 
-			const int step_aligned_pow =   rangeToStep(step_width) - align_reduce; // ceil ?
+			const int step_aligned_pow = rangeToStep(step_width) - align_reduce; // ceil ?
 			const auto pos_int = align_shift(
 					floatToInt(pos, BS), step_aligned_pow > 0 ? step_aligned_pow : 0);
 

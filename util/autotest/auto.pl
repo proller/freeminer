@@ -407,7 +407,8 @@ $commands = {
     cmake_prepare => sub {
         $config->{cmake_clang} //= 1 if $config->{clang_version};
         $config->{clang_version} = $config->{cmake_clang} if $config->{cmake_clang} and $config->{cmake_clang} ne '1';
-        $config->{cmake_libcxx} //= 1                     if $config->{cmake_clang};
+        # Fix boost redownload:
+        # $config->{cmake_libcxx} //= 1                     if $config->{cmake_clang};
         $g->{build_names}{x_clang} = $config->{clang_version} if $config->{cmake_clang};
         my $build_dir = $commands->{build_dir}();
         chdir $config->{root_path};

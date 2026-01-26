@@ -221,7 +221,7 @@ MapgenEarth::MapgenEarth(MapgenEarthParams *params_, EmergeParams *emerge) :
 		if (!std::filesystem::exists(heat_img)) {
 			const auto lock = std::lock_guard(maps_holder->download_lock);
 			if (!std::filesystem::exists(heat_img)) {
-				multi_http_to_file_cdn("earth_heat.png", {});
+				multi_http_to_file_cdn("earth", "earth_heat.png", {});
 			}
 		}
 
@@ -429,7 +429,7 @@ void MapgenEarth::generateBuildings()
 			const auto lock = std::lock_guard(maps_holder->osm_http_lock);
 			if (!std::filesystem::exists(base_full_name)) {
 				const auto url = "https://osm.download.movisda.io/grid/" + filename;
-				multi_http_to_file({url}, base_full_name);
+				multi_http_to_file_cdn("movisda_grid", filename, {url});
 			}
 		}
 

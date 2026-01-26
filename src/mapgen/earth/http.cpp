@@ -88,8 +88,8 @@ size_t multi_http_to_file(
 	return std::filesystem::file_size(path);
 };
 
-size_t multi_http_to_file_cdn(
-		const std::string &name, std::vector<std::string> links, const std::string &path)
+size_t multi_http_to_file_cdn(const std::string &dir, const std::string &name,
+		std::vector<std::string> links, const std::string &path)
 {
 	links.insert(links.begin(),
 #if defined(__EMSCRIPTEN__)
@@ -97,8 +97,7 @@ size_t multi_http_to_file_cdn(
 #else
 			"http://cdn.freeminer.org/"
 #endif
-			"earth/" +
-					name);
+					+ dir + "/" + name);
 	return multi_http_to_file(name, links, path);
 }
 
@@ -133,7 +132,6 @@ size_t multi_http_to_file(const std::vector<std::string> &links, const std::stri
 	std::ofstream(path, std::ios_base::binary) << ""; // create zero file
 	return std::filesystem::file_size(path);
 };
-
 
 std::string exec_to_string(const std::string &cmd)
 {
