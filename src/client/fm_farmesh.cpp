@@ -126,7 +126,7 @@ void FarMesh::makeFarBlocks(const v3bpos_t &blockpos, const block_step_t step)
 #if FARMESH_DEBUG || FARMESH_FAST
 	{
 		auto block_step_correct =
-				getFarStep(m_client->getEnv().getClientMap().getControl(),
+				farmesh::getFarStep(m_client->getEnv().getClientMap().getControl(),
 						getNodeBlockPos(m_camera_pos_aligned), blockpos);
 		if (!block_step_correct)
 			return;
