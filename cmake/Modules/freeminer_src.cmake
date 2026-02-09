@@ -255,7 +255,7 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
         add_library(EXPAT::EXPAT ALIAS expat)
     endif()
     set(Boost_USE_STATIC_LIBS ${BUILD_STATIC_LIBS})
-    find_package(Boost COMPONENTS program_options geometry)
+    find_package(Boost COMPONENTS program_options)
     if(Boost_FOUND)
         set(BUILD_TESTING 0 CACHE INTERNAL "")
         set(BUILD_DATA_TESTS 0 CACHE INTERNAL "")

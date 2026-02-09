@@ -68,8 +68,8 @@ size_t multi_http_to_file(
 	}
 
 	for (const auto &uri : links) {
-		if (http_to_file(uri, path)) {
-			return std::filesystem::file_size(path);
+		if (const auto size = http_to_file(uri, path)) {
+			return size;
 		}
 	}
 

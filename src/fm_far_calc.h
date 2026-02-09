@@ -28,6 +28,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 struct MapDrawControl;
 
+namespace farmesh
+{
+
 #if USE_POS32
 constexpr uint16_t tree_pow_default = FARMESH_STEP_MAX;
 #else
@@ -43,22 +46,41 @@ struct tree_params
 	const uint16_t external_pow = tree_pow - 2;
 };
 
+struct tree_result_t
+{
+	v3bpos_t pos;
+	bpos_t size;
+	block_step_t step;
+};
+
 block_step_t getLodStep(const MapDrawControl &draw_control,
-		const v3bpos_t &playerblockpos, const v3bpos_t &block_pos, const pos_t speedf);
-block_step_t getFarStepCellSize(const MapDrawControl &draw_control, const v3bpos_t &ppos,
-		const v3bpos_t &blockpos, uint8_t cell_size_pow);
+		const v3bpos_t &player_block_pos, const v3bpos_t &block_pos, const pos_t speedf);
+
 block_step_t getFarStep(const MapDrawControl &draw_control,
-		const v3bpos_t &playerblockpos, const v3bpos_t &block_pos);
+		const v3bpos_t &player_block_pos, const v3bpos_t &block_pos,
+		bool cell_each = false);
+
 block_step_t getFarStepBad(const MapDrawControl &draw_control,
-		const v3bpos_t &playerblockpos, const v3bpos_t &block_pos);
-bool inFarGrid(const v3bpos_t &blockpos, const v3bpos_t &playerblockpos,
-		block_step_t step, const MapDrawControl &draw_control);
-v3bpos_t getFarActual(const v3bpos_t &blockpos, const v3bpos_t &playerblockpos,
-		block_step_t step, const MapDrawControl &draw_control,
-		const std::optional<uint8_t> &cell_size_pow = {});
+		const v3bpos_t &player_block_pos, const v3bpos_t &block_pos);
+
+bool inFarGrid(const MapDrawControl &draw_control, const v3bpos_t &player_block_pos,
+		const v3bpos_t &blockpos, const block_step_t step, const bool cell_each = false);
+
+std::optional<tree_result_t> getFarParams(const MapDrawControl &draw_control,
+		const v3bpos_t &player_block_pos, const v3bpos_t &blockpos,
+		bool cell_each = false);
+
+v3bpos_t getFarActualBlockPos(const MapDrawControl &draw_control,
+		const v3bpos_t &player_block_pos, const v3bpos_t &blockpos,
+		bool cell_each = false);
+
 v3bpos_t playerBlockAlign(
-		const MapDrawControl &draw_control, const v3bpos_t &playerblockpos);
-void runFarAll(const v3bpos_t &ppos, uint8_t cell_size_pow, int farmesh,
-		uint8_t farmesh_quality, pos_t two_d,
-		const std::function<bool(const v3bpos_t &, const bpos_t &)> &func);
-int rangeToStep(const int range);
+		const MapDrawControl &draw_control, const v3bpos_t &player_block_pos);
+
+void runFarAll(const v3bpos_t &player_block_pos, uint8_t cell_size_pow, int farmesh,
+		uint8_t farmesh_quality_pow, pos_t two_d, bool cell_each,
+		const std::function<bool(const v3bpos_t &, const bpos_t &, const block_step_t &)>
+				&func);
+
+uint8_t rangeToStep(const int range);
+}

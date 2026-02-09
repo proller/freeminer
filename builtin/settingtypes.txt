@@ -119,7 +119,7 @@
 
 [Freeminer]
 
-[*Client]
+[*Client] [client]
 
 #    Minimum wanted FPS.
 #    The amount of rendered stuff is dynamically set according to this. and viewing range min and max.
@@ -142,10 +142,6 @@ farmesh_all_changed () int 10000
 
 # Set to true to disable wield light (enabled by default, requires shaders)
 disable_wieldlight () bool false
-
-# Increases performance on modern GPUs a lot
-# it may be needed to decrease client_unload_unused_data_timeout to limit the RAM usage
-enable_vbo () bool false
 
 # Reduce FOV when speed increases
 movement_fov () bool true
@@ -175,7 +171,7 @@ android_keyboard () enum 0 0,1,2
 touchscreen () bool true
 
 
-[*Server]
+[*Server] [server]
 # Lan udp announce
 serverlist_lan () bool true
 

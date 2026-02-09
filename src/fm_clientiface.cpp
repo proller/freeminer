@@ -617,34 +617,36 @@ uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 			if (!player)
 				return 0;
 
-			auto *sao = player->getPlayerSAO();
+			const auto *sao = player->getPlayerSAO();
 			if (!sao)
 				return 0;
 
-			auto playerpos = sao->getBasePosition();
+			const auto playerpos = sao->getBasePosition();
 
-			auto cbpos = floatToInt(playerpos, BS * MAP_BLOCKSIZE);
+			const auto player_block_pos = floatToInt(playerpos, BS * MAP_BLOCKSIZE);
 
 			const auto cell_size = 1; // FMTODO from remoteclient
-			const auto cell_size_pow = rangeToStep(cell_size);
+			const auto cell_size_pow = farmesh::rangeToStep(cell_size);
 			thread_local static const pos_t setting_farmesh_all_changed =
 					g_settings->getU32("farmesh_all_changed");
 			const auto &use_farmesh_all_changed =
 					std::min(setting_farmesh_all_changed, farmesh_all_changed);
-			runFarAll(cbpos, cell_size_pow, farmesh, farmesh_quality, false,
-					[this, &ordered, &cbpos, &use_farmesh_all_changed](
-							const v3bpos_t &bpos, const bpos_t &size) -> bool {
+			farmesh::runFarAll(player_block_pos, cell_size_pow, farmesh,
+					farmesh::rangeToStep(farmesh_quality), false, true,
+					[this, &ordered, &player_block_pos, &use_farmesh_all_changed](
+							const v3bpos_t &bpos, const bpos_t &size,
+							const block_step_t &step) -> bool {
 						if (!size) {
 							return false;
-						};
+						}
 
 						// TODO: use block center
-						const auto bdist = radius_box(cbpos, bpos);
+						const auto bdist = radius_box(player_block_pos, bpos);
 						if (bdist << MAP_BLOCKP > use_farmesh_all_changed) {
 							return false;
 						}
 
-						block_step_t step = rangeToStep(size);
+						//block_step_t step = rangeToStep(size);
 						if (far_blocks_requested.size() < step) {
 							far_blocks_requested.resize(step);
 						}

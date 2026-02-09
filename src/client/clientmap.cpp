@@ -456,11 +456,11 @@ void ClientMap::updateDrawList(float dtime, unsigned int max_cycle_ms)
 
 
 			for (auto & [block_coord, block] : m_blocks) {
-				int mesh_step = getLodStep(
+				int mesh_step = farmesh::getLodStep(
 						m_control, getNodeBlockPos(cam_pos_nodes), block_coord, speedf);
 				auto mesh = block ? block->getLodMesh(mesh_step, true) : nullptr;
 				if (!mesh && block) {
-					int fmesh_step = getFarStep(
+					int fmesh_step = farmesh::getFarStep(
 							m_control, getNodeBlockPos(far_blocks_last_cam_pos), block_coord);
 					mesh = block->getFarMesh(fmesh_step);
 				}
@@ -595,10 +595,10 @@ void ClientMap::updateDrawList(float dtime, unsigned int max_cycle_ms)
 */
 			MapBlock *block = getBlockNoCreateNoEx(block_coord);
 			int mesh_step =
-					getLodStep(m_control, getNodeBlockPos(cam_pos_nodes), block_coord, speedf);
+					farmesh::getLodStep(m_control, getNodeBlockPos(cam_pos_nodes), block_coord, speedf);
 			auto mesh = block ? block->getLodMesh(mesh_step, true) : nullptr;
 			if (!mesh && block) {
-				int fmesh_step = getFarStep(
+				int fmesh_step = farmesh::getFarStep(
 						m_control, getNodeBlockPos(far_blocks_last_cam_pos), block_coord);
 				mesh = block->getFarMesh(fmesh_step);
 			}
@@ -964,7 +964,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 		block->resetUsageTimer();
 
 		const auto mesh_step =
-				getLodStep(m_control, getNodeBlockPos(m_camera_position_node), bp, speedf);
+				farmesh::getLodStep(m_control, getNodeBlockPos(m_camera_position_node), bp, speedf);
 	
 
 			/*
@@ -1139,11 +1139,8 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 				continue;
 
 			{
-				const auto fmesh_step = getFarStep(
-						m_control, getNodeBlockPos(far_blocks_last_cam_pos), bp);
-				blocks_skip_farmesh.emplace(
-						getFarActual(bp, getNodeBlockPos(far_blocks_last_cam_pos),
-								fmesh_step, m_control));
+				blocks_skip_farmesh.emplace(farmesh::getFarActualBlockPos(
+						m_control, getNodeBlockPos(far_blocks_last_cam_pos), bp ));
 			}
 
 			if (mesh) {
@@ -1178,8 +1175,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 		const auto lock = m_far_blocks.lock_unique_rec();
 		for (auto it = m_far_blocks.begin(); it != m_far_blocks.end();) {
 			const auto &block = it->second;
-			if (far_iteration_clean  &&
-					block->far_iteration < far_iteration_clean) {
+			if (far_iteration_clean && block->far_iteration < far_iteration_clean) {
 				m_far_blocks_delete.emplace_back(block);
 				it = m_far_blocks.erase(it);
 			} else if (block->far_iteration >= far_iteration_use) {
@@ -1474,7 +1470,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 	for (auto &i : m_drawlist) {
 		const auto block_pos = i.first;
 		const auto & block = i.second;
-		int mesh_step = getLodStep(
+		int mesh_step = farmesh::getLodStep(
 				m_control, getNodeBlockPos(m_camera_position_node), block->getPos(), speedf);
 
 		// If the mesh of the block happened to get deleted, ignore it
@@ -1485,7 +1481,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 		if (!block_mesh) {
 			int &fmesh_step = mesh_step;
 
-			fmesh_step = getFarStep(
+			fmesh_step = farmesh::getFarStep(
 					m_control, getNodeBlockPos(far_blocks_last_cam_pos), block->getPos());
 			block_mesh = block->getFarMesh(fmesh_step);
 			is_far = true;
@@ -1919,7 +1915,7 @@ void ClientMap::renderMapShadows(video::IVideoDriver *driver,
 		auto block = i.second;
 
 		// If the mesh of the block happened to get deleted, ignore it
-		auto mapBlockMesh = block->getLodMesh(getLodStep(m_control, getNodeBlockPos(m_camera_position_node), block_pos, speedf), true);
+		auto mapBlockMesh = block->getLodMesh(farmesh::getLodStep(m_control, getNodeBlockPos(m_camera_position_node), block_pos, speedf), true);
 
 #if FARMESH_SHADOWS
 		if (!mapBlockMesh) {
@@ -2061,7 +2057,7 @@ void ClientMap::updateDrawListShadow(v3opos_t shadow_light_pos, v3opos_t shadow_
 		for (const auto & [key, block] : m_blocks) {
 			++blocks_loaded;
 			
-			const auto mesh = block->getLodMesh(getLodStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos(), speedf), true);
+			const auto mesh = block->getLodMesh(farmesh::getLodStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos(), speedf), true);
 /*
 		for (const auto &entry : sector->getBlocks()) {
 			MapBlock *block = entry.second.get();
@@ -2135,7 +2131,7 @@ void ClientMap::updateTransparentMeshBuffers()
 		MapBlockMesh *blockmesh = block->mesh;
 */
 		auto block = it->second;
-		auto blockmesh = block->getLodMesh(getLodStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos(), speedf));
+		auto blockmesh = block->getLodMesh(farmesh::getLodStep(m_control, getNodeBlockPos(m_camera_position_node), block->getPos(), speedf));
 
 #if FARMESH_SHADOWS
 		if (!blockmesh) {

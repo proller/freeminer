@@ -182,10 +182,10 @@ Client::Client(
 	m_cache_save_interval = g_settings->getU16("server_map_save_interval");
 	m_mesh_grid = { g_settings->getU16("client_mesh_chunk") };
 	control.cell_size = m_mesh_grid.cell_size;
-	control.cell_size_pow =	rangeToStep(control.cell_size);
+	control.cell_size_pow =	farmesh::rangeToStep(control.cell_size);
 	control.farmesh_quality = g_settings->getU16("farmesh_quality");
-	control.farmesh_quality_pow = rangeToStep(control.farmesh_quality);
-	control.farmesh_stable = g_settings->getU16("farmesh_stable");
+	control.farmesh_quality_pow = farmesh::rangeToStep(control.farmesh_quality);
+	control.farmesh_stable = g_settings->getBool("farmesh_stable");
 	control.farmesh_all_changed = g_settings->getPos("farmesh_all_changed");
 }
 

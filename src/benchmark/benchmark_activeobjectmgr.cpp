@@ -9,13 +9,13 @@ namespace {
 
 class TestObject : public ServerActiveObject {
 public:
-	TestObject(v3f pos) : ServerActiveObject(nullptr, pos)
+	TestObject(v3opos_t pos) : ServerActiveObject(nullptr, pos)
 	{}
 
 	ActiveObjectType getType() const {
 		return ACTIVEOBJECT_TYPE_TEST;
 	}
-	bool getCollisionBox(aabb3f *toset) const {
+	bool getCollisionBox(aabb3o *toset) const {
 		return false;
 	}
 	bool getSelectionBox(aabb3f *toset) const {
@@ -31,9 +31,9 @@ public:
 
 constexpr float POS_RANGE = 2001;
 
-inline v3f randpos()
+inline v3opos_t randpos()
 {
-	return v3f(myrand_range(-POS_RANGE, POS_RANGE),
+	return v3opos_t(myrand_range(-POS_RANGE, POS_RANGE),
 		myrand_range(-20, 60),
 		myrand_range(-POS_RANGE, POS_RANGE));
 }
@@ -86,8 +86,8 @@ void benchGetObjectsInArea(Catch::Benchmark::Chronometer &meter)
 	fill(mgr, N);
 	meter.measure([&] {
 		x = 0;
-		v3f pos = randpos();
-		v3f off(50, 50, 50);
+		v3opos_t pos = randpos();
+		v3opos_t off(50, 50, 50);
 		off[myrand_range(0, 2)] = 10;
 		mgr.getObjectsInArea({pos, pos + off}, result, cb);
 		return x;

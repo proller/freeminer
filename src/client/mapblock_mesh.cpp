@@ -745,7 +745,8 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data):
 			buf->drop();
 		}
 
-		if (static const auto farlights = g_settings->getBool("farlights"); farlights && far_step) {
+		if (static const auto farlights = g_settings->getBool("farlights");
+				farlights && far_step) {
 			scene::SMeshBuffer *buffer = new scene::SMeshBuffer();
 			buffer->PrimitiveType = scene::EPT_POINTS;
 			buffer->Material.PointCloud = true;
@@ -788,8 +789,8 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data):
 							buffer->Indices->Data.emplace_back(index_i);
 						}
 					}
-						}
-					}
+				}
+			}
 			mesh->addMeshBuffer(buffer);
 			buffer->drop();
 		}

@@ -21,15 +21,15 @@ thread_local std::pair<block_step_t, v3bpos_t> block_cache_p;
 
 const MapNode &FarContainer::getNodeRefUnsafe(const v3pos_t &pos)
 {
-	const auto bpos = getNodeBlockPos(pos);
-	const auto player_bpos =
-			getNodeBlockPos(m_client->getEnv().getClientMap().far_blocks_last_cam_pos);
-	const auto step =
-			getFarStep(m_client->getEnv().getClientMap().getControl(), player_bpos, bpos);
-	//const auto &shift = step; // + cell_size_pow;
-	//const v3bpos_t bpos_aligned((bpos.X >> shift) << shift, (bpos.Y >> shift) << shift, (bpos.Z >> shift) << shift);
-	const v3bpos_t bpos_aligned = getFarActual(
-			bpos, player_bpos, step, m_client->getEnv().getClientMap().getControl());
+	const auto block_pos = getNodeBlockPos(pos);
+	auto &client_map = m_client->getEnv().getClientMap();
+	const auto player_block_pos = getNodeBlockPos(client_map.far_blocks_last_cam_pos);
+	const auto &control = client_map.getControl();
+
+	const auto tree_result = farmesh::getFarParams(control, player_block_pos, block_pos, true);
+	if (tree_result) {
+	const auto &step = tree_result->step;
+	const v3bpos_t &bpos_aligned = tree_result->pos;
 
 	MapBlockPtr block;
 	const auto step_block_pos = std::make_pair(step, bpos_aligned);
@@ -38,18 +38,18 @@ const MapNode &FarContainer::getNodeRefUnsafe(const v3pos_t &pos)
 	}
 
 	if (!block && step < FARMESH_STEP_MAX) {
-		const auto &storage = m_client->getEnv().getClientMap().far_blocks_storage[step];
+		const auto &storage = client_map.far_blocks_storage[step];
 		block = storage.get(bpos_aligned).block;
 	}
 
-	const auto loadBlock = [this](const auto &bpos, const auto step) -> MapBlockPtr {
+	const auto loadBlock = [this, &client_map](
+								   const auto &bpos, const auto step) -> MapBlockPtr {
 		auto *dbase =
 				GetFarDatabase({}, m_client->far_dbases, m_client->m_world_path, step);
 		if (!dbase) {
 			return {};
 		}
-		MapBlockPtr block =
-				m_client->getEnv().getClientMap().createBlankBlockNoInsert(bpos);
+		MapBlockPtr block = client_map.createBlankBlockNoInsert(bpos);
 
 		std::string blob;
 		dbase->loadBlock(bpos, &blob);
@@ -89,17 +89,17 @@ const MapNode &FarContainer::getNodeRefUnsafe(const v3pos_t &pos)
 		block_cache_p = step_block_pos;
 		block_cache = block;
 
-		v3pos_t relpos = pos - bpos_aligned * MAP_BLOCKSIZE;
+		const v3pos_t relpos = pos - bpos_aligned * MAP_BLOCKSIZE;
 
 		const auto &relpos_shift = step;
-		const auto relpos_shifted = v3pos_t(relpos.X >> relpos_shift,
-				relpos.Y >> relpos_shift, relpos.Z >> relpos_shift);
+		const auto relpos_shifted = v3pos_t{relpos.X >> relpos_shift,
+				relpos.Y >> relpos_shift, relpos.Z >> relpos_shift};
 		const auto &n = block->getNodeNoLock(relpos_shifted);
 		if (n.getContent() != CONTENT_IGNORE) {
 			return n;
 		}
 	}
-
+	}
 	if (const auto &v = m_mg->visible_content(pos, use_weather); v.getContent()) {
 		return v;
 	}
