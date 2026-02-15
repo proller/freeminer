@@ -23,14 +23,12 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <atomic>
 #include <cstdint>
-#include <future>
 #include "client/camera.h"
 #include "irr_v3d.h"
 #include "irrlichttypes.h"
 #include "mapblock.h"
 #include "threading/async.h"
 #include "threading/concurrent_unordered_map.h"
-#include "threading/concurrent_unordered_set.h"
 
 class Client;
 class Mapgen;
@@ -59,9 +57,11 @@ public:
 			v3pos_t m_camera_offset,
 			//float brightness,
 			int render_range, float speed);
-	void makeFarBlock(const v3bpos_t &blockpos, block_step_t step, bool bnear = false);
+	void makeFarBlock(const v3bpos_t &blockpos, block_step_t step);
 	void makeFarBlocks(const v3bpos_t &blockpos, block_step_t step);
-	//void makeFarBlocks(const v3bpos_t &blockpos);
+
+	void enqueueFarMeshForBlock(const v3bpos_t &blockpos, const block_step_t step,
+			const MapBlockPtr &block, const double timestamp);
 
 private:
 	//std::vector<v3bpos_t> m_make_far_blocks_list;
@@ -93,7 +93,7 @@ private:
 	static constexpr uint16_t grid_size_xy{grid_size_x * grid_size_y};
 
 	static constexpr uint8_t wait_server_far_block{
-			3}; // minimum 1 ; maybe make dynamic depend on avg server ask/response time, or on fast mode
+			1}; // minimum 1 ; maybe make dynamic depend on avg server ask/response time, or on fast mode
 
 	Mapgen *mg{};
 
@@ -120,9 +120,15 @@ private:
 	bool complete_set{};
 	uint32_t collect_reset_timestamp{static_cast<uint32_t>(-1)};
 	uint8_t planes_processed_last{};
-	concurrent_shared_unordered_map<uint16_t, concurrent_unordered_set<v3bpos_t>>
-			far_blocks_list;
 	std::array<async_step_runner, 6> async;
 	async_step_runner async_cleaner;
 	int async_cleaner_next{};
+
+	struct BlockTodo
+	{
+		MapBlockPtr block;
+		double timestamp;
+	};
+	std::array<concurrent_unordered_map<v3bpos_t, BlockTodo>, FARMESH_STEP_MAX>
+			farmesh_make_queue;
 };

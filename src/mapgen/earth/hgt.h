@@ -21,11 +21,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -89,6 +89,7 @@ public:
 	bool load(ll_t lat, ll_t lon) override;
 };
 
+#if 0
 class height_gebco_tif final : public height
 {
 	const std::string folder;
@@ -107,6 +108,26 @@ public:
 	static int lat90_start(ll_t lat);
 	static int lon90_start(ll_t lon);
 };
+#endif
+
+class height_seabed_tif final : public height
+{
+	const std::string folder;
+	int lat_loading = 200;
+	int lon_loading = 200;
+	std::string file_name(ll_t lat, ll_t lon) override;
+
+protected:
+	std::tuple<size_t, size_t, ll_t, ll_t> ll_to_xy(ll_t lat, ll_t lon) override;
+	int16_t read(uint16_t y, uint16_t x) override;
+
+public:
+	height_seabed_tif(const std::string &folder, ll_t lat, ll_t lon);
+	bool load(ll_t lat, ll_t lon) override;
+	bool ok(ll_t lat, ll_t lon) override;
+	static int lat_start(ll_t lat) { return floor(lat); }
+	static int lon_start(ll_t lon) { return floor(lon); }
+};
 
 class height_dummy final : public height
 {
@@ -124,11 +145,11 @@ public:
 
 class hgts
 {
-	std::map<int, std::map<int, std::shared_ptr<height>>> map1, map90;
+	std::map<int, std::map<int, std::shared_ptr<height>>> map1, map1_seabed; //, map90;
 	const std::string folder;
 	std::mutex mutex;
 
 public:
 	hgts(const std::string &folder);
-	height::height_t get(height::ll_t lat, height::ll_t lon);
+	height::height_t get(const height::ll_t lat, const height::ll_t lon);
 };

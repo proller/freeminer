@@ -213,7 +213,7 @@ void MeshUpdateQueue::fillDataFromMapBlocks(QueuedMeshUpdate *q)
 {
 	auto mesh_grid = m_client->getMeshGrid();
 
-	const auto lod_step = getLodStep(m_client->m_env.getClientMap().getControl(),
+	const auto lod_step = farmesh::getLodStep(m_client->m_env.getClientMap().getControl(),
 			getNodeBlockPos(
 					floatToInt(m_client->m_env.getLocalPlayer()->getPosition(), BS)),
 			q->p, m_client->getEnv().getLocalPlayer()->getSpeed().getLength());

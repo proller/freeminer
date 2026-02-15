@@ -249,10 +249,10 @@ public:
 	std::map<uint16_t, std::pair<double, int32_t>> m_objects_last_pos_sent;
 	v3f m_last_direction;
 	float m_nearest_unsent_reset_timer{};
-	std::unordered_map<v3bpos_t, uint8_t> blocks;
+	//std::unordered_map<v3bpos_t, uint8_t> blocks;
 	void SetBlocksNotSent();
 	void SetBlockDeleted(const v3bpos_t &p);
-	std::vector<std::unordered_map<v3bpos_t, std::pair<uint8_t, int32_t>>>
+	std::vector<std::unordered_map<v3bpos_t, std::pair<block_step_t, int32_t>>>
 			far_blocks_requested{FARMESH_STEP_MAX};
 	std::mutex far_blocks_requested_mutex;
 	int GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge, float dtime,

@@ -23,7 +23,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "hgt.h"
 
-#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -33,42 +32,42 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <iostream>
 #include <math.h>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <unistd.h>
 #include <utility>
 #include <vector>
 #include "debug/dump.h"
-#include "filesys.h"
 #include "http.h"
-#include "porting.h"
 #include "serialization.h"
-#include "util/timetaker.h"
 
 #if USE_TIFF
 #include "tiffio.h"
 #endif
+
+#define HGT_DEBUG 0
 
 // bad anything but works
 // todo: prepare all data from all sources in one good tiled layer
 
 hgts::hgts(const std::string &folder) : folder{folder}
 {
-	fs::CreateAllDirs(folder);
+	std::error_code ec;
+	std::filesystem::create_directories(folder, ec);
 }
 
-height::height_t hgts::get(height_hgt::ll_t lat, height_hgt::ll_t lon)
+height::height_t hgts::get(const height_hgt::ll_t lat, const height_hgt::ll_t lon)
 {
 
 	constexpr auto layers = true;
-	height::height_t prev_layer_height = 30000;
 
 	const auto lat1 = height::lat_start(lat); // + 90 % 180;
 	const auto lon1 = height::lon_start(lon);
-	{
-		const auto &map1_lat1 = map1[lat1];
+	const auto get_lat1 = [&](const auto &map1_lat1,
+								  const auto &lon1) -> std::optional<height::height_t> {
 		if (const auto it = map1_lat1.find(lon1); it != map1_lat1.end()) {
-			prev_layer_height = it->second->get(lat, lon);
+			const auto prev_layer_height = it->second->get(lat, lon);
 
 			if constexpr (layers) {
 				if (prev_layer_height) {
@@ -77,6 +76,16 @@ height::height_t hgts::get(height_hgt::ll_t lat, height_hgt::ll_t lon)
 			} else {
 				return prev_layer_height;
 			}
+		}
+		return {};
+	};
+
+	{
+		if (const auto ret = get_lat1(map1[lat1], lon1)) {
+			return ret.value();
+		}
+		if (const auto ret = get_lat1(map1_seabed[lat1], lon1)) {
+			return ret.value();
 		}
 	}
 
@@ -91,34 +100,23 @@ height::height_t hgts::get(height_hgt::ll_t lat, height_hgt::ll_t lon)
 
 	//DUMP((long)this, "notfound, will load", lat, lon, lat1, lon1, lat90, lon90, map1[lat1].contains(lon1), prev_layer_height);
 	const auto lock = std::unique_lock(mutex);
-
 	const auto &map1_lat1 = map1[lat1];
 
-	if (const auto it = map1_lat1.find(lon1); it != map1_lat1.end()) {
-		prev_layer_height = it->second->get(lat, lon);
-
-		if constexpr (layers) {
-			if (prev_layer_height) {
-				return prev_layer_height;
-			}
-		} else {
-			return prev_layer_height;
-		}
+	if (const auto ret = get_lat1(map1_lat1, lon1)) {
+		return ret.value();
 	}
-	/*
-	if (map90[lat90].contains(lon90)) {
-		//DUMP("g2");
-		return std::min(prev_layer_height, map90[lat90][lon90]->get(lat, lon));
+	if (const auto ret = get_lat1(map1_seabed[lat1], lon1)) {
+		return ret.value();
 	}
-*/
 
-	const auto place_dummy = [&](const auto &lat_dec, const auto &lon_dec) {
+	const auto place_dummy = [&](auto &map, const auto &lat_dec, const auto &lon_dec) {
 		const static auto hgt_dummy = std::make_shared<height_dummy>();
 		//DUMP("place dummy", lat, lon, lat_dec, lon_dec, map1[lat_dec].contains(lon_dec));
-		if (!map1[lat_dec].contains(lon_dec))
-			map1[lat_dec][lon_dec] = hgt_dummy;
-		return map1[lat_dec][lon_dec]->get(lat, lon);
+		if (!map[lat_dec].contains(lon_dec))
+			map[lat_dec][lon_dec] = hgt_dummy;
+		return map[lat_dec][lon_dec]->get(lat, lon);
 	};
+	/*
 	const auto place_dummy90 = [&](const auto &lat90, const auto &lon90) {
 		const static auto hgt_dummy = std::make_shared<height_dummy>();
 		//DUMP("place dummy", lat, lon, map90[lat90].contains(lon90));
@@ -126,7 +124,7 @@ height::height_t hgts::get(height_hgt::ll_t lat, height_hgt::ll_t lon)
 			map90[lat90][lon90] = hgt_dummy;
 		return map90[lat90][lon90]->get(lat, lon);
 	};
-
+    */
 	if (lat <= 90 && lat >= -90 && lon <= 180 && lon >= -180) {
 		// DUMP("insert", (long)this, lat, lon, folder, map1.size(), map1_lat1.size());
 		if (!map1_lat1.contains(lon1)) {
@@ -135,35 +133,39 @@ height::height_t hgts::get(height_hgt::ll_t lat, height_hgt::ll_t lon)
 			const int lon_dec = hgt->lon_start(lon);
 			if (hgt->load(lat, lon)) {
 				map1[lat_dec][lon_dec] = std::move(hgt);
-				prev_layer_height = map1[lat_dec][lon_dec]->get(lat, lon);
-				//DUMP("hgt ok", lat, lon, lat_dec, lon_dec, prev_layer_height);
-
-				if constexpr (layers) {
-					if (prev_layer_height) {
-						return prev_layer_height;
-					}
-				} else {
-					return prev_layer_height;
+				if (const auto ret = get_lat1(map1[lat_dec], lon_dec)) {
+					return ret.value();
 				}
 			}
-			place_dummy(lat1, lon1);
+			place_dummy(map1, lat1, lon1);
 		}
-		if (0) {
-			// WRONG, todo
-			//map[lat][lon]->get(lat, lon);
-			auto hgt = std::make_shared<height_tif>(folder, lat, lon);
-			const auto lat_dec = hgt->lat_start(lat);
-			const auto lon_dec = hgt->lon_start(lon);
-			DUMP("next tif", map1[lat_dec].contains(lon_dec));
-			DUMP("load tif", lat, lon, lat_dec, lon_dec);
-			// TODO: actual pos check here!
+
+		if (const auto ret = get_lat1(map1[lat1], lon1)) {
+			return ret.value();
+		}
+
+		if (!map1_seabed[lat1].contains(lon1)) {
+			auto hgt = std::make_shared<height_seabed_tif>(folder, lat, lon);
+			const int lat_dec = hgt->lat_start(lat);
+			const int lon_dec = hgt->lon_start(lon);
 			if (hgt->load(lat, lon)) {
-				//if (hgt->ok(lat_dec, lon_dec))
-				map1[lat_dec][lon_dec] = std::move(hgt);
-				return map1[lat_dec][lon_dec]->get(lat, lon);
+				map1_seabed[lat_dec][lon_dec] = std::move(hgt);
+				if (const auto ret = get_lat1(map1_seabed[lat_dec], lon_dec)) {
+
+					// todo: layer configurable
+					if (ret.value() > 0)
+						return 0;
+
+					return ret.value();
+				}
 			}
+			place_dummy(map1_seabed, lat1, lon1);
+		}
+		if (const auto ret = get_lat1(map1_seabed[lat1], lon1)) {
+			return ret.value();
 		}
 	}
+	/*
 	const auto lat90 = height_gebco_tif::lat90_start(lat); // + 90 % 180;
 	const auto lon90 = height_gebco_tif::lon90_start(lon);
 	if (lat <= 90 && lat >= -90 && lon <= 180 && lon >= -180) {
@@ -189,6 +191,8 @@ height::height_t hgts::get(height_hgt::ll_t lat, height_hgt::ll_t lon)
 		return place_dummy90(lat90, lon90);
 	}
 	return map90[lat90][lon90]->get(lat, lon);
+	*/
+	return 0;
 }
 
 std::mutex height::mutex;
@@ -198,12 +202,20 @@ height_hgt::height_hgt(const std::string &folder, ll_t lat, ll_t lon) : folder{f
 	side_length_x_extra = 1;
 	tile_deg_x = 1;
 	tile_deg_y = 1;
+
+	std::error_code ec;
+	std::filesystem::create_directories(folder, ec);
 }
+
 height_tif::height_tif(const std::string &folder, ll_t lat, ll_t lon) : folder{folder}
 {
+
 	side_length_x_extra = 1;
 	tile_deg_x = 60;
 	tile_deg_y = 45;
+
+	std::error_code ec;
+	std::filesystem::create_directories(folder, ec);
 }
 
 bool height::ok(ll_t lat, ll_t lon)
@@ -265,7 +277,7 @@ bool height_hgt::load(ll_t lat, ll_t lon)
 		return false;
 	}
 	//DUMP((long long)this, lat_dec, lon_dec, lat_loading, lon_loading, lat_loaded, lon_loaded);
-	TimeTaker timer("hgt load");
+	//TimeTaker timer("hgt load");
 
 	lat_loading = lat_dec;
 	lon_loading = lon_dec;
@@ -337,7 +349,9 @@ bool height_hgt::load(ll_t lat, ll_t lon)
 		const auto zstfile = zipname + "/" + filename + ".zst";
 		std::string ffolder = folder + "/" + zipname;
 		std::string zstdfull = folder + "/" + zstfile;
-		fs::CreateAllDirs(ffolder);
+		std::error_code ec;
+		std::filesystem::create_directories(folder, ec);
+
 		multi_http_to_file(zstfile,
 				{
 #if defined(__EMSCRIPTEN__)
@@ -477,7 +491,6 @@ const auto gen_zip_name_15 = [](int lat_dec, int lon_dec) {
 	h = floor(h / 180.0 * 4);
 	int w = floor((lon_dec + 180) / 360.0 * 6);
 	char c = 'A' + h * 6 + w;
-	DUMP(h, w, c);
 	return std::string{"15-"} + c;
 };
 
@@ -508,9 +521,7 @@ bool height_tif::load(ll_t lat, ll_t lon)
 		//DUMP(lat_dec, lon_dec);
 		return false;
 	}
-	DUMP((long long)this, lat_dec, lon_dec, lat_loading, lon_loading, lat_loaded,
-			lon_loaded);
-	TimeTaker timer("hgt load");
+	//TimeTaker timer("hgt load");
 
 	lat_loading = lat_dec;
 	lon_loading = lon_dec;
@@ -523,7 +534,6 @@ bool height_tif::load(ll_t lat, ll_t lon)
 		const auto zipfile = zipname + ".zip";
 		const auto zipfull = folder + "/" + zipname;
 		const auto tifname = folder + "/" + zipname + ".tif";
-		DUMP(zipname, zipfile, tifname);
 		if (!std::filesystem::exists(tifname)) {
 			multi_http_to_file(zipfile,
 					{"http://cdn.freeminer.org/earth/" + zipfile,
@@ -566,20 +576,18 @@ bool height_tif::load(ll_t lat, ll_t lon)
 									floor(((bytes[0] * 0.299) + (bytes[1] * 0.587) +
 											(bytes[3] * 0.144) + 0.5)) -
 									37; // Wrong?
-							if (!(i % 100000))
-								DUMP(i, raster[i], bytes[0], bytes[2], bytes[3], bytes[4],
-										gray);
+							//if (!(i % 100000)) DUMP(i, raster[i], bytes[0], bytes[2], bytes[3], bytes[4],gray);
 							heights[i] = gray;
 						}
 
 						lat_loaded = lat_dec;
 						lon_loaded = lon_dec;
 					} else {
-						DUMP("read fail");
+						//DUMP("read fail");
 					}
 					_TIFFfree(raster);
 				} else {
-					DUMP("malloc fail");
+					//DUMP("malloc fail");
 				}
 				TIFFClose(tif);
 
@@ -589,7 +597,7 @@ bool height_tif::load(ll_t lat, ll_t lon)
 					seconds_per_px_y = seconds_per_px_x = 15;
 					side_length_x = w;
 					side_length_y = h;
-					DUMP("tif ok", seconds_per_px_x, side_length_x, side_length_y);
+					//DUMP("tif ok", seconds_per_px_x, side_length_x, side_length_y);
 
 					lat_loaded = lat_dec;
 					lon_loaded = lon_dec;
@@ -597,10 +605,8 @@ bool height_tif::load(ll_t lat, ll_t lon)
 					pixel_per_deg_x = (ll_t)side_length_x / tile_deg_x;
 					pixel_per_deg_y = (ll_t)side_length_y / tile_deg_y;
 
-					DUMP("loadok", (long long)this, heights.size(), lat_loaded,
-							lon_loaded, zipname, tifname, seconds_per_px_x,
-							get(lat_dec, lon_dec));
-					DUMP("ppd", pixel_per_deg_x, pixel_per_deg_y);
+					//DUMP("loadok", (long long)this, heights.size(), lat_loaded, lon_loaded, zipname, tifname, seconds_per_px_x, get(lat_dec, lon_dec));
+					//DUMP("ppd", pixel_per_deg_x, pixel_per_deg_y);
 
 					return true;
 				}
@@ -616,6 +622,7 @@ bool height_tif::load(ll_t lat, ll_t lon)
 	return false;
 }
 
+#if 0
 height_gebco_tif::height_gebco_tif(const std::string &folder, ll_t lat, ll_t lon) :
 		folder{folder}
 {
@@ -728,7 +735,7 @@ bool height_gebco_tif::load(ll_t lat, ll_t lon)
 		return false;
 	}
 	//DUMP("loadstart", (long long)this, lat, lon, lat_dec, lon_dec, lat_loading, lon_loading, lat_loaded, lon_loaded, floor(lat / 90.0 + 1) * 90);
-	TimeTaker timer("tiff load");
+	//TimeTaker timer("tiff load");
 
 	lat_loading = lat_dec;
 	lon_loading = lon_dec;
@@ -767,7 +774,7 @@ bool height_gebco_tif::load(ll_t lat, ll_t lon)
 					<< "https://www.bodc.ac.uk/data/open_download/gebco/gebco_2023_sub_ice_topo/geotiff/"
 					<< " or "
 					<< "https://www.bodc.ac.uk/data/open_download/gebco/gebco_2023_tid/geotiff/"
-					<< " in " << porting::path_cache + DIR_DELIM + "earth" << "\n";
+					<< " in " << porting::path_cache + "/earth" << "\n";
 		}
 
 		//DUMP(tifname, std::filesystem::exists(tifname));
@@ -898,6 +905,7 @@ int16_t height_gebco_tif::read(uint16_t y, uint16_t x)
 
 	return heights[pos];
 }
+#endif
 
 std::tuple<size_t, size_t, height::ll_t, height::ll_t> height_hgt::ll_to_xy(
 		height::ll_t lat, height::ll_t lon)
@@ -970,7 +978,7 @@ height::height_t height::get(ll_t lat, ll_t lon)
 				//lat_seconds, lon_seconds,
 				seconds_per_px_x, seconds_per_px_y, lat, lon, lat_loaded, lon_loaded,
 				(lat - lat_loaded), pixel_per_deg_x, (lon - lon_loaded), pixel_per_deg_y);
-	//return height[2]; // debug not interpolated
+		//return height[2]; // debug not interpolated
 #endif
 
 	// ratio where X lays
@@ -987,4 +995,147 @@ height::height_t height::get(ll_t lat, ll_t lon)
 	// h2------------h3
 	return height[0] * dy * (1 - dx) + height[1] * dy * (dx) +
 		   height[2] * (1 - dy) * (1 - dx) + height[3] * (1 - dy) * dx;
+}
+
+// height_sb_tif implementation
+
+height_seabed_tif::height_seabed_tif(
+		const std::string &folder, height::ll_t lat, height::ll_t lon) : folder{folder}
+{
+	side_length_x_extra = 1;
+	tile_deg_x = 1;
+	tile_deg_y = 1;
+}
+
+std::string height_seabed_tif::file_name(height::ll_t lat, height::ll_t lon)
+{
+	int lat_dec = height::lat_start(lat);
+	int lon_dec = height::lon_start(lon);
+	char buff[100];
+	std::snprintf(buff, sizeof(buff), "%c%02d%c%03d.sb.tif", lat_dec >= 0 ? 'N' : 'S',
+			std::abs(lat_dec), lon_dec >= 0 ? 'E' : 'W', std::abs(lon_dec));
+	return std::string(buff);
+}
+
+bool height_seabed_tif::ok(height::ll_t lat, height::ll_t lon)
+{
+	return (lat_loaded == height::lat_start(lat) && lon_loaded == height::lon_start(lon));
+}
+
+std::tuple<size_t, size_t, height::ll_t, height::ll_t> height_seabed_tif::ll_to_xy(
+		height::ll_t lat, height::ll_t lon)
+{
+	const height::ll_t lat_seconds = (lat - (height::ll_t)lat_loaded) * 60 * 60;
+	const height::ll_t lon_seconds = (lon - (height::ll_t)lon_loaded) * 60 * 60;
+	const int y = lat_seconds / seconds_per_px_y;
+	const int x = lon_seconds / seconds_per_px_x;
+	return {x, y, lat_seconds, lon_seconds};
+}
+
+int16_t height_seabed_tif::read(uint16_t y, uint16_t x)
+{
+	const int row = (side_length_y)-y;
+	const int pos = x + row * (side_length_x + 1);
+	const auto ret = heights[pos];
+	return ret;
+}
+
+bool height_seabed_tif::load(height::ll_t lat, height::ll_t lon)
+{
+	auto lat_dec = height::lat_start(lat);
+	auto lon_dec = height::lon_start(lon);
+
+	if (ok(lat, lon))
+		return true;
+	const auto lock = std::unique_lock(mutex);
+	if (ok(lat, lon))
+		return true;
+	if (lat_loading == lat_dec && lon_loading == lon_dec) {
+		return false;
+	}
+
+	lat_loading = lat_dec;
+	lon_loading = lon_dec;
+
+	std::string filename = file_name(lat, lon);
+	char lat_dir_buff[10];
+	std::snprintf(lat_dir_buff, sizeof(lat_dir_buff), "%c%02d", lat_dec >= 0 ? 'N' : 'S',
+			std::abs(lat_dec));
+	std::string lat_dir = lat_dir_buff;
+	std::string fullpath = folder + "/" + lat_dir + "/" + filename;
+
+	if (!std::filesystem::exists(fullpath)) {
+		std::error_code ec;
+		std::filesystem::create_directories(folder + "/" + lat_dir, ec);
+
+		std::string url =
+				std::string("http://cdn.freeminer.org/earth/") + lat_dir + "/" + filename;
+		multi_http_to_file(filename, {url}, fullpath);
+	}
+	if (!std::filesystem::exists(fullpath)) {
+		return false;
+	}
+
+	if (const auto tif = TIFFOpen(fullpath.c_str(), "r"); tif) {
+		uint32_t w = 0, h = 0;
+		TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &w);
+		TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &h);
+		if (!w || !h) {
+			TIFFClose(tif);
+			return false;
+		}
+
+		const size_t npixels = (w + 1) * (h + 1);
+		heights.resize(npixels);
+
+		const tdata_t buf = _TIFFmalloc(TIFFScanlineSize(tif));
+		for (uint32_t row = 0; row < h; ++row) {
+			TIFFReadScanline(tif, buf, row, 0);
+			uint32_t i = 0;
+			int16_t height = 0;
+			uint32_t dest = 0;
+			for (; i < w; ++i) {
+				height = (((uint8_t *)buf)[i << 1]) |
+						 (((uint8_t *)buf)[(i << 1) + 1] << 8);
+				dest = i + row * (w + 1);
+				if (height <= -32767 || height >= 31727)
+					height = 0;
+				heights[dest] = height;
+			}
+			heights[++dest] = height; // fill last col for interpolation
+		}
+
+		// fill last row for interpolation
+		for (uint32_t i = 0; i <= w; ++i) {
+			const auto src = i + (h - 1) * (w + 1);
+			const auto dest = i + h * (w + 1);
+			heights[dest] = heights[src];
+		}
+
+		_TIFFfree(buf);
+		TIFFClose(tif);
+
+		lat_loaded = lat_dec;
+		lon_loaded = lon_dec;
+		side_length_x = w;
+		side_length_y = h;
+
+		seconds_per_px_x =
+				tile_deg_x * 3600 / ((float)side_length_x - side_length_x_extra);
+		seconds_per_px_y = tile_deg_y * 3600 / ((float)side_length_y);
+		pixel_per_deg_x = (height::ll_t)side_length_x / tile_deg_x;
+		pixel_per_deg_y = (height::ll_t)side_length_y / tile_deg_y;
+
+#if HGT_DEBUG
+		DUMP("tif ok", seconds_per_px_x, side_length_x, side_length_y, seconds_per_px_x,
+				seconds_per_px_y);
+		DUMP("loadok", (long)this, heights.size(), lat_loaded, lon_loaded, fullpath,
+				seconds_per_px_x, get(lat_dec, lon_dec));
+		DUMP("testread", read(0, 0), read(0, side_length_x - 1),
+				read(side_length_y - 1, side_length_x - 1), read(side_length_y - 1, 0));
+#endif
+
+		return true;
+	}
+	return false;
 }

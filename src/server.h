@@ -434,7 +434,7 @@ public:
 	void peerAdded(con::IPeer *peer) override;
 	void deletingPeer(con::IPeer *peer, bool timeout) override;
 */
-	void peerAdded(session_t peer_id);
+	void peerAdded(session_t peer_id) override;
 	void deletingPeer(session_t peer_id, bool timeout) override;
 
 	void DenySudoAccess(session_t peer_id);

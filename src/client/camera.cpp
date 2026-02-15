@@ -607,7 +607,7 @@ void Camera::updateViewingRange()
 		viewing_range = farmesh;
 	}
 
-	m_cameranode->setFarValue(std::fmax(2000, viewing_range) * BS);
+	m_cameranode->setFarValue(std::fmax(2000, viewing_range * 3) * BS);
 }
 
 void Camera::setDigging(s32 button)

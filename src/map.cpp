@@ -75,9 +75,11 @@ void Map::dispatchEvent(const MapEditEvent &event)
 	}
 }
 
-/*
 MapSector * Map::getSectorNoGenerateNoLock(v2s16 p)
 {
+    return this;
+
+	/*
 	if(m_sector_cache != NULL && p == m_sector_cache_p){
 		MapSector * sector = m_sector_cache;
 		return sector;
@@ -95,6 +97,7 @@ MapSector * Map::getSectorNoGenerateNoLock(v2s16 p)
 	m_sector_cache = sector;
 
 	return sector;
+*/
 }
 
 MapSector *Map::getSectorNoGenerate(v2s16 p)
@@ -102,6 +105,7 @@ MapSector *Map::getSectorNoGenerate(v2s16 p)
 	return getSectorNoGenerateNoLock(p);
 }
 
+/*
 MapBlock *Map::getBlockNoCreateNoEx(v3s16 p3d)
 {
 	v2s16 p2d(p3d.X, p3d.Z);

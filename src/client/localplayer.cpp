@@ -730,7 +730,7 @@ void LocalPlayer::applyControl(float dtime, Environment *env)
 
 		// fm:
 		//  better air control when falling fast
-		float speed = m_speed.getLength();
+		const float speed = m_speed.getLength();
 		if (!superspeed && speed > movement_speed_fast &&
 				control.movement_speed) {
 			v3f move_direction = v3f(0, 0, 1);
