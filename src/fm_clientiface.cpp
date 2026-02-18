@@ -375,7 +375,7 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 				Check if map has this block
 			*/
 
-			MapBlock *block;
+			MapBlockPtr block;
 			if (0) {
 				const auto lock = env->getMap().m_blocks.try_lock_shared_rec();
 				if (!lock->owns_lock()) {
@@ -384,9 +384,9 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 						first_skipped_d = d;
 					continue;
 				}
-				block = env->getMap().getBlockNoCreateNoEx(p);
+				block = env->getMap().getBlock(p);
 			}
-			block = env->getMap().getBlockNoCreateNoEx(p);
+			block = env->getMap().getBlock(p);
 
 			// bool surely_not_found_on_disk = false;
 			// bool block_is_invalid = false;
@@ -395,8 +395,8 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 						block->data[0].param0 == CONTENT_AIR) {
 					uint8_t not_air = 0;
 					for (const auto &dir : g_6dirs) {
-						if (const auto *block_near =
-										env->getMap().getBlockNoCreateNoEx(p + dir)) {
+						if (const auto block_near = env->getMap().getBlock(p + dir)) {
+							const auto lock = block_near->lock_shared_rec();
 							if (block_near->m_is_mono_block &&
 									block_near->data[0].param0 != CONTENT_AIR) {
 								++not_air;
@@ -568,13 +568,16 @@ queue_full_break:
 
 uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 {
+
+	TimeTaker time("Server: Send far [ms]");
+
 	const static thread_local auto client_unload_unused_data_timeout =
 			g_settings->getFloat("client_unload_unused_data_timeout");
 	uint16_t sent_cnt{};
 	TRY_UNIQUE_LOCK(far_blocks_requested_mutex)
 	{
 		std::multimap<int32_t, MapBlockPtr> ordered;
-		constexpr uint16_t send_max{50};
+		constexpr uint16_t send_max{100};
 		for (auto &far_blocks : far_blocks_requested) {
 			for (auto &[bpos, step_sent] : far_blocks) {
 				auto &[step, sent_ts] = step_sent;

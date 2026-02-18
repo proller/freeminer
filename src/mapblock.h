@@ -504,6 +504,17 @@ public:
 
 	block_step_t far_step{};
 	uint32_t far_make_mesh_timestamp{static_cast<uint32_t>(-1)};
+	enum class far_status_e
+	{
+		none = 0,
+		s1_created,
+		s2_requested,
+		s3_recieved,
+		s4_mesh_enqueued,
+		s5_mesh_start,
+		s6_mesh_complete,
+	};
+	far_status_e far_status{};
 	std::atomic_uint32_t far_iteration{};
 	std::atomic_bool creating_far_mesh{};
 	std::atomic_short heat{};

@@ -23,14 +23,12 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <atomic>
 #include <cstdint>
-#include <future>
 #include "client/camera.h"
 #include "irr_v3d.h"
 #include "irrlichttypes.h"
 #include "mapblock.h"
 #include "threading/async.h"
 #include "threading/concurrent_unordered_map.h"
-#include "threading/concurrent_unordered_set.h"
 
 class Client;
 class Mapgen;
@@ -59,16 +57,21 @@ public:
 			v3pos_t m_camera_offset,
 			//float brightness,
 			int render_range, float speed);
-	void makeFarBlock(const v3bpos_t &blockpos, block_step_t step, bool bnear = false,
-			std::optional<v3bpos_t> blockpos_actual = {});
+	void makeFarBlock(
+			const v3bpos_t &blockpos, block_step_t step, const bool low_priority = false);
 	void makeFarBlocks(const v3bpos_t &blockpos, block_step_t step);
-	//void makeFarBlocks(const v3bpos_t &blockpos);
+
+	void enqueueFarMeshForBlock(const v3bpos_t &blockpos, const block_step_t step,
+			const MapBlockPtr &block, const double timestamp,
+			const bool low_priority = false);
+
+	bool game_update_complete{};
 
 private:
 	//std::vector<v3bpos_t> m_make_far_blocks_list;
 
 	v3opos_t m_camera_pos = {-1337, -1337, -1337};
-	v3pos_t m_camera_pos_aligned{0, 0, 0};
+	v3pos_t m_camera_pos_aligned{-1337, -1337, -1337};
 	/*v3f m_camera_dir;
 	f32 m_camera_fov;
 	f32 m_camera_pitch;
@@ -116,14 +119,23 @@ private:
 	std::atomic_uint last_distance_max{};
 	int go_direction(const size_t dir_n);
 	int go_flat();
-	int go_container();
+	int go_container(const block_step_t step_limit = 0);
 	uint32_t far_iteration_complete{};
+	double far_iteration_updated_uptime{};
 	bool complete_set{};
 	uint32_t collect_reset_timestamp{static_cast<uint32_t>(-1)};
 	uint8_t planes_processed_last{};
-	concurrent_shared_unordered_map<uint16_t, concurrent_unordered_set<v3bpos_t>>
-			far_blocks_list;
 	std::array<async_step_runner, 6> async;
 	async_step_runner async_cleaner;
 	int async_cleaner_next{};
+	bool farmesh_flat{true};
+	bool farmesh_ray{true};
+	struct BlockTodo
+	{
+		MapBlockPtr block;
+		double timestamp;
+	};
+	std::array<concurrent_unordered_map<v3bpos_t, BlockTodo>, FARMESH_STEP_MAX * 2>
+			farmesh_make_queue;
+	std::atomic_bool farmesh_make_queue_complete{true};
 };

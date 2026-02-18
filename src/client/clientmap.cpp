@@ -1487,7 +1487,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 			is_far = true;
 		}
 		
-		if (!block_mesh)
+		if (!block_mesh || block_mesh->isEmpty())
 			continue;
 
 		// Do exact frustum culling

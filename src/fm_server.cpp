@@ -591,6 +591,10 @@ void Server::handleCommand_GetBlocks(NetworkPacket *pkt)
 	{
 		ServerMap::far_blocks_req_t blocks;
 		packet[TOSERVER_GET_BLOCKS_BLOCKS].convert(blocks);
+		for (auto &step_data : client->far_blocks_requested) {
+			step_data.clear();
+		}
+
 		for (const auto &[bpos, step_iteration] : blocks) {
 			const auto &[step, iteation] = step_iteration;
 			if (step >= FARMESH_STEP_MAX - 1) {

@@ -85,7 +85,8 @@ size_t multi_http_to_file(
 			<< "\n";
 
 	std::ofstream(path, std::ios_base::binary) << ""; // create zero file
-	return std::filesystem::file_size(path);
+
+	return 0;
 };
 
 size_t multi_http_to_file_cdn(const std::string &dir, const std::string &name,
@@ -130,7 +131,7 @@ size_t multi_http_to_file(const std::vector<std::string> &links, const std::stri
 			<< "\n";
 
 	std::ofstream(path, std::ios_base::binary) << ""; // create zero file
-	return std::filesystem::file_size(path);
+	return 0;
 };
 
 std::string exec_to_string(const std::string &cmd)

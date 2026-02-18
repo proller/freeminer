@@ -72,7 +72,8 @@ struct ProcessedWay
 enum class ProcessedMemberRole
 {
 	Outer,
-	Inner
+	Inner,
+	Part
 };
 struct ProcessedMember
 {

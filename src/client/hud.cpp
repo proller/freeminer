@@ -938,7 +938,7 @@ void Hud::drawBlockBounds()
 	auto pos = player->getStandingNodePos();
 */
 
-const auto is_each_mode= m_block_bounds_mode == BLOCK_BOUNDS_FAR_DRAWN_EACH;
+    const auto is_each_mode= m_block_bounds_mode == BLOCK_BOUNDS_FAR_DRAWN_EACH;
 	if (m_block_bounds_mode == BLOCK_BOUNDS_FAR_DRAWN || is_each_mode) {
 		const auto offset = intToFloat(client->getCamera()->getOffset(), BS);
 
@@ -978,27 +978,35 @@ const auto is_each_mode= m_block_bounds_mode == BLOCK_BOUNDS_FAR_DRAWN_EACH;
 				int fscale = 1;
 				int lod_step = 0;
 				int far_step = 0;
+				int r = 0;
 				int b = 0;
 				const auto &mesh = block->getFarMesh(mesh_step);
 				if (!mesh || !mesh->getMesh() || !mesh->getMesh()->getMeshBufferCount()) {
 					b = 50;
 				}
+				std::optional<aabb3f> box;
 				if (mesh) {
 					fscale = mesh->fscale;
 					lod_step = mesh->lod_step;
 					far_step = mesh->far_step;
+					//box = mesh->getMesh(0)->getBoundingBox();
+					if (mesh->isEmpty()) { r+=50;}
 				}
 				if (is_each_mode) {
 					fscale = 1 << mesh_step;
 				}
-				const aabb3f box(oposToV3f(intToFloat((blockPos)*MAP_BLOCKSIZE, BS) -
+				if (!box) {
+					box = aabb3f{oposToV3f(intToFloat((blockPos)*MAP_BLOCKSIZE, BS) -
 										   offset - halfNode + 1),
-						oposToV3f(intToFloat(((blockPos)*MAP_BLOCKSIZE) +
-													 (MAP_BLOCKSIZE * fscale - fscale),
-										  BS) -
-								  offset + halfNode - 1));
-				driver->draw3DBox(box, video::SColor(200 + b, 255 - lod_step * 10 + b,
-											   255 - g - far_step * 10, fscale * 20));
+							oposToV3f(
+									intToFloat(((blockPos)*MAP_BLOCKSIZE) +
+													   (MAP_BLOCKSIZE * fscale - fscale),
+											BS) -
+									offset + halfNode - 1)};
+				}
+				driver->draw3DBox(
+						box.value(), video::SColor(200 + b, 255 - r + lod_step * 10,
+											 255 - g - far_step * 10, fscale * 20));
 			}
 		}
 	} else if (m_block_bounds_mode == BLOCK_BOUNDS_FAR_REQUEST) {
@@ -1016,7 +1024,7 @@ const auto is_each_mode= m_block_bounds_mode == BLOCK_BOUNDS_FAR_DRAWN_EACH;
 										   offset - halfNode + 1),
 						oposToV3f(intToFloat(((blockPos)*MAP_BLOCKSIZE) +
 													 (MAP_BLOCKSIZE << mesh_step) -
-													 (1 << mesh_step), // - 1
+													 (mesh_step), // - 1
 										  BS) -
 								  offset + halfNode - 1));
 				driver->draw3DBox(box, video::SColor(200 + b, 255 - lod_step * 10 + b,

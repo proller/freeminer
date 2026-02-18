@@ -82,5 +82,5 @@ void runFarAll(const v3bpos_t &player_block_pos, uint8_t cell_size_pow, int farm
 		const std::function<bool(const v3bpos_t &, const bpos_t &, const block_step_t &)>
 				&func);
 
-uint8_t rangeToStep(const int range);
+block_step_t rangeToStep(const int range);
 }

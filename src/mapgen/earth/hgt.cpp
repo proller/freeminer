@@ -85,6 +85,9 @@ height::height_t hgts::get(const height_hgt::ll_t lat, const height_hgt::ll_t lo
 			return ret.value();
 		}
 		if (const auto ret = get_lat1(map1_seabed[lat1], lon1)) {
+			// todo: layer configurable
+			if (ret.value() > 0)
+				return 0;
 			return ret.value();
 		}
 	}
@@ -106,6 +109,9 @@ height::height_t hgts::get(const height_hgt::ll_t lat, const height_hgt::ll_t lo
 		return ret.value();
 	}
 	if (const auto ret = get_lat1(map1_seabed[lat1], lon1)) {
+		// todo: layer configurable
+		if (ret.value() > 0)
+			return 0;
 		return ret.value();
 	}
 
@@ -152,16 +158,16 @@ height::height_t hgts::get(const height_hgt::ll_t lat, const height_hgt::ll_t lo
 				map1_seabed[lat_dec][lon_dec] = std::move(hgt);
 				if (const auto ret = get_lat1(map1_seabed[lat_dec], lon_dec)) {
 
-					// todo: layer configurable
-					if (ret.value() > 0)
-						return 0;
-
 					return ret.value();
 				}
+			} else {
+				place_dummy(map1_seabed, lat1, lon1);
 			}
-			place_dummy(map1_seabed, lat1, lon1);
 		}
 		if (const auto ret = get_lat1(map1_seabed[lat1], lon1)) {
+			// todo: layer configurable
+			if (ret.value() > 0)
+				return 0;
 			return ret.value();
 		}
 	}

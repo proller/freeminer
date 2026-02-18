@@ -415,10 +415,18 @@ $commands = {
         rename qw(CMakeCache.txt CMakeCache.txt.backup);
         rename qw(src/cmake_config.h src/cmake_config.backup);
         sy qq{mkdir -p $build_dir $config->{logdir}};
+
+        my $self = join(' ', $0, (map { /[()\s"]/ ? "'" . $_ . "'" : $_ } @ARGV), '$*');
         file_append(
             "$config->{logdir}/run.sh",
             join "\n",
-            qq{# } . join(' ', $0, map { /[()\s"]/ ? "'" . $_ . "'" : $_ } @ARGV),
+            "cd ..",
+            $self,
+        );
+        file_append(
+            "$config->{logdir}/log.sh",
+            join "\n",
+            qq{# } . $self,
             qq{cd "$build_dir"},
             ""
         );
@@ -924,14 +932,14 @@ sub sig(;$$) {
 
 sub sy (@) {
     say 'running ', join ' ', @_;
-    file_append("$config->{logdir}/run.sh", join(' ', @_), "\n");
+    file_append("$config->{logdir}/log.sh", join(' ', @_), "\n");
     return sig system 'bash', '-c', join ' ', @_;
 }
 
 sub sytee (@) {
     my $tee = pop;
     say 'running ', join ' ', @_;
-    file_append("$config->{logdir}/run.sh", join(' ', @_), "\n");
+    file_append("$config->{logdir}/log.sh", join(' ', @_), "\n");
     my $pid = open my $fh, "-|", "@_ 2>&1" or return "can't open @_: $!";
     if ($config->{pid_file}) {
         unlink $config->{pid_file};
