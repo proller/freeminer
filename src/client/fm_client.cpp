@@ -432,7 +432,7 @@ void ClientMap::cleanPerodic(uint32_t uptime)
 #if FARMESH_CLEAN
 	for (const auto &[pos, block] : m_blocks) {
 		thread_local static const auto client_unload_unused_data_timeout =
-				g_settings->getFloat("client_unload_unused_data_timeout");
+				g_settings->getFloat("client_unload_unused_data_timeout") * 2;
 
 		{
 			int step = 0;

@@ -41,9 +41,9 @@ class Server;
 // #define FARMESH_FAST 1
 // #define FARMESH_DEBUG 1 // One direction, one thread, no neighborhoods
 #define FARMESH_SHADOWS 1
-#if defined(__ANDROID__)
+//#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
 #define FARMESH_CLEAN 1
-#endif
+//#endif
 
 class FarMesh
 {
@@ -119,12 +119,12 @@ private:
 	std::atomic_uint last_distance_max{};
 	int go_direction(const size_t dir_n);
 	int go_flat();
-	int go_container(const block_step_t step_limit = 0);
+	int go_container(bool only_received, const block_step_t step_limit = 0);
 	uint32_t far_iteration_complete{};
 	double far_iteration_updated_uptime{};
 	bool complete_set{};
 	uint32_t collect_reset_timestamp{static_cast<uint32_t>(-1)};
-	uint8_t planes_processed_last{};
+	//uint8_t planes_processed_last{};
 	std::array<async_step_runner, 6> async;
 	async_step_runner async_cleaner;
 	int async_cleaner_next{};
