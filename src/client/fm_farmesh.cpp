@@ -120,11 +120,9 @@ void FarMesh::makeFarBlock(
 	}
 
 	// Make mesh for blocks without data
-	if (
-			(block->far_status >= MapBlock::far_status_e::s2_requested &&
-					block->far_status <= MapBlock::far_status_e::s4_mesh_enqueued
-					&& m_client->m_uptime >= block->far_make_mesh_timestamp)
-	) {
+	if ((block->far_status >= MapBlock::far_status_e::s2_requested &&
+				block->far_status <= MapBlock::far_status_e::s4_mesh_enqueued &&
+				m_client->m_uptime >= block->far_make_mesh_timestamp)) {
 		enqueueFarMeshForBlock(
 				blockpos_actual, step, block, m_client->m_uptime, low_priority);
 	}
@@ -280,55 +278,61 @@ FarMesh::FarMesh(Client *client, Server *server) :
 	//	process_order[i] = i;
 	//auto rng = std::default_random_engine{};
 	//std::shuffle(std::begin(process_order), std::end(process_order), rng);
-	m_client->mesh_thread_pool.enqueue([this]() {
-		while (!m_client->isShutdown()) {
-			m_client->mesh_thread_pool.wait_until_empty();
-			size_t processed = 0;
-			block_step_t step = 0;
-			{
-				TimeTaker time("Client: Farmesh mesh [ms]");
+	farmesh_thread = std::thread(&FarMesh::processFarmeshQueue, this);
+}
 
-				for (auto &one_step : farmesh_make_queue) {
-					size_t processed_in_step = 0;
-					bool next = true;
-					{
-						const auto lock = one_step.try_lock_unique_rec();
-						if (lock->owns_lock()) {
-							for (auto it = one_step.begin(); it != one_step.end();) {
-								m_client->mesh_thread_pool.enqueue(
-										[this, block = it->second.block]() mutable {
-											m_client->createFarMesh(block);
-										});
+void FarMesh::processFarmeshQueue()
+{
+	while (!farmesh_thread_stop) {
+		m_client->mesh_thread_pool.wait_until_empty();
+		size_t processed = 0;
+		//block_step_t step = 0;
+		{
+			TimeTaker time("Client: Farmesh mesh [ms]");
 
-								it = one_step.erase(it);
-								++processed_in_step;
-								++processed;
-								if (processed * (1 << (3 * m_control->cell_size_pow)) >
-										500) {
-									next = false;
-									break;
-								}
+			for (auto &one_step : farmesh_make_queue) {
+				//size_t processed_in_step = 0;
+				bool next = true;
+				{
+					const auto lock = one_step.try_lock_unique_rec();
+					if (lock->owns_lock()) {
+						for (auto it = one_step.begin(); it != one_step.end();) {
+							m_client->mesh_thread_pool.enqueue(
+									[this, block = it->second.block]() mutable {
+										m_client->createFarMesh(block);
+									});
+
+							it = one_step.erase(it);
+							//++processed_in_step;
+							++processed;
+							if (processed * (1 << (3 * m_control->cell_size_pow)) > 500) {
+								next = false;
+								break;
 							}
 						}
 					}
-					if (!next)
-						break;
-
-					++step;
 				}
-			}
-			if (processed) {
-				// DUMP(processed, step);
-			} else {
-				farmesh_make_queue_complete = true;
-				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				if (!next)
+					break;
+
+				//++step;
 			}
 		}
-	});
+		if (processed) {
+			// DUMP(processed, step);
+		} else {
+			farmesh_make_queue_complete = true;
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
+	}
 }
 
 FarMesh::~FarMesh()
 {
+	farmesh_thread_stop = true;
+	if (farmesh_thread.joinable()) {
+		farmesh_thread.join();
+	}
 }
 
 auto align_shift(auto pos, const auto amount)

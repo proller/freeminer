@@ -23,6 +23,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <atomic>
 #include <cstdint>
+#include <thread>
 #include "client/camera.h"
 #include "irr_v3d.h"
 #include "irrlichttypes.h"
@@ -138,4 +139,8 @@ private:
 	std::array<concurrent_unordered_map<v3bpos_t, BlockTodo>, FARMESH_STEP_MAX * 2>
 			farmesh_make_queue;
 	std::atomic_bool farmesh_make_queue_complete{true};
+
+	std::thread farmesh_thread;
+	bool farmesh_thread_stop{};
+	void processFarmeshQueue();
 };
