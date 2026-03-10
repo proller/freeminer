@@ -646,9 +646,9 @@ uint8_t FarMesh::update(v3opos_t camera_pos,
 			<< 7;
 
 	auto &client_map = m_client->getEnv().getClientMap();
+	const auto far_old = far_iteration_updated_uptime + 5 < m_client->m_uptime;
 	const auto far_fast =
-			!m_control->farmesh_stable &&
-			far_iteration_updated_uptime + 3 < m_client->m_uptime &&
+			!m_control->farmesh_stable && far_old &&
 			(
 					//m_client->getEnv().getClientMap().m_far_fast &&
 					m_speed > 200 * BS ||
@@ -677,6 +677,7 @@ uint8_t FarMesh::update(v3opos_t camera_pos,
 	};
 
 	if (!far_iteration_complete) {
+		++far_iteration_complete;
 		if (!m_camera_pos_aligned.X && !m_camera_pos_aligned.Y &&
 				!m_camera_pos_aligned.Z) {
 			set_new_cam_pos();
@@ -769,11 +770,11 @@ uint8_t FarMesh::update(v3opos_t camera_pos,
 		if (far_fast || !cam_pos_updated) {
 			if (grid_finished && !complete_set) {
 				client_map.far_blocks_last_cam_pos = m_camera_pos_aligned;
-				client_map.far_iteration_use = far_iteration_complete;
-
-				if (!cam_pos_updated && far_iteration_complete) {
-					if (farmesh_make_queue_complete) {
-						far_iteration_updated_uptime = m_client->m_uptime;
+				if (!cam_pos_updated || far_old) {
+					client_map.far_iteration_use =
+							far_iteration_complete - (cam_pos_updated ? 1 : 0);
+					far_iteration_updated_uptime = m_client->m_uptime;
+					if (!cam_pos_updated && farmesh_make_queue_complete) {
 						client_map.far_iteration_clean = far_iteration_complete - 1;
 					}
 				}
