@@ -173,11 +173,17 @@ std::optional<tree_result_t> find(
 	const auto make_result = [&param](const auto &child) {
 		return tree_result_t{
 				.pos{to_v3bpos(child.pos)},
-				//.size{child.size >> (param.cell_size_each ? 0 : param.cell_size_pow)},
-				.size{to_bpos(child.size >> param.cell_size_pow)},
+				.size{child.size >> (param.cell_size_each ? 0 : param.cell_size_pow)},
 				.step{static_cast<block_step_t>(
 						rangeToStep(child.size) -
 						(param.cell_size_each ? 0 : param.cell_size_pow))},
+		};
+	};
+	const auto make_result_no_shift = [](const auto &child) {
+		return tree_result_t{
+				.pos{to_v3bpos(child.pos)},
+				.size{child.size},
+				.step{static_cast<block_step_t>(rangeToStep(child.size))},
 		};
 	};
 
@@ -190,29 +196,28 @@ std::optional<tree_result_t> find(
 		if (depth) {
 			return {};
 		} else {
-			return make_result(child);
+			return make_result_no_shift(child);
 		}
 	}
 
 	if (child.size <= (1 << (param.cell_size_pow))) {
-		return make_result(child);
+		return make_result_no_shift(child);
 	}
 
 	const tpos_t childSize = child.size >> 1;
-	/*
+	const auto dsize = childSize >> param.cell_size_pow;
+	/* round
 	const auto distance =
-			((tpos_t)std::hypot(param.player_pos.X - (child.pos.X + childSize),
-					 param.player_pos.Y - (child.pos.Y + childSize),
-					 param.player_pos.Z - (child.pos.Z + childSize)) >>
-					param.cell_size_pow)
-			<< param.cell_size_pow;
+			((tpos_t)std::hypot(param.player_pos.X - (child.pos.X + dsize),
+					 param.player_pos.Y - (child.pos.Y + dsize),
+					 param.player_pos.Z - (child.pos.Z + dsize)));
 	*/
+
 	const auto distance =
-			(std::max({std::abs((tpos_t)param.player_pos.X - (child.pos.X + childSize)),
-					 std::abs((tpos_t)param.player_pos.Y - (child.pos.Y + childSize)),
-					 std::abs((tpos_t)param.player_pos.Z - (child.pos.Z + childSize))}) >>
-					param.cell_size_pow)
-			<< param.cell_size_pow;
+			(std::max({std::abs((tpos_t)param.player_pos.X - (child.pos.X + dsize)),
+					std::abs((tpos_t)param.player_pos.Y - (child.pos.Y + dsize)),
+					std::abs((tpos_t)param.player_pos.Z - (child.pos.Z + dsize))})
+			);
 	const auto next_child_size =
 			child.size << (1 + std::max(param.farmesh_quality_pow, param.cell_size_pow) -
 						   (param.cell_size_each ? 0 : param.cell_size_pow));
@@ -378,59 +383,56 @@ void each(const each_param_t &param, const child_t &child)
 			<< param.cell_size_pow;
 			*/
 
+	const auto dsize = childSize >> param.cell_size_pow;
 	const auto distance =
-			(std::max({std::abs((tpos_t)param.player_pos.X - (child.pos.X + childSize)),
-					 std::abs((tpos_t)param.player_pos.Y - (child.pos.Y + childSize)),
-					 std::abs((tpos_t)param.player_pos.Z - (child.pos.Z + childSize))}) >>
-					param.cell_size_pow)
-			<< param.cell_size_pow;
+			(std::max({std::abs((tpos_t)param.player_pos.X - (child.pos.X + dsize)),
+					std::abs((tpos_t)param.player_pos.Y - (child.pos.Y + dsize)),
+					std::abs((tpos_t)param.player_pos.Z - (child.pos.Z + dsize))}));
 
-	const auto next_child_size =
-			child.size << (1 + std::max(param.farmesh_quality_pow, param.cell_size_pow));
+	const auto next_child_size = child.size << ((1 + std::max(param.farmesh_quality_pow,
+															 param.cell_size_pow)));
 	if (distance >= next_child_size) {
 		param.func(tree_result_t{
 				.pos{to_v3bpos(child.pos)},
 				.size{to_bpos(
-						child.size >> (param.cell_size_each ? param.cell_size_pow : 0))},
+						child.size)},
 				.step{rangeToStep(child.size)},
 		});
 		return;
 	}
 
-	const auto childSizeNext = childSize
-							   << (param.cell_size_each ? 0 : param.cell_size_pow);
+	const auto childPosNext = childSize
+							  << (param.cell_size_each ? 0 : param.cell_size_pow);
 
 	uint8_t i{0};
 	for (const auto &child : {
 				 // first with unchanged Y for 2d
 				 child_t{.pos{child.pos}, .size = childSize},
 				 child_t{.pos = v3tpos_t(
-								 child.pos.X + childSizeNext, child.pos.Y, child.pos.Z),
+								 child.pos.X + childPosNext, child.pos.Y, child.pos.Z),
 						 .size = childSize},
 				 child_t{.pos = v3tpos_t(
-								 child.pos.X, child.pos.Y, child.pos.Z + childSizeNext),
+								 child.pos.X, child.pos.Y, child.pos.Z + childPosNext),
 						 .size = childSize},
-				 child_t{.pos = v3tpos_t(child.pos.X + childSizeNext, child.pos.Y,
-								 child.pos.Z + childSizeNext),
+				 child_t{.pos = v3tpos_t(child.pos.X + childPosNext, child.pos.Y,
+								 child.pos.Z + childPosNext),
 						 .size = childSize},
 
 				 // two_d ends here
 
 				 child_t{.pos = v3tpos_t(
-								 child.pos.X, child.pos.Y + childSizeNext, child.pos.Z),
+								 child.pos.X, child.pos.Y + childPosNext, child.pos.Z),
 						 .size = childSize},
-				 child_t{.pos = v3tpos_t(child.pos.X + childSizeNext,
-								 child.pos.Y + childSizeNext, child.pos.Z),
+				 child_t{.pos = v3tpos_t(child.pos.X + childPosNext,
+								 child.pos.Y + childPosNext, child.pos.Z),
 						 .size = childSize},
-				 child_t{.pos = v3tpos_t(child.pos.X, child.pos.Y + childSizeNext,
-								 child.pos.Z + childSizeNext),
+				 child_t{.pos = v3tpos_t(child.pos.X, child.pos.Y + childPosNext,
+								 child.pos.Z + childPosNext),
 						 .size = childSize},
-				 child_t{.pos = v3tpos_t(child.pos.X + childSizeNext,
-								 child.pos.Y + childSizeNext,
-								 child.pos.Z + childSizeNext),
+				 child_t{.pos = v3tpos_t(child.pos.X + childPosNext,
+								 child.pos.Y + childPosNext, child.pos.Z + childPosNext),
 						 .size = childSize},
 		 }) {
-
 		if (param.two_d && i++ >= 4) {
 			break;
 		}
@@ -438,8 +440,7 @@ void each(const each_param_t &param, const child_t &child)
 		if (child.size < (1 << (param.cell_size_pow))) {
 			if (param.func(tree_result_t{
 						.pos{to_v3bpos(child.pos)},
-						.size{to_bpos(child.size >>
-									  (param.cell_size_each ? 0 : param.cell_size_pow))},
+						.size{to_bpos(child.size)},
 						.step{rangeToStep(child.size)},
 				})) {
 				return;

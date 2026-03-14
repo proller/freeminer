@@ -302,7 +302,7 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 			return;
 		}
 
-		block->far_make_mesh_timestamp = m_uptime + 1 + step / 3;
+		block->far_make_mesh_timestamp = m_uptime + 1 + step / 4;
 		block->far_status = MapBlock::far_status_e::s3_recieved;
 
 		++m_new_farmeshes;
@@ -329,7 +329,7 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 				if (const auto &it = far_blocks.find(blockpos);
 						it != far_blocks.end() && it->second->far_step == step) {
 					block = it->second;
-					block->far_make_mesh_timestamp = m_uptime + 1 + step / 3;
+					block->far_make_mesh_timestamp = m_uptime + 1 + step / 4;
 					block->far_status = MapBlock::far_status_e::s3_recieved;
 
 					// TODO: throttle ~1s to wait nearby block datas

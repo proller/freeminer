@@ -4748,11 +4748,11 @@ void Game::updateFrame(f32 dtime,
 		if (!complete || porting::getTimeMs() > next_run_time) {
 			next_run_time = porting::getTimeMs() + 1000;
 			client->farmesh_async.step([&, farmesh_range = farmesh_range,
-									   //yaw = player->getYaw(),
-									   //pitch = player->getPitch(),
-									   camera_pos = camera->getPosition(),
-									   camera_offset = camera->getOffset(),
-									   speed = player->getSpeed().getLength()]() {
+											   //yaw = player->getYaw(),
+											   //pitch = player->getPitch(),
+											   camera_pos = camera->getPosition(),
+											   camera_offset = camera->getOffset(),
+											   speed = player->getSpeed().getLength()]() {
 				complete = client->farmesh->update(camera_pos,
 						//camera->getDirection(), camera->getFovMax(), camera->getCameraMode(), pitch, yaw,
 						camera_offset,
