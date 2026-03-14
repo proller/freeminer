@@ -20,7 +20,7 @@ thread_local MapBlockPtr block_cache{};
 thread_local std::pair<block_step_t, v3bpos_t> block_cache_p;
 }
 
-const MapNode &FarContainer::getNodeRefUnsafe(const v3pos_t &pos)
+std::pair<const MapNode &, bool> FarContainer::getNodeRefAndStop(const v3pos_t &pos)
 {
 	const auto block_pos = getNodeBlockPos(pos);
 	auto &client_map = m_client->getEnv().getClientMap();
@@ -103,15 +103,16 @@ const MapNode &FarContainer::getNodeRefUnsafe(const v3pos_t &pos)
 				const auto &n = block->getNodeNoLock(relpos_shifted);
 				if (n.getContent() != CONTENT_IGNORE) {
 					// Dangerous, returning ref to not locked block
-					return n;
+					return {n, false};
 				}
 			}
 		}
 	}
 
 	if (const auto &v = m_mg->visible_content(pos, use_weather); v.getContent()) {
-		return v;
+		const auto stop = m_mg->surface_2d() && v.getContent() != CONTENT_AIR;
+		return {v, stop};
 	}
 
-	return m_mg->visible_transparent;
+	return {m_mg->visible_transparent, false};
 };

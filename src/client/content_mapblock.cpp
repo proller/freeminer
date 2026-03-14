@@ -1847,11 +1847,19 @@ void MapblockMeshGenerator::generate()
 	const auto lstep = 1 << data->lod_step;
 	const auto fstep = 1 << data->far_step;
 	for (cur_node.pf.Z = cur_node.pr.Z = 0; cur_node.pr.Z < data->side_length_data; cur_node.pr.Z+=lstep, cur_node.pf.Z+=fstep)
-	for (cur_node.pf.Y = cur_node.pr.Y = 0; cur_node.pr.Y < data->side_length_data; cur_node.pr.Y+=lstep, cur_node.pf.Y+=fstep)
-	for (cur_node.pf.X = cur_node.pr.X = 0; cur_node.pr.X < data->side_length_data; cur_node.pr.X+=lstep, cur_node.pf.X+=fstep) {
-		cur_node.p = (data->far_step ? cur_node.pf : cur_node.pr);
-		cur_node.n = data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p);
-		cur_node.f = &nodedef->get(cur_node.n);
-		drawNode();
-	}
+		for (cur_node.pf.X = cur_node.pr.X = 0; cur_node.pr.X < data->side_length_data; cur_node.pr.X += lstep, cur_node.pf.X += fstep) {
+            uint16_t prev_stops = 0;
+			for (cur_node.pf.Y = cur_node.pr.Y = 0; cur_node.pr.Y < data->side_length_data; cur_node.pr.Y += lstep, cur_node.pf.Y += fstep) {
+				cur_node.p = (data->far_step ? cur_node.pf : cur_node.pr);
+				const auto [n, stop] =
+						data->m_vmanip.getNodeRefAndStop(blockpos_nodes + cur_node.p);
+				if (!stop and prev_stops >= 2) {
+					break;
+				}
+				prev_stops += stop;
+				cur_node.n = n;
+				cur_node.f = &nodedef->get(cur_node.n);
+				drawNode();
+			}
+		}
 }
