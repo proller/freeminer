@@ -718,17 +718,65 @@ void Server::SendBlockFm(session_t peer_id, MapBlockPtr block, u8 ver,
 	Send(&pkt);
 }
 
+void Server::SendBlocksFm(session_t peer_id, std::vector<MapBlockPtr> blocks, u8 ver,
+		u16 net_proto_version, SerializedBlockCache *cache)
+{
+	thread_local const int net_compression_level =
+			rangelim(g_settings->getS16("map_compression_level_net"), -1, 9);
+
+	g_profiler->add("Connection: blocks sent", 1);
+
+	MSGPACK_PACKET_INIT((int)TOCLIENT_BLOCKDATA_FM, 2);
+	PACK(TOCLIENT_BLOCKDATA_BLOCKS, blocks.size());
+	msgpack::sbuffer buffer_blocks;
+	msgpack::packer<msgpack::sbuffer> pk_blocks(&buffer_blocks);
+	pk_blocks.pack_array(blocks.size());
+
+	for (const auto &block : blocks) {
+		pk_blocks.pack_map(8);
+		PACK_PK(pk_blocks, TOCLIENT_BLOCKDATA_POS, block->getPos());
+		std::ostringstream os(std::ios_base::binary);
+		block->serialize(os, ver, false, net_compression_level);
+		block->serializeNetworkSpecific(os);
+
+		PACK_PK(pk_blocks, TOCLIENT_BLOCKDATA_DATA, os.str());
+		PACK_PK(pk_blocks, TOCLIENT_BLOCKDATA_HEAT,
+				(weather::heat_t)(block->heat + block->heat_add));
+		PACK_PK(pk_blocks, TOCLIENT_BLOCKDATA_HUMIDITY,
+				(weather::humidity_t)(block->humidity + block->humidity_add));
+		PACK_PK(pk_blocks, TOCLIENT_BLOCKDATA_STEP, block->far_step);
+		PACK_PK(pk_blocks, TOCLIENT_BLOCKDATA_CONTENT_ONLY,
+				block->m_is_mono_block ? block->data[0].param0 : CONTENT_IGNORE);
+		PACK_PK(pk_blocks, TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM1, block->data[0].param1);
+		PACK_PK(pk_blocks, TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM2, block->data[0].param2);
+	}
+
+	PACK(TOCLIENT_BLOCKDATA_BLOCKS_DATA,
+			std::string(buffer_blocks.data(), buffer_blocks.size()));
+
+	NetworkPacket pkt(TOCLIENT_BLOCKDATAS_FM, buffer.size(), peer_id);
+	pkt.putLongString({buffer.data(), buffer.size()});
+	Send(&pkt);
+}
+
 uint32_t Server::SendFarBlocks(float dtime)
 {
 	int32_t uptime = m_uptime_counter->get();
 	ScopeProfiler sp(g_profiler, "Server: Far blocks send");
+	std::vector<RemoteClientPtr> clients;
+	{
+		const auto lock = m_clients.getClientList().lock_shared_rec();
+		clients.reserve(m_clients.getClientList().size());
+		for (const auto &client : m_clients.getClientList()) {
+			if (!client.second)
+				continue;
+			clients.emplace_back(client.second);
+		}
+	}
 	uint32_t sent{};
-	const auto lock = m_clients.getClientList().lock_shared_rec();
-	for (const auto &client : m_clients.getClientList()) {
-		const auto c = client.second;
-		if (!c)
-			continue;
-		sent += c->SendFarBlocks(uptime);
+	for (const auto &client : clients) {
+		const auto c = client;
+		sent += client->SendFarBlocks(uptime);
 	}
 	return sent;
 }

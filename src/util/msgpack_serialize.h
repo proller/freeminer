@@ -35,6 +35,12 @@ using packet_field_t = uint8_t;
 		pk.pack(y);                                                                      \
 	}
 
+#define PACK_PK(pk, x, y)                                                                \
+	{                                                                                    \
+		pk.pack((packet_field_t)x);                                                      \
+		pk.pack(y);                                                                      \
+	}
+
 #define PACK_ZIP(x, y)                                                                   \
 	{                                                                                    \
 		msgpack::sbuffer buffer_zip;                                                     \

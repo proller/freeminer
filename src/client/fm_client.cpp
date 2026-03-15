@@ -180,7 +180,8 @@ void Client::MakeEmerge(const Settings &settings, const MapgenType &mgtype)
 
 void Client::createFarMesh(MapBlockPtr &block)
 {
-	if (bool cmp = false; block->creating_far_mesh.compare_exchange_weak(cmp, true)) {
+	//if (bool cmp = false; block->creating_far_mesh.compare_exchange_weak(cmp, true))
+	if (1) {
 		g_profiler->add("Client: Farmesh mesh", 1);
 		block->far_make_mesh_timestamp = -1;
 		block->far_status = MapBlock::far_status_e::s5_mesh_start;
@@ -209,9 +210,57 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 		return;
 	}
 	auto &packet = *(pkt->packet);
+	processSingleBlockData(packet);
+}
+
+void Client::handleCommand_BlockDatasFm(NetworkPacket *pkt)
+{
+	if (!pkt->packet_unpack()) {
+		return;
+	}
+
+	auto &packet = pkt->packet;
+
+	// Check if this is an array of blocks packet
+	size_t blocks_count = 0;
+	if (packet->contains(TOCLIENT_BLOCKDATA_BLOCKS)) {
+		(*packet)[TOCLIENT_BLOCKDATA_BLOCKS].convert(blocks_count);
+	}
+	if (blocks_count > 0 && packet->contains(TOCLIENT_BLOCKDATA_BLOCKS_DATA)) {
+		// Handle array of blocks
+		std::string blocks_data;
+		(*packet)[TOCLIENT_BLOCKDATA_BLOCKS_DATA].convert(blocks_data);
+
+		// Unpack the array of blocks
+		msgpack::unpacked unpacked;
+		msgpack::unpack(unpacked, blocks_data.data(), blocks_data.size());
+		msgpack::object obj = unpacked.get();
+
+		if (obj.type == msgpack::type::ARRAY) {
+			auto blocks_array = obj.as<std::vector<msgpack::object>>();
+
+			for (const auto &block_obj : blocks_array) {
+				if (block_obj.type == msgpack::type::MAP) {
+					MsgpackPacket block_packet = block_obj.as<MsgpackPacket>();
+					MsgpackPacketSafe block_packet_safe;
+					block_packet_safe.insert(block_packet.begin(), block_packet.end());
+
+					// Process each block in the array
+					processSingleBlockData(block_packet_safe);
+				}
+			}
+		}
+	} else {
+		// Handle single block (legacy compatibility)
+		processSingleBlockData(*packet);
+	}
+}
+
+void Client::processSingleBlockData(MsgpackPacketSafe &packet)
+{
 	v3bpos_t bpos = packet[TOCLIENT_BLOCKDATA_POS].as<v3bpos_t>();
 	block_step_t step = 0;
-	packet[TOCLIENT_BLOCKDATA_STEP].convert(step);
+	packet.convert_safe(TOCLIENT_BLOCKDATA_STEP, step);
 	std::istringstream istr(
 			packet[TOCLIENT_BLOCKDATA_DATA].as<std::string>(), std::ios_base::binary);
 
@@ -256,7 +305,7 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 			} catch (const std::exception &ex) {
 				errorstream << "fm block deSerialize fail " << bpos << " "
 							<< block->far_step << " : " << ex.what() << " : "
-							<< pkt->getSize() << " " << packet.size()
+							<< packet.size()
 							<< " v=" << (short)m_server_ser_ver << "\n";
 #if !NDEBUG
 				errorstream << "bad data " << istr.str().size() << " : " << istr.str()
@@ -277,72 +326,73 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 		block->humidity = humidity;
 	}
 
-	if (m_localdb && !is_simple_singleplayer_game) {
-		if (const auto db = GetFarDatabase({}, far_dbases, m_world_path, step); db) {
-			ServerMap::saveBlock(block.get(), db);
+	mesh_thread_pool.enqueue([this, block, bpos, step]() {
+		if (m_localdb && !is_simple_singleplayer_game) {
+			if (const auto db = GetFarDatabase({}, far_dbases, m_world_path, step); db) {
+				ServerMap::saveBlock(block.get(), db);
 
-			if (!step && !far_container.have_params) {
-				merger->add_changed(bpos);
-			}
-		}
-	}
-
-	if (!step) {
-		updateMeshTimestampWithEdge(bpos);
-		if (!overload && block->m_is_mono_block && block->data[0].param0 != CONTENT_AIR) {
-			if (getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS))
-							.getDistanceFrom(bpos) <= 1)
-				addUpdateMeshTaskWithEdge(bpos);
-		}
-	} else {
-		static thread_local const auto settings_farmesh_server =
-				g_settings->getU16("farmesh_server");
-		static thread_local const auto settings_farmesh = g_settings->getU16("farmesh");
-		if (!settings_farmesh_server || !settings_farmesh || !farmesh) {
-			return;
-		}
-
-		block->far_make_mesh_timestamp = m_uptime + 1 + step / 4;
-		block->far_status = MapBlock::far_status_e::s3_recieved;
-
-		++m_new_farmeshes;
-
-		//todo: step ordered thread pool
-		[this, block, step]() mutable {
-			auto &client_map = getEnv().getClientMap();
-			const auto &control = client_map.getControl();
-			auto blockpos = block->getPos();
-			const auto blockpos_original = blockpos;
-			const auto step_original = step;
-
-			const auto tree_result = farmesh::getFarParams(control,
-					getNodeBlockPos(client_map.far_blocks_last_cam_pos), blockpos);
-			if (!tree_result)
-				return;
-			auto &far_blocks = client_map.m_far_blocks;
-			bool other_draw_block = false;
-			if (tree_result->pos != blockpos || tree_result->step != step) {
-				other_draw_block = true;
-				step = tree_result->step;
-				blockpos = tree_result->pos;
-				const auto lock = far_blocks.lock_unique_rec();
-				if (const auto &it = far_blocks.find(blockpos);
-						it != far_blocks.end() && it->second->far_step == step) {
-					block = it->second;
-					block->far_make_mesh_timestamp = m_uptime + 1 + step / 4;
-					block->far_status = MapBlock::far_status_e::s3_recieved;
-
-					// TODO: throttle ~1s to wait nearby block datas
-				} else {
-					return;
+				if (!step && !far_container.have_params) {
+					merger->add_changed(bpos);
 				}
 			}
-			farmesh->enqueueFarMeshForBlock(
-					blockpos, step, block, m_uptime, other_draw_block);
+		}
 
-			if (other_draw_block) {
+		if (!step) {
+			updateMeshTimestampWithEdge(bpos);
+			if (!overload && block->m_is_mono_block &&
+					block->data[0].param0 != CONTENT_AIR) {
+				if (getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS))
+								.getDistanceFrom(bpos) <= 1)
+					addUpdateMeshTaskWithEdge(bpos);
+			}
+		} else {
+			static thread_local const auto settings_farmesh_server =
+					g_settings->getU16("farmesh_server");
+			static thread_local const auto settings_farmesh =
+					g_settings->getU16("farmesh");
+			if (!settings_farmesh_server || !settings_farmesh || !farmesh) {
 				return;
 			}
+
+			block->far_make_mesh_timestamp = m_uptime + 1 + step / 4;
+			block->far_status = MapBlock::far_status_e::s3_recieved;
+
+			++m_new_farmeshes;
+
+			[this, block, step]() mutable {
+				auto &client_map = getEnv().getClientMap();
+				const auto &control = client_map.getControl();
+				auto blockpos = block->getPos();
+				//const auto blockpos_original = blockpos;
+				//const auto step_original = step;
+
+				const auto tree_result = farmesh::getFarParams(control,
+						getNodeBlockPos(client_map.far_blocks_last_cam_pos), blockpos);
+				if (!tree_result)
+					return;
+				auto &far_blocks = client_map.m_far_blocks;
+				bool other_draw_block = false;
+				if (tree_result->pos != blockpos || tree_result->step != step) {
+					other_draw_block = true;
+					step = tree_result->step;
+					blockpos = tree_result->pos;
+					const auto lock = far_blocks.lock_unique_rec();
+					if (const auto &it = far_blocks.find(blockpos);
+							it != far_blocks.end() && it->second->far_step == step) {
+						block = it->second;
+						block->far_make_mesh_timestamp = m_uptime + 1 + step / 4;
+						block->far_status = MapBlock::far_status_e::s3_recieved;
+
+					} else {
+						return;
+					}
+				}
+				farmesh->enqueueFarMeshForBlock(
+						blockpos, step, block, m_uptime, other_draw_block);
+
+				if (other_draw_block) {
+					return;
+				}
 
 			if (0) {
 				const auto lock = far_blocks.lock_unique_rec();
@@ -353,10 +403,9 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 					block->far_iteration =
 							it->second->far_iteration.load(std::memory_order::relaxed);
 
-					far_blocks.at(blockpos) = block;
-				}
-			}
-		}();
+			}();
+		}
+	});
 
 // if decide to generate empty areas on server:
 #if 0
@@ -404,7 +453,6 @@ void Client::handleCommand_BlockDataFm(NetworkPacket *pkt)
 				++m_client->m_new_meshes;
 			}
 #endif
-	}
 }
 
 void Client::sendDrawControl()

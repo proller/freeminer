@@ -133,6 +133,8 @@ public:
 
 	void handleCommand_FreeminerInit(NetworkPacket *pkt);
 	void handleCommand_BlockDataFm(NetworkPacket *pkt);
+	void handleCommand_BlockDatasFm(NetworkPacket *pkt);
+	void processSingleBlockData(MsgpackPacketSafe &packet);
 	void sendInitFm();
 	void sendDrawControl();
 	void sendGetBlocks();

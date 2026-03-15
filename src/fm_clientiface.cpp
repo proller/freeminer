@@ -681,12 +681,22 @@ uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 		}
 
 		// First with larger iteration and smaller step
-
+		std::vector<MapBlockPtr> blocks;
+		const auto send = [&]() {
+			if (!blocks.empty()) {
+				m_env->m_server->SendBlocksFm(
+						peer_id, blocks, serialization_version, net_proto_version);
+			}
+		};
 		for (auto it = ordered.rbegin(); it != ordered.rend(); ++it) {
 			//	for (const auto &[key, block] : std::views::reverse(ordered)) {
-			m_env->m_server->SendBlockFm(
-					peer_id, it->second, serialization_version, net_proto_version);
+			blocks.emplace_back(it->second);
+			if (blocks.size() >= 100) {
+				send();
+				blocks.clear();
+			}
 		}
+		send();
 	}
 
 	return sent_cnt;
