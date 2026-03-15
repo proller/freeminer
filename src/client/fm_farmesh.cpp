@@ -175,7 +175,6 @@ void FarMesh::makeFarBlocks(const v3bpos_t &blockpos, const block_step_t step)
 			return;
 		const v3bpos_t &bpos = tree_result->pos;
 		makeFarBlock(bpos, block_step_correct, low_priority++);
-		break;
 	}
 }
 
