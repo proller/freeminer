@@ -15,8 +15,8 @@ public:
 	bool use_weather{true};
 	bool have_params{};
 	FarContainer(Client *client);
-	std::pair<const MapNode &, bool> getNodeRefAndStop(const v3pos_t &p) override;
-	const MapNode &getNodeRefUnsafe(const v3pos_t &p) override
+	std::pair<const MapNode, bool> getNodeRefAndStop(const v3pos_t &p) override;
+	const MapNode getNodeRefUnsafe(const v3pos_t &p) override
 	{
 		return getNodeRefAndStop(p).first;
 	};

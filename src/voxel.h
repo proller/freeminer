@@ -416,12 +416,12 @@ public:
 	}
 	// Stuff explodes if non-emerged area is touched with this.
 	// Emerge first, and check VOXELFLAG_NO_DATA if appropriate.
-	MapNode & getNodeRefUnsafe(const v3pos_t &p)
+	const MapNode getNodeRefUnsafe(const v3pos_t &p)
 	{
 		return m_data[m_area.index(p)];
 	}
 
-	const MapNode & getNodeRefUnsafeCheckFlags(const v3pos_t &p)
+	const MapNode getNodeRefUnsafeCheckFlags(const v3pos_t &p)
 	{
 		s32 index = m_area.index(p);
 
@@ -519,7 +519,7 @@ public:
 
 	//freeminer:
 	// for Map compatibility:
-	const MapNode & getNodeTry(const v3pos_t &p) {
+	const MapNode getNodeTry(const v3pos_t &p) {
 		if (m_area.contains(p))
 			return getNodeRefUnsafe(p);
 		return ContentIgnoreNode;

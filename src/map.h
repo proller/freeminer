@@ -339,7 +339,7 @@ public:
 	{
 		return getNodeTry(p);
 	};
-	inline MapNode &getNodeRefUnsafe(const v3pos_t &p) override { return getNodeRef(p); }
+	inline const MapNode getNodeRefUnsafe(const v3pos_t &p) override { return getNodeRef(p); }
 
 	// bool isBlockOccluded(const v3pos_t &pos, const v3pos_t &cam_pos_nodes);
 

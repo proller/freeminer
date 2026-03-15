@@ -196,12 +196,12 @@ std::optional<tree_result_t> find(
 		if (depth) {
 			return {};
 		} else {
-			return make_result_no_shift(child);
+			return make_result(child);
 		}
 	}
 
 	if (child.size <= (1 << (param.cell_size_pow))) {
-		return make_result_no_shift(child);
+		return make_result(child);
 	}
 
 	const tpos_t childSize = child.size >> 1;

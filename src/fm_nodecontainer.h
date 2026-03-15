@@ -30,8 +30,8 @@ class NodeContainer
 {
 public:
 	//	virtual const MapNode &getNodeRefUnsafeCheckFlags(const v3pos_t &p) = 0;
-	virtual const MapNode &getNodeRefUnsafe(const v3pos_t &p) = 0;
-	virtual std::pair<const MapNode &, bool> getNodeRefAndStop(const v3pos_t &p)
+	virtual const MapNode getNodeRefUnsafe(const v3pos_t &p) = 0;
+	virtual std::pair<const MapNode , bool> getNodeRefAndStop(const v3pos_t &p)
 	{
 		return {getNodeRefUnsafe(p), false};
 	};
@@ -41,7 +41,7 @@ public:
 		return getNodeRefAndStop(p).first;
 	};
 	virtual MapNode getNodeNoEx(const v3pos_t &p) { return getNodeRefAndStop(p).first; };
-	virtual const MapNode &getNodeRefUnsafeCheckFlags(const v3pos_t &p)
+	virtual const MapNode getNodeRefUnsafeCheckFlags(const v3pos_t &p)
 	{
 		return getNodeRefAndStop(p).first;
 	};

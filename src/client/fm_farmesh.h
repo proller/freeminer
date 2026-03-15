@@ -65,6 +65,7 @@ public:
 	void enqueueFarMeshForBlock(const v3bpos_t &blockpos, const block_step_t step,
 			const MapBlockPtr &block, const double timestamp,
 			const bool low_priority = false);
+	void stop() { farmesh_thread_stop = true; }
 
 	bool game_update_complete{};
 

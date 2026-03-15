@@ -20,7 +20,7 @@ thread_local MapBlockPtr block_cache{};
 thread_local std::pair<block_step_t, v3bpos_t> block_cache_p;
 }
 
-std::pair<const MapNode &, bool> FarContainer::getNodeRefAndStop(const v3pos_t &pos)
+std::pair<const MapNode, bool> FarContainer::getNodeRefAndStop(const v3pos_t &pos)
 {
 	const auto block_pos = getNodeBlockPos(pos);
 	auto &client_map = m_client->getEnv().getClientMap();
@@ -99,8 +99,7 @@ std::pair<const MapNode &, bool> FarContainer::getNodeRefAndStop(const v3pos_t &
 							std::min(MAP_BLOCKSIZE - 1, relpos.Y >> relpos_shift)),
 					static_cast<pos_t>(
 							std::min(MAP_BLOCKSIZE - 1, relpos.Z >> relpos_shift))};
-			{
-				const auto &n = block->getNodeNoLock(relpos_shifted);
+				const auto n = block->getNodeNoLock(relpos_shifted);
 				if (n.getContent() != CONTENT_IGNORE) {
 					// Dangerous, returning ref to not locked block
 					return {n, false};
