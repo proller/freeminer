@@ -99,6 +99,7 @@ std::pair<const MapNode, bool> FarContainer::getNodeRefAndStop(const v3pos_t &po
 							std::min(MAP_BLOCKSIZE - 1, relpos.Y >> relpos_shift)),
 					static_cast<pos_t>(
 							std::min(MAP_BLOCKSIZE - 1, relpos.Z >> relpos_shift))};
+			{
 				const auto n = block->getNodeNoLock(relpos_shifted);
 				if (n.getContent() != CONTENT_IGNORE) {
 					// Dangerous, returning ref to not locked block
