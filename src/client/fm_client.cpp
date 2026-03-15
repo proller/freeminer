@@ -49,7 +49,7 @@ void Client::sendInitFm()
 {
 	MSGPACK_PACKET_INIT((int)TOSERVER_INIT_FM, 1);
 
-	PACK(TOSERVER_INIT_FM_VERSION, 1);
+	PACK(TOSERVER_INIT_FM_VERSION, CLIENT_PROTOCOL_VERSION_FM);
 
 	NetworkPacket pkt(TOSERVER_INIT_FM, buffer.size());
 	pkt.putLongString({buffer.data(), buffer.size()});
@@ -305,8 +305,7 @@ void Client::processSingleBlockData(MsgpackPacketSafe &packet)
 			} catch (const std::exception &ex) {
 				errorstream << "fm block deSerialize fail " << bpos << " "
 							<< block->far_step << " : " << ex.what() << " : "
-							<< packet.size()
-							<< " v=" << (short)m_server_ser_ver << "\n";
+							<< packet.size() << " v=" << (short)m_server_ser_ver << "\n";
 #if !NDEBUG
 				errorstream << "bad data " << istr.str().size() << " : " << istr.str()
 							<< "\n";
@@ -394,15 +393,19 @@ void Client::processSingleBlockData(MsgpackPacketSafe &packet)
 					return;
 				}
 
-			if (0) {
-				const auto lock = far_blocks.lock_unique_rec();
-				if (const auto &it = far_blocks.find(blockpos); it != far_blocks.end()) {
-					if (it->second->far_step != block->far_step) {
-						return;
-					}
-					block->far_iteration =
-							it->second->far_iteration.load(std::memory_order::relaxed);
+				if (0) {
+					const auto lock = far_blocks.lock_unique_rec();
+					if (const auto &it = far_blocks.find(blockpos);
+							it != far_blocks.end()) {
+						if (it->second->far_step != block->far_step) {
+							return;
+						}
+						block->far_iteration = it->second->far_iteration.load(
+								std::memory_order::relaxed);
 
+						far_blocks.at(blockpos) = block;
+					}
+				}
 			}();
 		}
 	});

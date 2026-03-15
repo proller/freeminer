@@ -134,7 +134,7 @@ const ClientCommandFactory clientCommandFactoryTable[TOCLIENT_NUM_MSG_TYPES] =
 	null_command_factory, // 0x10
 	null_command_factory, // 0x11
 	{ "TOCLIENT_BLOCKDATA_FM",                2, true }, // 0x12
-	null_command_factory, // 0x13
+	{ "TOCLIENT_BLOCKDATAS_FM",               2, true }, // 0x13
 	null_command_factory, // 0x14
 	null_command_factory, // 0x15
 	null_command_factory, // 0x16

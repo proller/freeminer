@@ -690,10 +690,15 @@ uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 		};
 		for (auto it = ordered.rbegin(); it != ordered.rend(); ++it) {
 			//	for (const auto &[key, block] : std::views::reverse(ordered)) {
-			blocks.emplace_back(it->second);
-			if (blocks.size() >= 100) {
-				send();
-				blocks.clear();
+			if (net_proto_version_fm < 3) {
+				m_env->m_server->SendBlockFm(
+						peer_id, it->second, serialization_version, net_proto_version);
+			} else {
+				blocks.emplace_back(it->second);
+				if (blocks.size() >= 100) {
+					send();
+					blocks.clear();
+				}
 			}
 		}
 		send();

@@ -7,7 +7,7 @@
 #include "../msgpack_fix.h"
 #include "../config.h"
 
-#define CLIENT_PROTOCOL_VERSION_FM 2
+#define CLIENT_PROTOCOL_VERSION_FM 3
 #define SERVER_PROTOCOL_VERSION_FM 0
 
 enum
