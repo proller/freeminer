@@ -136,8 +136,7 @@ bool FarMesh::makeFarBlock(
 		const auto size = 1 << (step + draw_control.cell_size_pow);
 		return enqueueFarMeshForBlock(
 				blockpos_actual, step, block, m_client->m_uptime, low_priority);
-	} else if (m_client->m_uptime >= block->far_make_mesh_timestamp > 0 &&
-			   block->far_make_mesh_timestamp != -1) {
+	} else if (m_client->m_uptime >= block->far_make_mesh_timestamp) {
 		collect_reset_timestamp =
 				std::min(collect_reset_timestamp, block->far_make_mesh_timestamp);
 	} else {
@@ -145,7 +144,7 @@ bool FarMesh::makeFarBlock(
 	return false;
 }
 
-void FarMesh::makeFarBlocks(const v3bpos_t &blockpos, const block_step_t step)
+size_t FarMesh::makeFarBlocks(const v3bpos_t &blockpos, const block_step_t step)
 {
 	const auto &control = *m_control;
 #if FARMESH_DEBUG || FARMESH_FAST
@@ -153,11 +152,11 @@ void FarMesh::makeFarBlocks(const v3bpos_t &blockpos, const block_step_t step)
 		const auto tree_result = farmesh::getFarParams(
 				control, getNodeBlockPos(m_camera_pos_aligned), blockpos);
 		if (!tree_result) {
-			return;
+			return 0;
 		}
 		const auto &block_step_correct = tree_result->step;
 		if (!block_step_correct)
-			return;
+			return 0;
 		const v3bpos_t &bpos = tree_result->pos;
 		return makeFarBlock(bpos, block_step_correct /*, {}, bpos*/);
 	}
@@ -180,6 +179,7 @@ void FarMesh::makeFarBlocks(const v3bpos_t &blockpos, const block_step_t step)
 	const auto &use_dirs = pnear;
 	const auto step_width = 1 << (step - 1 + control.cell_size_pow);
 	int low_priority = 0;
+	size_t res = 0;
 	for (const auto &dir : use_dirs) {
 		const auto bpos_dir = blockpos + dir * step_width;
 		const auto tree_result = farmesh::getFarParams(
@@ -188,11 +188,13 @@ void FarMesh::makeFarBlocks(const v3bpos_t &blockpos, const block_step_t step)
 			continue;
 		}
 		const auto &block_step_correct = tree_result->step;
-		if (!block_step_correct)
-			return;
+		if (!block_step_correct) {
+			continue;
+		}
 		const v3bpos_t &bpos = tree_result->pos;
-		makeFarBlock(bpos, block_step_correct, low_priority++);
+		res += makeFarBlock(bpos, block_step_correct, low_priority++);
 	}
+	return res;
 }
 
 #if 0
@@ -553,6 +555,7 @@ int FarMesh::go_direction(const size_t dir_n)
 	const auto &far_cam_pos_grid = m_client->getEnv().getClientMap().far_cam_pos_grid;
 	const auto camera_pos = intToFloat(far_cam_pos_grid, BS);
 	int processed = 0;
+	size_t blocks_enqueued = 0;
 	for (uint16_t i = 0; i < grid_size_xy; ++i) {
 		auto &ray_cache = cache[i];
 		if (ray_cache.finished > last_distance_max) {
@@ -683,7 +686,7 @@ int FarMesh::go_direction(const size_t dir_n)
 				} //else
 #endif
 				if (block_step_prev && depth >= draw_control.wanted_range) {
-					makeFarBlocks(block_pos_unaligned, block_step_prev);
+					blocks_enqueued += makeFarBlocks(block_pos_unaligned, block_step_prev);
 					ray_cache.finished = -1;
 					break;
 				}

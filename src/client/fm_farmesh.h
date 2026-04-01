@@ -60,7 +60,7 @@ public:
 			int render_range, float speed);
 	bool makeFarBlock(
 			const v3bpos_t &blockpos, block_step_t step, const bool low_priority = false);
-	void makeFarBlocks(const v3bpos_t &blockpos, block_step_t step);
+	size_t makeFarBlocks(const v3bpos_t &blockpos, block_step_t step);
 
 	bool enqueueFarMeshForBlock(const v3bpos_t &blockpos, const block_step_t step,
 			const MapBlockPtr &block, const double timestamp,
