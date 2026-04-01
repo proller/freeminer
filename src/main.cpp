@@ -255,7 +255,7 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 
 	PIDFileHandler pid_handler(cmd_args);
 	if (cmd_args.exists("pid") && !pid_handler.isCreated()) {
-        return 1;
+		resolve(1); return;
 	}
 
 	// parse settings from cmdline. must be after loading settings. maybe better to move
