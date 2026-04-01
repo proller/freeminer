@@ -137,6 +137,7 @@ bool FarMesh::makeFarBlock(
 		return enqueueFarMeshForBlock(
 				blockpos_actual, step, block, m_client->m_uptime, low_priority);
 	} else if (m_client->m_uptime >= block->far_make_mesh_timestamp > 0 &&
+			   block->far_make_mesh_timestamp != -1) {
 		collect_reset_timestamp =
 				std::min(collect_reset_timestamp, block->far_make_mesh_timestamp);
 	} else {
