@@ -137,7 +137,8 @@ bool FarMesh::makeFarBlock(
 		return enqueueFarMeshForBlock(
 				blockpos_actual, step, block, m_client->m_uptime, low_priority);
 	} else if (m_client->m_uptime >= block->far_make_mesh_timestamp) {
-				block->far_status = MapBlock::far_status_e::s2_requested; // BUG! removeme, status should be always sync with far_make_mesh_timestamp
+		block->far_status = MapBlock::far_status_e::
+				s2_requested; // BUG! removeme, status should be always sync with far_make_mesh_timestamp
 		collect_reset_timestamp =
 				std::min(collect_reset_timestamp, block->far_make_mesh_timestamp);
 	} else {
@@ -687,7 +688,8 @@ int FarMesh::go_direction(const size_t dir_n)
 				} //else
 #endif
 				if (block_step_prev && depth >= draw_control.wanted_range) {
-					blocks_enqueued += makeFarBlocks(block_pos_unaligned, block_step_prev);
+					blocks_enqueued +=
+							makeFarBlocks(block_pos_unaligned, block_step_prev);
 					ray_cache.finished = -1;
 					break;
 				}
@@ -809,6 +811,12 @@ uint8_t FarMesh::update(v3opos_t camera_pos,
 			}
 		} else if (farmesh_ray) {
 			// Try find surface via raytrace
+			if (mesh_complete_set) {
+				if (last_distance_max < distance_max) {
+					plane_processed.fill({});
+					last_distance_max = distance_max; // * 1.1;
+				}
+			}
 
 			for (uint8_t i = 0; i < sizeof(g_6dirso) / sizeof(g_6dirso[0]); ++i) {
 #if FARMESH_DEBUG

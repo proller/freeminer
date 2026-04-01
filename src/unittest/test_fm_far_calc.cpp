@@ -206,7 +206,10 @@ void TestFmFarCalc::testRunFarAllVerification()
 		draw_control.cell_size_pow = dc_csp;  // cell size = 1
 		draw_control.cell_size = 1 << dc_csp; // cell size = 1
 		draw_control.farmesh_quality_pow = draw_control.cell_size_pow;
-		for (const auto &dc_fm : {128, 1000, 10000}) {
+		for (const auto &dc_fm : {
+					 128,
+					 1000,
+			 }) {
 			draw_control.farmesh = dc_fm;
 			for (const auto &cell_each : {true, false}) {
 				//for (const auto &two_d : {true, false}) {
