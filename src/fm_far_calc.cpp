@@ -35,24 +35,20 @@ block_step_t getLodStep(const MapDrawControl &draw_control,
 		const v3bpos_t &playerblockpos, const v3bpos_t &blockpos, const pos_t speedf)
 {
 	if (draw_control.lodmesh) {
-		int range = radius_box(playerblockpos, blockpos);
+		const auto range = radius_box(playerblockpos, blockpos);
 		/* todo: make stable, depend on speed increase/decrease
 		const auto speed_blocks = speedf / (BS * MAP_BLOCKSIZE);
 		if (range > 1 && speed_blocks > 1) {
 			range += speed_blocks;
 		}
 		*/
-
-		const auto cells = std::max<int>(draw_control.cell_size << 1,
-				draw_control.lodmesh >> draw_control.cell_size_pow);
-
-		for (int i = 8; i >= 1; --i) {
-			if (range >= cells + draw_control.lodmesh * (1 << (i - 1)))
+		const auto &cells = draw_control.cell_size_pow;
+		const auto max_lod = MAP_BLOCKP + draw_control.cell_size_pow;
+		for (int i = max_lod; i >= 1; --i) {
+			if (range >= (1 << cells) + (draw_control.lodmesh) * (1 << (i - 1))) {
 				return i;
+			}
 		}
-
-		if (range >= cells)
-			return 1;
 	}
 	return 0;
 };
