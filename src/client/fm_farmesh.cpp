@@ -137,6 +137,7 @@ bool FarMesh::makeFarBlock(
 		return enqueueFarMeshForBlock(
 				blockpos_actual, step, block, m_client->m_uptime, low_priority);
 	} else if (m_client->m_uptime >= block->far_make_mesh_timestamp) {
+				block->far_status = MapBlock::far_status_e::s2_requested; // BUG! removeme, status should be always sync with far_make_mesh_timestamp
 		collect_reset_timestamp =
 				std::min(collect_reset_timestamp, block->far_make_mesh_timestamp);
 	} else {
