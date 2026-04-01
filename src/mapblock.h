@@ -6,6 +6,8 @@
 
 #include "config.h"
 
+#include "threading/atomic.h"
+
 #include <atomic>
 #include <cstdint>
 #include <unordered_map>
@@ -495,8 +497,13 @@ public:
 
 protected:
 	friend class ClientMap;
-	std::array<std::atomic<MapBlock::mesh_type>, LODMESH_STEP_MAX + 1> m_lod_mesh;
-	std::array<std::atomic<MapBlock::mesh_type>, FARMESH_STEP_MAX + 1> m_far_mesh;
+#if USE_ATOMIC_SHARED_PTR
+	using atomic_shared_ptr = std::atomic<MapBlock::mesh_type>;
+#else	
+	using atomic_shared_ptr = atomic_fake<MapBlock::mesh_type>;
+#endif
+	std::array<atomic_shared_ptr, LODMESH_STEP_MAX + 1> m_lod_mesh;
+	std::array<atomic_shared_ptr, FARMESH_STEP_MAX + 1> m_far_mesh;
 	MapBlock::mesh_type delete_mesh;
 
 public:
