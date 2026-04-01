@@ -255,6 +255,8 @@ public:
 	void SetBlockDeleted(const v3bpos_t &p);
 	std::vector<std::unordered_map<v3bpos_t, std::pair<block_step_t, int32_t>>>
 			far_blocks_requested{FARMESH_STEP_MAX};
+	std::vector<std::unordered_map<v3bpos_t, std::pair<block_step_t, int32_t>>>
+			far_blocks_sent{FARMESH_STEP_MAX};
 	std::mutex far_blocks_requested_mutex;
 	int GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge, float dtime,
 			std::vector<PrioritySortedBlockTransfer> &dest, double m_uptime, u64 max_ms);

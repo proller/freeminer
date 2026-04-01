@@ -295,15 +295,20 @@ public:
 		MapBlockPtr block{};
 		int32_t far_last_used{};
 	};
-	std::array<concurrent_unordered_map<v3bpos_t, BlockUsed>, FARMESH_STEP_MAX> far_blocks_storage;
+	std::array<concurrent_unordered_map<v3bpos_t, BlockUsed>, FARMESH_STEP_MAX>
+			far_blocks_storage;
 	//double m_far_blocks_created = 0;
 	float far_blocks_sent_timer{1};
-	v3pos_t far_blocks_last_cam_pos;
 	std::vector<MapBlockPtr> m_far_blocks_delete_1, m_far_blocks_delete_2;
-	bool m_far_blocks_delete_current {};
+	bool m_far_blocks_delete_current{};
 
 	//static constexpr bool m_far_fast =			true; // show generated far farmesh stable(0) or instant(1)
-	uint32_t far_iteration_use{};
+	v3pos_t far_cam_pos_grid;
+	v3pos_t far_cam_pos_mesh;
+	v3pos_t far_cam_pos_draw;
+	uint32_t far_iteration_grid{};
+	uint32_t far_iteration_mesh{};
+	uint32_t far_iteration_draw{};
 	uint32_t far_iteration_clean{};
 	// MapBlock * getBlockNoCreateNoEx(v3pos_t & p);
 	MapBlockPtr createBlankBlockNoInsert(const v3bpos_t &p);

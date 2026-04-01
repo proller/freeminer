@@ -218,9 +218,7 @@ void MapBlock::setLodMesh(const MapBlock::mesh_type &rmesh)
 
 void MapBlock::setFarMesh(const MapBlock::mesh_type &rmesh, block_step_t step)
 {
-	if (auto mesh = std::move(m_far_mesh[step])) {
-		delete_mesh = std::move(mesh);
-	}
+	std::swap(m_far_mesh[step], delete_mesh);
 	m_far_mesh[step] = rmesh;
 }
 

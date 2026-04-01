@@ -40,6 +40,8 @@ struct MapDrawControl
 	bool enable_fog = g_settings->getBool("enable_fog");
 
 	void fm_init();
+	void registerSettingsCallbacks();
+	void onSettingChanged(const std::string &name);
 	MapDrawControl() { fm_init(); }
 	// == 
 

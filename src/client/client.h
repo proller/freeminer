@@ -141,6 +141,8 @@ public:
 	void updateMeshTimestampWithEdge(const v3bpos_t &blockpos);
 	void MakeEmerge(const Settings &settings, const MapgenType& mgtype);
 	void createFarMesh(MapBlockPtr &block);
+	void registerClientSettingsCallbacks();
+	void onSettingChanged(const std::string &name);
 
 	std::unique_ptr<Server> m_localserver;
 	std::string m_world_path;

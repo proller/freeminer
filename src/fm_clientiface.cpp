@@ -615,7 +615,7 @@ uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 		}
 
 		// TODO: why not have?
-		if (farmesh && have_farmesh_quality && farmesh_all_changed) {
+		if (farmesh && have_farmesh_quality && farmesh_all_changed && ordered.empty()) {
 			auto *player = m_env->getPlayer(peer_id);
 			if (!player)
 				return 0;
@@ -635,8 +635,8 @@ uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 			const auto &use_farmesh_all_changed =
 					std::min(setting_farmesh_all_changed, farmesh_all_changed);
 			farmesh::runFarAll(player_block_pos, cell_size_pow, farmesh,
-					farmesh::rangeToStep(farmesh_quality), false, true,
-					[this, &ordered, &player_block_pos, &use_farmesh_all_changed](
+					farmesh::rangeToStep(farmesh_quality), false, true, 0,
+					[this, &ordered, &player_block_pos, &use_farmesh_all_changed , &sent_cnt](
 							const v3bpos_t &bpos, const bpos_t &size,
 							const block_step_t &step) -> bool {
 						if (!size) {
@@ -649,14 +649,21 @@ uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 							return false;
 						}
 
-						//block_step_t step = rangeToStep(size);
-						if (far_blocks_requested.size() < step) {
-							far_blocks_requested.resize(step);
+						if (far_blocks_requested.size() >= step) {
+							if (far_blocks_requested[step].contains(bpos)) {
+								return false;
+							}
 						}
-						auto &[stepp, sent_ts] = far_blocks_requested[step][bpos];
-						if (sent_ts < 0) { // <=
+
+						if (far_blocks_sent.size() < step) {
+							far_blocks_sent.resize(step);
+						}
+
+						auto &[_, sent_ts] = far_blocks_sent[step][bpos];
+						if (sent_ts < 0) {
 							return false;
 						}
+
 						const auto dbase = GetFarDatabase(m_env->m_map->m_db.dbase,
 								m_env->m_server->far_dbases, m_env->m_map->m_savedir,
 								step);
@@ -675,6 +682,10 @@ uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 						//sent_ts = 0;
 						sent_ts = -1; //TODO
 						ordered.emplace(sent_ts - step, block);
+
+						if (++sent_cnt > send_max) {
+							return true;
+						}
 
 						return false;
 					});

@@ -952,7 +952,7 @@ void Hud::drawBlockBounds()
 			for (const auto &[blockPos, block] : far_blocks) {
 				if (!block)
 					continue;
-				if (block->far_iteration < client_map.far_iteration_use)
+				if (block->far_iteration < client_map.far_iteration_draw)
 					continue;
 				/*					
 				const auto mesh_step_ = getFarStep(
@@ -963,11 +963,11 @@ void Hud::drawBlockBounds()
 										.m_far_blocks_last_cam_pos),
 						blockPos);
 */
-				const auto &mesh_step = block->far_step;
+				const auto &mesh_step = block->far_step_draw;
 				int g = 0;
 
 				if (!farmesh::inFarGrid(client_map.getControl(),
-							getNodeBlockPos(client_map.far_blocks_last_cam_pos), blockPos,
+							getNodeBlockPos(client_map.far_cam_pos_draw), blockPos,
 							mesh_step, is_each_mode)) {
 					// DUMP("Not in grid", blockPos,  block->far_step, mesh_step, block->getTimestamp(), client->getEnv() .getClientMap() .m_far_blocks_last_cam_pos);
 					if (is_each_mode)

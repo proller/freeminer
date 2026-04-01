@@ -3,6 +3,7 @@
 // Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
 #include "fm_far_calc.h"
+#include "fm_farmesh.h"
 
 #include "clientmap.h"
 #include "client.h"
@@ -146,6 +147,48 @@ void MapDrawControl::fm_init()
 		lodmesh = 0;
 
 	fov_want = fov = g_settings->getFloat("fov");
+}
+
+void MapDrawControl::registerSettingsCallbacks()
+{
+	/*
+	g_settings->registerChangedCallback("farmesh", [](const std::string &name, void *data) {
+		static_cast<MapDrawControl*>(data)->onSettingChanged(name);
+	}, this);
+	
+	g_settings->registerChangedCallback("lodmesh", [](const std::string &name, void *data) {
+		static_cast<MapDrawControl*>(data)->onSettingChanged(name);
+	}, this);
+	
+	g_settings->registerChangedCallback("farmesh_quality", [](const std::string &name, void *data) {
+		static_cast<MapDrawControl*>(data)->onSettingChanged(name);
+	}, this);
+	
+	g_settings->registerChangedCallback("farmesh_stable", [](const std::string &name, void *data) {
+		static_cast<MapDrawControl*>(data)->onSettingChanged(name);
+	}, this);
+	
+	g_settings->registerChangedCallback("farmesh_all_changed", [](const std::string &name, void *data) {
+		static_cast<MapDrawControl*>(data)->onSettingChanged(name);
+	}, this);
+	*/
+
+}
+
+void MapDrawControl::onSettingChanged(const std::string &name)
+{
+	if (name == "farmesh")
+		farmesh = g_settings->getS32("farmesh");
+	if (name == "lodmesh")
+		lodmesh = g_settings->getS32("lodmesh");
+	if (name == "farmesh_quality") {
+		farmesh_quality = g_settings->getU16("farmesh_quality");
+		farmesh_quality_pow = farmesh::rangeToStep(farmesh_quality);
+	}
+	if (name == "farmesh_stable")
+		farmesh_stable = g_settings->getBool("farmesh_stable");
+	if (name == "farmesh_all_changed")
+		farmesh_all_changed = g_settings->getPos("farmesh_all_changed");
 }
 /*
 	ClientMap
@@ -460,8 +503,7 @@ void ClientMap::updateDrawList(float dtime, unsigned int max_cycle_ms)
 						m_control, getNodeBlockPos(cam_pos_nodes), block_coord, speedf);
 				auto mesh = block ? block->getLodMesh(mesh_step, true) : nullptr;
 				if (!mesh && block) {
-					int fmesh_step = farmesh::getFarStep(
-							m_control, getNodeBlockPos(far_blocks_last_cam_pos), block_coord);
+					if(const auto &fmesh_step = block->far_step_draw ?: block->far_step)
 					mesh = block->getFarMesh(fmesh_step);
 				}
 				if (!mesh)
@@ -598,8 +640,7 @@ void ClientMap::updateDrawList(float dtime, unsigned int max_cycle_ms)
 					farmesh::getLodStep(m_control, getNodeBlockPos(cam_pos_nodes), block_coord, speedf);
 			auto mesh = block ? block->getLodMesh(mesh_step, true) : nullptr;
 			if (!mesh && block) {
-				int fmesh_step = farmesh::getFarStep(
-						m_control, getNodeBlockPos(far_blocks_last_cam_pos), block_coord);
+				if(const auto &fmesh_step = block->far_step_draw ?: block->far_step)
 				mesh = block->getFarMesh(fmesh_step);
 			}
 			//if (!mesh)
@@ -1140,7 +1181,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 
 			{
 				blocks_skip_farmesh.emplace(farmesh::getFarActualBlockPos(
-						m_control, getNodeBlockPos(far_blocks_last_cam_pos), bp ));
+						m_control, getNodeBlockPos(far_cam_pos_draw), bp ));
 			}
 
 			if (mesh) {
@@ -1178,7 +1219,7 @@ void ClientMap::updateDrawListFm(float dtime, unsigned int max_cycle_ms)
 			if (far_iteration_clean && block->far_iteration < far_iteration_clean) {
 				m_far_blocks_delete.emplace_back(block);
 				it = m_far_blocks.erase(it);
-			} else if (block->far_iteration >= far_iteration_use) {
+			} else if (block->far_iteration >= far_iteration_draw) {
 				if (!blocks_skip_farmesh.contains(it->first)) {
 					drawlist.emplace(it->first, block);
 					++farblocks_drawn;
@@ -1479,12 +1520,10 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 		// If the mesh of the block happened to get deleted, ignore it
 
 		if (!block_mesh) {
-			int &fmesh_step = mesh_step;
-
-			fmesh_step = farmesh::getFarStep(
-					m_control, getNodeBlockPos(far_blocks_last_cam_pos), block->getPos());
-			block_mesh = block->getFarMesh(fmesh_step);
-			is_far = true;
+			if (const auto &fmesh_step = block->far_step_draw ?: block->far_step) {
+				block_mesh = block->getFarMesh(fmesh_step);
+				is_far = true;
+			}
 		}
 		
 		if (!block_mesh || block_mesh->isEmpty())
@@ -1919,7 +1958,7 @@ void ClientMap::renderMapShadows(video::IVideoDriver *driver,
 
 #if FARMESH_SHADOWS
 		if (!mapBlockMesh) {
-			mapBlockMesh = block->getFarMesh(getFarStep(m_control, getNodeBlockPos(far_blocks_last_cam_pos), block_pos ));
+			mapBlockMesh = block->getFarMesh(block->far_step_draw?:block->far_step);
 		}
 #endif
 
@@ -2091,7 +2130,7 @@ void ClientMap::updateDrawListShadow(v3opos_t shadow_light_pos, v3opos_t shadow_
 			const auto lock = m_far_blocks.lock_shared_rec();
 			for (const auto &[pos, block] : m_far_blocks) {
 				if (far_iteration_clean && block->far_iteration < far_iteration_clean) {
-				} else if (block->far_iteration >= far_iteration_use) {
+				} else if (block->far_iteration >= far_iteration_draw) {
 					if (blocks_skip_farmesh.contains(pos))
 						continue;
 
@@ -2135,7 +2174,7 @@ void ClientMap::updateTransparentMeshBuffers()
 
 #if FARMESH_SHADOWS
 		if (!blockmesh) {
-			blockmesh = block->getFarMesh(getFarStep(m_control, getNodeBlockPos(far_blocks_last_cam_pos), block->getPos()));
+			blockmesh = block->getFarMesh(block->far_step_draw?:block->far_step);
 		}
 #endif
 

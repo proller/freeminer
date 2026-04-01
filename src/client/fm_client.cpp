@@ -58,7 +58,6 @@ void Client::sendInitFm()
 
 void Client::sendGetBlocks()
 {
-
 	static thread_local const auto farmesh_server = g_settings->getU16("farmesh_server");
 	if (!farmesh_server)
 		return;
@@ -181,8 +180,10 @@ void Client::MakeEmerge(const Settings &settings, const MapgenType &mgtype)
 void Client::createFarMesh(MapBlockPtr &block)
 {
 	//if (bool cmp = false; block->creating_far_mesh.compare_exchange_weak(cmp, true))
+	block->creating_far_mesh = true;
 	if (1) {
 		g_profiler->add("Client: Farmesh mesh", 1);
+		TimeTaker timer("Client: Farmesh mesh [ms]");
 		block->far_make_mesh_timestamp = -1;
 		block->far_status = MapBlock::far_status_e::s5_mesh_start;
 
@@ -197,9 +198,11 @@ void Client::createFarMesh(MapBlockPtr &block)
 		mesh_make_data.m_blockpos = blockpos;
 		const auto mesh = std::make_shared<MapBlockMesh>(m_client, &mesh_make_data);
 		block->setFarMesh(mesh, step);
+		block->far_step_draw = block->far_step;
 		block->creating_far_mesh = false;
 		block->far_status = MapBlock::far_status_e::s6_mesh_complete;
 		++m_client->m_new_meshes;
+		g_profiler->avg("Client: Farmesh mesh [ms]", timer.stop(true));
 	}
 }
 
@@ -274,9 +277,9 @@ void Client::processSingleBlockData(MsgpackPacketSafe &packet)
 		}
 		if (!block) {
 			block = m_env.getMap().createBlankBlockNoInsert(bpos);
+			far_blocks_storage.insert_or_assign(
+					bpos, Map::BlockUsed{block, (int32_t)m_uptime});
 		}
-		far_blocks_storage.insert_or_assign(
-				bpos, Map::BlockUsed{block, (int32_t)m_uptime});
 	} else {
 		block = m_env.getMap().getBlock(bpos);
 		if (!block) {
@@ -353,46 +356,64 @@ void Client::processSingleBlockData(MsgpackPacketSafe &packet)
 				return;
 			}
 
-			block->far_make_mesh_timestamp = m_uptime + 1 + step / 4;
-			block->far_status = MapBlock::far_status_e::s3_recieved;
+			const auto block_status = [this](const MapBlockPtr &block, const auto &step) {
+				constexpr auto update_farmesh = true;
+				const auto far_make_mesh_timestamp = m_uptime + 1 + step / 4;
+				if (block->far_make_mesh_timestamp <= 0 ||
+						block->far_make_mesh_timestamp == -1 ||
+						(update_farmesh && block->far_make_mesh_timestamp <
+												   far_make_mesh_timestamp)) {
+					block->far_make_mesh_timestamp = far_make_mesh_timestamp;
+				}
+				block->far_status = MapBlock::far_status_e::s3_recieved;
+			};
+
+			block_status(block, step);
 
 			++m_new_farmeshes;
 
-			[this, block, step]() mutable {
+			{
 				auto &client_map = getEnv().getClientMap();
 				const auto &control = client_map.getControl();
 				auto blockpos = block->getPos();
 				//const auto blockpos_original = blockpos;
 				//const auto step_original = step;
 
-				const auto tree_result = farmesh::getFarParams(control,
-						getNodeBlockPos(client_map.far_blocks_last_cam_pos), blockpos);
+				const auto tree_result = farmesh::getFarParams(
+						control, getNodeBlockPos(client_map.far_cam_pos_mesh), blockpos);
 				if (!tree_result)
 					return;
 				auto &far_blocks = client_map.m_far_blocks;
 				bool other_draw_block = false;
 				if (tree_result->pos != blockpos || tree_result->step != step) {
 					other_draw_block = true;
-					step = tree_result->step;
+					auto &step = tree_result->step;
 					blockpos = tree_result->pos;
 					const auto lock = far_blocks.lock_unique_rec();
 					if (const auto &it = far_blocks.find(blockpos);
 							it != far_blocks.end() && it->second->far_step == step) {
-						block = it->second;
-						block->far_make_mesh_timestamp = m_uptime + 1 + step / 4;
+						auto &block = it->second;
+						block_status(block, step);
+						/*
+						if (block->far_make_mesh_timestamp <= 0 ||
+								(update_farmesh && block->far_make_mesh_timestamp <
+														   far_make_mesh_timestamp)) {
+							block->far_make_mesh_timestamp = far_make_mesh_timestamp;
+						}
 						block->far_status = MapBlock::far_status_e::s3_recieved;
-
+*/
 					} else {
 						return;
 					}
 				}
-				farmesh->enqueueFarMeshForBlock(
-						blockpos, step, block, m_uptime, other_draw_block);
 
-				if (other_draw_block) {
-					return;
-				}
+				// if (other_draw_block) {
+				// 	return;
+				// }
 
+				// farmesh->enqueueFarMeshForBlock(blockpos, step, block, m_uptime, other_draw_block);
+
+#if 0
 				if (0) {
 					const auto lock = far_blocks.lock_unique_rec();
 					if (const auto &it = far_blocks.find(blockpos);
@@ -406,7 +427,8 @@ void Client::processSingleBlockData(MsgpackPacketSafe &packet)
 						far_blocks.at(blockpos) = block;
 					}
 				}
-			}();
+#endif
+			} //();
 		}
 	});
 
@@ -510,4 +532,28 @@ void ClientMap::cleanPerodic(uint32_t uptime)
 		}
 	}
 #endif
+}
+
+void Client::registerClientSettingsCallbacks()
+{
+	/*
+Via FarMesh
+	g_settings->registerChangedCallback(
+			"client_mesh_chunk",
+			[](const std::string &name, void *data) {
+				static_cast<Client *>(data)->onSettingChanged(name);
+			},
+			this);
+*/
+}
+
+void Client::onSettingChanged(const std::string &name)
+{
+	if (name == "client_mesh_chunk") {
+		m_mesh_grid = {g_settings->getU16("client_mesh_chunk")};
+		// Update the control values that depend on mesh grid
+		auto &control = m_env.getClientMap().getControl();
+		control.cell_size = m_mesh_grid.cell_size;
+		control.cell_size_pow = farmesh::rangeToStep(control.cell_size);
+	}
 }

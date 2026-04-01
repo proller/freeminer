@@ -12,7 +12,7 @@ class TestMap : public Map {
 public:
 	TestMap(IGameDef *gamedef) : Map(gamedef) {}
 
-	MapBlock * createBlockTest(v3s16 p)
+	MapBlock * createBlockTest(v3bpos_t p)
 	{
 		v2pos_t p2d(p.X, p.Z);
 		s16 block_y = p.Y;

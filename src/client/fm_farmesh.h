@@ -58,21 +58,22 @@ public:
 			v3pos_t m_camera_offset,
 			//float brightness,
 			int render_range, float speed);
-	void makeFarBlock(
+	bool makeFarBlock(
 			const v3bpos_t &blockpos, block_step_t step, const bool low_priority = false);
 	void makeFarBlocks(const v3bpos_t &blockpos, block_step_t step);
 
-	void enqueueFarMeshForBlock(const v3bpos_t &blockpos, const block_step_t step,
+	bool enqueueFarMeshForBlock(const v3bpos_t &blockpos, const block_step_t step,
 			const MapBlockPtr &block, const double timestamp,
 			const bool low_priority = false);
 	void stop() { farmesh_thread_stop = true; }
+	void restart();
 
 	bool game_update_complete{};
 
 private:
 	//std::vector<v3bpos_t> m_make_far_blocks_list;
 
-	v3opos_t m_camera_pos = {-1337, -1337, -1337};
+	//v3opos_t m_camera_pos = {-1337, -1337, -1337};
 	v3pos_t m_camera_pos_aligned{-1337, -1337, -1337};
 	/*v3f m_camera_dir;
 	f32 m_camera_fov;
@@ -98,9 +99,6 @@ private:
 	static constexpr uint16_t grid_size_y{grid_size_max_y};
 	static constexpr uint16_t grid_size_xy{grid_size_x * grid_size_y};
 
-	static constexpr uint8_t wait_server_far_block{
-			1}; // minimum 1 ; maybe make dynamic depend on avg server ask/response time, or on fast mode
-
 	Mapgen *mg{};
 
 	struct ray_cache
@@ -111,7 +109,7 @@ private:
 	};
 	using direction_cache = std::array<ray_cache, grid_size_xy>;
 	std::array<direction_cache, 6> direction_caches;
-	v3pos_t direction_caches_pos;
+	//v3pos_t direction_caches_pos;
 	std::array<unordered_map_v3pos<bool>, 6> mg_caches;
 	struct plane_cache
 	{
@@ -122,16 +120,19 @@ private:
 	int go_direction(const size_t dir_n);
 	int go_flat();
 	int go_container(bool only_received, const block_step_t step_limit = 0);
-	uint32_t far_iteration_complete{};
-	double far_iteration_updated_uptime{};
-	bool complete_set{};
+	uint32_t far_iteration_pos{};
+	double far_iteration_pos_time{};
+	bool want_reset = false;
+	//bool mesh_complete_set{};
+	//bool grid_finished{};
 	uint32_t collect_reset_timestamp{static_cast<uint32_t>(-1)};
 	//uint8_t planes_processed_last{};
-	std::array<async_step_runner, 6> async;
+	std::array<async_step_runner, 6> async_direction;
 	async_step_runner async_cleaner;
 	int async_cleaner_next{};
 	bool farmesh_flat{true};
 	bool farmesh_ray{true};
+	uint16_t farmesh_wait_server{1};
 	struct BlockTodo
 	{
 		MapBlockPtr block;
@@ -140,8 +141,11 @@ private:
 	std::array<concurrent_unordered_map<v3bpos_t, BlockTodo>, FARMESH_STEP_MAX * 2>
 			farmesh_make_queue;
 	std::atomic_bool farmesh_make_queue_complete{true};
+	std::atomic_size_t farmesh_make_queue_processed{};
+	std::atomic_size_t farmesh_make_queue_size{};
 
 	std::thread farmesh_thread;
 	bool farmesh_thread_stop{};
 	void processFarmeshQueue();
+	void onSettingChanged(const std::string &name);
 };

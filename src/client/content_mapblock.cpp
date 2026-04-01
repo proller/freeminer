@@ -1848,18 +1848,27 @@ void MapblockMeshGenerator::generate()
 	const auto fstep = 1 << data->far_step;
 	for (cur_node.pf.Z = cur_node.pr.Z = 0; cur_node.pr.Z < data->side_length_data; cur_node.pr.Z+=lstep, cur_node.pf.Z+=fstep)
 		for (cur_node.pf.X = cur_node.pr.X = 0; cur_node.pr.X < data->side_length_data; cur_node.pr.X += lstep, cur_node.pf.X += fstep) {
-            uint16_t prev_stops = 0;
+            uint16_t prev_visibles = 0;
+            uint16_t prev_invisibles = 0;
 			for (cur_node.pf.Y = cur_node.pr.Y = 0; cur_node.pr.Y < data->side_length_data; cur_node.pr.Y += lstep, cur_node.pf.Y += fstep) {
 				cur_node.p = (data->far_step ? cur_node.pf : cur_node.pr);
-				const auto [n, stop] =
-						data->m_vmanip.getNodeRefAndStop(blockpos_nodes + cur_node.p);
-				if (!stop and prev_stops >= 2) {
-					break;
-				}
-				prev_stops += stop;
+				const auto [n, visible] =
+						data->m_vmanip.getNodeRefAndVisible(blockpos_nodes + cur_node.p);
+
 				cur_node.n = n;
 				cur_node.f = &nodedef->get(cur_node.n);
 				drawNode();
+#if 0 && !defined(FARMESH_DEBUG)
+				if (prev_invisibles > 1 && prev_visibles > 2) {
+					// May cause holes
+					break;
+				}
+				if (visible) {
+					++prev_visibles;
+				} else {
+					++prev_invisibles;
+				}
+#endif				
 			}
 		}
 }

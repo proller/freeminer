@@ -20,11 +20,11 @@ thread_local MapBlockPtr block_cache{};
 thread_local std::pair<block_step_t, v3bpos_t> block_cache_p;
 }
 
-std::pair<const MapNode, bool> FarContainer::getNodeRefAndStop(const v3pos_t &pos)
+std::pair<const MapNode, bool> FarContainer::getNodeRefAndVisible(const v3pos_t &pos)
 {
 	const auto block_pos = getNodeBlockPos(pos);
 	auto &client_map = m_client->getEnv().getClientMap();
-	const auto player_block_pos = getNodeBlockPos(client_map.far_blocks_last_cam_pos);
+	const auto player_block_pos = getNodeBlockPos(client_map.far_cam_pos_mesh);
 	const auto &control = client_map.getControl();
 
 	const auto tree_result =
@@ -110,8 +110,8 @@ std::pair<const MapNode, bool> FarContainer::getNodeRefAndStop(const v3pos_t &po
 	}
 
 	if (const auto &v = m_mg->visible_content(pos, use_weather); v.getContent()) {
-		const auto stop = m_mg->surface_2d() && v.getContent() != CONTENT_AIR;
-		return {v, stop};
+		const auto visible = m_mg->surface_2d() && v.getContent() != CONTENT_AIR;
+		return {v, visible};
 	}
 
 	return {m_mg->visible_transparent, false};

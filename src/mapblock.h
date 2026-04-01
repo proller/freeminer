@@ -500,6 +500,7 @@ protected:
 	MapBlock::mesh_type delete_mesh;
 
 public:
+	block_step_t far_step_draw{};
 #endif
 
 	block_step_t far_step{};
