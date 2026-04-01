@@ -888,20 +888,25 @@ uint8_t FarMesh::update(v3opos_t camera_pos,
 				async_cleaner.step([this]() {
 					auto &client_map = m_client->getEnv().getClientMap();
 					//const auto &far_blocks = client_map.m_far_blocks;
-					block_step_t step = 0;
-					for (auto &bs : client_map.far_blocks_storage) {
+					//block_step_t step = 0;
+					for (auto &blocks_step : client_map.far_blocks_storage) {
 						//std::vector<v3pos_t> del;
 						{
-							if (const auto lock = bs.try_lock_shared_rec();
-									lock->owns_lock()) {
-								for (auto &b : bs) {
-									if (b.second.far_last_used &&
-											m_client->m_uptime >
-													b.second.far_last_used +
-															client_unload_unused_data_timeout) {
-										b.second.far_last_used = 0;
-										b.second.block.reset();
-									}
+							if (const auto lock = blocks_step.try_lock_shared_rec();
+									!lock->owns_lock()) {
+								continue;
+							}
+							for (auto &block_used : blocks_step) {
+								if (block_used.second.block->far_step >=
+										client_map.far_iteration_clean) {
+									continue;
+								}
+								if (block_used.second.far_last_used &&
+										m_client->m_uptime >
+												block_used.second.far_last_used +
+														client_unload_unused_data_timeout) {
+									block_used.second.far_last_used = 0;
+									block_used.second.block.reset();
 								}
 							}
 						}
@@ -914,7 +919,7 @@ uint8_t FarMesh::update(v3opos_t camera_pos,
 								bs.erase(pos);
 							}
 						}*/
-						++step;
+						//++step;
 					}
 				});
 			}

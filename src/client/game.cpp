@@ -4746,7 +4746,7 @@ void Game::updateFrame(f32 dtime,
 		auto &complete = client->farmesh->game_update_complete;
 		thread_local static u64 next_run_time{};
 		if (!complete || porting::getTimeMs() > next_run_time) {
-			next_run_time = porting::getTimeMs() + 1000;
+			next_run_time = porting::getTimeMs() + 3000;
 			client->farmesh_async.step([&, farmesh_range = farmesh_range,
 											   //yaw = player->getYaw(),
 											   //pitch = player->getPitch(),

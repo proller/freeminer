@@ -495,8 +495,8 @@ public:
 
 protected:
 	friend class ClientMap;
-	std::array<MapBlock::mesh_type, LODMESH_STEP_MAX + 1> m_lod_mesh;
-	std::array<MapBlock::mesh_type, FARMESH_STEP_MAX + 1> m_far_mesh;
+	std::array<std::atomic<MapBlock::mesh_type>, LODMESH_STEP_MAX + 1> m_lod_mesh;
+	std::array<std::atomic<MapBlock::mesh_type>, FARMESH_STEP_MAX + 1> m_far_mesh;
 	MapBlock::mesh_type delete_mesh;
 
 public:

@@ -191,14 +191,21 @@ const MapBlock::mesh_type empty_mesh;
 #if CHECK_CLIENT_BUILD()
 const MapBlock::mesh_type MapBlock::getLodMesh(block_step_t step, bool allow_other)
 {
-	if (m_lod_mesh[step] || !allow_other)
-		return m_lod_mesh[step];
+	auto m = m_lod_mesh[step].load();
+	if (m || !allow_other)
+		return m;
 
 	for (int inc = 1; inc < 4; ++inc) {
-		if (step + inc < m_lod_mesh.size() && m_lod_mesh[step + inc])
-			return m_lod_mesh[step + inc];
-		if (step - inc >= 0 && m_lod_mesh[step - inc])
-			return m_lod_mesh[step - inc];
+		if (step + inc < m_lod_mesh.size()) {
+			if (auto mn = m_lod_mesh[step + inc].load()) {
+				return mn;
+			}
+		}
+		if (step - inc >= 0) {
+			if (auto mp = m_lod_mesh[step - inc].load()) {
+				return mp;
+			}
+		}
 	}
 	return empty_mesh;
 }
@@ -210,16 +217,13 @@ const MapBlock::mesh_type MapBlock::getFarMesh(block_step_t step)
 
 void MapBlock::setLodMesh(const MapBlock::mesh_type &rmesh)
 {
-	const auto ms = rmesh->lod_step;
-	if (auto mesh = std::move(m_lod_mesh[ms]))
-		delete_mesh = std::move(mesh);
-	m_lod_mesh[ms] = rmesh;
+	const auto step = rmesh->lod_step;
+	delete_mesh = m_lod_mesh[step].exchange(rmesh);
 }
 
 void MapBlock::setFarMesh(const MapBlock::mesh_type &rmesh, block_step_t step)
 {
-	std::swap(m_far_mesh[step], delete_mesh);
-	m_far_mesh[step] = rmesh;
+	delete_mesh = m_far_mesh[step].exchange(rmesh);
 }
 
 #endif
