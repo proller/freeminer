@@ -892,13 +892,16 @@ uint8_t FarMesh::update(v3opos_t camera_pos,
 					for (auto &blocks_step : client_map.far_blocks_storage) {
 						//std::vector<v3pos_t> del;
 						{
-							if (const auto lock = blocks_step.try_lock_shared_rec();
-									!lock->owns_lock()) {
+							const auto lock = blocks_step.try_lock_shared_rec();
+							if (!lock->owns_lock()) {
 								continue;
 							}
 							for (auto &block_used : blocks_step) {
-								if (block_used.second.block->far_step >=
-										client_map.far_iteration_clean) {
+								auto &block = block_used.second.block;
+								if (!block) {
+									continue;
+								}
+								if (block->far_step >= client_map.far_iteration_clean) {
 									continue;
 								}
 								if (block_used.second.far_last_used &&
@@ -906,7 +909,7 @@ uint8_t FarMesh::update(v3opos_t camera_pos,
 												block_used.second.far_last_used +
 														client_unload_unused_data_timeout) {
 									block_used.second.far_last_used = 0;
-									block_used.second.block.reset();
+									block.reset();
 								}
 							}
 						}
