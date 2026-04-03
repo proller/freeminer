@@ -238,8 +238,8 @@ our $options = {
         fps_max_unfocused => 10,
     },
     bot_random => {
-        random_input       => 1,
-        continuous_forward => 1,
+        #random_input       => 1,
+        #continuous_forward => 1,
     },
     bot_forward => {
         continuous_forward => 1,
@@ -502,7 +502,7 @@ $commands = {
           qq{--run-unittests --logfile $config->{logdir}/autotest.$g->{task_name}.test.log},
           options_make([qw(verbose trace)]);
     },
-    set_bot         => {'----bot' => 1, '----bot_random' => 1,},
+    set_bot         => {'----bot' => 1, }, # '----bot_random' => 1,
     run_bot         => ['set_bot', 'set_client', 'run_single'],
     run             => ['set_client', 'run_single'],
     valgrind => sub {

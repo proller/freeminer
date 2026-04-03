@@ -186,7 +186,7 @@ void MapDrawControl::onSettingChanged(const std::string &name)
 		farmesh_quality_pow = farmesh::rangeToStep(farmesh_quality);
 	}
 	if (name == "farmesh_stable")
-		farmesh_stable = g_settings->getBool("farmesh_stable");
+		farmesh_stable = g_settings->getU16("farmesh_stable");
 	if (name == "farmesh_all_changed")
 		farmesh_all_changed = g_settings->getPos("farmesh_all_changed");
 }

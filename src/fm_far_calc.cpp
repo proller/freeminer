@@ -190,7 +190,7 @@ std::optional<tree_result_t> find(
 	    */
 	}
 
-	if (child.size < (1 << (param.cell_size_pow))) {
+	if (child.size <= (1 << (param.cell_size_pow))) {
 		return make_result(child);
 	}
 
@@ -425,7 +425,7 @@ void each(const each_param_t &param, const child_t &child)
 			break;
 		}
 
-		if (child.size < (1 << (param.cell_size_pow))) {
+		if (child.size <= (1 << (param.cell_size_pow))) {
 			if (param.func(tree_result_t{
 						.pos{to_v3bpos(child.pos)},
 						.size{to_bpos(child.size)},

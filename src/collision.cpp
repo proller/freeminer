@@ -494,7 +494,7 @@ collisionMoveResult collisionMoveSimple(Environment *env, IGameDef *gamedef,
 			// Final speed:
 			*speed_f += accel_f * dtime;
 			// Limit speed for avoiding hangs
-			*speed_f = truncate(rangelimv(*speed_f, -5000.0f, 5000.0f), 10000.0f);
+			*speed_f = truncate(rangelimv(*speed_f, -1000.0f, 5000.0f), 10000.0f);
 			break;
 		}
 		// Otherwise, a collision occurred.

@@ -391,6 +391,7 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 			// bool surely_not_found_on_disk = false;
 			// bool block_is_invalid = false;
 			if (block) {
+				const auto lock = block->lock_shared_rec();
 				if (d >= 2 && block->m_is_mono_block &&
 						block->data[0].param0 == CONTENT_AIR) {
 					uint8_t not_air = 0;

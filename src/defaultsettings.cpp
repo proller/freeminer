@@ -163,7 +163,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("client_mesh_chunk", mesh_chunk_and_farmesh_quality);
 	settings->setDefault("farmesh_quality",
 			mesh_chunk_and_farmesh_quality); //depends on client_mesh_chunk
-	settings->setDefault("farmesh_stable", "0");
+	settings->setDefault("farmesh_stable", "20");
 	settings->setDefault("farmesh_server", "1");
 	settings->setDefault("farmesh_all_changed", slow ? "1000" : "10000");
 	settings->setDefault("farlights", "1");

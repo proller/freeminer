@@ -132,7 +132,7 @@ private:
 	int async_cleaner_next{};
 	bool farmesh_flat{true};
 	bool farmesh_ray{true};
-	uint16_t farmesh_wait_server{1};
+	uint16_t farmesh_wait_server{2};
 	struct BlockTodo
 	{
 		MapBlockPtr block;

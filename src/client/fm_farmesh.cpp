@@ -735,11 +735,10 @@ uint8_t FarMesh::update(v3opos_t camera_pos,
 			(std::min<unsigned int>(render_range, 1.2 * m_client->fog_range / BS) >> 7)
 			<< 7;
 
-	const auto far_old = !m_control->farmesh_stable &&
-						 far_iteration_pos_time + 10 < m_client->m_uptime;
+	const auto far_old =
+			far_iteration_pos_time + m_control->farmesh_stable < m_client->m_uptime;
 	const auto far_fast =
-			!m_control->farmesh_stable &&
-			// far_old &&
+			far_old &&
 			(
 					//m_client->getEnv().getClientMap().m_far_fast &&
 					m_speed > 200 * BS ||
