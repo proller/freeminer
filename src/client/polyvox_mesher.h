@@ -49,6 +49,8 @@ private:
     
     // Convert PolyVox mesh to Freeminer mesh format
     void convertToCollector(const PolyVox::Mesh<PolyVox::CubicVertex<PolyVox::Material8>>& polyvoxMesh);
+    void convertToCollector(const PolyVox::Mesh<PolyVox::Vertex<PolyVox::Material8>>& polyvoxMesh);
+    void convertToCollector(const PolyVox::Mesh<PolyVox::Vertex<uint8_t>>& polyvoxMesh);
     
     // Helper functions
     PolyVox::Material8 nodeToMaterial(const MapNode& node);
