@@ -468,3 +468,5 @@ list(APPEND FREEMINER_SERVER_LIBRARIES
     ${FREEMINER_COMMON_LIBRARIES}
     ${PNG_LIBRARY}
 )
+
+include(freeminer_polyvox)

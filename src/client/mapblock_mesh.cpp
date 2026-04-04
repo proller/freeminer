@@ -7,6 +7,7 @@
 #include "EPrimitiveTypes.h"
 #include "client.h"
 #include "client/clientmap.h"
+#include "client/polyvox_mesher.h"
 #include "mapblock.h"
 #include "map.h"
 #include "noise.h"
@@ -660,7 +661,8 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data):
 
 	{
 		// Generate everything
-		MapblockMeshGenerator(data, &collector).generate();
+		//MapblockMeshGenerator(data, &collector).generate();
+		PolyVoxMesher(data, &collector).generate();
 	}
 
 	/*

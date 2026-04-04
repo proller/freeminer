@@ -606,6 +606,7 @@ include_directories(SYSTEM
 	# on Android, Luanti depends on SDL2 directly
 	# on other platforms, only IrrlichtMt depends on SDL2
 	"$<$<PLATFORM_ID:Android>:${SDL2_INCLUDE_DIRS}>"
+	${CMAKE_CURRENT_SOURCE_DIR}/../src/external/PolyVox/include
 )
 
 if(USE_GETTEXT)
