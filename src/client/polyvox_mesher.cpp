@@ -34,7 +34,7 @@ public:
 
 	DensityType convertToDensity(Material8 voxel)
 	{
-		return voxel.getMaterial();
+		return voxel.getMaterial() > 0 ? 255 : 0;
 	}
 
 	MaterialType convertToMaterial(Material8 voxel)
@@ -44,12 +44,16 @@ public:
 
 	MaterialType blendMaterials(Material8 a, Material8 b, float /*weight*/)
 	{
-		return convertToDensity(a) > convertToDensity(b) ? a : b;
+		if (a.getMaterial() == 0)
+			return b;
+		if (b.getMaterial() == 0)
+			return a;
+		return a;
 	}
 
 	DensityType getThreshold()
 	{
-		return 0;
+		return 127;
 	}
 };
 
@@ -241,10 +245,7 @@ void PolyVoxMesher::fillVolume(RawVolume<Material8>& volume)
 
 void PolyVoxMesher::extractMesh(RawVolume<Material8>& volume)
 {
-    // Keep far meshes on cubic extraction for stability. Marching cubes is
-    // still used for actual LOD smoothing, but pure far aggregation should
-    // prefer visibility over smoothness.
-    bool useSmoothMesh = (m_data->lod_step > 0) && (m_data->far_step <= 0);
+    bool useSmoothMesh = (m_data->lod_step > 0) || (m_data->fscale > 1);
     if (useSmoothMesh) {
         Region region = volume.getEnclosingRegion();
         Material8MarchingCubesController controller;
