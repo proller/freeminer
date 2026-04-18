@@ -116,6 +116,14 @@ Material8 pickTriangleMaterial(const Material8 &a, const Material8 &b, const Mat
 	return c;
 }
 
+v3f getRenderNormal(const MeshMakeData *data, const v3f &normal)
+{
+	if (data->lod_step > 0 || data->fscale > 1 || data->far_step > 0)
+		return v3f(0.0f, 0.0f, 0.0f);
+
+	return normal;
+}
+
 }
 
 // Maps light index to corner direction (copied from content_mapblock.cpp)
@@ -546,20 +554,19 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
                    (int)triIdx, uv0.X, uv0.Y, uv1.X, uv1.Y, uv2.X, uv2.Y);
         }
         
+        const v3f render_normal = getRenderNormal(m_data, normal);
+
         // Create vertices with proper lighting and texture coordinates
         video::S3DVertex vertices[3];
         if (m_data->m_smooth_lighting) {
-            vertices[0] = video::S3DVertex(pos0, normal, blendLightColor(pos0, normal), uv0);
-            vertices[1] = video::S3DVertex(pos1, normal, blendLightColor(pos1, normal), uv1);
-            vertices[2] = video::S3DVertex(pos2, normal, blendLightColor(pos2, normal), uv2);
+            vertices[0] = video::S3DVertex(pos0, render_normal, blendLightColor(pos0, normal), uv0);
+            vertices[1] = video::S3DVertex(pos1, render_normal, blendLightColor(pos1, normal), uv1);
+            vertices[2] = video::S3DVertex(pos2, render_normal, blendLightColor(pos2, normal), uv2);
         } else {
             video::SColor color = cur_node.lcolor;
-            if (!cur_node.f->light_source) {
-                applyFacesShading(color, normal);
-            }
-            vertices[0] = video::S3DVertex(pos0, normal, color, uv0);
-            vertices[1] = video::S3DVertex(pos1, normal, color, uv1);
-            vertices[2] = video::S3DVertex(pos2, normal, color, uv2);
+            vertices[0] = video::S3DVertex(pos0, render_normal, color, uv0);
+            vertices[1] = video::S3DVertex(pos1, render_normal, color, uv1);
+            vertices[2] = video::S3DVertex(pos2, render_normal, color, uv2);
         }
         
         // Debug: Print vertex colors for first few triangles
@@ -835,20 +842,19 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
                    (int)triIdx, uv0.X, uv0.Y, uv1.X, uv1.Y, uv2.X, uv2.Y);
         }
         
+        const v3f render_normal = getRenderNormal(m_data, normal);
+
         // Create vertices with proper lighting and texture coordinates
         video::S3DVertex vertices[3];
         if (m_data->m_smooth_lighting) {
-            vertices[0] = video::S3DVertex(pos0, normal, blendLightColor(pos0, normal), uv0);
-            vertices[1] = video::S3DVertex(pos1, normal, blendLightColor(pos1, normal), uv1);
-            vertices[2] = video::S3DVertex(pos2, normal, blendLightColor(pos2, normal), uv2);
+            vertices[0] = video::S3DVertex(pos0, render_normal, blendLightColor(pos0, normal), uv0);
+            vertices[1] = video::S3DVertex(pos1, render_normal, blendLightColor(pos1, normal), uv1);
+            vertices[2] = video::S3DVertex(pos2, render_normal, blendLightColor(pos2, normal), uv2);
         } else {
             video::SColor color = cur_node.lcolor;
-            if (!cur_node.f->light_source) {
-                applyFacesShading(color, normal);
-            }
-            vertices[0] = video::S3DVertex(pos0, normal, color, uv0);
-            vertices[1] = video::S3DVertex(pos1, normal, color, uv1);
-            vertices[2] = video::S3DVertex(pos2, normal, color, uv2);
+            vertices[0] = video::S3DVertex(pos0, render_normal, color, uv0);
+            vertices[1] = video::S3DVertex(pos1, render_normal, color, uv1);
+            vertices[2] = video::S3DVertex(pos2, render_normal, color, uv2);
         }
         
         // Debug: Print vertex colors for first few triangles
@@ -1200,20 +1206,22 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
                    (int)triIdx, uv0.X, uv0.Y, uv1.X, uv1.Y, uv2.X, uv2.Y);
         }
         
+        const v3f render_normal = getRenderNormal(m_data, normal);
+
         // Create vertices with proper lighting and texture coordinates
         video::S3DVertex vertices[3];
         if (m_data->m_smooth_lighting) {
-            vertices[0] = video::S3DVertex(pos0, normal, blendLightColor(pos0, normal), uv0);
-            vertices[1] = video::S3DVertex(pos1, normal, blendLightColor(pos1, normal), uv1);
-            vertices[2] = video::S3DVertex(pos2, normal, blendLightColor(pos2, normal), uv2);
+            vertices[0] = video::S3DVertex(pos0, render_normal, blendLightColor(pos0, normal), uv0);
+            vertices[1] = video::S3DVertex(pos1, render_normal, blendLightColor(pos1, normal), uv1);
+            vertices[2] = video::S3DVertex(pos2, render_normal, blendLightColor(pos2, normal), uv2);
         } else {
             video::SColor color = cur_node.lcolor;
             if (!cur_node.f->light_source) {
                 applyFacesShading(color, normal);
             }
-            vertices[0] = video::S3DVertex(pos0, normal, color, uv0);
-            vertices[1] = video::S3DVertex(pos1, normal, color, uv1);
-            vertices[2] = video::S3DVertex(pos2, normal, color, uv2);
+            vertices[0] = video::S3DVertex(pos0, render_normal, color, uv0);
+            vertices[1] = video::S3DVertex(pos1, render_normal, color, uv1);
+            vertices[2] = video::S3DVertex(pos2, render_normal, color, uv2);
         }
         
         // Debug: Print vertex colors for first few triangles
@@ -1334,8 +1342,5 @@ video::SColor PolyVoxMesher::blendLightColor(const v3f &vertex_pos)
 video::SColor PolyVoxMesher::blendLightColor(const v3f &vertex_pos, const v3f &vertex_normal)
 {
     LightInfo light = blendLight(vertex_pos);
-    video::SColor color = encode_light(light.getPair(MYMAX(0.0f, vertex_normal.Y)), cur_node.f->light_source);
-    if (!cur_node.f->light_source)
-        applyFacesShading(color, vertex_normal);
-    return color;
+    return encode_light(light.getPair(MYMAX(0.0f, vertex_normal.Y)), cur_node.f->light_source);
 }

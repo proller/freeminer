@@ -37,3 +37,6 @@
 [submodule "src/mapgen/earth/json"]
 	path = src/mapgen/earth/json
 	url = https://github.com/nlohmann/json.git
+[submodule "src/external/PolyVox"]
+	path = src/external/PolyVox
+	url = https://github.com/JoeGurt/PolyVox.git
