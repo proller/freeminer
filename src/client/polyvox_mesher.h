@@ -11,8 +11,11 @@
 // PolyVox includes
 #include <PolyVox/RawVolume.h>
 #include <PolyVox/CubicSurfaceExtractor.h>
+#include <PolyVox/MarchingCubesSurfaceExtractor.h>
 #include <PolyVox/Mesh.h>
 #include <PolyVox/Material.h>
+#include <array>
+#include <unordered_map>
 
 class PolyVoxMesher
 {
@@ -27,6 +30,9 @@ private:
     MeshCollector* m_collector;
     const NodeDefManager *nodedef;
     const v3pos_t blockpos_nodes;
+    std::unordered_map<content_t, uint8_t> m_content_to_material;
+    std::array<content_t, 256> m_material_to_content{};
+    uint8_t m_next_material_id = 1;
 
     // current node (matching MapblockMeshGenerator structure)
     struct {
@@ -51,6 +57,11 @@ private:
     void convertToCollector(const PolyVox::Mesh<PolyVox::CubicVertex<PolyVox::Material8>>& polyvoxMesh);
     void convertToCollector(const PolyVox::Mesh<PolyVox::Vertex<PolyVox::Material8>>& polyvoxMesh);
     void convertToCollector(const PolyVox::Mesh<PolyVox::Vertex<uint8_t>>& polyvoxMesh);
+    v3pos_t resolveTriangleNodePos(const v3f &base_pos0, const v3f &base_pos1,
+        const v3f &base_pos2, const v3f &normal) const;
+    v3pos_t remapVolumePosToNodePos(const v3pos_t &volume_pos) const;
+    void resetMaterialMappings();
+    void setupNodeFromMaterial(const PolyVox::Material8 &material, const v3pos_t &fallback_pos);
     
     // Helper functions
     PolyVox::Material8 nodeToMaterial(const MapNode& node);

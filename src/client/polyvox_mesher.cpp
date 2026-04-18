@@ -22,6 +22,98 @@
 
 using namespace PolyVox;
 
+namespace {
+
+class Material8MarchingCubesController
+{
+public:
+	using DensityType = uint8_t;
+	using MaterialType = Material8;
+
+	Material8MarchingCubesController() = default;
+
+	DensityType convertToDensity(Material8 voxel)
+	{
+		return voxel.getMaterial();
+	}
+
+	MaterialType convertToMaterial(Material8 voxel)
+	{
+		return voxel;
+	}
+
+	MaterialType blendMaterials(Material8 a, Material8 b, float /*weight*/)
+	{
+		return convertToDensity(a) > convertToDensity(b) ? a : b;
+	}
+
+	DensityType getThreshold()
+	{
+		return 0;
+	}
+};
+
+v3pos_t sampleNodePos(const v3f &base_pos0, const v3f &base_pos1,
+		const v3f &base_pos2, const v3f &normal, float offset_sign)
+{
+	v3f centroid = (base_pos0 + base_pos1 + base_pos2) / 3.0f;
+	v3f sample = centroid + normal * (BS * 0.25f * offset_sign);
+
+	return v3pos_t(
+		(int)std::floor(sample.X / BS),
+		(int)std::floor(sample.Y / BS),
+		(int)std::floor(sample.Z / BS)
+	);
+}
+
+v3pos_t sampleNodePosFromFaceDir(const v3f &base_pos0, const v3f &base_pos1,
+		const v3f &base_pos2, const v3pos_t &face_dir)
+{
+	v3f centroid = (base_pos0 + base_pos1 + base_pos2) / 3.0f;
+	v3f sample = centroid - v3f(face_dir.X, face_dir.Y, face_dir.Z) * (BS * 0.25f);
+
+	return v3pos_t(
+		(int)std::floor(sample.X / BS),
+		(int)std::floor(sample.Y / BS),
+		(int)std::floor(sample.Z / BS)
+	);
+}
+
+bool nodeProducesGeometry(const MapNode &node, const NodeDefManager *nodedef,
+		s16 fscale)
+{
+	content_t content = node.getContent();
+	if (content == CONTENT_AIR || content == CONTENT_IGNORE)
+		return false;
+
+	const ContentFeatures &features = nodedef->get(node);
+	if (features.name == "unknown")
+		return false;
+
+	if (fscale > 1 &&
+			features.drawtype != NDT_NORMAL &&
+			features.drawtype != NDT_LIQUID) {
+		return false;
+	}
+
+	return true;
+}
+
+Material8 pickTriangleMaterial(const Material8 &a, const Material8 &b, const Material8 &c)
+{
+	if (a == b || a == c)
+		return a;
+	if (b == c)
+		return b;
+	if (a.getMaterial() != 0)
+		return a;
+	if (b.getMaterial() != 0)
+		return b;
+	return c;
+}
+
+}
+
 // Maps light index to corner direction (copied from content_mapblock.cpp)
 static const v3pos_t light_dirs[8] = {
 	v3pos_t(-1, -1, -1),
@@ -49,6 +141,8 @@ PolyVoxMesher::PolyVoxMesher(MeshMakeData* data, MeshCollector* collector)
 
 void PolyVoxMesher::generate()
 {
+    resetMaterialMappings();
+
     // Create a PolyVox volume for the entire mesh chunk
     const u16 chunk_size = m_data->m_mesh_grid.cell_size * MAP_BLOCKSIZE;
     Region region(Vector3DInt32(0, 0, 0), 
@@ -60,6 +154,63 @@ void PolyVoxMesher::generate()
     
     // Extract mesh from the volume
     extractMesh(volume);
+}
+
+v3pos_t PolyVoxMesher::resolveTriangleNodePos(const v3f &base_pos0,
+		const v3f &base_pos1, const v3f &base_pos2, const v3f &normal) const
+{
+	const v3pos_t candidates[] = {
+		sampleNodePos(base_pos0, base_pos1, base_pos2, normal, -1.0f),
+		sampleNodePos(base_pos0, base_pos1, base_pos2, normal, 1.0f),
+		sampleNodePos(base_pos0, base_pos1, base_pos2, v3f(0.0f, 0.0f, 0.0f), 0.0f),
+	};
+
+	for (const v3pos_t &candidate : candidates) {
+		MapNode node = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + candidate);
+		if (nodeProducesGeometry(node, nodedef, m_data->fscale))
+			return candidate;
+	}
+
+	return candidates[0];
+}
+
+v3pos_t PolyVoxMesher::remapVolumePosToNodePos(const v3pos_t &volume_pos) const
+{
+	if (m_data->far_step <= 0)
+		return volume_pos;
+
+	const s16 lstep = 1 << m_data->lod_step;
+	const s16 fstep = 1 << m_data->far_step;
+	const s16 scale = std::max<s16>(1, fstep / lstep);
+	return volume_pos * scale;
+}
+
+void PolyVoxMesher::resetMaterialMappings()
+{
+    m_content_to_material.clear();
+    m_material_to_content.fill(CONTENT_IGNORE);
+    m_material_to_content[0] = CONTENT_AIR;
+    m_next_material_id = 1;
+}
+
+void PolyVoxMesher::setupNodeFromMaterial(const Material8 &material,
+        const v3pos_t &fallback_pos)
+{
+    MapNode material_node = materialToNode(material);
+    if (material_node.getContent() != CONTENT_AIR &&
+            material_node.getContent() != CONTENT_IGNORE &&
+            nodedef->get(material_node).name != "unknown") {
+        cur_node.p = fallback_pos;
+        cur_node.origin = oposToV3f(intToFloat(cur_node.p, BS));
+        cur_node.n = material_node;
+        cur_node.f = &nodedef->get(cur_node.n);
+        return;
+    }
+
+    cur_node.p = fallback_pos;
+    cur_node.origin = oposToV3f(intToFloat(cur_node.p, BS));
+    cur_node.n = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p);
+    cur_node.f = &nodedef->get(cur_node.n);
 }
 
 void PolyVoxMesher::fillVolume(RawVolume<Material8>& volume)
@@ -90,28 +241,14 @@ void PolyVoxMesher::fillVolume(RawVolume<Material8>& volume)
 
 void PolyVoxMesher::extractMesh(RawVolume<Material8>& volume)
 {
-    // Check if we should use smooth mesh based on settings or distance
-    bool useSmoothMesh = (m_data->lod_step > 0) || (m_data->fscale > 1);
-//useSmoothMesh = 1;
+    // Keep far meshes on cubic extraction for stability. Marching cubes is
+    // still used for actual LOD smoothing, but pure far aggregation should
+    // prefer visibility over smoothness.
+    bool useSmoothMesh = (m_data->lod_step > 0) && (m_data->far_step <= 0);
     if (useSmoothMesh) {
-        // Create temporary volume with uint8_t data type that marching cubes can handle
         Region region = volume.getEnclosingRegion();
-        RawVolume<uint8_t> tempVolume(region);
-        
-        // Convert Material8 volume to uint8_t volume
-        for (int32_t z = region.getLowerZ(); z <= region.getUpperZ(); z++) {
-            for (int32_t y = region.getLowerY(); y <= region.getUpperY(); y++) {
-                for (int32_t x = region.getLowerX(); x <= region.getUpperX(); x++) {
-                    Material8 material = volume.getVoxel(x, y, z);
-                    tempVolume.setVoxel(x, y, z, material.getMaterial());
-                }
-            }
-        }
-        
-        // Extract smooth mesh using marching cubes on the volume (already at correct LOD)
-        // Use default controller for uint8_t data
-        DefaultMarchingCubesController<uint8_t> controller;
-        auto mesh = extractMarchingCubesMesh(&tempVolume, region, controller);
+        Material8MarchingCubesController controller;
+        auto mesh = extractMarchingCubesMesh(&volume, region, controller);
         printf("PolyVoxMesher: Marching cubes mesh - %d vertices, %d indices\n", 
                (int)mesh.getNoOfVertices(), (int)mesh.getNoOfIndices());
         
@@ -129,7 +266,7 @@ void PolyVoxMesher::extractMesh(RawVolume<Material8>& volume)
                 for (int32_t z = region.getLowerZ(); z <= region.getUpperZ() && nonZeroCount < 10; z++) {
                     for (int32_t y = region.getLowerY(); y <= region.getUpperY() && nonZeroCount < 10; y++) {
                         for (int32_t x = region.getLowerX(); x <= region.getUpperX() && nonZeroCount < 10; x++) {
-                            uint8_t val = tempVolume.getVoxel(x, y, z);
+                            uint8_t val = volume.getVoxel(x, y, z).getMaterial();
                             if (val > maxVal) maxVal = val;
                             if (val > 0) {
                                 printf("PolyVoxMesher: Non-zero voxel at (%d,%d,%d) = %d\n", x, y, z, val);
@@ -163,10 +300,6 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
 {
     if (polyvoxMesh.getNoOfIndices() == 0 || polyvoxMesh.getNoOfVertices() == 0)
         return;
-    
-    // Calculate the offset that the original system expects
-    // This matches the offset calculation in mapblock_mesh.cpp
-    v3f offset = oposToV3f(intToFloat((m_data->m_blockpos - m_data->m_mesh_grid.getMeshPos(m_data->m_blockpos)) * MAP_BLOCKSIZE, BS));
     
     // Process triangles from the mesh
     const uint32_t numTriangles = polyvoxMesh.getNoOfIndices() / 3;
@@ -231,11 +364,6 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
             pos2 = base_pos2;
         }
         
-        // Apply the offset that the collector expects
-        pos0 += offset;
-        pos1 += offset;
-        pos2 += offset;
-        
         // Debug output for first few triangles
         if (triIdx < 5) {
             printf("PolyVoxMesher: Triangle %d: (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n",
@@ -261,40 +389,23 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
                    (int)triIdx, normal.X, normal.Y, normal.Z);
         }
         
-        // Determine which node this triangle belongs to by looking at the vertex positions
-        // Since PolyVox generates faces at voxel boundaries, we need to map back to the solid voxel
-        // The normal tells us which direction the face is pointing, so we can find the solid voxel
-        v3pos_t base_node_pos = v3pos_t(
-            (int)std::floor(base_pos0.X / BS + 0.5f),
-            (int)std::floor(base_pos0.Y / BS + 0.5f),
-            (int)std::floor(base_pos0.Z / BS + 0.5f)
-        );
+        // Determine face direction based on normal for proper tile selection
+        v3pos_t face_dir(0, 1, 0); // default to top face
+        const float threshold = 0.5f;
         
-        // Adjust position based on normal to get the solid voxel
-        // If normal points in positive direction, solid voxel is in negative direction
-        v3pos_t triangle_node_pos = base_node_pos;
-        const float normal_threshold = 0.1f;
-        
-        if (normal.X > normal_threshold) {
-            triangle_node_pos.X -= 1; // Face points +X, solid is to -X
-        } else if (normal.X < -normal_threshold) {
-            triangle_node_pos.X += 1; // Face points -X, solid is to +X
-        } else if (normal.Y > normal_threshold) {
-            triangle_node_pos.Y -= 1; // Face points +Y, solid is to -Y
-        } else if (normal.Y < -normal_threshold) {
-            triangle_node_pos.Y += 1; // Face points -Y, solid is to +Y
-        } else if (normal.Z > normal_threshold) {
-            triangle_node_pos.Z -= 1; // Face points +Z, solid is to -Z
-        } else if (normal.Z < -normal_threshold) {
-            triangle_node_pos.Z += 1; // Face points -Z, solid is to +Z
+        if (std::abs(normal.Y) > threshold && std::abs(normal.Y) > std::abs(normal.X) && std::abs(normal.Y) > std::abs(normal.Z)) {
+            face_dir = v3pos_t(0, normal.Y > 0 ? 1 : -1, 0);
+        } else if (std::abs(normal.X) > threshold && std::abs(normal.X) > std::abs(normal.Z)) {
+            face_dir = v3pos_t(normal.X > 0 ? 1 : -1, 0, 0);
+        } else if (std::abs(normal.Z) > threshold) {
+            face_dir = v3pos_t(0, 0, normal.Z > 0 ? 1 : -1);
         }
-        // If normal is near zero or ambiguous, use the base position
-        
-        // Set up current node for this triangle
-        cur_node.p = triangle_node_pos;
-        cur_node.origin = oposToV3f(intToFloat(cur_node.p, BS));
-        cur_node.n = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p);
-        cur_node.f = &nodedef->get(cur_node.n);
+
+        // Use the snapped face direction to locate the solid voxel for cubic faces.
+        v3pos_t triangle_node_pos = remapVolumePosToNodePos(
+                sampleNodePosFromFaceDir(base_pos0, base_pos1, base_pos2, face_dir));
+        Material8 triangle_material = pickTriangleMaterial(vertex0.data, vertex1.data, vertex2.data);
+        setupNodeFromMaterial(triangle_material, triangle_node_pos);
         
         // Debug: Print node info for first few triangles
         if (triIdx < 5) {
@@ -303,7 +414,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
                    triangle_node_pos.X, triangle_node_pos.Y, triangle_node_pos.Z,
                    (int)cur_node.n.getContent(), (int)nodeToMaterial(cur_node.n).getMaterial());
         }
-        
+
         // Debug: Print lighting info
         if (triIdx < 3) {
             printf("PolyVoxMesher: Tri %d: smooth_lighting=%d content=%d\n",
@@ -321,26 +432,15 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
                        cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
             }
         } else {
-            auto light = LightPair(getInteriorLight(cur_node.n, 0, nodedef));
+            MapNode neighbor = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p + face_dir * m_data->fscale);
+            auto light = LightPair(getFaceLight(cur_node.n, neighbor, nodedef));
             cur_node.lcolor = encode_light(light, cur_node.f->light_source);
             if (triIdx < 3) {
-                printf("PolyVoxMesher: Tri %d: standard light=(%d,%d) color=(%d,%d,%d,%d)\n",
-                       (int)triIdx, light.lightDay, light.lightNight,
+                printf("PolyVoxMesher: Tri %d: face light=(%d,%d) neighbor=%d color=(%d,%d,%d,%d)\n",
+                       (int)triIdx, light.lightDay, light.lightNight, (int)neighbor.getContent(),
                        cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(), 
                        cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
             }
-        }
-        
-        // Determine face direction based on normal for proper tile selection
-        v3pos_t face_dir(0, 1, 0); // default to top face
-        const float threshold = 0.5f;
-        
-        if (std::abs(normal.Y) > threshold && std::abs(normal.Y) > std::abs(normal.X) && std::abs(normal.Y) > std::abs(normal.Z)) {
-            face_dir = v3pos_t(0, normal.Y > 0 ? 1 : -1, 0);
-        } else if (std::abs(normal.X) > threshold && std::abs(normal.X) > std::abs(normal.Z)) {
-            face_dir = v3pos_t(normal.X > 0 ? 1 : -1, 0, 0);
-        } else if (std::abs(normal.Z) > threshold) {
-            face_dir = v3pos_t(0, 0, normal.Z > 0 ? 1 : -1);
         }
         
         // Get the appropriate tile for this face direction
@@ -350,7 +450,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
         getNodeTile(cur_node.n, cur_node.p, face_dir, m_data, tile);
         
         // Apply backface culling for solid nodes (matching content_mapblock.cpp behavior)
-        bool backface_culling = cur_node.f->drawtype == NDT_NORMAL || m_data->fscale > 1;
+        bool backface_culling = cur_node.f->drawtype == NDT_NORMAL;
         if (backface_culling) {
             for (auto &layer : tile.layers) {
                 if (layer.texture) {
@@ -381,6 +481,10 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
             }
         }
         
+        // For cubic extraction the faces are axis-aligned, so prefer the
+        // discrete face direction over triangle winding for shading/lighting.
+        normal = v3f(face_dir.X, face_dir.Y, face_dir.Z);
+
         // Debug: Print tile info for first few triangles
         if (triIdx < 3) {
             printf("PolyVoxMesher: Tri %d: face_dir=(%d,%d,%d) has_texture=%s scale=%d drawtype=%d\n",
@@ -481,10 +585,6 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
     if (polyvoxMesh.getNoOfIndices() == 0 || polyvoxMesh.getNoOfVertices() == 0)
         return;
     
-    // Calculate the offset that the original system expects
-    // This matches the offset calculation in mapblock_mesh.cpp
-    v3f offset = oposToV3f(intToFloat((m_data->m_blockpos - m_data->m_mesh_grid.getMeshPos(m_data->m_blockpos)) * MAP_BLOCKSIZE, BS));
-    
     // Process triangles from the mesh
     const uint32_t numTriangles = polyvoxMesh.getNoOfIndices() / 3;
     
@@ -546,11 +646,6 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
             pos2 = base_pos2;
         }
         
-        // Apply the offset that the collector expects
-        pos0 += offset;
-        pos1 += offset;
-        pos2 += offset;
-        
         // Debug output for first few triangles
         if (triIdx < 5) {
             printf("PolyVoxMesher (smooth): Triangle %d: (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n",
@@ -588,39 +683,10 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
                    (int)triIdx, normal.X, normal.Y, normal.Z);
         }
         
-        // Determine which node this triangle belongs to by looking at the vertex positions
-        // For smooth meshes, we need to find the closest solid voxel
-        v3pos_t base_node_pos = v3pos_t(
-            (int)std::floor(base_pos0.X / BS + 0.5f),
-            (int)std::floor(base_pos0.Y / BS + 0.5f),
-            (int)std::floor(base_pos0.Z / BS + 0.5f)
-        );
-        
-        // Adjust position based on normal to get the solid voxel
-        // If normal points in positive direction, solid voxel is in negative direction
-        v3pos_t triangle_node_pos = base_node_pos;
-        const float normal_threshold = 0.1f;
-        
-        if (normal.X > normal_threshold) {
-            triangle_node_pos.X -= 1; // Face points +X, solid is to -X
-        } else if (normal.X < -normal_threshold) {
-            triangle_node_pos.X += 1; // Face points -X, solid is to +X
-        } else if (normal.Y > normal_threshold) {
-            triangle_node_pos.Y -= 1; // Face points +Y, solid is to -Y
-        } else if (normal.Y < -normal_threshold) {
-            triangle_node_pos.Y += 1; // Face points -Y, solid is to +Y
-        } else if (normal.Z > normal_threshold) {
-            triangle_node_pos.Z -= 1; // Face points +Z, solid is to -Z
-        } else if (normal.Z < -normal_threshold) {
-            triangle_node_pos.Z += 1; // Face points -Z, solid is to +Z
-        }
-        // If normal is near zero or ambiguous, use the base position
-        
-        // Set up current node for this triangle
-        cur_node.p = triangle_node_pos;
-        cur_node.origin = oposToV3f(intToFloat(cur_node.p, BS));
-        cur_node.n = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p);
-        cur_node.f = &nodedef->get(cur_node.n);
+        v3pos_t triangle_node_pos = remapVolumePosToNodePos(
+                resolveTriangleNodePos(base_pos0, base_pos1, base_pos2, normal));
+        Material8 triangle_material = pickTriangleMaterial(vertex0.data, vertex1.data, vertex2.data);
+        setupNodeFromMaterial(triangle_material, triangle_node_pos);
         
         // Debug: Print node info for first few triangles
         if (triIdx < 5) {
@@ -630,6 +696,18 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
                    (int)cur_node.n.getContent(), (int)nodeToMaterial(cur_node.n).getMaterial());
         }
         
+        // Determine face direction based on normal for proper tile selection
+        v3pos_t face_dir(0, 1, 0); // default to top face
+        const float threshold = 0.5f;
+        
+        if (std::abs(normal.Y) > threshold && std::abs(normal.Y) > std::abs(normal.X) && std::abs(normal.Y) > std::abs(normal.Z)) {
+            face_dir = v3pos_t(0, normal.Y > 0 ? 1 : -1, 0);
+        } else if (std::abs(normal.X) > threshold && std::abs(normal.X) > std::abs(normal.Z)) {
+            face_dir = v3pos_t(normal.X > 0 ? 1 : -1, 0, 0);
+        } else if (std::abs(normal.Z) > threshold) {
+            face_dir = v3pos_t(0, 0, normal.Z > 0 ? 1 : -1);
+        }
+
         // Debug: Print lighting info
         if (triIdx < 3) {
             printf("PolyVoxMesher (smooth): Tri %d: smooth_lighting=%d content=%d\n",
@@ -647,26 +725,15 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
                        cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
             }
         } else {
-            auto light = LightPair(getInteriorLight(cur_node.n, 0, nodedef));
+            MapNode neighbor = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p + face_dir * m_data->fscale);
+            auto light = LightPair(getFaceLight(cur_node.n, neighbor, nodedef));
             cur_node.lcolor = encode_light(light, cur_node.f->light_source);
             if (triIdx < 3) {
-                printf("PolyVoxMesher (smooth): Tri %d: standard light=(%d,%d) color=(%d,%d,%d,%d)\n",
-                       (int)triIdx, light.lightDay, light.lightNight,
+                printf("PolyVoxMesher (smooth): Tri %d: face light=(%d,%d) neighbor=%d color=(%d,%d,%d,%d)\n",
+                       (int)triIdx, light.lightDay, light.lightNight, (int)neighbor.getContent(),
                        cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(), 
                        cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
             }
-        }
-        
-        // Determine face direction based on normal for proper tile selection
-        v3pos_t face_dir(0, 1, 0); // default to top face
-        const float threshold = 0.5f;
-        
-        if (std::abs(normal.Y) > threshold && std::abs(normal.Y) > std::abs(normal.X) && std::abs(normal.Y) > std::abs(normal.Z)) {
-            face_dir = v3pos_t(0, normal.Y > 0 ? 1 : -1, 0);
-        } else if (std::abs(normal.X) > threshold && std::abs(normal.X) > std::abs(normal.Z)) {
-            face_dir = v3pos_t(normal.X > 0 ? 1 : -1, 0, 0);
-        } else if (std::abs(normal.Z) > threshold) {
-            face_dir = v3pos_t(0, 0, normal.Z > 0 ? 1 : -1);
         }
         
         // Get the appropriate tile for this face direction
@@ -676,7 +743,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
         getNodeTile(cur_node.n, cur_node.p, face_dir, m_data, tile);
         
         // Apply backface culling for solid nodes (matching content_mapblock.cpp behavior)
-        bool backface_culling = cur_node.f->drawtype == NDT_NORMAL || m_data->fscale > 1;
+        bool backface_culling = false;
         if (backface_culling) {
             for (auto &layer : tile.layers) {
                 if (layer.texture) {
@@ -816,10 +883,6 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
         return;
     }
     
-    // Calculate the offset that the original system expects
-    // This matches the offset calculation in mapblock_mesh.cpp
-    v3f offset = oposToV3f(intToFloat((m_data->m_blockpos - m_data->m_mesh_grid.getMeshPos(m_data->m_blockpos)) * MAP_BLOCKSIZE, BS));
-    
     // Process triangles from the mesh
     const uint32_t numTriangles = polyvoxMesh.getNoOfIndices() / 3;
     
@@ -883,11 +946,6 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
             pos1 = base_pos1;
             pos2 = base_pos2;
         }
-        
-        // Apply the offset that the collector expects
-        pos0 += offset;
-        pos1 += offset;
-        pos2 += offset;
         
         // Debug output for first few triangles
         if (triIdx < 5) {
@@ -954,40 +1012,17 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
                    (int)triIdx, normal.X, normal.Y, normal.Z, flipped ? 1 : 0);
         }
         
-        // For uint8_t data, we need to map back to material for node lookup
-        // Use the first vertex position to determine which node this triangle belongs to
-        v3pos_t base_node_pos = v3pos_t(
-            (int)std::floor(base_pos0.X / BS + 0.5f),
-            (int)std::floor(base_pos0.Y / BS + 0.5f),
-            (int)std::floor(base_pos0.Z / BS + 0.5f)
-        );
+        // Determine which node this triangle belongs to by sampling just inside
+        // the solid side of the surface instead of guessing from one axis.
+        v3pos_t triangle_node_pos = remapVolumePosToNodePos(
+                resolveTriangleNodePos(base_pos0, base_pos1, base_pos2, normal));
         
-        // Debug: Print base node position
+        // Debug: Print sampled node position
         if (triIdx < 3) {
-            printf("PolyVoxMesher (smooth uint8): Tri %d: base_node_pos=(%d,%d,%d) base_pos=(%.1f,%.1f,%.1f)\n",
-                   (int)triIdx, base_node_pos.X, base_node_pos.Y, base_node_pos.Z,
+            printf("PolyVoxMesher (smooth uint8): Tri %d: sampled_node_pos=(%d,%d,%d) base_pos=(%.1f,%.1f,%.1f)\n",
+                   (int)triIdx, triangle_node_pos.X, triangle_node_pos.Y, triangle_node_pos.Z,
                    base_pos0.X, base_pos0.Y, base_pos0.Z);
         }
-        
-        // Adjust position based on normal to get the solid voxel
-        // If normal points in positive direction, solid voxel is in negative direction
-        v3pos_t triangle_node_pos = base_node_pos;
-        const float normal_threshold = 0.1f;
-        
-        if (normal.X > normal_threshold) {
-            triangle_node_pos.X -= 1; // Face points +X, solid is to -X
-        } else if (normal.X < -normal_threshold) {
-            triangle_node_pos.X += 1; // Face points -X, solid is to +X
-        } else if (normal.Y > normal_threshold) {
-            triangle_node_pos.Y -= 1; // Face points +Y, solid is to -Y
-        } else if (normal.Y < -normal_threshold) {
-            triangle_node_pos.Y += 1; // Face points -Y, solid is to +Y
-        } else if (normal.Z > normal_threshold) {
-            triangle_node_pos.Z -= 1; // Face points +Z, solid is to -Z
-        } else if (normal.Z < -normal_threshold) {
-            triangle_node_pos.Z += 1; // Face points -Z, solid is to +Z
-        }
-        // If normal is near zero or ambiguous, use the base position
         
         // Set up current node for this triangle
         cur_node.p = triangle_node_pos;
@@ -1010,6 +1045,18 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
                    (int)cur_node.n.getContent(), (int)cur_node.n.getContent());
         }
         
+        // Determine face direction based on normal for proper tile selection
+        v3pos_t face_dir(0, 1, 0); // default to top face
+        const float threshold = 0.5f;
+        
+        if (std::abs(normal.Y) > threshold && std::abs(normal.Y) > std::abs(normal.X) && std::abs(normal.Y) > std::abs(normal.Z)) {
+            face_dir = v3pos_t(0, normal.Y > 0 ? 1 : -1, 0);
+        } else if (std::abs(normal.X) > threshold && std::abs(normal.X) > std::abs(normal.Z)) {
+            face_dir = v3pos_t(normal.X > 0 ? 1 : -1, 0, 0);
+        } else if (std::abs(normal.Z) > threshold) {
+            face_dir = v3pos_t(0, 0, normal.Z > 0 ? 1 : -1);
+        }
+
         // Debug: Print lighting info
         if (triIdx < 3) {
             printf("PolyVoxMesher (smooth uint8): Tri %d: smooth_lighting=%d content=%d\n",
@@ -1033,10 +1080,11 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
                        cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
             }
         } else {
-            auto light = LightPair(getInteriorLight(cur_node.n, 0, nodedef));
+            MapNode neighbor = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p + face_dir * m_data->fscale);
+            auto light = LightPair(getFaceLight(cur_node.n, neighbor, nodedef));
             if (triIdx < 3) {
-                printf("PolyVoxMesher (smooth uint8): Tri %d: raw light=(%d,%d)\n",
-                       (int)triIdx, light.lightDay, light.lightNight);
+                printf("PolyVoxMesher (smooth uint8): Tri %d: face light=(%d,%d) neighbor=%d\n",
+                       (int)triIdx, light.lightDay, light.lightNight, (int)neighbor.getContent());
             }
             cur_node.lcolor = encode_light(light, cur_node.f->light_source);
             if (triIdx < 3) {
@@ -1048,18 +1096,6 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
             }
         }
         
-        // Determine face direction based on normal for proper tile selection
-        v3pos_t face_dir(0, 1, 0); // default to top face
-        const float threshold = 0.5f;
-        
-        if (std::abs(normal.Y) > threshold && std::abs(normal.Y) > std::abs(normal.X) && std::abs(normal.Y) > std::abs(normal.Z)) {
-            face_dir = v3pos_t(0, normal.Y > 0 ? 1 : -1, 0);
-        } else if (std::abs(normal.X) > threshold && std::abs(normal.X) > std::abs(normal.Z)) {
-            face_dir = v3pos_t(normal.X > 0 ? 1 : -1, 0, 0);
-        } else if (std::abs(normal.Z) > threshold) {
-            face_dir = v3pos_t(0, 0, normal.Z > 0 ? 1 : -1);
-        }
-        
         // Get the appropriate tile for this face direction
         TileSpec tile;
         
@@ -1067,7 +1103,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
         getNodeTile(cur_node.n, cur_node.p, face_dir, m_data, tile);
         
         // Apply backface culling for solid nodes (matching content_mapblock.cpp behavior)
-        bool backface_culling = cur_node.f->drawtype == NDT_NORMAL || m_data->fscale > 1;
+        bool backface_culling = false;
         if (backface_culling) {
             for (auto &layer : tile.layers) {
                 if (layer.texture) {
@@ -1217,26 +1253,32 @@ Material8 PolyVoxMesher::nodeToMaterial(const MapNode& node)
             return Material8(0); // Treat as air/empty
         }
     }
-    
-    // Use the content ID directly as the material ID (but clamp to reasonable range)
-    // This ensures different node types get different materials and thus different textures
-    // Material8 can hold values 0-255, so we need to map content_t to this range
-    uint8_t materialId = static_cast<uint8_t>(content % 255) + 1; // +1 to avoid 0 (air)
-    return Material8(materialId);
+
+    auto it = m_content_to_material.find(content);
+    if (it != m_content_to_material.end())
+        return Material8(it->second);
+
+    if (m_next_material_id == 0) {
+        printf("PolyVoxMesher: WARNING - material id space exhausted, falling back for content=%d\n",
+               (int)content);
+        return Material8(1);
+    }
+
+    uint8_t material_id = m_next_material_id++;
+    m_content_to_material.emplace(content, material_id);
+    m_material_to_content[material_id] = content;
+    return Material8(material_id);
 }
 
 MapNode PolyVoxMesher::materialToNode(const Material8& material)
 {
-    // Convert PolyVox material back to Freeminer node
     uint8_t materialId = material.getMaterial();
-    
-    // Air/empty material
-    if (materialId == 0) {
+
+    if (materialId == 0)
         return MapNode(CONTENT_AIR);
-    }
-    
-    // For now, return a simple solid node (content 2)
-    return MapNode(2);
+
+    content_t content = m_material_to_content[materialId];
+    return MapNode(content);
 }
 
 // Gets the base lighting values for a node (copied from content_mapblock.cpp)
