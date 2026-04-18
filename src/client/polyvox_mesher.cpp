@@ -20,6 +20,13 @@
 #include "util/directiontables.h"
 #include "util/numeric.h"
 
+#if POLYVOX_MESHER_DEBUG
+#include <cstdio>
+#define POLYVOX_MESHER_DEBUG_PRINTF(...) std::printf(__VA_ARGS__)
+#else
+#define POLYVOX_MESHER_DEBUG_PRINTF(...) ((void)0)
+#endif
+
 using namespace PolyVox;
 
 namespace {
@@ -256,18 +263,18 @@ void PolyVoxMesher::extractMesh(RawVolume<Material8>& volume)
         Region region = volume.getEnclosingRegion();
         Material8MarchingCubesController controller;
         auto mesh = extractMarchingCubesMesh(&volume, region, controller);
-        printf("PolyVoxMesher: Marching cubes mesh - %d vertices, %d indices\n", 
+        POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Marching cubes mesh - %d vertices, %d indices\n", 
                (int)mesh.getNoOfVertices(), (int)mesh.getNoOfIndices());
         
         // Skip processing if mesh is too small (likely noise or floating pieces)
         const uint32_t minIndices = 12; // Minimum 4 triangles
         if (mesh.getNoOfIndices() < minIndices) {
-            printf("PolyVoxMesher: Skipping tiny mesh with %d indices (below threshold %d)\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Skipping tiny mesh with %d indices (below threshold %d)\n",
                    (int)mesh.getNoOfIndices(), (int)minIndices);
         } else {
             // Debug: Check if we have data in the volume
             if (mesh.getNoOfVertices() == 0) {
-                printf("PolyVoxMesher: Empty mesh detected, checking volume data...\n");
+                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Empty mesh detected, checking volume data...\n");
                 int nonZeroCount = 0;
                 uint8_t maxVal = 0;
                 for (int32_t z = region.getLowerZ(); z <= region.getUpperZ() && nonZeroCount < 10; z++) {
@@ -276,16 +283,16 @@ void PolyVoxMesher::extractMesh(RawVolume<Material8>& volume)
                             uint8_t val = volume.getVoxel(x, y, z).getMaterial();
                             if (val > maxVal) maxVal = val;
                             if (val > 0) {
-                                printf("PolyVoxMesher: Non-zero voxel at (%d,%d,%d) = %d\n", x, y, z, val);
+                                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Non-zero voxel at (%d,%d,%d) = %d\n", x, y, z, val);
                                 nonZeroCount++;
                             }
                         }
                     }
                 }
                 if (nonZeroCount == 0) {
-                    printf("PolyVoxMesher: No non-zero voxels found in volume! Max value: %d\n", maxVal);
+                    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: No non-zero voxels found in volume! Max value: %d\n", maxVal);
                 } else {
-                    printf("PolyVoxMesher: Found %d non-zero voxels, max value: %d\n", nonZeroCount, maxVal);
+                    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Found %d non-zero voxels, max value: %d\n", nonZeroCount, maxVal);
                 }
             }
             auto decodedMesh = decodeMesh(mesh);
@@ -312,7 +319,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
     const uint32_t numTriangles = polyvoxMesh.getNoOfIndices() / 3;
     
     // Debug output
-    printf("PolyVoxMesher: Processing mesh with %d vertices and %d indices (%d triangles)\n", 
+    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Processing mesh with %d vertices and %d indices (%d triangles)\n", 
            (int)polyvoxMesh.getNoOfVertices(), (int)polyvoxMesh.getNoOfIndices(), (int)numTriangles);
     
     for (uint32_t triIdx = 0; triIdx < numTriangles; triIdx++) {
@@ -373,7 +380,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
         
         // Debug output for first few triangles
         if (triIdx < 5) {
-            printf("PolyVoxMesher: Triangle %d: (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Triangle %d: (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n",
                    (int)triIdx,
                    pos0.X, pos0.Y, pos0.Z,
                    pos1.X, pos1.Y, pos1.Z,
@@ -392,7 +399,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
         
         // Debug: Print normal for first few triangles
         if (triIdx < 5) {
-            printf("PolyVoxMesher: Tri %d: normal=(%.3f,%.3f,%.3f)\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: normal=(%.3f,%.3f,%.3f)\n",
                    (int)triIdx, normal.X, normal.Y, normal.Z);
         }
         
@@ -416,7 +423,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
         
         // Debug: Print node info for first few triangles
         if (triIdx < 5) {
-            printf("PolyVoxMesher: Tri %d: base=(%.1f,%.1f,%.1f) node=(%d,%d,%d) content=%d material=%d\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: base=(%.1f,%.1f,%.1f) node=(%d,%d,%d) content=%d material=%d\n",
                    (int)triIdx, base_pos0.X, base_pos0.Y, base_pos0.Z,
                    triangle_node_pos.X, triangle_node_pos.Y, triangle_node_pos.Z,
                    (int)cur_node.n.getContent(), (int)nodeToMaterial(cur_node.n).getMaterial());
@@ -424,7 +431,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
 
         // Debug: Print lighting info
         if (triIdx < 3) {
-            printf("PolyVoxMesher: Tri %d: smooth_lighting=%d content=%d\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: smooth_lighting=%d content=%d\n",
                    (int)triIdx, m_data->m_smooth_lighting ? 1 : 0, (int)cur_node.n.getContent());
         }
         
@@ -433,7 +440,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
             getSmoothLightFrame();
             cur_node.lcolor = blendLightColor(v3f(0, 0, 0)); // center of node
             if (triIdx < 3) {
-                printf("PolyVoxMesher: Tri %d: smooth light color=(%d,%d,%d,%d)\n",
+                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: smooth light color=(%d,%d,%d,%d)\n",
                        (int)triIdx,
                        cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(), 
                        cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
@@ -443,7 +450,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
             auto light = LightPair(getFaceLight(cur_node.n, neighbor, nodedef));
             cur_node.lcolor = encode_light(light, cur_node.f->light_source);
             if (triIdx < 3) {
-                printf("PolyVoxMesher: Tri %d: face light=(%d,%d) neighbor=%d color=(%d,%d,%d,%d)\n",
+                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: face light=(%d,%d) neighbor=%d color=(%d,%d,%d,%d)\n",
                        (int)triIdx, light.lightDay, light.lightNight, (int)neighbor.getContent(),
                        cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(), 
                        cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
@@ -483,7 +490,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
                 
                 // Debug: Check for missing textures
                 if (triIdx < 3 && !layer.texture) {
-                    printf("PolyVoxMesher: Tri %d: WARNING - Missing texture for layer!\n", (int)triIdx);
+                    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: WARNING - Missing texture for layer!\n", (int)triIdx);
                 }
             }
         }
@@ -494,7 +501,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
 
         // Debug: Print tile info for first few triangles
         if (triIdx < 3) {
-            printf("PolyVoxMesher: Tri %d: face_dir=(%d,%d,%d) has_texture=%s scale=%d drawtype=%d\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: face_dir=(%d,%d,%d) has_texture=%s scale=%d drawtype=%d\n",
                    (int)triIdx, face_dir.X, face_dir.Y, face_dir.Z,
                    tile.layers[0].texture ? "yes" : "no",
                    tile.layers[0].texture ? tile.layers[0].scale : 0,
@@ -550,7 +557,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
         
         // Debug: Print UV coordinates for first few triangles
         if (triIdx < 3) {
-            printf("PolyVoxMesher: Tri %d: UVs=(%.3f,%.3f) (%.3f,%.3f) (%.3f,%.3f)\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: UVs=(%.3f,%.3f) (%.3f,%.3f) (%.3f,%.3f)\n",
                    (int)triIdx, uv0.X, uv0.Y, uv1.X, uv1.Y, uv2.X, uv2.Y);
         }
         
@@ -571,7 +578,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
         
         // Debug: Print vertex colors for first few triangles
         if (triIdx < 3) {
-            printf("PolyVoxMesher: Tri %d: colors=(%d,%d,%d,%d) (%d,%d,%d,%d) (%d,%d,%d,%d)\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: colors=(%d,%d,%d,%d) (%d,%d,%d,%d) (%d,%d,%d,%d)\n",
                    (int)triIdx,
                    vertices[0].Color.getAlpha(), vertices[0].Color.getRed(), vertices[0].Color.getGreen(), vertices[0].Color.getBlue(),
                    vertices[1].Color.getAlpha(), vertices[1].Color.getRed(), vertices[1].Color.getGreen(), vertices[1].Color.getBlue(),
@@ -583,7 +590,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyv
         m_collector->append(tile, vertices, 3, indices, 3);
     }
     
-    printf("PolyVoxMesher: Finished processing %d triangles\n", (int)numTriangles);
+    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Finished processing %d triangles\n", (int)numTriangles);
 }
 
 void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMesh)
@@ -595,7 +602,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
     const uint32_t numTriangles = polyvoxMesh.getNoOfIndices() / 3;
     
     // Debug output
-    printf("PolyVoxMesher (smooth): Processing mesh with %d vertices and %d indices (%d triangles)\n", 
+    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Processing mesh with %d vertices and %d indices (%d triangles)\n", 
            (int)polyvoxMesh.getNoOfVertices(), (int)polyvoxMesh.getNoOfIndices(), (int)numTriangles);
     
     for (uint32_t triIdx = 0; triIdx < numTriangles; triIdx++) {
@@ -654,7 +661,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
         
         // Debug output for first few triangles
         if (triIdx < 5) {
-            printf("PolyVoxMesher (smooth): Triangle %d: (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Triangle %d: (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n",
                    (int)triIdx,
                    pos0.X, pos0.Y, pos0.Z,
                    pos1.X, pos1.Y, pos1.Z,
@@ -685,7 +692,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
         
         // Debug: Print normal for first few triangles
         if (triIdx < 5) {
-            printf("PolyVoxMesher (smooth): Tri %d: normal=(%.3f,%.3f,%.3f)\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: normal=(%.3f,%.3f,%.3f)\n",
                    (int)triIdx, normal.X, normal.Y, normal.Z);
         }
         
@@ -696,7 +703,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
         
         // Debug: Print node info for first few triangles
         if (triIdx < 5) {
-            printf("PolyVoxMesher (smooth): Tri %d: base=(%.1f,%.1f,%.1f) node=(%d,%d,%d) content=%d material=%d\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: base=(%.1f,%.1f,%.1f) node=(%d,%d,%d) content=%d material=%d\n",
                    (int)triIdx, base_pos0.X, base_pos0.Y, base_pos0.Z,
                    triangle_node_pos.X, triangle_node_pos.Y, triangle_node_pos.Z,
                    (int)cur_node.n.getContent(), (int)nodeToMaterial(cur_node.n).getMaterial());
@@ -716,7 +723,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
 
         // Debug: Print lighting info
         if (triIdx < 3) {
-            printf("PolyVoxMesher (smooth): Tri %d: smooth_lighting=%d content=%d\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: smooth_lighting=%d content=%d\n",
                    (int)triIdx, m_data->m_smooth_lighting ? 1 : 0, (int)cur_node.n.getContent());
         }
         
@@ -725,7 +732,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
             getSmoothLightFrame();
             cur_node.lcolor = blendLightColor(v3f(0, 0, 0)); // center of node
             if (triIdx < 3) {
-                printf("PolyVoxMesher (smooth): Tri %d: smooth light color=(%d,%d,%d,%d)\n",
+                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: smooth light color=(%d,%d,%d,%d)\n",
                        (int)triIdx,
                        cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(), 
                        cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
@@ -735,7 +742,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
             auto light = LightPair(getFaceLight(cur_node.n, neighbor, nodedef));
             cur_node.lcolor = encode_light(light, cur_node.f->light_source);
             if (triIdx < 3) {
-                printf("PolyVoxMesher (smooth): Tri %d: face light=(%d,%d) neighbor=%d color=(%d,%d,%d,%d)\n",
+                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: face light=(%d,%d) neighbor=%d color=(%d,%d,%d,%d)\n",
                        (int)triIdx, light.lightDay, light.lightNight, (int)neighbor.getContent(),
                        cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(), 
                        cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
@@ -775,14 +782,14 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
                 
                 // Debug: Check for missing textures
                 if (triIdx < 3 && !layer.texture) {
-                    printf("PolyVoxMesher (smooth): Tri %d: WARNING - Missing texture for layer!\n", (int)triIdx);
+                    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: WARNING - Missing texture for layer!\n", (int)triIdx);
                 }
             }
         }
         
         // Debug: Print tile info for first few triangles
         if (triIdx < 3) {
-            printf("PolyVoxMesher (smooth): Tri %d: face_dir=(%d,%d,%d) has_texture=%s scale=%d drawtype=%d\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: face_dir=(%d,%d,%d) has_texture=%s scale=%d drawtype=%d\n",
                    (int)triIdx, face_dir.X, face_dir.Y, face_dir.Z,
                    tile.layers[0].texture ? "yes" : "no",
                    tile.layers[0].texture ? tile.layers[0].scale : 0,
@@ -838,7 +845,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
         
         // Debug: Print UV coordinates for first few triangles
         if (triIdx < 3) {
-            printf("PolyVoxMesher (smooth): Tri %d: UVs=(%.3f,%.3f) (%.3f,%.3f) (%.3f,%.3f)\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: UVs=(%.3f,%.3f) (%.3f,%.3f) (%.3f,%.3f)\n",
                    (int)triIdx, uv0.X, uv0.Y, uv1.X, uv1.Y, uv2.X, uv2.Y);
         }
         
@@ -859,7 +866,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
         
         // Debug: Print vertex colors for first few triangles
         if (triIdx < 3) {
-            printf("PolyVoxMesher (smooth): Tri %d: colors=(%d,%d,%d,%d) (%d,%d,%d,%d) (%d,%d,%d,%d)\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: colors=(%d,%d,%d,%d) (%d,%d,%d,%d) (%d,%d,%d,%d)\n",
                    (int)triIdx,
                    vertices[0].Color.getAlpha(), vertices[0].Color.getRed(), vertices[0].Color.getGreen(), vertices[0].Color.getBlue(),
                    vertices[1].Color.getAlpha(), vertices[1].Color.getRed(), vertices[1].Color.getGreen(), vertices[1].Color.getBlue(),
@@ -871,7 +878,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMes
         m_collector->append(tile, vertices, 3, indices, 3);
     }
     
-    printf("PolyVoxMesher (smooth): Finished processing %d triangles\n", (int)numTriangles);
+    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Finished processing %d triangles\n", (int)numTriangles);
 }
 
 void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
@@ -883,7 +890,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
     // This helps eliminate noise and small isolated meshes from marching cubes
     const uint32_t minTriangleCount = 4; // Minimum triangles for a valid mesh component
     if (polyvoxMesh.getNoOfIndices() / 3 < minTriangleCount) {
-        printf("PolyVoxMesher (smooth uint8): Skipping small mesh with %d triangles (below threshold %d)\n",
+        POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Skipping small mesh with %d triangles (below threshold %d)\n",
                (int)(polyvoxMesh.getNoOfIndices() / 3), (int)minTriangleCount);
         return;
     }
@@ -892,7 +899,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
     const uint32_t numTriangles = polyvoxMesh.getNoOfIndices() / 3;
     
     // Debug output
-    printf("PolyVoxMesher (smooth uint8): Processing mesh with %d vertices and %d indices (%d triangles), fscale=%d\n", 
+    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Processing mesh with %d vertices and %d indices (%d triangles), fscale=%d\n", 
            (int)polyvoxMesh.getNoOfVertices(), (int)polyvoxMesh.getNoOfIndices(), (int)numTriangles, m_data->fscale);
     
     for (uint32_t triIdx = 0; triIdx < numTriangles; triIdx++) {
@@ -944,7 +951,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
             pos2 *= v3f((float)fscale, (float)fscale, (float)fscale);
             pos2 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
             
-            printf("PolyVoxMesher (smooth uint8): fscale applied - pos0=(%.2f,%.2f,%.2f) base=(%.2f,%.2f,%.2f)\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): fscale applied - pos0=(%.2f,%.2f,%.2f) base=(%.2f,%.2f,%.2f)\n",
                    pos0.X, pos0.Y, pos0.Z, base_pos0.X, base_pos0.Y, base_pos0.Z);
         } else {
             pos0 = base_pos0;
@@ -954,7 +961,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
         
         // Debug output for first few triangles
         if (triIdx < 5) {
-            printf("PolyVoxMesher (smooth uint8): Triangle %d: (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Triangle %d: (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n",
                    (int)triIdx,
                    pos0.X, pos0.Y, pos0.Z,
                    pos1.X, pos1.Y, pos1.Z,
@@ -1007,13 +1014,13 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
             float absX = std::abs(normal.X);
             float absY = std::abs(normal.Y);
             float absZ = std::abs(normal.Z);
-            printf("PolyVoxMesher (smooth uint8): Tri %d: normal=(%.3f,%.3f,%.3f) abs=(%.3f,%.3f,%.3f)\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: normal=(%.3f,%.3f,%.3f) abs=(%.3f,%.3f,%.3f)\n",
                    (int)triIdx, normal.X, normal.Y, normal.Z, absX, absY, absZ);
         }
         
         // Debug: Print normal for first few triangles
         if (triIdx < 10) {
-            printf("PolyVoxMesher (smooth uint8): Tri %d: normal=(%.3f,%.3f,%.3f) flipped=%d\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: normal=(%.3f,%.3f,%.3f) flipped=%d\n",
                    (int)triIdx, normal.X, normal.Y, normal.Z, flipped ? 1 : 0);
         }
         
@@ -1024,7 +1031,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
         
         // Debug: Print sampled node position
         if (triIdx < 3) {
-            printf("PolyVoxMesher (smooth uint8): Tri %d: sampled_node_pos=(%d,%d,%d) base_pos=(%.1f,%.1f,%.1f)\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: sampled_node_pos=(%d,%d,%d) base_pos=(%.1f,%.1f,%.1f)\n",
                    (int)triIdx, triangle_node_pos.X, triangle_node_pos.Y, triangle_node_pos.Z,
                    base_pos0.X, base_pos0.Y, base_pos0.Z);
         }
@@ -1037,14 +1044,14 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
         
         // Debug: Print node lookup result
         if (triIdx < 3) {
-            printf("PolyVoxMesher (smooth uint8): Tri %d: lookup node=(%d,%d,%d) content=%d\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: lookup node=(%d,%d,%d) content=%d\n",
                    (int)triIdx, cur_node.p.X, cur_node.p.Y, cur_node.p.Z,
                    (int)cur_node.n.getContent());
         }
         
         // Debug: Print node info for first few triangles
         if (triIdx < 5) {
-            printf("PolyVoxMesher (smooth uint8): Tri %d: base=(%.1f,%.1f,%.1f) node=(%d,%d,%d) content=%d material=%d\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: base=(%.1f,%.1f,%.1f) node=(%d,%d,%d) content=%d material=%d\n",
                    (int)triIdx, base_pos0.X, base_pos0.Y, base_pos0.Z,
                    triangle_node_pos.X, triangle_node_pos.Y, triangle_node_pos.Z,
                    (int)cur_node.n.getContent(), (int)cur_node.n.getContent());
@@ -1064,13 +1071,13 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
 
         // Debug: Print lighting info
         if (triIdx < 3) {
-            printf("PolyVoxMesher (smooth uint8): Tri %d: smooth_lighting=%d content=%d\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: smooth_lighting=%d content=%d\n",
                    (int)triIdx, m_data->m_smooth_lighting ? 1 : 0, (int)cur_node.n.getContent());
         }
         
         // Debug: Print node content and features
         if (triIdx < 3) {
-            printf("PolyVoxMesher (smooth uint8): Tri %d: node content=%d drawtype=%d light_source=%d\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: node content=%d drawtype=%d light_source=%d\n",
                    (int)triIdx, (int)cur_node.n.getContent(), (int)cur_node.f->drawtype, (int)cur_node.f->light_source);
         }
         
@@ -1079,7 +1086,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
             getSmoothLightFrame();
             cur_node.lcolor = blendLightColor(v3f(0, 0, 0)); // center of node
             if (triIdx < 3) {
-                printf("PolyVoxMesher (smooth uint8): Tri %d: smooth light color=(%d,%d,%d,%d)\n",
+                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: smooth light color=(%d,%d,%d,%d)\n",
                        (int)triIdx,
                        cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(), 
                        cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
@@ -1088,12 +1095,12 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
             MapNode neighbor = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p + face_dir * m_data->fscale);
             auto light = LightPair(getFaceLight(cur_node.n, neighbor, nodedef));
             if (triIdx < 3) {
-                printf("PolyVoxMesher (smooth uint8): Tri %d: face light=(%d,%d) neighbor=%d\n",
+                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: face light=(%d,%d) neighbor=%d\n",
                        (int)triIdx, light.lightDay, light.lightNight, (int)neighbor.getContent());
             }
             cur_node.lcolor = encode_light(light, cur_node.f->light_source);
             if (triIdx < 3) {
-                printf("PolyVoxMesher (smooth uint8): Tri %d: encoded color=(%d,%d,%d,%d) light_source=%d\n",
+                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: encoded color=(%d,%d,%d,%d) light_source=%d\n",
                        (int)triIdx,
                        cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(), 
                        cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue(),
@@ -1134,14 +1141,14 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
                 
                 // Debug: Check for missing textures
                 if (triIdx < 3 && !layer.texture) {
-                    printf("PolyVoxMesher (smooth uint8): Tri %d: WARNING - Missing texture for layer!\n", (int)triIdx);
+                    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: WARNING - Missing texture for layer!\n", (int)triIdx);
                 }
             }
         }
         
         // Debug: Print tile info for first few triangles
         if (triIdx < 3) {
-            printf("PolyVoxMesher (smooth uint8): Tri %d: face_dir=(%d,%d,%d) has_texture=%s scale=%d drawtype=%d\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: face_dir=(%d,%d,%d) has_texture=%s scale=%d drawtype=%d\n",
                    (int)triIdx, face_dir.X, face_dir.Y, face_dir.Z,
                    tile.layers[0].texture ? "yes" : "no",
                    tile.layers[0].texture ? tile.layers[0].scale : 0,
@@ -1202,7 +1209,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
         
         // Debug: Print UV coordinates for first few triangles
         if (triIdx < 3) {
-            printf("PolyVoxMesher (smooth uint8): Tri %d: UVs=(%.3f,%.3f) (%.3f,%.3f) (%.3f,%.3f)\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: UVs=(%.3f,%.3f) (%.3f,%.3f) (%.3f,%.3f)\n",
                    (int)triIdx, uv0.X, uv0.Y, uv1.X, uv1.Y, uv2.X, uv2.Y);
         }
         
@@ -1226,7 +1233,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
         
         // Debug: Print vertex colors for first few triangles
         if (triIdx < 3) {
-            printf("PolyVoxMesher (smooth uint8): Tri %d: colors=(%d,%d,%d,%d) (%d,%d,%d,%d) (%d,%d,%d,%d)\n",
+            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: colors=(%d,%d,%d,%d) (%d,%d,%d,%d) (%d,%d,%d,%d)\n",
                    (int)triIdx,
                    vertices[0].Color.getAlpha(), vertices[0].Color.getRed(), vertices[0].Color.getGreen(), vertices[0].Color.getBlue(),
                    vertices[1].Color.getAlpha(), vertices[1].Color.getRed(), vertices[1].Color.getGreen(), vertices[1].Color.getBlue(),
@@ -1238,7 +1245,7 @@ void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
         m_collector->append(tile, vertices, 3, indices, 3);
     }
     
-    printf("PolyVoxMesher (smooth uint8): Finished processing %d triangles\n", (int)numTriangles);
+    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Finished processing %d triangles\n", (int)numTriangles);
 }
 
 Material8 PolyVoxMesher::nodeToMaterial(const MapNode& node)
@@ -1266,7 +1273,7 @@ Material8 PolyVoxMesher::nodeToMaterial(const MapNode& node)
         return Material8(it->second);
 
     if (m_next_material_id == 0) {
-        printf("PolyVoxMesher: WARNING - material id space exhausted, falling back for content=%d\n",
+        POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: WARNING - material id space exhausted, falling back for content=%d\n",
                (int)content);
         return Material8(1);
     }
