@@ -5,19 +5,15 @@
 #include "polyvox_mesher.h"
 #include "util/numeric.h"
 #include "nodedef.h"
-#include "settings.h"
 #include "constants.h"
 #include "PolyVox/RawVolume.h"
 #include "PolyVox/CubicSurfaceExtractor.h"
 #include "PolyVox/MarchingCubesSurfaceExtractor.h"
-#include "PolyVox/VolumeResampler.h"
 #include "PolyVox/Mesh.h"
 #include "PolyVox/Material.h"
-#include "PolyVox/DefaultMarchingCubesController.h"
 #include "client/tile.h"
 #include "client/mesh.h"
 #include "client/tile.h"
-#include "util/directiontables.h"
 #include "util/numeric.h"
 
 #if POLYVOX_MESHER_DEBUG
@@ -29,7 +25,8 @@
 
 using namespace PolyVox;
 
-namespace {
+namespace
+{
 
 class Material8MarchingCubesController
 {
@@ -44,10 +41,7 @@ public:
 		return voxel.getMaterial() > 0 ? 255 : 0;
 	}
 
-	MaterialType convertToMaterial(Material8 voxel)
-	{
-		return voxel;
-	}
+	MaterialType convertToMaterial(Material8 voxel) { return voxel; }
 
 	MaterialType blendMaterials(Material8 a, Material8 b, float /*weight*/)
 	{
@@ -58,23 +52,17 @@ public:
 		return a;
 	}
 
-	DensityType getThreshold()
-	{
-		return 127;
-	}
+	DensityType getThreshold() { return 127; }
 };
 
-v3pos_t sampleNodePos(const v3f &base_pos0, const v3f &base_pos1,
-		const v3f &base_pos2, const v3f &normal, float offset_sign)
+v3pos_t sampleNodePos(const v3f &base_pos0, const v3f &base_pos1, const v3f &base_pos2,
+		const v3f &normal, float offset_sign)
 {
 	v3f centroid = (base_pos0 + base_pos1 + base_pos2) / 3.0f;
 	v3f sample = centroid + normal * (BS * 0.25f * offset_sign);
 
-	return v3pos_t(
-		(int)std::floor(sample.X / BS),
-		(int)std::floor(sample.Y / BS),
-		(int)std::floor(sample.Z / BS)
-	);
+	return v3pos_t((int)std::floor(sample.X / BS), (int)std::floor(sample.Y / BS),
+			(int)std::floor(sample.Z / BS));
 }
 
 v3pos_t sampleNodePosFromFaceDir(const v3f &base_pos0, const v3f &base_pos1,
@@ -83,15 +71,11 @@ v3pos_t sampleNodePosFromFaceDir(const v3f &base_pos0, const v3f &base_pos1,
 	v3f centroid = (base_pos0 + base_pos1 + base_pos2) / 3.0f;
 	v3f sample = centroid - v3f(face_dir.X, face_dir.Y, face_dir.Z) * (BS * 0.25f);
 
-	return v3pos_t(
-		(int)std::floor(sample.X / BS),
-		(int)std::floor(sample.Y / BS),
-		(int)std::floor(sample.Z / BS)
-	);
+	return v3pos_t((int)std::floor(sample.X / BS), (int)std::floor(sample.Y / BS),
+			(int)std::floor(sample.Z / BS));
 }
 
-bool nodeProducesGeometry(const MapNode &node, const NodeDefManager *nodedef,
-		s16 fscale)
+bool nodeProducesGeometry(const MapNode &node, const NodeDefManager *nodedef, s16 fscale)
 {
 	content_t content = node.getContent();
 	if (content == CONTENT_AIR || content == CONTENT_IGNORE)
@@ -101,8 +85,7 @@ bool nodeProducesGeometry(const MapNode &node, const NodeDefManager *nodedef,
 	if (features.name == "unknown")
 		return false;
 
-	if (fscale > 1 &&
-			features.drawtype != NDT_NORMAL &&
+	if (fscale > 1 && features.drawtype != NDT_NORMAL &&
 			features.drawtype != NDT_LIQUID) {
 		return false;
 	}
@@ -135,14 +118,14 @@ v3f getRenderNormal(const MeshMakeData *data, const v3f &normal)
 
 // Maps light index to corner direction (copied from content_mapblock.cpp)
 static const v3pos_t light_dirs[8] = {
-	v3pos_t(-1, -1, -1),
-	v3pos_t(-1, -1,  1),
-	v3pos_t(-1,  1, -1),
-	v3pos_t(-1,  1,  1),
-	v3pos_t( 1, -1, -1),
-	v3pos_t( 1, -1,  1),
-	v3pos_t( 1,  1, -1),
-	v3pos_t( 1,  1,  1),
+		v3pos_t(-1, -1, -1),
+		v3pos_t(-1, -1, 1),
+		v3pos_t(-1, 1, -1),
+		v3pos_t(-1, 1, 1),
+		v3pos_t(1, -1, -1),
+		v3pos_t(1, -1, 1),
+		v3pos_t(1, 1, -1),
+		v3pos_t(1, 1, 1),
 };
 
 // Standard index set to make a quad on 4 vertices
@@ -150,38 +133,36 @@ static constexpr u16 quad_indices_02[] = {0, 1, 2, 2, 3, 0};
 static constexpr u16 quad_indices_13[] = {0, 1, 3, 3, 1, 2};
 static const auto &quad_indices = quad_indices_02;
 
-PolyVoxMesher::PolyVoxMesher(MeshMakeData* data, MeshCollector* collector)
-    : m_data(data)
-    , m_collector(collector)
-    , nodedef(data->m_nodedef)
-    , blockpos_nodes(data->m_blockpos * MAP_BLOCKSIZE)
+PolyVoxMesher::PolyVoxMesher(MeshMakeData *data, MeshCollector *collector) :
+		m_data(data), m_collector(collector), nodedef(data->m_nodedef),
+		blockpos_nodes(data->m_blockpos * MAP_BLOCKSIZE)
 {
 }
 
 void PolyVoxMesher::generate()
 {
-    resetMaterialMappings();
+	resetMaterialMappings();
 
-    // Create a PolyVox volume for the entire mesh chunk
-    const u16 chunk_size = m_data->m_side_length;
-    Region region(Vector3DInt32(-1, -1, -1),
-                  Vector3DInt32(chunk_size, chunk_size, chunk_size));
-    RawVolume<Material8> volume(region);
-    
-    // Fill the volume with node data
-    fillVolume(volume);
-    
-    // Extract mesh from the volume
-    extractMesh(volume);
+	// Create a PolyVox volume for the entire mesh chunk
+	const u16 chunk_size = m_data->m_side_length;
+	Region region(
+			Vector3DInt32(-1, -1, -1), Vector3DInt32(chunk_size, chunk_size, chunk_size));
+	RawVolume<Material8> volume(region);
+
+	// Fill the volume with node data
+	fillVolume(volume);
+
+	// Extract mesh from the volume
+	extractMesh(volume);
 }
 
-v3pos_t PolyVoxMesher::resolveTriangleNodePos(const v3f &base_pos0,
-		const v3f &base_pos1, const v3f &base_pos2, const v3f &normal) const
+v3pos_t PolyVoxMesher::resolveTriangleNodePos(const v3f &base_pos0, const v3f &base_pos1,
+		const v3f &base_pos2, const v3f &normal) const
 {
 	const v3pos_t candidates[] = {
-		sampleNodePos(base_pos0, base_pos1, base_pos2, normal, -1.0f),
-		sampleNodePos(base_pos0, base_pos1, base_pos2, normal, 1.0f),
-		sampleNodePos(base_pos0, base_pos1, base_pos2, v3f(0.0f, 0.0f, 0.0f), 0.0f),
+			sampleNodePos(base_pos0, base_pos1, base_pos2, normal, -1.0f),
+			sampleNodePos(base_pos0, base_pos1, base_pos2, normal, 1.0f),
+			sampleNodePos(base_pos0, base_pos1, base_pos2, v3f(0.0f, 0.0f, 0.0f), 0.0f),
 	};
 
 	for (const v3pos_t &candidate : candidates) {
@@ -206,1148 +187,1265 @@ v3pos_t PolyVoxMesher::remapVolumePosToNodePos(const v3pos_t &volume_pos) const
 
 void PolyVoxMesher::resetMaterialMappings()
 {
-    m_content_to_material.clear();
-    m_material_to_content.fill(CONTENT_IGNORE);
-    m_material_to_content[0] = CONTENT_AIR;
-    m_next_material_id = 1;
+	m_content_to_material.clear();
+	m_material_to_content.fill(CONTENT_IGNORE);
+	m_material_to_content[0] = CONTENT_AIR;
+	m_next_material_id = 1;
 }
 
-void PolyVoxMesher::setupNodeFromMaterial(const Material8 &material,
-        const v3pos_t &fallback_pos)
+void PolyVoxMesher::setupNodeFromMaterial(
+		const Material8 &material, const v3pos_t &fallback_pos)
 {
-    MapNode material_node = materialToNode(material);
-    if (material_node.getContent() != CONTENT_AIR &&
-            material_node.getContent() != CONTENT_IGNORE &&
-            nodedef->get(material_node).name != "unknown") {
-        cur_node.p = fallback_pos;
-        cur_node.origin = oposToV3f(intToFloat(cur_node.p, BS));
-        cur_node.n = material_node;
-        cur_node.f = &nodedef->get(cur_node.n);
-        return;
-    }
+	MapNode material_node = materialToNode(material);
+	if (material_node.getContent() != CONTENT_AIR &&
+			material_node.getContent() != CONTENT_IGNORE &&
+			nodedef->get(material_node).name != "unknown") {
+		cur_node.p = fallback_pos;
+		cur_node.origin = oposToV3f(intToFloat(cur_node.p, BS));
+		cur_node.n = material_node;
+		cur_node.f = &nodedef->get(cur_node.n);
+		return;
+	}
 
-    cur_node.p = fallback_pos;
-    cur_node.origin = oposToV3f(intToFloat(cur_node.p, BS));
-    cur_node.n = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p);
-    cur_node.f = &nodedef->get(cur_node.n);
+	cur_node.p = fallback_pos;
+	cur_node.origin = oposToV3f(intToFloat(cur_node.p, BS));
+	cur_node.n = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p);
+	cur_node.f = &nodedef->get(cur_node.n);
 }
 
-void PolyVoxMesher::fillVolume(RawVolume<Material8>& volume)
+void PolyVoxMesher::fillVolume(RawVolume<Material8> &volume)
 {
-    v3pos_t blockpos_nodes = m_data->m_blockpos * MAP_BLOCKSIZE;
-    
-    const auto lstep = 1 << m_data->lod_step;
-    const auto fstep = 1 << m_data->far_step;
+	v3pos_t blockpos_nodes = m_data->m_blockpos * MAP_BLOCKSIZE;
 
-    const s16 chunk_size = m_data->m_side_length;
+	const auto lstep = 1 << m_data->lod_step;
+	const auto fstep = 1 << m_data->far_step;
 
-    // Build a dense sampled-grid volume with a one-voxel border so surface
-    // extraction can see adjacent samples across mesh chunk boundaries.
-    for (s16 z = -1; z <= chunk_size; ++z) {
-        for (s16 x = -1; x <= chunk_size; ++x) {
-            for (s16 y = -1; y <= chunk_size; ++y) {
-                cur_node.pr = v3pos_t(x * lstep, y * lstep, z * lstep);
-                cur_node.pf = v3pos_t(x * fstep, y * fstep, z * fstep);
-                cur_node.p = (m_data->far_step ? cur_node.pf : cur_node.pr);
-                MapNode node = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p);
-                volume.setVoxel(x, y, z, nodeToMaterial(node));
-            }
-        }
-    }
+	const s16 chunk_size = m_data->m_side_length;
+
+	// Build a dense sampled-grid volume with a one-voxel border so surface
+	// extraction can see adjacent samples across mesh chunk boundaries.
+	for (s16 z = -1; z <= chunk_size; ++z) {
+		for (s16 x = -1; x <= chunk_size; ++x) {
+			for (s16 y = -1; y <= chunk_size; ++y) {
+				cur_node.pr = v3pos_t(x * lstep, y * lstep, z * lstep);
+				cur_node.pf = v3pos_t(x * fstep, y * fstep, z * fstep);
+				cur_node.p = (m_data->far_step ? cur_node.pf : cur_node.pr);
+				MapNode node = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p);
+				volume.setVoxel(x, y, z, nodeToMaterial(node));
+			}
+		}
+	}
 }
 
-void PolyVoxMesher::extractMesh(RawVolume<Material8>& volume)
+void PolyVoxMesher::extractMesh(RawVolume<Material8> &volume)
 {
-    bool useSmoothMesh = (m_data->lod_step > 0) || (m_data->fscale > 1);
-    if (useSmoothMesh) {
-        Region region = volume.getEnclosingRegion();
-        Material8MarchingCubesController controller;
-        auto mesh = extractMarchingCubesMesh(&volume, region, controller);
-        POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Marching cubes mesh - %d vertices, %d indices\n", 
-               (int)mesh.getNoOfVertices(), (int)mesh.getNoOfIndices());
-        
-        // Skip processing if mesh is too small (likely noise or floating pieces)
-        const uint32_t minIndices = 12; // Minimum 4 triangles
-        if (mesh.getNoOfIndices() < minIndices) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Skipping tiny mesh with %d indices (below threshold %d)\n",
-                   (int)mesh.getNoOfIndices(), (int)minIndices);
-        } else {
-            // Debug: Check if we have data in the volume
-            if (mesh.getNoOfVertices() == 0) {
-                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Empty mesh detected, checking volume data...\n");
-                int nonZeroCount = 0;
-                uint8_t maxVal = 0;
-                for (int32_t z = region.getLowerZ(); z <= region.getUpperZ() && nonZeroCount < 10; z++) {
-                    for (int32_t y = region.getLowerY(); y <= region.getUpperY() && nonZeroCount < 10; y++) {
-                        for (int32_t x = region.getLowerX(); x <= region.getUpperX() && nonZeroCount < 10; x++) {
-                            uint8_t val = volume.getVoxel(x, y, z).getMaterial();
-                            if (val > maxVal) maxVal = val;
-                            if (val > 0) {
-                                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Non-zero voxel at (%d,%d,%d) = %d\n", x, y, z, val);
-                                nonZeroCount++;
-                            }
-                        }
-                    }
-                }
-                if (nonZeroCount == 0) {
-                    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: No non-zero voxels found in volume! Max value: %d\n", maxVal);
-                } else {
-                    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Found %d non-zero voxels, max value: %d\n", nonZeroCount, maxVal);
-                }
-            }
-            auto decodedMesh = decodeMesh(mesh);
-            
-            // Convert the extracted mesh to our collector format
-            convertToCollector(decodedMesh);
-        }
-    } else {
-        // Extract the surface mesh using PolyVox cubic surface extractor (original behavior)
-        auto mesh = extractCubicMesh(&volume, volume.getEnclosingRegion());
-        auto decodedMesh = decodeMesh(mesh);
-        
-        // Convert the extracted mesh to our collector format
-        convertToCollector(decodedMesh);
-    }
+	bool useSmoothMesh = (m_data->lod_step > 0) || (m_data->fscale > 1);
+	if (useSmoothMesh) {
+		Region region = volume.getEnclosingRegion();
+		Material8MarchingCubesController controller;
+		auto mesh = extractMarchingCubesMesh(&volume, region, controller);
+		POLYVOX_MESHER_DEBUG_PRINTF(
+				"PolyVoxMesher: Marching cubes mesh - %d vertices, %d indices\n",
+				(int)mesh.getNoOfVertices(), (int)mesh.getNoOfIndices());
+
+		// Skip processing if mesh is too small (likely noise or floating pieces)
+		const uint32_t minIndices = 12; // Minimum 4 triangles
+		if (mesh.getNoOfIndices() < minIndices) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher: Skipping tiny mesh with %d indices (below threshold %d)\n",
+					(int)mesh.getNoOfIndices(), (int)minIndices);
+		} else {
+			// Debug: Check if we have data in the volume
+			if (mesh.getNoOfVertices() == 0) {
+				POLYVOX_MESHER_DEBUG_PRINTF(
+						"PolyVoxMesher: Empty mesh detected, checking volume data...\n");
+				int nonZeroCount = 0;
+				uint8_t maxVal = 0;
+				for (int32_t z = region.getLowerZ();
+						z <= region.getUpperZ() && nonZeroCount < 10; z++) {
+					for (int32_t y = region.getLowerY();
+							y <= region.getUpperY() && nonZeroCount < 10; y++) {
+						for (int32_t x = region.getLowerX();
+								x <= region.getUpperX() && nonZeroCount < 10; x++) {
+							uint8_t val = volume.getVoxel(x, y, z).getMaterial();
+							if (val > maxVal)
+								maxVal = val;
+							if (val > 0) {
+								POLYVOX_MESHER_DEBUG_PRINTF(
+										"PolyVoxMesher: Non-zero voxel at (%d,%d,%d) = %d\n",
+										x, y, z, val);
+								nonZeroCount++;
+							}
+						}
+					}
+				}
+				if (nonZeroCount == 0) {
+					POLYVOX_MESHER_DEBUG_PRINTF(
+							"PolyVoxMesher: No non-zero voxels found in volume! Max value: %d\n",
+							maxVal);
+				} else {
+					POLYVOX_MESHER_DEBUG_PRINTF(
+							"PolyVoxMesher: Found %d non-zero voxels, max value: %d\n",
+							nonZeroCount, maxVal);
+				}
+			}
+			auto decodedMesh = decodeMesh(mesh);
+
+			// Convert the extracted mesh to our collector format
+			convertToCollector(decodedMesh);
+		}
+	} else {
+		// Extract the surface mesh using PolyVox cubic surface extractor (original behavior)
+		auto mesh = extractCubicMesh(&volume, volume.getEnclosingRegion());
+		auto decodedMesh = decodeMesh(mesh);
+
+		// Convert the extracted mesh to our collector format
+		convertToCollector(decodedMesh);
+	}
 }
 
-void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>>& polyvoxMesh)
+void PolyVoxMesher::convertToCollector(const Mesh<CubicVertex<Material8>> &polyvoxMesh)
 {
-    if (polyvoxMesh.getNoOfIndices() == 0 || polyvoxMesh.getNoOfVertices() == 0)
-        return;
-    
-    // Process triangles from the mesh
-    const uint32_t numTriangles = polyvoxMesh.getNoOfIndices() / 3;
-    
-    // Debug output
-    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Processing mesh with %d vertices and %d indices (%d triangles)\n", 
-           (int)polyvoxMesh.getNoOfVertices(), (int)polyvoxMesh.getNoOfIndices(), (int)numTriangles);
-    
-    for (uint32_t triIdx = 0; triIdx < numTriangles; triIdx++) {
-        
-        // Get the three vertices of this triangle
-        uint32_t idx0 = polyvoxMesh.getIndex(triIdx * 3 + 0);
-        uint32_t idx1 = polyvoxMesh.getIndex(triIdx * 3 + 1);
-        uint32_t idx2 = polyvoxMesh.getIndex(triIdx * 3 + 2);
-        
-        if (idx0 >= polyvoxMesh.getNoOfVertices() || 
-            idx1 >= polyvoxMesh.getNoOfVertices() || 
-            idx2 >= polyvoxMesh.getNoOfVertices()) {
-            continue;
-        }
-        
-        auto vertex0 = polyvoxMesh.getVertex(idx0);
-        auto vertex1 = polyvoxMesh.getVertex(idx1);
-        auto vertex2 = polyvoxMesh.getVertex(idx2);
-        
-        // For CubicVertex, decode the position
-        // Convert to world coordinates and create vertices
-        // The volume is positioned relative to the mesh grid origin
-        Vector3DFloat decodedPos0 = decodePosition(vertex0.encodedPosition);
-        Vector3DFloat decodedPos1 = decodePosition(vertex1.encodedPosition);
-        Vector3DFloat decodedPos2 = decodePosition(vertex2.encodedPosition);
-        
-        // Calculate vertex positions relative to mesh grid origin
-        v3f base_pos0 = oposToV3f(v3opos_t(decodedPos0.getX(), decodedPos0.getY(), decodedPos0.getZ()) * BS);
-        v3f base_pos1 = oposToV3f(v3opos_t(decodedPos1.getX(), decodedPos1.getY(), decodedPos1.getZ()) * BS);
-        v3f base_pos2 = oposToV3f(v3opos_t(decodedPos2.getX(), decodedPos2.getY(), decodedPos2.getZ()) * BS);
-        
-        v3f pos0, pos1, pos2;
-        
-        // Apply fscale scaling if needed (matching content_mapblock.cpp logic)
-        if (m_data->fscale > 1) {
-            int fscale = m_data->fscale;
-            
-            // Apply the same scaling transformation as in content_mapblock.cpp
-            // First, shift to node center
-            pos0 = base_pos0 + v3f(HBS, 0.0f, HBS);
-            // Scale uniformly
-            pos0 *= v3f((float)fscale, (float)fscale, (float)fscale);
-            // Apply offset: -HBS for X/Z, and special Y offset calculation
-            pos0 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
-            
-            pos1 = base_pos1 + v3f(HBS, 0.0f, HBS);
-            pos1 *= v3f((float)fscale, (float)fscale, (float)fscale);
-            pos1 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
-            
-            pos2 = base_pos2 + v3f(HBS, 0.0f, HBS);
-            pos2 *= v3f((float)fscale, (float)fscale, (float)fscale);
-            pos2 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
-        } else {
-            pos0 = base_pos0;
-            pos1 = base_pos1;
-            pos2 = base_pos2;
-        }
-        
-        // Debug output for first few triangles
-        if (triIdx < 5) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Triangle %d: (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n",
-                   (int)triIdx,
-                   pos0.X, pos0.Y, pos0.Z,
-                   pos1.X, pos1.Y, pos1.Z,
-                   pos2.X, pos2.Y, pos2.Z);
-        }
-        
-        // Calculate normal (cross product of two edges)
-        v3f edge1 = pos1 - pos0;
-        v3f edge2 = pos2 - pos0;
-        v3f normal = edge1.crossProduct(edge2);
-        if (normal.getLengthSQ() > 0.0f) {
-            normal.normalize();
-        } else {
-            normal = v3f(0, 1, 0);
-        }
-        
-        // Debug: Print normal for first few triangles
-        if (triIdx < 5) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: normal=(%.3f,%.3f,%.3f)\n",
-                   (int)triIdx, normal.X, normal.Y, normal.Z);
-        }
-        
-        // Determine face direction based on normal for proper tile selection
-        v3pos_t face_dir(0, 1, 0); // default to top face
-        const float threshold = 0.5f;
-        
-        if (std::abs(normal.Y) > threshold && std::abs(normal.Y) > std::abs(normal.X) && std::abs(normal.Y) > std::abs(normal.Z)) {
-            face_dir = v3pos_t(0, normal.Y > 0 ? 1 : -1, 0);
-        } else if (std::abs(normal.X) > threshold && std::abs(normal.X) > std::abs(normal.Z)) {
-            face_dir = v3pos_t(normal.X > 0 ? 1 : -1, 0, 0);
-        } else if (std::abs(normal.Z) > threshold) {
-            face_dir = v3pos_t(0, 0, normal.Z > 0 ? 1 : -1);
-        }
+	if (polyvoxMesh.getNoOfIndices() == 0 || polyvoxMesh.getNoOfVertices() == 0)
+		return;
 
-        // Use the snapped face direction to locate the solid voxel for cubic faces.
-        v3pos_t triangle_node_pos = remapVolumePosToNodePos(
-                sampleNodePosFromFaceDir(base_pos0, base_pos1, base_pos2, face_dir));
-        Material8 triangle_material = pickTriangleMaterial(vertex0.data, vertex1.data, vertex2.data);
-        setupNodeFromMaterial(triangle_material, triangle_node_pos);
-        
-        // Debug: Print node info for first few triangles
-        if (triIdx < 5) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: base=(%.1f,%.1f,%.1f) node=(%d,%d,%d) content=%d material=%d\n",
-                   (int)triIdx, base_pos0.X, base_pos0.Y, base_pos0.Z,
-                   triangle_node_pos.X, triangle_node_pos.Y, triangle_node_pos.Z,
-                   (int)cur_node.n.getContent(), (int)nodeToMaterial(cur_node.n).getMaterial());
-        }
+	// Process triangles from the mesh
+	const uint32_t numTriangles = polyvoxMesh.getNoOfIndices() / 3;
 
-        // Debug: Print lighting info
-        if (triIdx < 3) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: smooth_lighting=%d content=%d\n",
-                   (int)triIdx, m_data->m_smooth_lighting ? 1 : 0, (int)cur_node.n.getContent());
-        }
-        
-        // Get lighting for this node
-        if (m_data->m_smooth_lighting) {
-            getSmoothLightFrame();
-            cur_node.lcolor = blendLightColor(v3f(0, 0, 0)); // center of node
-            if (triIdx < 3) {
-                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: smooth light color=(%d,%d,%d,%d)\n",
-                       (int)triIdx,
-                       cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(), 
-                       cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
-            }
-        } else {
-            MapNode neighbor = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p + face_dir * m_data->fscale);
-            auto light = LightPair(getFaceLight(cur_node.n, neighbor, nodedef));
-            cur_node.lcolor = encode_light(light, cur_node.f->light_source);
-            if (triIdx < 3) {
-                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: face light=(%d,%d) neighbor=%d color=(%d,%d,%d,%d)\n",
-                       (int)triIdx, light.lightDay, light.lightNight, (int)neighbor.getContent(),
-                       cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(), 
-                       cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
-            }
-        }
-        
-        // Get the appropriate tile for this face direction
-        TileSpec tile;
-        
-        // Use directional tile selection for all nodes (this ensures proper texture mapping)
-        getNodeTile(cur_node.n, cur_node.p, face_dir, m_data, tile);
-        
-        // Apply backface culling for solid nodes (matching content_mapblock.cpp behavior)
-        bool backface_culling = cur_node.f->drawtype == NDT_NORMAL;
-        if (backface_culling) {
-            for (auto &layer : tile.layers) {
-                if (layer.texture) {
-                    layer.material_flags |= MATERIAL_FLAG_BACKFACE_CULLING;
-                }
-            }
-        }
-        
-        // Apply tile animations and transformations (ported from content_mapblock.cpp)
-        for (auto &layer : tile.layers) {
-            if (layer.texture) {
-                // Apply animation transformations
-                if (layer.material_flags & MATERIAL_FLAG_ANIMATION) {
-                    // Handle texture animation
-                    // This is a simplified version - in reality you'd want to implement
-                    // proper animation frame calculation like in the original
-                }
-                
-                // Apply texture transforms
-                if (layer.scale != 1) {
-                    // Handle scaled textures
-                }
-                
-                // Debug: Check for missing textures
-                if (triIdx < 3 && !layer.texture) {
-                    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: WARNING - Missing texture for layer!\n", (int)triIdx);
-                }
-            }
-        }
-        
-        // For cubic extraction the faces are axis-aligned, so prefer the
-        // discrete face direction over triangle winding for shading/lighting.
-        normal = v3f(face_dir.X, face_dir.Y, face_dir.Z);
+	// Debug output
+	POLYVOX_MESHER_DEBUG_PRINTF(
+			"PolyVoxMesher: Processing mesh with %d vertices and %d indices (%d triangles)\n",
+			(int)polyvoxMesh.getNoOfVertices(), (int)polyvoxMesh.getNoOfIndices(),
+			(int)numTriangles);
 
-        // Debug: Print tile info for first few triangles
-        if (triIdx < 3) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: face_dir=(%d,%d,%d) has_texture=%s scale=%d drawtype=%d\n",
-                   (int)triIdx, face_dir.X, face_dir.Y, face_dir.Z,
-                   tile.layers[0].texture ? "yes" : "no",
-                   tile.layers[0].texture ? tile.layers[0].scale : 0,
-                   (int)cur_node.f->drawtype);
-        }
-        
-        // Generate texture coordinates based on the triangle vertices
-        // Improved approach - generate UVs relative to the face and node position
-        v2f uv0, uv1, uv2;
-        
-        // Calculate UV coordinates relative to the node's face
-        // Use the vertex positions within the node's coordinate system
-        v3f node_origin = cur_node.origin; // Center of the current node
-        
-        // Calculate relative positions within the node (normalized to [-0.5, 0.5])
-        v3f rel_pos0 = (pos0 - node_origin) / BS;
-        v3f rel_pos1 = (pos1 - node_origin) / BS;
-        v3f rel_pos2 = (pos2 - node_origin) / BS;
-        
-        // Generate UV coordinates based on face normal orientation
-        if (std::abs(normal.Y) > 0.5f) {
-            // Top/bottom face - map X,Z coordinates
-            uv0 = v2f(rel_pos0.X + 0.5f, rel_pos0.Z + 0.5f);
-            uv1 = v2f(rel_pos1.X + 0.5f, rel_pos1.Z + 0.5f);
-            uv2 = v2f(rel_pos2.X + 0.5f, rel_pos2.Z + 0.5f);
-        } else if (std::abs(normal.X) > 0.5f) {
-            // Side face X-aligned - map Z,Y coordinates
-            uv0 = v2f(rel_pos0.Z + 0.5f, rel_pos0.Y + 0.5f);
-            uv1 = v2f(rel_pos1.Z + 0.5f, rel_pos1.Y + 0.5f);
-            uv2 = v2f(rel_pos2.Z + 0.5f, rel_pos2.Y + 0.5f);
-        } else {
-            // Side face Z-aligned - map X,Y coordinates
-            uv0 = v2f(rel_pos0.X + 0.5f, rel_pos0.Y + 0.5f);
-            uv1 = v2f(rel_pos1.X + 0.5f, rel_pos1.Y + 0.5f);
-            uv2 = v2f(rel_pos2.X + 0.5f, rel_pos2.Y + 0.5f);
-        }
-        
-        // Apply tile-specific transformations from content_mapblock.cpp approach
-        // Handle texture scaling and other tile properties
-        for (auto &layer : tile.layers) {
-            if (layer.texture) {
-                // Apply texture scaling
-                if (layer.scale != 1) {
-                    uv0.X *= layer.scale;
-                    uv0.Y *= layer.scale;
-                    uv1.X *= layer.scale;
-                    uv1.Y *= layer.scale;
-                    uv2.X *= layer.scale;
-                    uv2.Y *= layer.scale;
-                }
-            }
-        }
-        
-        // Debug: Print UV coordinates for first few triangles
-        if (triIdx < 3) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: UVs=(%.3f,%.3f) (%.3f,%.3f) (%.3f,%.3f)\n",
-                   (int)triIdx, uv0.X, uv0.Y, uv1.X, uv1.Y, uv2.X, uv2.Y);
-        }
-        
-        const v3f render_normal = getRenderNormal(m_data, normal);
+	for (uint32_t triIdx = 0; triIdx < numTriangles; triIdx++) {
 
-        // Create vertices with proper lighting and texture coordinates
-        video::S3DVertex vertices[3];
-        if (m_data->m_smooth_lighting) {
-            vertices[0] = video::S3DVertex(pos0, render_normal, blendLightColor(pos0, normal), uv0);
-            vertices[1] = video::S3DVertex(pos1, render_normal, blendLightColor(pos1, normal), uv1);
-            vertices[2] = video::S3DVertex(pos2, render_normal, blendLightColor(pos2, normal), uv2);
-        } else {
-            video::SColor color = cur_node.lcolor;
-            vertices[0] = video::S3DVertex(pos0, render_normal, color, uv0);
-            vertices[1] = video::S3DVertex(pos1, render_normal, color, uv1);
-            vertices[2] = video::S3DVertex(pos2, render_normal, color, uv2);
-        }
-        
-        // Debug: Print vertex colors for first few triangles
-        if (triIdx < 3) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Tri %d: colors=(%d,%d,%d,%d) (%d,%d,%d,%d) (%d,%d,%d,%d)\n",
-                   (int)triIdx,
-                   vertices[0].Color.getAlpha(), vertices[0].Color.getRed(), vertices[0].Color.getGreen(), vertices[0].Color.getBlue(),
-                   vertices[1].Color.getAlpha(), vertices[1].Color.getRed(), vertices[1].Color.getGreen(), vertices[1].Color.getBlue(),
-                   vertices[2].Color.getAlpha(), vertices[2].Color.getRed(), vertices[2].Color.getGreen(), vertices[2].Color.getBlue());
-        }
-        
-        // Add triangle to collector
-        u16 indices[3] = {0, 1, 2};
-        m_collector->append(tile, vertices, 3, indices, 3);
-    }
-    
-    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: Finished processing %d triangles\n", (int)numTriangles);
+		// Get the three vertices of this triangle
+		uint32_t idx0 = polyvoxMesh.getIndex(triIdx * 3 + 0);
+		uint32_t idx1 = polyvoxMesh.getIndex(triIdx * 3 + 1);
+		uint32_t idx2 = polyvoxMesh.getIndex(triIdx * 3 + 2);
+
+		if (idx0 >= polyvoxMesh.getNoOfVertices() ||
+				idx1 >= polyvoxMesh.getNoOfVertices() ||
+				idx2 >= polyvoxMesh.getNoOfVertices()) {
+			continue;
+		}
+
+		auto vertex0 = polyvoxMesh.getVertex(idx0);
+		auto vertex1 = polyvoxMesh.getVertex(idx1);
+		auto vertex2 = polyvoxMesh.getVertex(idx2);
+
+		// For CubicVertex, decode the position
+		// Convert to world coordinates and create vertices
+		// The volume is positioned relative to the mesh grid origin
+		Vector3DFloat decodedPos0 = decodePosition(vertex0.encodedPosition);
+		Vector3DFloat decodedPos1 = decodePosition(vertex1.encodedPosition);
+		Vector3DFloat decodedPos2 = decodePosition(vertex2.encodedPosition);
+
+		// Calculate vertex positions relative to mesh grid origin
+		v3f base_pos0 = oposToV3f(
+				v3opos_t(decodedPos0.getX(), decodedPos0.getY(), decodedPos0.getZ()) *
+				BS);
+		v3f base_pos1 = oposToV3f(
+				v3opos_t(decodedPos1.getX(), decodedPos1.getY(), decodedPos1.getZ()) *
+				BS);
+		v3f base_pos2 = oposToV3f(
+				v3opos_t(decodedPos2.getX(), decodedPos2.getY(), decodedPos2.getZ()) *
+				BS);
+
+		v3f pos0, pos1, pos2;
+
+		// Apply fscale scaling if needed (matching content_mapblock.cpp logic)
+		if (m_data->fscale > 1) {
+			int fscale = m_data->fscale;
+
+			// Apply the same scaling transformation as in content_mapblock.cpp
+			// First, shift to node center
+			pos0 = base_pos0 + v3f(HBS, 0.0f, HBS);
+			// Scale uniformly
+			pos0 *= v3f((float)fscale, (float)fscale, (float)fscale);
+			// Apply offset: -HBS for X/Z, and special Y offset calculation
+			pos0 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
+
+			pos1 = base_pos1 + v3f(HBS, 0.0f, HBS);
+			pos1 *= v3f((float)fscale, (float)fscale, (float)fscale);
+			pos1 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
+
+			pos2 = base_pos2 + v3f(HBS, 0.0f, HBS);
+			pos2 *= v3f((float)fscale, (float)fscale, (float)fscale);
+			pos2 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
+		} else {
+			pos0 = base_pos0;
+			pos1 = base_pos1;
+			pos2 = base_pos2;
+		}
+
+		// Debug output for first few triangles
+		if (triIdx < 5) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher: Triangle %d: (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n",
+					(int)triIdx, pos0.X, pos0.Y, pos0.Z, pos1.X, pos1.Y, pos1.Z, pos2.X,
+					pos2.Y, pos2.Z);
+		}
+
+		// Calculate normal (cross product of two edges)
+		v3f edge1 = pos1 - pos0;
+		v3f edge2 = pos2 - pos0;
+		v3f normal = edge1.crossProduct(edge2);
+		if (normal.getLengthSQ() > 0.0f) {
+			normal.normalize();
+		} else {
+			normal = v3f(0, 1, 0);
+		}
+
+		// Debug: Print normal for first few triangles
+		if (triIdx < 5) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher: Tri %d: normal=(%.3f,%.3f,%.3f)\n", (int)triIdx,
+					normal.X, normal.Y, normal.Z);
+		}
+
+		// Determine face direction based on normal for proper tile selection
+		v3pos_t face_dir(0, 1, 0); // default to top face
+		const float threshold = 0.5f;
+
+		if (std::abs(normal.Y) > threshold && std::abs(normal.Y) > std::abs(normal.X) &&
+				std::abs(normal.Y) > std::abs(normal.Z)) {
+			face_dir = v3pos_t(0, normal.Y > 0 ? 1 : -1, 0);
+		} else if (std::abs(normal.X) > threshold &&
+				   std::abs(normal.X) > std::abs(normal.Z)) {
+			face_dir = v3pos_t(normal.X > 0 ? 1 : -1, 0, 0);
+		} else if (std::abs(normal.Z) > threshold) {
+			face_dir = v3pos_t(0, 0, normal.Z > 0 ? 1 : -1);
+		}
+
+		// Use the snapped face direction to locate the solid voxel for cubic faces.
+		v3pos_t triangle_node_pos = remapVolumePosToNodePos(
+				sampleNodePosFromFaceDir(base_pos0, base_pos1, base_pos2, face_dir));
+		Material8 triangle_material =
+				pickTriangleMaterial(vertex0.data, vertex1.data, vertex2.data);
+		setupNodeFromMaterial(triangle_material, triangle_node_pos);
+
+		// Debug: Print node info for first few triangles
+		if (triIdx < 5) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher: Tri %d: base=(%.1f,%.1f,%.1f) node=(%d,%d,%d) content=%d material=%d\n",
+					(int)triIdx, base_pos0.X, base_pos0.Y, base_pos0.Z,
+					triangle_node_pos.X, triangle_node_pos.Y, triangle_node_pos.Z,
+					(int)cur_node.n.getContent(),
+					(int)nodeToMaterial(cur_node.n).getMaterial());
+		}
+
+		// Debug: Print lighting info
+		if (triIdx < 3) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher: Tri %d: smooth_lighting=%d content=%d\n", (int)triIdx,
+					m_data->m_smooth_lighting ? 1 : 0, (int)cur_node.n.getContent());
+		}
+
+		// Get lighting for this node
+		if (m_data->m_smooth_lighting) {
+			getSmoothLightFrame();
+			cur_node.lcolor = blendLightColor(v3f(0, 0, 0)); // center of node
+			if (triIdx < 3) {
+				POLYVOX_MESHER_DEBUG_PRINTF(
+						"PolyVoxMesher: Tri %d: smooth light color=(%d,%d,%d,%d)\n",
+						(int)triIdx, cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(),
+						cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
+			}
+		} else {
+			MapNode neighbor = m_data->m_vmanip.getNodeNoEx(
+					blockpos_nodes + cur_node.p + face_dir * m_data->fscale);
+			auto light = LightPair(getFaceLight(cur_node.n, neighbor, nodedef));
+			cur_node.lcolor = encode_light(light, cur_node.f->light_source);
+			if (triIdx < 3) {
+				POLYVOX_MESHER_DEBUG_PRINTF(
+						"PolyVoxMesher: Tri %d: face light=(%d,%d) neighbor=%d color=(%d,%d,%d,%d)\n",
+						(int)triIdx, light.lightDay, light.lightNight,
+						(int)neighbor.getContent(), cur_node.lcolor.getAlpha(),
+						cur_node.lcolor.getRed(), cur_node.lcolor.getGreen(),
+						cur_node.lcolor.getBlue());
+			}
+		}
+
+		// Get the appropriate tile for this face direction
+		TileSpec tile;
+
+		// Use directional tile selection for all nodes (this ensures proper texture mapping)
+		getNodeTile(cur_node.n, cur_node.p, face_dir, m_data, tile);
+
+		// Apply backface culling for solid nodes (matching content_mapblock.cpp behavior)
+		bool backface_culling = cur_node.f->drawtype == NDT_NORMAL;
+		if (backface_culling) {
+			for (auto &layer : tile.layers) {
+				if (layer.texture) {
+					layer.material_flags |= MATERIAL_FLAG_BACKFACE_CULLING;
+				}
+			}
+		}
+
+		// Apply tile animations and transformations (ported from content_mapblock.cpp)
+		for (auto &layer : tile.layers) {
+			if (layer.texture) {
+				// Apply animation transformations
+				if (layer.material_flags & MATERIAL_FLAG_ANIMATION) {
+					// Handle texture animation
+					// This is a simplified version - in reality you'd want to implement
+					// proper animation frame calculation like in the original
+				}
+
+				// Apply texture transforms
+				if (layer.scale != 1) {
+					// Handle scaled textures
+				}
+
+				// Debug: Check for missing textures
+				if (triIdx < 3 && !layer.texture) {
+					POLYVOX_MESHER_DEBUG_PRINTF(
+							"PolyVoxMesher: Tri %d: WARNING - Missing texture for layer!\n",
+							(int)triIdx);
+				}
+			}
+		}
+
+		// For cubic extraction the faces are axis-aligned, so prefer the
+		// discrete face direction over triangle winding for shading/lighting.
+		normal = v3f(face_dir.X, face_dir.Y, face_dir.Z);
+
+		// Debug: Print tile info for first few triangles
+		if (triIdx < 3) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher: Tri %d: face_dir=(%d,%d,%d) has_texture=%s scale=%d drawtype=%d\n",
+					(int)triIdx, face_dir.X, face_dir.Y, face_dir.Z,
+					tile.layers[0].texture ? "yes" : "no",
+					tile.layers[0].texture ? tile.layers[0].scale : 0,
+					(int)cur_node.f->drawtype);
+		}
+
+		// Generate texture coordinates based on the triangle vertices
+		// Improved approach - generate UVs relative to the face and node position
+		v2f uv0, uv1, uv2;
+
+		// Calculate UV coordinates relative to the node's face
+		// Use the vertex positions within the node's coordinate system
+		v3f node_origin = cur_node.origin; // Center of the current node
+
+		// Calculate relative positions within the node (normalized to [-0.5, 0.5])
+		v3f rel_pos0 = (pos0 - node_origin) / BS;
+		v3f rel_pos1 = (pos1 - node_origin) / BS;
+		v3f rel_pos2 = (pos2 - node_origin) / BS;
+
+		// Generate UV coordinates based on face normal orientation
+		if (std::abs(normal.Y) > 0.5f) {
+			// Top/bottom face - map X,Z coordinates
+			uv0 = v2f(rel_pos0.X + 0.5f, rel_pos0.Z + 0.5f);
+			uv1 = v2f(rel_pos1.X + 0.5f, rel_pos1.Z + 0.5f);
+			uv2 = v2f(rel_pos2.X + 0.5f, rel_pos2.Z + 0.5f);
+		} else if (std::abs(normal.X) > 0.5f) {
+			// Side face X-aligned - map Z,Y coordinates
+			uv0 = v2f(rel_pos0.Z + 0.5f, rel_pos0.Y + 0.5f);
+			uv1 = v2f(rel_pos1.Z + 0.5f, rel_pos1.Y + 0.5f);
+			uv2 = v2f(rel_pos2.Z + 0.5f, rel_pos2.Y + 0.5f);
+		} else {
+			// Side face Z-aligned - map X,Y coordinates
+			uv0 = v2f(rel_pos0.X + 0.5f, rel_pos0.Y + 0.5f);
+			uv1 = v2f(rel_pos1.X + 0.5f, rel_pos1.Y + 0.5f);
+			uv2 = v2f(rel_pos2.X + 0.5f, rel_pos2.Y + 0.5f);
+		}
+
+		// Apply tile-specific transformations from content_mapblock.cpp approach
+		// Handle texture scaling and other tile properties
+		for (auto &layer : tile.layers) {
+			if (layer.texture) {
+				// Apply texture scaling
+				if (layer.scale != 1) {
+					uv0.X *= layer.scale;
+					uv0.Y *= layer.scale;
+					uv1.X *= layer.scale;
+					uv1.Y *= layer.scale;
+					uv2.X *= layer.scale;
+					uv2.Y *= layer.scale;
+				}
+			}
+		}
+
+		// Debug: Print UV coordinates for first few triangles
+		if (triIdx < 3) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher: Tri %d: UVs=(%.3f,%.3f) (%.3f,%.3f) (%.3f,%.3f)\n",
+					(int)triIdx, uv0.X, uv0.Y, uv1.X, uv1.Y, uv2.X, uv2.Y);
+		}
+
+		const v3f render_normal = getRenderNormal(m_data, normal);
+
+		// Create vertices with proper lighting and texture coordinates
+		video::S3DVertex vertices[3];
+		if (m_data->m_smooth_lighting) {
+			vertices[0] = video::S3DVertex(
+					pos0, render_normal, blendLightColor(pos0, normal), uv0);
+			vertices[1] = video::S3DVertex(
+					pos1, render_normal, blendLightColor(pos1, normal), uv1);
+			vertices[2] = video::S3DVertex(
+					pos2, render_normal, blendLightColor(pos2, normal), uv2);
+		} else {
+			video::SColor color = cur_node.lcolor;
+			vertices[0] = video::S3DVertex(pos0, render_normal, color, uv0);
+			vertices[1] = video::S3DVertex(pos1, render_normal, color, uv1);
+			vertices[2] = video::S3DVertex(pos2, render_normal, color, uv2);
+		}
+
+		// Debug: Print vertex colors for first few triangles
+		if (triIdx < 3) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher: Tri %d: colors=(%d,%d,%d,%d) (%d,%d,%d,%d) (%d,%d,%d,%d)\n",
+					(int)triIdx, vertices[0].Color.getAlpha(), vertices[0].Color.getRed(),
+					vertices[0].Color.getGreen(), vertices[0].Color.getBlue(),
+					vertices[1].Color.getAlpha(), vertices[1].Color.getRed(),
+					vertices[1].Color.getGreen(), vertices[1].Color.getBlue(),
+					vertices[2].Color.getAlpha(), vertices[2].Color.getRed(),
+					vertices[2].Color.getGreen(), vertices[2].Color.getBlue());
+		}
+
+		// Add triangle to collector
+		u16 indices[3] = {0, 1, 2};
+		m_collector->append(tile, vertices, 3, indices, 3);
+	}
+
+	POLYVOX_MESHER_DEBUG_PRINTF(
+			"PolyVoxMesher: Finished processing %d triangles\n", (int)numTriangles);
 }
 
-void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>>& polyvoxMesh)
+void PolyVoxMesher::convertToCollector(const Mesh<Vertex<Material8>> &polyvoxMesh)
 {
-    if (polyvoxMesh.getNoOfIndices() == 0 || polyvoxMesh.getNoOfVertices() == 0)
-        return;
-    
-    // Process triangles from the mesh
-    const uint32_t numTriangles = polyvoxMesh.getNoOfIndices() / 3;
-    
-    // Debug output
-    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Processing mesh with %d vertices and %d indices (%d triangles)\n", 
-           (int)polyvoxMesh.getNoOfVertices(), (int)polyvoxMesh.getNoOfIndices(), (int)numTriangles);
-    
-    for (uint32_t triIdx = 0; triIdx < numTriangles; triIdx++) {
-        
-        // Get the three vertices of this triangle
-        uint32_t idx0 = polyvoxMesh.getIndex(triIdx * 3 + 0);
-        uint32_t idx1 = polyvoxMesh.getIndex(triIdx * 3 + 1);
-        uint32_t idx2 = polyvoxMesh.getIndex(triIdx * 3 + 2);
-        
-        if (idx0 >= polyvoxMesh.getNoOfVertices() || 
-            idx1 >= polyvoxMesh.getNoOfVertices() || 
-            idx2 >= polyvoxMesh.getNoOfVertices()) {
-            continue;
-        }
-        
-        auto vertex0 = polyvoxMesh.getVertex(idx0);
-        auto vertex1 = polyvoxMesh.getVertex(idx1);
-        auto vertex2 = polyvoxMesh.getVertex(idx2);
-        
-        // For decoded Vertex, position is already available
-        Vector3DFloat decodedPos0 = vertex0.position;
-        Vector3DFloat decodedPos1 = vertex1.position;
-        Vector3DFloat decodedPos2 = vertex2.position;
-        
-        // Calculate vertex positions relative to mesh grid origin
-        v3f base_pos0 = oposToV3f(v3opos_t(decodedPos0.getX(), decodedPos0.getY(), decodedPos0.getZ()) * BS);
-        v3f base_pos1 = oposToV3f(v3opos_t(decodedPos1.getX(), decodedPos1.getY(), decodedPos1.getZ()) * BS);
-        v3f base_pos2 = oposToV3f(v3opos_t(decodedPos2.getX(), decodedPos2.getY(), decodedPos2.getZ()) * BS);
-        
-        v3f pos0, pos1, pos2;
-        
-        // Apply fscale scaling if needed (matching content_mapblock.cpp logic)
-        if (m_data->fscale > 1) {
-            int fscale = m_data->fscale;
-            
-            // Apply the same scaling transformation as in content_mapblock.cpp
-            // First, shift to node center
-            pos0 = base_pos0 + v3f(HBS, 0.0f, HBS);
-            // Scale uniformly
-            pos0 *= v3f((float)fscale, (float)fscale, (float)fscale);
-            // Apply offset: -HBS for X/Z, and special Y offset calculation
-            pos0 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
-            
-            pos1 = base_pos1 + v3f(HBS, 0.0f, HBS);
-            pos1 *= v3f((float)fscale, (float)fscale, (float)fscale);
-            pos1 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
-            
-            pos2 = base_pos2 + v3f(HBS, 0.0f, HBS);
-            pos2 *= v3f((float)fscale, (float)fscale, (float)fscale);
-            pos2 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
-        } else {
-            pos0 = base_pos0;
-            pos1 = base_pos1;
-            pos2 = base_pos2;
-        }
-        
-        // Debug output for first few triangles
-        if (triIdx < 5) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Triangle %d: (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n",
-                   (int)triIdx,
-                   pos0.X, pos0.Y, pos0.Z,
-                   pos1.X, pos1.Y, pos1.Z,
-                   pos2.X, pos2.Y, pos2.Z);
-        }
-        
-        // Calculate normal (use the one from the vertex if available, otherwise calculate)
-        v3f normal;
-        // Check if normal has meaningful values (avoid division by zero)
-        if (vertex0.normal.getX() != 0.0f || vertex0.normal.getY() != 0.0f || vertex0.normal.getZ() != 0.0f) {
-            normal = v3f(vertex0.normal.getX(), vertex0.normal.getY(), vertex0.normal.getZ());
-            if (normal.getLengthSQ() > 0.0f) {
-                normal.normalize();
-            } else {
-                normal = v3f(0, 1, 0);
-            }
-        } else {
-            // Calculate normal (cross product of two edges)
-            v3f edge1 = pos1 - pos0;
-            v3f edge2 = pos2 - pos0;
-            normal = edge1.crossProduct(edge2);
-            if (normal.getLengthSQ() > 0.0f) {
-                normal.normalize();
-            } else {
-                normal = v3f(0, 1, 0);
-            }
-        }
-        
-        // Debug: Print normal for first few triangles
-        if (triIdx < 5) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: normal=(%.3f,%.3f,%.3f)\n",
-                   (int)triIdx, normal.X, normal.Y, normal.Z);
-        }
-        
-        v3pos_t triangle_node_pos = remapVolumePosToNodePos(
-                resolveTriangleNodePos(base_pos0, base_pos1, base_pos2, normal));
-        Material8 triangle_material = pickTriangleMaterial(vertex0.data, vertex1.data, vertex2.data);
-        setupNodeFromMaterial(triangle_material, triangle_node_pos);
-        
-        // Debug: Print node info for first few triangles
-        if (triIdx < 5) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: base=(%.1f,%.1f,%.1f) node=(%d,%d,%d) content=%d material=%d\n",
-                   (int)triIdx, base_pos0.X, base_pos0.Y, base_pos0.Z,
-                   triangle_node_pos.X, triangle_node_pos.Y, triangle_node_pos.Z,
-                   (int)cur_node.n.getContent(), (int)nodeToMaterial(cur_node.n).getMaterial());
-        }
-        
-        // Determine face direction based on normal for proper tile selection
-        v3pos_t face_dir(0, 1, 0); // default to top face
-        const float threshold = 0.5f;
-        
-        if (std::abs(normal.Y) > threshold && std::abs(normal.Y) > std::abs(normal.X) && std::abs(normal.Y) > std::abs(normal.Z)) {
-            face_dir = v3pos_t(0, normal.Y > 0 ? 1 : -1, 0);
-        } else if (std::abs(normal.X) > threshold && std::abs(normal.X) > std::abs(normal.Z)) {
-            face_dir = v3pos_t(normal.X > 0 ? 1 : -1, 0, 0);
-        } else if (std::abs(normal.Z) > threshold) {
-            face_dir = v3pos_t(0, 0, normal.Z > 0 ? 1 : -1);
-        }
+	if (polyvoxMesh.getNoOfIndices() == 0 || polyvoxMesh.getNoOfVertices() == 0)
+		return;
 
-        // Debug: Print lighting info
-        if (triIdx < 3) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: smooth_lighting=%d content=%d\n",
-                   (int)triIdx, m_data->m_smooth_lighting ? 1 : 0, (int)cur_node.n.getContent());
-        }
-        
-        // Get lighting for this node
-        if (m_data->m_smooth_lighting) {
-            getSmoothLightFrame();
-            cur_node.lcolor = blendLightColor(v3f(0, 0, 0)); // center of node
-            if (triIdx < 3) {
-                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: smooth light color=(%d,%d,%d,%d)\n",
-                       (int)triIdx,
-                       cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(), 
-                       cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
-            }
-        } else {
-            MapNode neighbor = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p + face_dir * m_data->fscale);
-            auto light = LightPair(getFaceLight(cur_node.n, neighbor, nodedef));
-            cur_node.lcolor = encode_light(light, cur_node.f->light_source);
-            if (triIdx < 3) {
-                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: face light=(%d,%d) neighbor=%d color=(%d,%d,%d,%d)\n",
-                       (int)triIdx, light.lightDay, light.lightNight, (int)neighbor.getContent(),
-                       cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(), 
-                       cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
-            }
-        }
-        
-        // Get the appropriate tile for this face direction
-        TileSpec tile;
-        
-        // Use directional tile selection for all nodes (this ensures proper texture mapping)
-        getNodeTile(cur_node.n, cur_node.p, face_dir, m_data, tile);
-        
-        // Apply backface culling for solid nodes (matching content_mapblock.cpp behavior)
-        bool backface_culling = false;
-        if (backface_culling) {
-            for (auto &layer : tile.layers) {
-                if (layer.texture) {
-                    layer.material_flags |= MATERIAL_FLAG_BACKFACE_CULLING;
-                }
-            }
-        }
-        
-        // Apply tile animations and transformations (ported from content_mapblock.cpp)
-        for (auto &layer : tile.layers) {
-            if (layer.texture) {
-                // Apply animation transformations
-                if (layer.material_flags & MATERIAL_FLAG_ANIMATION) {
-                    // Handle texture animation
-                    // This is a simplified version - in reality you'd want to implement
-                    // proper animation frame calculation like in the original
-                }
-                
-                // Apply texture transforms
-                if (layer.scale != 1) {
-                    // Handle scaled textures
-                }
-                
-                // Debug: Check for missing textures
-                if (triIdx < 3 && !layer.texture) {
-                    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: WARNING - Missing texture for layer!\n", (int)triIdx);
-                }
-            }
-        }
-        
-        // Debug: Print tile info for first few triangles
-        if (triIdx < 3) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: face_dir=(%d,%d,%d) has_texture=%s scale=%d drawtype=%d\n",
-                   (int)triIdx, face_dir.X, face_dir.Y, face_dir.Z,
-                   tile.layers[0].texture ? "yes" : "no",
-                   tile.layers[0].texture ? tile.layers[0].scale : 0,
-                   (int)cur_node.f->drawtype);
-        }
-        
-        // Generate texture coordinates based on the triangle vertices
-        // Improved approach - generate UVs relative to the face and node position
-        v2f uv0, uv1, uv2;
-        
-        // Calculate UV coordinates relative to the node's face
-        // Use the vertex positions within the node's coordinate system
-        v3f node_origin = cur_node.origin; // Center of the current node
-        
-        // Calculate relative positions within the node (normalized to [-0.5, 0.5])
-        v3f rel_pos0 = (pos0 - node_origin) / BS;
-        v3f rel_pos1 = (pos1 - node_origin) / BS;
-        v3f rel_pos2 = (pos2 - node_origin) / BS;
-        
-        // Generate UV coordinates based on face normal orientation
-        if (std::abs(normal.Y) > 0.5f) {
-            // Top/bottom face - map X,Z coordinates
-            uv0 = v2f(rel_pos0.X + 0.5f, rel_pos0.Z + 0.5f);
-            uv1 = v2f(rel_pos1.X + 0.5f, rel_pos1.Z + 0.5f);
-            uv2 = v2f(rel_pos2.X + 0.5f, rel_pos2.Z + 0.5f);
-        } else if (std::abs(normal.X) > 0.5f) {
-            // Side face X-aligned - map Z,Y coordinates
-            uv0 = v2f(rel_pos0.Z + 0.5f, rel_pos0.Y + 0.5f);
-            uv1 = v2f(rel_pos1.Z + 0.5f, rel_pos1.Y + 0.5f);
-            uv2 = v2f(rel_pos2.Z + 0.5f, rel_pos2.Y + 0.5f);
-        } else {
-            // Side face Z-aligned - map X,Y coordinates
-            uv0 = v2f(rel_pos0.X + 0.5f, rel_pos0.Y + 0.5f);
-            uv1 = v2f(rel_pos1.X + 0.5f, rel_pos1.Y + 0.5f);
-            uv2 = v2f(rel_pos2.X + 0.5f, rel_pos2.Y + 0.5f);
-        }
-        
-        // Apply tile-specific transformations from content_mapblock.cpp approach
-        // Handle texture scaling and other tile properties
-        for (auto &layer : tile.layers) {
-            if (layer.texture) {
-                // Apply texture scaling
-                if (layer.scale != 1) {
-                    uv0.X *= layer.scale;
-                    uv0.Y *= layer.scale;
-                    uv1.X *= layer.scale;
-                    uv1.Y *= layer.scale;
-                    uv2.X *= layer.scale;
-                    uv2.Y *= layer.scale;
-                }
-            }
-        }
-        
-        // Debug: Print UV coordinates for first few triangles
-        if (triIdx < 3) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: UVs=(%.3f,%.3f) (%.3f,%.3f) (%.3f,%.3f)\n",
-                   (int)triIdx, uv0.X, uv0.Y, uv1.X, uv1.Y, uv2.X, uv2.Y);
-        }
-        
-        const v3f render_normal = getRenderNormal(m_data, normal);
+	// Process triangles from the mesh
+	const uint32_t numTriangles = polyvoxMesh.getNoOfIndices() / 3;
 
-        // Create vertices with proper lighting and texture coordinates
-        video::S3DVertex vertices[3];
-        if (m_data->m_smooth_lighting) {
-            vertices[0] = video::S3DVertex(pos0, render_normal, blendLightColor(pos0, normal), uv0);
-            vertices[1] = video::S3DVertex(pos1, render_normal, blendLightColor(pos1, normal), uv1);
-            vertices[2] = video::S3DVertex(pos2, render_normal, blendLightColor(pos2, normal), uv2);
-        } else {
-            video::SColor color = cur_node.lcolor;
-            vertices[0] = video::S3DVertex(pos0, render_normal, color, uv0);
-            vertices[1] = video::S3DVertex(pos1, render_normal, color, uv1);
-            vertices[2] = video::S3DVertex(pos2, render_normal, color, uv2);
-        }
-        
-        // Debug: Print vertex colors for first few triangles
-        if (triIdx < 3) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Tri %d: colors=(%d,%d,%d,%d) (%d,%d,%d,%d) (%d,%d,%d,%d)\n",
-                   (int)triIdx,
-                   vertices[0].Color.getAlpha(), vertices[0].Color.getRed(), vertices[0].Color.getGreen(), vertices[0].Color.getBlue(),
-                   vertices[1].Color.getAlpha(), vertices[1].Color.getRed(), vertices[1].Color.getGreen(), vertices[1].Color.getBlue(),
-                   vertices[2].Color.getAlpha(), vertices[2].Color.getRed(), vertices[2].Color.getGreen(), vertices[2].Color.getBlue());
-        }
-        
-        // Add triangle to collector
-        u16 indices[3] = {0, 1, 2};
-        m_collector->append(tile, vertices, 3, indices, 3);
-    }
-    
-    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth): Finished processing %d triangles\n", (int)numTriangles);
+	// Debug output
+	POLYVOX_MESHER_DEBUG_PRINTF(
+			"PolyVoxMesher (smooth): Processing mesh with %d vertices and %d indices (%d triangles)\n",
+			(int)polyvoxMesh.getNoOfVertices(), (int)polyvoxMesh.getNoOfIndices(),
+			(int)numTriangles);
+
+	for (uint32_t triIdx = 0; triIdx < numTriangles; triIdx++) {
+
+		// Get the three vertices of this triangle
+		uint32_t idx0 = polyvoxMesh.getIndex(triIdx * 3 + 0);
+		uint32_t idx1 = polyvoxMesh.getIndex(triIdx * 3 + 1);
+		uint32_t idx2 = polyvoxMesh.getIndex(triIdx * 3 + 2);
+
+		if (idx0 >= polyvoxMesh.getNoOfVertices() ||
+				idx1 >= polyvoxMesh.getNoOfVertices() ||
+				idx2 >= polyvoxMesh.getNoOfVertices()) {
+			continue;
+		}
+
+		auto vertex0 = polyvoxMesh.getVertex(idx0);
+		auto vertex1 = polyvoxMesh.getVertex(idx1);
+		auto vertex2 = polyvoxMesh.getVertex(idx2);
+
+		// For decoded Vertex, position is already available
+		Vector3DFloat decodedPos0 = vertex0.position;
+		Vector3DFloat decodedPos1 = vertex1.position;
+		Vector3DFloat decodedPos2 = vertex2.position;
+
+		// Calculate vertex positions relative to mesh grid origin
+		v3f base_pos0 = oposToV3f(
+				v3opos_t(decodedPos0.getX(), decodedPos0.getY(), decodedPos0.getZ()) *
+				BS);
+		v3f base_pos1 = oposToV3f(
+				v3opos_t(decodedPos1.getX(), decodedPos1.getY(), decodedPos1.getZ()) *
+				BS);
+		v3f base_pos2 = oposToV3f(
+				v3opos_t(decodedPos2.getX(), decodedPos2.getY(), decodedPos2.getZ()) *
+				BS);
+
+		v3f pos0, pos1, pos2;
+
+		// Apply fscale scaling if needed (matching content_mapblock.cpp logic)
+		if (m_data->fscale > 1) {
+			int fscale = m_data->fscale;
+
+			// Apply the same scaling transformation as in content_mapblock.cpp
+			// First, shift to node center
+			pos0 = base_pos0 + v3f(HBS, 0.0f, HBS);
+			// Scale uniformly
+			pos0 *= v3f((float)fscale, (float)fscale, (float)fscale);
+			// Apply offset: -HBS for X/Z, and special Y offset calculation
+			pos0 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
+
+			pos1 = base_pos1 + v3f(HBS, 0.0f, HBS);
+			pos1 *= v3f((float)fscale, (float)fscale, (float)fscale);
+			pos1 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
+
+			pos2 = base_pos2 + v3f(HBS, 0.0f, HBS);
+			pos2 *= v3f((float)fscale, (float)fscale, (float)fscale);
+			pos2 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
+		} else {
+			pos0 = base_pos0;
+			pos1 = base_pos1;
+			pos2 = base_pos2;
+		}
+
+		// Debug output for first few triangles
+		if (triIdx < 5) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth): Triangle %d: (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n",
+					(int)triIdx, pos0.X, pos0.Y, pos0.Z, pos1.X, pos1.Y, pos1.Z, pos2.X,
+					pos2.Y, pos2.Z);
+		}
+
+		// Calculate normal (use the one from the vertex if available, otherwise calculate)
+		v3f normal;
+		// Check if normal has meaningful values (avoid division by zero)
+		if (vertex0.normal.getX() != 0.0f || vertex0.normal.getY() != 0.0f ||
+				vertex0.normal.getZ() != 0.0f) {
+			normal = v3f(
+					vertex0.normal.getX(), vertex0.normal.getY(), vertex0.normal.getZ());
+			if (normal.getLengthSQ() > 0.0f) {
+				normal.normalize();
+			} else {
+				normal = v3f(0, 1, 0);
+			}
+		} else {
+			// Calculate normal (cross product of two edges)
+			v3f edge1 = pos1 - pos0;
+			v3f edge2 = pos2 - pos0;
+			normal = edge1.crossProduct(edge2);
+			if (normal.getLengthSQ() > 0.0f) {
+				normal.normalize();
+			} else {
+				normal = v3f(0, 1, 0);
+			}
+		}
+
+		// Debug: Print normal for first few triangles
+		if (triIdx < 5) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth): Tri %d: normal=(%.3f,%.3f,%.3f)\n",
+					(int)triIdx, normal.X, normal.Y, normal.Z);
+		}
+
+		v3pos_t triangle_node_pos = remapVolumePosToNodePos(
+				resolveTriangleNodePos(base_pos0, base_pos1, base_pos2, normal));
+		Material8 triangle_material =
+				pickTriangleMaterial(vertex0.data, vertex1.data, vertex2.data);
+		setupNodeFromMaterial(triangle_material, triangle_node_pos);
+
+		// Debug: Print node info for first few triangles
+		if (triIdx < 5) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth): Tri %d: base=(%.1f,%.1f,%.1f) node=(%d,%d,%d) content=%d material=%d\n",
+					(int)triIdx, base_pos0.X, base_pos0.Y, base_pos0.Z,
+					triangle_node_pos.X, triangle_node_pos.Y, triangle_node_pos.Z,
+					(int)cur_node.n.getContent(),
+					(int)nodeToMaterial(cur_node.n).getMaterial());
+		}
+
+		// Determine face direction based on normal for proper tile selection
+		v3pos_t face_dir(0, 1, 0); // default to top face
+		const float threshold = 0.5f;
+
+		if (std::abs(normal.Y) > threshold && std::abs(normal.Y) > std::abs(normal.X) &&
+				std::abs(normal.Y) > std::abs(normal.Z)) {
+			face_dir = v3pos_t(0, normal.Y > 0 ? 1 : -1, 0);
+		} else if (std::abs(normal.X) > threshold &&
+				   std::abs(normal.X) > std::abs(normal.Z)) {
+			face_dir = v3pos_t(normal.X > 0 ? 1 : -1, 0, 0);
+		} else if (std::abs(normal.Z) > threshold) {
+			face_dir = v3pos_t(0, 0, normal.Z > 0 ? 1 : -1);
+		}
+
+		// Debug: Print lighting info
+		if (triIdx < 3) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth): Tri %d: smooth_lighting=%d content=%d\n",
+					(int)triIdx, m_data->m_smooth_lighting ? 1 : 0,
+					(int)cur_node.n.getContent());
+		}
+
+		// Get lighting for this node
+		if (m_data->m_smooth_lighting) {
+			getSmoothLightFrame();
+			cur_node.lcolor = blendLightColor(v3f(0, 0, 0)); // center of node
+			if (triIdx < 3) {
+				POLYVOX_MESHER_DEBUG_PRINTF(
+						"PolyVoxMesher (smooth): Tri %d: smooth light color=(%d,%d,%d,%d)\n",
+						(int)triIdx, cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(),
+						cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
+			}
+		} else {
+			MapNode neighbor = m_data->m_vmanip.getNodeNoEx(
+					blockpos_nodes + cur_node.p + face_dir * m_data->fscale);
+			auto light = LightPair(getFaceLight(cur_node.n, neighbor, nodedef));
+			cur_node.lcolor = encode_light(light, cur_node.f->light_source);
+			if (triIdx < 3) {
+				POLYVOX_MESHER_DEBUG_PRINTF(
+						"PolyVoxMesher (smooth): Tri %d: face light=(%d,%d) neighbor=%d color=(%d,%d,%d,%d)\n",
+						(int)triIdx, light.lightDay, light.lightNight,
+						(int)neighbor.getContent(), cur_node.lcolor.getAlpha(),
+						cur_node.lcolor.getRed(), cur_node.lcolor.getGreen(),
+						cur_node.lcolor.getBlue());
+			}
+		}
+
+		// Get the appropriate tile for this face direction
+		TileSpec tile;
+
+		// Use directional tile selection for all nodes (this ensures proper texture mapping)
+		getNodeTile(cur_node.n, cur_node.p, face_dir, m_data, tile);
+
+		// Apply backface culling for solid nodes (matching content_mapblock.cpp behavior)
+		bool backface_culling = false;
+		if (backface_culling) {
+			for (auto &layer : tile.layers) {
+				if (layer.texture) {
+					layer.material_flags |= MATERIAL_FLAG_BACKFACE_CULLING;
+				}
+			}
+		}
+
+		// Apply tile animations and transformations (ported from content_mapblock.cpp)
+		for (auto &layer : tile.layers) {
+			if (layer.texture) {
+				// Apply animation transformations
+				if (layer.material_flags & MATERIAL_FLAG_ANIMATION) {
+					// Handle texture animation
+					// This is a simplified version - in reality you'd want to implement
+					// proper animation frame calculation like in the original
+				}
+
+				// Apply texture transforms
+				if (layer.scale != 1) {
+					// Handle scaled textures
+				}
+
+				// Debug: Check for missing textures
+				if (triIdx < 3 && !layer.texture) {
+					POLYVOX_MESHER_DEBUG_PRINTF(
+							"PolyVoxMesher (smooth): Tri %d: WARNING - Missing texture for layer!\n",
+							(int)triIdx);
+				}
+			}
+		}
+
+		// Debug: Print tile info for first few triangles
+		if (triIdx < 3) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth): Tri %d: face_dir=(%d,%d,%d) has_texture=%s scale=%d drawtype=%d\n",
+					(int)triIdx, face_dir.X, face_dir.Y, face_dir.Z,
+					tile.layers[0].texture ? "yes" : "no",
+					tile.layers[0].texture ? tile.layers[0].scale : 0,
+					(int)cur_node.f->drawtype);
+		}
+
+		// Generate texture coordinates based on the triangle vertices
+		// Improved approach - generate UVs relative to the face and node position
+		v2f uv0, uv1, uv2;
+
+		// Calculate UV coordinates relative to the node's face
+		// Use the vertex positions within the node's coordinate system
+		v3f node_origin = cur_node.origin; // Center of the current node
+
+		// Calculate relative positions within the node (normalized to [-0.5, 0.5])
+		v3f rel_pos0 = (pos0 - node_origin) / BS;
+		v3f rel_pos1 = (pos1 - node_origin) / BS;
+		v3f rel_pos2 = (pos2 - node_origin) / BS;
+
+		// Generate UV coordinates based on face normal orientation
+		if (std::abs(normal.Y) > 0.5f) {
+			// Top/bottom face - map X,Z coordinates
+			uv0 = v2f(rel_pos0.X + 0.5f, rel_pos0.Z + 0.5f);
+			uv1 = v2f(rel_pos1.X + 0.5f, rel_pos1.Z + 0.5f);
+			uv2 = v2f(rel_pos2.X + 0.5f, rel_pos2.Z + 0.5f);
+		} else if (std::abs(normal.X) > 0.5f) {
+			// Side face X-aligned - map Z,Y coordinates
+			uv0 = v2f(rel_pos0.Z + 0.5f, rel_pos0.Y + 0.5f);
+			uv1 = v2f(rel_pos1.Z + 0.5f, rel_pos1.Y + 0.5f);
+			uv2 = v2f(rel_pos2.Z + 0.5f, rel_pos2.Y + 0.5f);
+		} else {
+			// Side face Z-aligned - map X,Y coordinates
+			uv0 = v2f(rel_pos0.X + 0.5f, rel_pos0.Y + 0.5f);
+			uv1 = v2f(rel_pos1.X + 0.5f, rel_pos1.Y + 0.5f);
+			uv2 = v2f(rel_pos2.X + 0.5f, rel_pos2.Y + 0.5f);
+		}
+
+		// Apply tile-specific transformations from content_mapblock.cpp approach
+		// Handle texture scaling and other tile properties
+		for (auto &layer : tile.layers) {
+			if (layer.texture) {
+				// Apply texture scaling
+				if (layer.scale != 1) {
+					uv0.X *= layer.scale;
+					uv0.Y *= layer.scale;
+					uv1.X *= layer.scale;
+					uv1.Y *= layer.scale;
+					uv2.X *= layer.scale;
+					uv2.Y *= layer.scale;
+				}
+			}
+		}
+
+		// Debug: Print UV coordinates for first few triangles
+		if (triIdx < 3) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth): Tri %d: UVs=(%.3f,%.3f) (%.3f,%.3f) (%.3f,%.3f)\n",
+					(int)triIdx, uv0.X, uv0.Y, uv1.X, uv1.Y, uv2.X, uv2.Y);
+		}
+
+		const v3f render_normal = getRenderNormal(m_data, normal);
+
+		// Create vertices with proper lighting and texture coordinates
+		video::S3DVertex vertices[3];
+		if (m_data->m_smooth_lighting) {
+			vertices[0] = video::S3DVertex(
+					pos0, render_normal, blendLightColor(pos0, normal), uv0);
+			vertices[1] = video::S3DVertex(
+					pos1, render_normal, blendLightColor(pos1, normal), uv1);
+			vertices[2] = video::S3DVertex(
+					pos2, render_normal, blendLightColor(pos2, normal), uv2);
+		} else {
+			video::SColor color = cur_node.lcolor;
+			vertices[0] = video::S3DVertex(pos0, render_normal, color, uv0);
+			vertices[1] = video::S3DVertex(pos1, render_normal, color, uv1);
+			vertices[2] = video::S3DVertex(pos2, render_normal, color, uv2);
+		}
+
+		// Debug: Print vertex colors for first few triangles
+		if (triIdx < 3) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth): Tri %d: colors=(%d,%d,%d,%d) (%d,%d,%d,%d) (%d,%d,%d,%d)\n",
+					(int)triIdx, vertices[0].Color.getAlpha(), vertices[0].Color.getRed(),
+					vertices[0].Color.getGreen(), vertices[0].Color.getBlue(),
+					vertices[1].Color.getAlpha(), vertices[1].Color.getRed(),
+					vertices[1].Color.getGreen(), vertices[1].Color.getBlue(),
+					vertices[2].Color.getAlpha(), vertices[2].Color.getRed(),
+					vertices[2].Color.getGreen(), vertices[2].Color.getBlue());
+		}
+
+		// Add triangle to collector
+		u16 indices[3] = {0, 1, 2};
+		m_collector->append(tile, vertices, 3, indices, 3);
+	}
+
+	POLYVOX_MESHER_DEBUG_PRINTF(
+			"PolyVoxMesher (smooth): Finished processing %d triangles\n",
+			(int)numTriangles);
 }
 
-void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>>& polyvoxMesh)
+void PolyVoxMesher::convertToCollector(const Mesh<Vertex<uint8_t>> &polyvoxMesh)
 {
-    if (polyvoxMesh.getNoOfIndices() == 0 || polyvoxMesh.getNoOfVertices() == 0)
-        return;
-    
-    // Filter out small disconnected mesh components to prevent floating pieces
-    // This helps eliminate noise and small isolated meshes from marching cubes
-    const uint32_t minTriangleCount = 4; // Minimum triangles for a valid mesh component
-    if (polyvoxMesh.getNoOfIndices() / 3 < minTriangleCount) {
-        POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Skipping small mesh with %d triangles (below threshold %d)\n",
-               (int)(polyvoxMesh.getNoOfIndices() / 3), (int)minTriangleCount);
-        return;
-    }
-    
-    // Process triangles from the mesh
-    const uint32_t numTriangles = polyvoxMesh.getNoOfIndices() / 3;
-    
-    // Debug output
-    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Processing mesh with %d vertices and %d indices (%d triangles), fscale=%d\n", 
-           (int)polyvoxMesh.getNoOfVertices(), (int)polyvoxMesh.getNoOfIndices(), (int)numTriangles, m_data->fscale);
-    
-    for (uint32_t triIdx = 0; triIdx < numTriangles; triIdx++) {
-        
-        // Get the three vertices of this triangle
-        uint32_t idx0 = polyvoxMesh.getIndex(triIdx * 3 + 0);
-        uint32_t idx1 = polyvoxMesh.getIndex(triIdx * 3 + 1);
-        uint32_t idx2 = polyvoxMesh.getIndex(triIdx * 3 + 2);
-        
-        if (idx0 >= polyvoxMesh.getNoOfVertices() || 
-            idx1 >= polyvoxMesh.getNoOfVertices() || 
-            idx2 >= polyvoxMesh.getNoOfVertices()) {
-            continue;
-        }
-        
-        auto vertex0 = polyvoxMesh.getVertex(idx0);
-        auto vertex1 = polyvoxMesh.getVertex(idx1);
-        auto vertex2 = polyvoxMesh.getVertex(idx2);
-        
-        // For decoded Vertex, position is already available
-        Vector3DFloat decodedPos0 = vertex0.position;
-        Vector3DFloat decodedPos1 = vertex1.position;
-        Vector3DFloat decodedPos2 = vertex2.position;
-        
-        // Calculate vertex positions relative to mesh grid origin
-        v3f base_pos0 = oposToV3f(v3opos_t(decodedPos0.getX(), decodedPos0.getY(), decodedPos0.getZ()) * BS);
-        v3f base_pos1 = oposToV3f(v3opos_t(decodedPos1.getX(), decodedPos1.getY(), decodedPos1.getZ()) * BS);
-        v3f base_pos2 = oposToV3f(v3opos_t(decodedPos2.getX(), decodedPos2.getY(), decodedPos2.getZ()) * BS);
-        
-        v3f pos0, pos1, pos2;
-        
-        // Apply fscale scaling if needed (matching content_mapblock.cpp logic)
-        if (m_data->fscale > 1) {
-            int fscale = m_data->fscale;
-            
-            // Apply the same scaling transformation as in content_mapblock.cpp
-            // First, shift to node center
-            pos0 = base_pos0 + v3f(HBS, 0.0f, HBS);
-            // Scale uniformly
-            pos0 *= v3f((float)fscale, (float)fscale, (float)fscale);
-            // Apply offset: -HBS for X/Z, and special Y offset calculation
-            pos0 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
-            
-            pos1 = base_pos1 + v3f(HBS, 0.0f, HBS);
-            pos1 *= v3f((float)fscale, (float)fscale, (float)fscale);
-            pos1 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
-            
-            pos2 = base_pos2 + v3f(HBS, 0.0f, HBS);
-            pos2 *= v3f((float)fscale, (float)fscale, (float)fscale);
-            pos2 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
-            
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): fscale applied - pos0=(%.2f,%.2f,%.2f) base=(%.2f,%.2f,%.2f)\n",
-                   pos0.X, pos0.Y, pos0.Z, base_pos0.X, base_pos0.Y, base_pos0.Z);
-        } else {
-            pos0 = base_pos0;
-            pos1 = base_pos1;
-            pos2 = base_pos2;
-        }
-        
-        // Debug output for first few triangles
-        if (triIdx < 5) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Triangle %d: (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n",
-                   (int)triIdx,
-                   pos0.X, pos0.Y, pos0.Z,
-                   pos1.X, pos1.Y, pos1.Z,
-                   pos2.X, pos2.Y, pos2.Z);
-        }
-        
-        // Calculate normal using cross product (ensure correct winding order)
-        v3f edge1 = pos1 - pos0;
-        v3f edge2 = pos2 - pos0;
-        v3f normal = edge1.crossProduct(edge2);
-        
-        // Check for degenerate triangle
-        float area = normal.getLength();
-        if (area < 0.0001f) {
-            // Degenerate triangle, skip it
-            continue;
-        }
-        
-        // Normalize the normal vector
-        normal.normalize();
-        
-        // Additional check: ensure normal isn't NaN or infinite
-        if (!std::isfinite(normal.X) || !std::isfinite(normal.Y) || !std::isfinite(normal.Z)) {
-            normal = v3f(0, 1, 0);
-        }
-        
-        // Ensure normal has minimum magnitude to avoid culling issues
-        if (normal.getLength() < 0.1f) {
-            normal = v3f(0, 1, 0);
-        }
-        
-        // Check if normal needs flipping for consistent outward-facing orientation
-        // This helps with backface culling and visibility
-        bool flipped = false;
-        
-        // For terrain meshes, we want to ensure normals are generally pointing outward
-        // Only flip if the normal is strongly pointing in an inward direction
-        // Be more conservative with flipping to preserve side face visibility
-        if (normal.Y < -0.8f) {
-            // Strongly downward-facing normal - flip it
-            std::swap(pos0, pos1);
-            normal = -normal;
-            flipped = true;
-        }
-        // Don't flip side faces aggressively - let them render as-is
-        // Side faces with mixed X/Y/Z components should remain visible
-        
-        // Debug: Print information about side face normals
-        if (triIdx < 10) {
-            float absX = std::abs(normal.X);
-            float absY = std::abs(normal.Y);
-            float absZ = std::abs(normal.Z);
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: normal=(%.3f,%.3f,%.3f) abs=(%.3f,%.3f,%.3f)\n",
-                   (int)triIdx, normal.X, normal.Y, normal.Z, absX, absY, absZ);
-        }
-        
-        // Debug: Print normal for first few triangles
-        if (triIdx < 10) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: normal=(%.3f,%.3f,%.3f) flipped=%d\n",
-                   (int)triIdx, normal.X, normal.Y, normal.Z, flipped ? 1 : 0);
-        }
-        
-        // Determine which node this triangle belongs to by sampling just inside
-        // the solid side of the surface instead of guessing from one axis.
-        v3pos_t triangle_node_pos = remapVolumePosToNodePos(
-                resolveTriangleNodePos(base_pos0, base_pos1, base_pos2, normal));
-        
-        // Debug: Print sampled node position
-        if (triIdx < 3) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: sampled_node_pos=(%d,%d,%d) base_pos=(%.1f,%.1f,%.1f)\n",
-                   (int)triIdx, triangle_node_pos.X, triangle_node_pos.Y, triangle_node_pos.Z,
-                   base_pos0.X, base_pos0.Y, base_pos0.Z);
-        }
-        
-        // Set up current node for this triangle
-        cur_node.p = triangle_node_pos;
-        cur_node.origin = oposToV3f(intToFloat(cur_node.p, BS));
-        cur_node.n = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p);
-        cur_node.f = &nodedef->get(cur_node.n);
-        
-        // Debug: Print node lookup result
-        if (triIdx < 3) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: lookup node=(%d,%d,%d) content=%d\n",
-                   (int)triIdx, cur_node.p.X, cur_node.p.Y, cur_node.p.Z,
-                   (int)cur_node.n.getContent());
-        }
-        
-        // Debug: Print node info for first few triangles
-        if (triIdx < 5) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: base=(%.1f,%.1f,%.1f) node=(%d,%d,%d) content=%d material=%d\n",
-                   (int)triIdx, base_pos0.X, base_pos0.Y, base_pos0.Z,
-                   triangle_node_pos.X, triangle_node_pos.Y, triangle_node_pos.Z,
-                   (int)cur_node.n.getContent(), (int)cur_node.n.getContent());
-        }
-        
-        // Determine face direction based on normal for proper tile selection
-        v3pos_t face_dir(0, 1, 0); // default to top face
-        const float threshold = 0.5f;
-        
-        if (std::abs(normal.Y) > threshold && std::abs(normal.Y) > std::abs(normal.X) && std::abs(normal.Y) > std::abs(normal.Z)) {
-            face_dir = v3pos_t(0, normal.Y > 0 ? 1 : -1, 0);
-        } else if (std::abs(normal.X) > threshold && std::abs(normal.X) > std::abs(normal.Z)) {
-            face_dir = v3pos_t(normal.X > 0 ? 1 : -1, 0, 0);
-        } else if (std::abs(normal.Z) > threshold) {
-            face_dir = v3pos_t(0, 0, normal.Z > 0 ? 1 : -1);
-        }
+	if (polyvoxMesh.getNoOfIndices() == 0 || polyvoxMesh.getNoOfVertices() == 0)
+		return;
 
-        // Debug: Print lighting info
-        if (triIdx < 3) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: smooth_lighting=%d content=%d\n",
-                   (int)triIdx, m_data->m_smooth_lighting ? 1 : 0, (int)cur_node.n.getContent());
-        }
-        
-        // Debug: Print node content and features
-        if (triIdx < 3) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: node content=%d drawtype=%d light_source=%d\n",
-                   (int)triIdx, (int)cur_node.n.getContent(), (int)cur_node.f->drawtype, (int)cur_node.f->light_source);
-        }
-        
-        // Get lighting for this node
-        if (m_data->m_smooth_lighting) {
-            getSmoothLightFrame();
-            cur_node.lcolor = blendLightColor(v3f(0, 0, 0)); // center of node
-            if (triIdx < 3) {
-                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: smooth light color=(%d,%d,%d,%d)\n",
-                       (int)triIdx,
-                       cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(), 
-                       cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
-            }
-        } else {
-            MapNode neighbor = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p + face_dir * m_data->fscale);
-            auto light = LightPair(getFaceLight(cur_node.n, neighbor, nodedef));
-            if (triIdx < 3) {
-                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: face light=(%d,%d) neighbor=%d\n",
-                       (int)triIdx, light.lightDay, light.lightNight, (int)neighbor.getContent());
-            }
-            cur_node.lcolor = encode_light(light, cur_node.f->light_source);
-            if (triIdx < 3) {
-                POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: encoded color=(%d,%d,%d,%d) light_source=%d\n",
-                       (int)triIdx,
-                       cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(), 
-                       cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue(),
-                       (int)cur_node.f->light_source);
-            }
-        }
-        
-        // Get the appropriate tile for this face direction
-        TileSpec tile;
-        
-        // Use directional tile selection for all nodes (this ensures proper texture mapping)
-        getNodeTile(cur_node.n, cur_node.p, face_dir, m_data, tile);
-        
-        // Apply backface culling for solid nodes (matching content_mapblock.cpp behavior)
-        bool backface_culling = false;
-        if (backface_culling) {
-            for (auto &layer : tile.layers) {
-                if (layer.texture) {
-                    layer.material_flags |= MATERIAL_FLAG_BACKFACE_CULLING;
-                }
-            }
-        }
-        
-        // Apply tile animations and transformations (ported from content_mapblock.cpp)
-        for (auto &layer : tile.layers) {
-            if (layer.texture) {
-                // Apply animation transformations
-                if (layer.material_flags & MATERIAL_FLAG_ANIMATION) {
-                    // Handle texture animation
-                    // This is a simplified version - in reality you'd want to implement
-                    // proper animation frame calculation like in the original
-                }
-                
-                // Apply texture transforms
-                if (layer.scale != 1) {
-                    // Handle scaled textures
-                }
-                
-                // Debug: Check for missing textures
-                if (triIdx < 3 && !layer.texture) {
-                    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: WARNING - Missing texture for layer!\n", (int)triIdx);
-                }
-            }
-        }
-        
-        // Debug: Print tile info for first few triangles
-        if (triIdx < 3) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: face_dir=(%d,%d,%d) has_texture=%s scale=%d drawtype=%d\n",
-                   (int)triIdx, face_dir.X, face_dir.Y, face_dir.Z,
-                   tile.layers[0].texture ? "yes" : "no",
-                   tile.layers[0].texture ? tile.layers[0].scale : 0,
-                   (int)cur_node.f->drawtype);
-        }
-        
-        // Generate texture coordinates based on the triangle vertices
-        // Improved approach - generate UVs relative to the face and node position
-        v2f uv0, uv1, uv2;
-        
-        // Calculate UV coordinates relative to the node's face
-        // Use the vertex positions within the node's coordinate system
-        v3f node_origin = cur_node.origin; // Center of the current node
-        
-        // Calculate relative positions within the node (normalized to [-0.5, 0.5])
-        v3f rel_pos0 = (pos0 - node_origin) / BS;
-        v3f rel_pos1 = (pos1 - node_origin) / BS;
-        v3f rel_pos2 = (pos2 - node_origin) / BS;
-        
-        // Generate UV coordinates based on face normal orientation
-        if (std::abs(normal.Y) > 0.5f) {
-            // Top/bottom face - map X,Z coordinates
-            uv0 = v2f(rel_pos0.X + 0.5f, rel_pos0.Z + 0.5f);
-            uv1 = v2f(rel_pos1.X + 0.5f, rel_pos1.Z + 0.5f);
-            uv2 = v2f(rel_pos2.X + 0.5f, rel_pos2.Z + 0.5f);
-        } else if (std::abs(normal.X) > 0.5f) {
-            // Side face X-aligned - map Z,Y coordinates
-            uv0 = v2f(rel_pos0.Z + 0.5f, rel_pos0.Y + 0.5f);
-            uv1 = v2f(rel_pos1.Z + 0.5f, rel_pos1.Y + 0.5f);
-            uv2 = v2f(rel_pos2.Z + 0.5f, rel_pos2.Y + 0.5f);
-        } else {
-            // Side face Z-aligned - map X,Y coordinates
-            uv0 = v2f(rel_pos0.X + 0.5f, rel_pos0.Y + 0.5f);
-            uv1 = v2f(rel_pos1.X + 0.5f, rel_pos1.Y + 0.5f);
-            uv2 = v2f(rel_pos2.X + 0.5f, rel_pos2.Y + 0.5f);
-        }
-        
-        // Apply tile-specific transformations from content_mapblock.cpp approach
-        // Handle texture scaling and other tile properties
-        for (auto &layer : tile.layers) {
-            if (layer.texture) {
-                // Apply texture scaling
-                if (layer.scale != 1) {
-                    uv0.X *= layer.scale;
-                    uv0.Y *= layer.scale;
-                    uv1.X *= layer.scale;
-                    uv1.Y *= layer.scale;
-                    uv2.X *= layer.scale;
-                    uv2.Y *= layer.scale;
-                }
-            }
-        }
-        
-        // If we flipped the positions, we also need to flip the UVs
-        if (flipped) {
-            std::swap(uv0, uv1);
-        }
-        
-        // Debug: Print UV coordinates for first few triangles
-        if (triIdx < 3) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: UVs=(%.3f,%.3f) (%.3f,%.3f) (%.3f,%.3f)\n",
-                   (int)triIdx, uv0.X, uv0.Y, uv1.X, uv1.Y, uv2.X, uv2.Y);
-        }
-        
-        const v3f render_normal = getRenderNormal(m_data, normal);
+	// Filter out small disconnected mesh components to prevent floating pieces
+	// This helps eliminate noise and small isolated meshes from marching cubes
+	const uint32_t minTriangleCount = 4; // Minimum triangles for a valid mesh component
+	if (polyvoxMesh.getNoOfIndices() / 3 < minTriangleCount) {
+		POLYVOX_MESHER_DEBUG_PRINTF(
+				"PolyVoxMesher (smooth uint8): Skipping small mesh with %d triangles (below threshold %d)\n",
+				(int)(polyvoxMesh.getNoOfIndices() / 3), (int)minTriangleCount);
+		return;
+	}
 
-        // Create vertices with proper lighting and texture coordinates
-        video::S3DVertex vertices[3];
-        if (m_data->m_smooth_lighting) {
-            vertices[0] = video::S3DVertex(pos0, render_normal, blendLightColor(pos0, normal), uv0);
-            vertices[1] = video::S3DVertex(pos1, render_normal, blendLightColor(pos1, normal), uv1);
-            vertices[2] = video::S3DVertex(pos2, render_normal, blendLightColor(pos2, normal), uv2);
-        } else {
-            video::SColor color = cur_node.lcolor;
-            if (!cur_node.f->light_source) {
-                applyFacesShading(color, normal);
-            }
-            vertices[0] = video::S3DVertex(pos0, render_normal, color, uv0);
-            vertices[1] = video::S3DVertex(pos1, render_normal, color, uv1);
-            vertices[2] = video::S3DVertex(pos2, render_normal, color, uv2);
-        }
-        
-        // Debug: Print vertex colors for first few triangles
-        if (triIdx < 3) {
-            POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Tri %d: colors=(%d,%d,%d,%d) (%d,%d,%d,%d) (%d,%d,%d,%d)\n",
-                   (int)triIdx,
-                   vertices[0].Color.getAlpha(), vertices[0].Color.getRed(), vertices[0].Color.getGreen(), vertices[0].Color.getBlue(),
-                   vertices[1].Color.getAlpha(), vertices[1].Color.getRed(), vertices[1].Color.getGreen(), vertices[1].Color.getBlue(),
-                   vertices[2].Color.getAlpha(), vertices[2].Color.getRed(), vertices[2].Color.getGreen(), vertices[2].Color.getBlue());
-        }
-        
-        // Add triangle to collector
-        u16 indices[3] = {0, 1, 2};
-        m_collector->append(tile, vertices, 3, indices, 3);
-    }
-    
-    POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher (smooth uint8): Finished processing %d triangles\n", (int)numTriangles);
+	// Process triangles from the mesh
+	const uint32_t numTriangles = polyvoxMesh.getNoOfIndices() / 3;
+
+	// Debug output
+	POLYVOX_MESHER_DEBUG_PRINTF(
+			"PolyVoxMesher (smooth uint8): Processing mesh with %d vertices and %d indices (%d triangles), fscale=%d\n",
+			(int)polyvoxMesh.getNoOfVertices(), (int)polyvoxMesh.getNoOfIndices(),
+			(int)numTriangles, m_data->fscale);
+
+	for (uint32_t triIdx = 0; triIdx < numTriangles; triIdx++) {
+
+		// Get the three vertices of this triangle
+		uint32_t idx0 = polyvoxMesh.getIndex(triIdx * 3 + 0);
+		uint32_t idx1 = polyvoxMesh.getIndex(triIdx * 3 + 1);
+		uint32_t idx2 = polyvoxMesh.getIndex(triIdx * 3 + 2);
+
+		if (idx0 >= polyvoxMesh.getNoOfVertices() ||
+				idx1 >= polyvoxMesh.getNoOfVertices() ||
+				idx2 >= polyvoxMesh.getNoOfVertices()) {
+			continue;
+		}
+
+		auto vertex0 = polyvoxMesh.getVertex(idx0);
+		auto vertex1 = polyvoxMesh.getVertex(idx1);
+		auto vertex2 = polyvoxMesh.getVertex(idx2);
+
+		// For decoded Vertex, position is already available
+		Vector3DFloat decodedPos0 = vertex0.position;
+		Vector3DFloat decodedPos1 = vertex1.position;
+		Vector3DFloat decodedPos2 = vertex2.position;
+
+		// Calculate vertex positions relative to mesh grid origin
+		v3f base_pos0 = oposToV3f(
+				v3opos_t(decodedPos0.getX(), decodedPos0.getY(), decodedPos0.getZ()) *
+				BS);
+		v3f base_pos1 = oposToV3f(
+				v3opos_t(decodedPos1.getX(), decodedPos1.getY(), decodedPos1.getZ()) *
+				BS);
+		v3f base_pos2 = oposToV3f(
+				v3opos_t(decodedPos2.getX(), decodedPos2.getY(), decodedPos2.getZ()) *
+				BS);
+
+		v3f pos0, pos1, pos2;
+
+		// Apply fscale scaling if needed (matching content_mapblock.cpp logic)
+		if (m_data->fscale > 1) {
+			int fscale = m_data->fscale;
+
+			// Apply the same scaling transformation as in content_mapblock.cpp
+			// First, shift to node center
+			pos0 = base_pos0 + v3f(HBS, 0.0f, HBS);
+			// Scale uniformly
+			pos0 *= v3f((float)fscale, (float)fscale, (float)fscale);
+			// Apply offset: -HBS for X/Z, and special Y offset calculation
+			pos0 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
+
+			pos1 = base_pos1 + v3f(HBS, 0.0f, HBS);
+			pos1 *= v3f((float)fscale, (float)fscale, (float)fscale);
+			pos1 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
+
+			pos2 = base_pos2 + v3f(HBS, 0.0f, HBS);
+			pos2 *= v3f((float)fscale, (float)fscale, (float)fscale);
+			pos2 += v3f(-HBS, -HBS * (float)fscale + HBS + BS, -HBS);
+
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth uint8): fscale applied - pos0=(%.2f,%.2f,%.2f) base=(%.2f,%.2f,%.2f)\n",
+					pos0.X, pos0.Y, pos0.Z, base_pos0.X, base_pos0.Y, base_pos0.Z);
+		} else {
+			pos0 = base_pos0;
+			pos1 = base_pos1;
+			pos2 = base_pos2;
+		}
+
+		// Debug output for first few triangles
+		if (triIdx < 5) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth uint8): Triangle %d: (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f) (%.2f,%.2f,%.2f)\n",
+					(int)triIdx, pos0.X, pos0.Y, pos0.Z, pos1.X, pos1.Y, pos1.Z, pos2.X,
+					pos2.Y, pos2.Z);
+		}
+
+		// Calculate normal using cross product (ensure correct winding order)
+		v3f edge1 = pos1 - pos0;
+		v3f edge2 = pos2 - pos0;
+		v3f normal = edge1.crossProduct(edge2);
+
+		// Check for degenerate triangle
+		float area = normal.getLength();
+		if (area < 0.0001f) {
+			// Degenerate triangle, skip it
+			continue;
+		}
+
+		// Normalize the normal vector
+		normal.normalize();
+
+		// Additional check: ensure normal isn't NaN or infinite
+		if (!std::isfinite(normal.X) || !std::isfinite(normal.Y) ||
+				!std::isfinite(normal.Z)) {
+			normal = v3f(0, 1, 0);
+		}
+
+		// Ensure normal has minimum magnitude to avoid culling issues
+		if (normal.getLength() < 0.1f) {
+			normal = v3f(0, 1, 0);
+		}
+
+		// Check if normal needs flipping for consistent outward-facing orientation
+		// This helps with backface culling and visibility
+		bool flipped = false;
+
+		// For terrain meshes, we want to ensure normals are generally pointing outward
+		// Only flip if the normal is strongly pointing in an inward direction
+		// Be more conservative with flipping to preserve side face visibility
+		if (normal.Y < -0.8f) {
+			// Strongly downward-facing normal - flip it
+			std::swap(pos0, pos1);
+			normal = -normal;
+			flipped = true;
+		}
+		// Don't flip side faces aggressively - let them render as-is
+		// Side faces with mixed X/Y/Z components should remain visible
+
+		// Debug: Print information about side face normals
+		if (triIdx < 10) {
+			float absX = std::abs(normal.X);
+			float absY = std::abs(normal.Y);
+			float absZ = std::abs(normal.Z);
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth uint8): Tri %d: normal=(%.3f,%.3f,%.3f) abs=(%.3f,%.3f,%.3f)\n",
+					(int)triIdx, normal.X, normal.Y, normal.Z, absX, absY, absZ);
+		}
+
+		// Debug: Print normal for first few triangles
+		if (triIdx < 10) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth uint8): Tri %d: normal=(%.3f,%.3f,%.3f) flipped=%d\n",
+					(int)triIdx, normal.X, normal.Y, normal.Z, flipped ? 1 : 0);
+		}
+
+		// Determine which node this triangle belongs to by sampling just inside
+		// the solid side of the surface instead of guessing from one axis.
+		v3pos_t triangle_node_pos = remapVolumePosToNodePos(
+				resolveTriangleNodePos(base_pos0, base_pos1, base_pos2, normal));
+
+		// Debug: Print sampled node position
+		if (triIdx < 3) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth uint8): Tri %d: sampled_node_pos=(%d,%d,%d) base_pos=(%.1f,%.1f,%.1f)\n",
+					(int)triIdx, triangle_node_pos.X, triangle_node_pos.Y,
+					triangle_node_pos.Z, base_pos0.X, base_pos0.Y, base_pos0.Z);
+		}
+
+		// Set up current node for this triangle
+		cur_node.p = triangle_node_pos;
+		cur_node.origin = oposToV3f(intToFloat(cur_node.p, BS));
+		cur_node.n = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p);
+		cur_node.f = &nodedef->get(cur_node.n);
+
+		// Debug: Print node lookup result
+		if (triIdx < 3) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth uint8): Tri %d: lookup node=(%d,%d,%d) content=%d\n",
+					(int)triIdx, cur_node.p.X, cur_node.p.Y, cur_node.p.Z,
+					(int)cur_node.n.getContent());
+		}
+
+		// Debug: Print node info for first few triangles
+		if (triIdx < 5) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth uint8): Tri %d: base=(%.1f,%.1f,%.1f) node=(%d,%d,%d) content=%d material=%d\n",
+					(int)triIdx, base_pos0.X, base_pos0.Y, base_pos0.Z,
+					triangle_node_pos.X, triangle_node_pos.Y, triangle_node_pos.Z,
+					(int)cur_node.n.getContent(), (int)cur_node.n.getContent());
+		}
+
+		// Determine face direction based on normal for proper tile selection
+		v3pos_t face_dir(0, 1, 0); // default to top face
+		const float threshold = 0.5f;
+
+		if (std::abs(normal.Y) > threshold && std::abs(normal.Y) > std::abs(normal.X) &&
+				std::abs(normal.Y) > std::abs(normal.Z)) {
+			face_dir = v3pos_t(0, normal.Y > 0 ? 1 : -1, 0);
+		} else if (std::abs(normal.X) > threshold &&
+				   std::abs(normal.X) > std::abs(normal.Z)) {
+			face_dir = v3pos_t(normal.X > 0 ? 1 : -1, 0, 0);
+		} else if (std::abs(normal.Z) > threshold) {
+			face_dir = v3pos_t(0, 0, normal.Z > 0 ? 1 : -1);
+		}
+
+		// Debug: Print lighting info
+		if (triIdx < 3) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth uint8): Tri %d: smooth_lighting=%d content=%d\n",
+					(int)triIdx, m_data->m_smooth_lighting ? 1 : 0,
+					(int)cur_node.n.getContent());
+		}
+
+		// Debug: Print node content and features
+		if (triIdx < 3) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth uint8): Tri %d: node content=%d drawtype=%d light_source=%d\n",
+					(int)triIdx, (int)cur_node.n.getContent(), (int)cur_node.f->drawtype,
+					(int)cur_node.f->light_source);
+		}
+
+		// Get lighting for this node
+		if (m_data->m_smooth_lighting) {
+			getSmoothLightFrame();
+			cur_node.lcolor = blendLightColor(v3f(0, 0, 0)); // center of node
+			if (triIdx < 3) {
+				POLYVOX_MESHER_DEBUG_PRINTF(
+						"PolyVoxMesher (smooth uint8): Tri %d: smooth light color=(%d,%d,%d,%d)\n",
+						(int)triIdx, cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(),
+						cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue());
+			}
+		} else {
+			MapNode neighbor = m_data->m_vmanip.getNodeNoEx(
+					blockpos_nodes + cur_node.p + face_dir * m_data->fscale);
+			auto light = LightPair(getFaceLight(cur_node.n, neighbor, nodedef));
+			if (triIdx < 3) {
+				POLYVOX_MESHER_DEBUG_PRINTF(
+						"PolyVoxMesher (smooth uint8): Tri %d: face light=(%d,%d) neighbor=%d\n",
+						(int)triIdx, light.lightDay, light.lightNight,
+						(int)neighbor.getContent());
+			}
+			cur_node.lcolor = encode_light(light, cur_node.f->light_source);
+			if (triIdx < 3) {
+				POLYVOX_MESHER_DEBUG_PRINTF(
+						"PolyVoxMesher (smooth uint8): Tri %d: encoded color=(%d,%d,%d,%d) light_source=%d\n",
+						(int)triIdx, cur_node.lcolor.getAlpha(), cur_node.lcolor.getRed(),
+						cur_node.lcolor.getGreen(), cur_node.lcolor.getBlue(),
+						(int)cur_node.f->light_source);
+			}
+		}
+
+		// Get the appropriate tile for this face direction
+		TileSpec tile;
+
+		// Use directional tile selection for all nodes (this ensures proper texture mapping)
+		getNodeTile(cur_node.n, cur_node.p, face_dir, m_data, tile);
+
+		// Apply backface culling for solid nodes (matching content_mapblock.cpp behavior)
+		bool backface_culling = false;
+		if (backface_culling) {
+			for (auto &layer : tile.layers) {
+				if (layer.texture) {
+					layer.material_flags |= MATERIAL_FLAG_BACKFACE_CULLING;
+				}
+			}
+		}
+
+		// Apply tile animations and transformations (ported from content_mapblock.cpp)
+		for (auto &layer : tile.layers) {
+			if (layer.texture) {
+				// Apply animation transformations
+				if (layer.material_flags & MATERIAL_FLAG_ANIMATION) {
+					// Handle texture animation
+					// This is a simplified version - in reality you'd want to implement
+					// proper animation frame calculation like in the original
+				}
+
+				// Apply texture transforms
+				if (layer.scale != 1) {
+					// Handle scaled textures
+				}
+
+				// Debug: Check for missing textures
+				if (triIdx < 3 && !layer.texture) {
+					POLYVOX_MESHER_DEBUG_PRINTF(
+							"PolyVoxMesher (smooth uint8): Tri %d: WARNING - Missing texture for layer!\n",
+							(int)triIdx);
+				}
+			}
+		}
+
+		// Debug: Print tile info for first few triangles
+		if (triIdx < 3) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth uint8): Tri %d: face_dir=(%d,%d,%d) has_texture=%s scale=%d drawtype=%d\n",
+					(int)triIdx, face_dir.X, face_dir.Y, face_dir.Z,
+					tile.layers[0].texture ? "yes" : "no",
+					tile.layers[0].texture ? tile.layers[0].scale : 0,
+					(int)cur_node.f->drawtype);
+		}
+
+		// Generate texture coordinates based on the triangle vertices
+		// Improved approach - generate UVs relative to the face and node position
+		v2f uv0, uv1, uv2;
+
+		// Calculate UV coordinates relative to the node's face
+		// Use the vertex positions within the node's coordinate system
+		v3f node_origin = cur_node.origin; // Center of the current node
+
+		// Calculate relative positions within the node (normalized to [-0.5, 0.5])
+		v3f rel_pos0 = (pos0 - node_origin) / BS;
+		v3f rel_pos1 = (pos1 - node_origin) / BS;
+		v3f rel_pos2 = (pos2 - node_origin) / BS;
+
+		// Generate UV coordinates based on face normal orientation
+		if (std::abs(normal.Y) > 0.5f) {
+			// Top/bottom face - map X,Z coordinates
+			uv0 = v2f(rel_pos0.X + 0.5f, rel_pos0.Z + 0.5f);
+			uv1 = v2f(rel_pos1.X + 0.5f, rel_pos1.Z + 0.5f);
+			uv2 = v2f(rel_pos2.X + 0.5f, rel_pos2.Z + 0.5f);
+		} else if (std::abs(normal.X) > 0.5f) {
+			// Side face X-aligned - map Z,Y coordinates
+			uv0 = v2f(rel_pos0.Z + 0.5f, rel_pos0.Y + 0.5f);
+			uv1 = v2f(rel_pos1.Z + 0.5f, rel_pos1.Y + 0.5f);
+			uv2 = v2f(rel_pos2.Z + 0.5f, rel_pos2.Y + 0.5f);
+		} else {
+			// Side face Z-aligned - map X,Y coordinates
+			uv0 = v2f(rel_pos0.X + 0.5f, rel_pos0.Y + 0.5f);
+			uv1 = v2f(rel_pos1.X + 0.5f, rel_pos1.Y + 0.5f);
+			uv2 = v2f(rel_pos2.X + 0.5f, rel_pos2.Y + 0.5f);
+		}
+
+		// Apply tile-specific transformations from content_mapblock.cpp approach
+		// Handle texture scaling and other tile properties
+		for (auto &layer : tile.layers) {
+			if (layer.texture) {
+				// Apply texture scaling
+				if (layer.scale != 1) {
+					uv0.X *= layer.scale;
+					uv0.Y *= layer.scale;
+					uv1.X *= layer.scale;
+					uv1.Y *= layer.scale;
+					uv2.X *= layer.scale;
+					uv2.Y *= layer.scale;
+				}
+			}
+		}
+
+		// If we flipped the positions, we also need to flip the UVs
+		if (flipped) {
+			std::swap(uv0, uv1);
+		}
+
+		// Debug: Print UV coordinates for first few triangles
+		if (triIdx < 3) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth uint8): Tri %d: UVs=(%.3f,%.3f) (%.3f,%.3f) (%.3f,%.3f)\n",
+					(int)triIdx, uv0.X, uv0.Y, uv1.X, uv1.Y, uv2.X, uv2.Y);
+		}
+
+		const v3f render_normal = getRenderNormal(m_data, normal);
+
+		// Create vertices with proper lighting and texture coordinates
+		video::S3DVertex vertices[3];
+		if (m_data->m_smooth_lighting) {
+			vertices[0] = video::S3DVertex(
+					pos0, render_normal, blendLightColor(pos0, normal), uv0);
+			vertices[1] = video::S3DVertex(
+					pos1, render_normal, blendLightColor(pos1, normal), uv1);
+			vertices[2] = video::S3DVertex(
+					pos2, render_normal, blendLightColor(pos2, normal), uv2);
+		} else {
+			video::SColor color = cur_node.lcolor;
+			if (!cur_node.f->light_source) {
+				applyFacesShading(color, normal);
+			}
+			vertices[0] = video::S3DVertex(pos0, render_normal, color, uv0);
+			vertices[1] = video::S3DVertex(pos1, render_normal, color, uv1);
+			vertices[2] = video::S3DVertex(pos2, render_normal, color, uv2);
+		}
+
+		// Debug: Print vertex colors for first few triangles
+		if (triIdx < 3) {
+			POLYVOX_MESHER_DEBUG_PRINTF(
+					"PolyVoxMesher (smooth uint8): Tri %d: colors=(%d,%d,%d,%d) (%d,%d,%d,%d) (%d,%d,%d,%d)\n",
+					(int)triIdx, vertices[0].Color.getAlpha(), vertices[0].Color.getRed(),
+					vertices[0].Color.getGreen(), vertices[0].Color.getBlue(),
+					vertices[1].Color.getAlpha(), vertices[1].Color.getRed(),
+					vertices[1].Color.getGreen(), vertices[1].Color.getBlue(),
+					vertices[2].Color.getAlpha(), vertices[2].Color.getRed(),
+					vertices[2].Color.getGreen(), vertices[2].Color.getBlue());
+		}
+
+		// Add triangle to collector
+		u16 indices[3] = {0, 1, 2};
+		m_collector->append(tile, vertices, 3, indices, 3);
+	}
+
+	POLYVOX_MESHER_DEBUG_PRINTF(
+			"PolyVoxMesher (smooth uint8): Finished processing %d triangles\n",
+			(int)numTriangles);
 }
 
-Material8 PolyVoxMesher::nodeToMaterial(const MapNode& node)
+Material8 PolyVoxMesher::nodeToMaterial(const MapNode &node)
 {
-    // Convert Freeminer node content to PolyVox material
-    content_t content = node.getContent();
-    
-    // Air nodes should be material 0 (empty) - these won't generate faces
-    if (content == CONTENT_AIR || content == CONTENT_IGNORE) {
-        return Material8(0);
-    }
-    
-    // When fscale > 1, only generate meshes for solid-like nodes
-    if (m_data->fscale > 1) {
-        const ContentFeatures& features = m_data->m_nodedef->get(content);
-        // Only generate meshes for normal solid blocks and liquids when fscale > 1
-        // This matches the original behavior where fscale > 1 simplifies rendering
-        if (features.drawtype != NDT_NORMAL && features.drawtype != NDT_LIQUID) {
-            return Material8(0); // Treat as air/empty
-        }
-    }
+	// Convert Freeminer node content to PolyVox material
+	content_t content = node.getContent();
 
-    auto it = m_content_to_material.find(content);
-    if (it != m_content_to_material.end())
-        return Material8(it->second);
+	// Air nodes should be material 0 (empty) - these won't generate faces
+	if (content == CONTENT_AIR || content == CONTENT_IGNORE) {
+		return Material8(0);
+	}
 
-    if (m_next_material_id == 0) {
-        POLYVOX_MESHER_DEBUG_PRINTF("PolyVoxMesher: WARNING - material id space exhausted, falling back for content=%d\n",
-               (int)content);
-        return Material8(1);
-    }
+	// When fscale > 1, only generate meshes for solid-like nodes
+	if (m_data->fscale > 1) {
+		const ContentFeatures &features = m_data->m_nodedef->get(content);
+		// Only generate meshes for normal solid blocks and liquids when fscale > 1
+		// This matches the original behavior where fscale > 1 simplifies rendering
+		if (features.drawtype != NDT_NORMAL && features.drawtype != NDT_LIQUID) {
+			return Material8(0); // Treat as air/empty
+		}
+	}
 
-    uint8_t material_id = m_next_material_id++;
-    m_content_to_material.emplace(content, material_id);
-    m_material_to_content[material_id] = content;
-    return Material8(material_id);
+	auto it = m_content_to_material.find(content);
+	if (it != m_content_to_material.end())
+		return Material8(it->second);
+
+	if (m_next_material_id == 0) {
+		POLYVOX_MESHER_DEBUG_PRINTF(
+				"PolyVoxMesher: WARNING - material id space exhausted, falling back for content=%d\n",
+				(int)content);
+		return Material8(1);
+	}
+
+	uint8_t material_id = m_next_material_id++;
+	m_content_to_material.emplace(content, material_id);
+	m_material_to_content[material_id] = content;
+	return Material8(material_id);
 }
 
-MapNode PolyVoxMesher::materialToNode(const Material8& material)
+MapNode PolyVoxMesher::materialToNode(const Material8 &material)
 {
-    uint8_t materialId = material.getMaterial();
+	uint8_t materialId = material.getMaterial();
 
-    if (materialId == 0)
-        return MapNode(CONTENT_AIR);
+	if (materialId == 0)
+		return MapNode(CONTENT_AIR);
 
-    content_t content = m_material_to_content[materialId];
-    return MapNode(content);
+	content_t content = m_material_to_content[materialId];
+	return MapNode(content);
 }
 
 // Gets the base lighting values for a node (copied from content_mapblock.cpp)
 void PolyVoxMesher::getSmoothLightFrame()
 {
-    for (int k = 0; k < 8; ++k)
-        cur_node.lframe.sunlight[k] = false;
-    for (int k = 0; k < 8; ++k) {
-        LightPair light(getSmoothLightTransparent(blockpos_nodes + cur_node.p, light_dirs[k], m_data));
-        cur_node.lframe.lightsDay[k] = light.lightDay;
-        cur_node.lframe.lightsNight[k] = light.lightNight;
-        // If there is direct sunlight and no ambient occlusion at some corner,
-        // mark the vertical edge (top and bottom corners) containing it.
-        if (light.lightDay == 255) {
-            cur_node.lframe.sunlight[k] = true;
-            cur_node.lframe.sunlight[k ^ 2] = true;
-        }
-    }
+	for (int k = 0; k < 8; ++k)
+		cur_node.lframe.sunlight[k] = false;
+	for (int k = 0; k < 8; ++k) {
+		LightPair light(getSmoothLightTransparent(
+				blockpos_nodes + cur_node.p, light_dirs[k], m_data));
+		cur_node.lframe.lightsDay[k] = light.lightDay;
+		cur_node.lframe.lightsNight[k] = light.lightNight;
+		// If there is direct sunlight and no ambient occlusion at some corner,
+		// mark the vertical edge (top and bottom corners) containing it.
+		if (light.lightDay == 255) {
+			cur_node.lframe.sunlight[k] = true;
+			cur_node.lframe.sunlight[k ^ 2] = true;
+		}
+	}
 }
 
 // Calculates vertex light level (adapted from content_mapblock.cpp)
 LightInfo PolyVoxMesher::blendLight(const v3f &vertex_pos)
 {
-    // Light levels at (logical) node corners are known. Here,
-    // trilinear interpolation is used to calculate light level
-    // at a given point in the node.
-    const float SMOOTH_LIGHTING_OVERSIZE = 1.0;
-    f32 x = core::clamp(vertex_pos.X / BS + 0.5, 0.0 - SMOOTH_LIGHTING_OVERSIZE, 1.0 + SMOOTH_LIGHTING_OVERSIZE);
-    f32 y = core::clamp(vertex_pos.Y / BS + 0.5, 0.0 - SMOOTH_LIGHTING_OVERSIZE, 1.0 + SMOOTH_LIGHTING_OVERSIZE);
-    f32 z = core::clamp(vertex_pos.Z / BS + 0.5, 0.0 - SMOOTH_LIGHTING_OVERSIZE, 1.0 + SMOOTH_LIGHTING_OVERSIZE);
-    f32 lightDay = 0.0; // daylight
-    f32 lightNight = 0.0;
-    f32 lightBoosted = 0.0; // daylight + direct sunlight, if any
-    for (int k = 0; k < 8; ++k) {
-        f32 dx = (k & 4) ? x : 1 - x;
-        f32 dy = (k & 2) ? y : 1 - y;
-        f32 dz = (k & 1) ? z : 1 - z;
-        // Use direct sunlight (255), if any; use daylight otherwise.
-        f32 light_boosted = cur_node.lframe.sunlight[k] ? 255 : cur_node.lframe.lightsDay[k];
-        lightDay += dx * dy * dz * cur_node.lframe.lightsDay[k];
-        lightNight += dx * dy * dz * cur_node.lframe.lightsNight[k];
-        lightBoosted += dx * dy * dz * light_boosted;
-    }
-    return LightInfo{lightDay, lightNight, lightBoosted};
+	// Light levels at (logical) node corners are known. Here,
+	// trilinear interpolation is used to calculate light level
+	// at a given point in the node.
+	const float SMOOTH_LIGHTING_OVERSIZE = 1.0;
+	f32 x = core::clamp(vertex_pos.X / BS + 0.5, 0.0 - SMOOTH_LIGHTING_OVERSIZE,
+			1.0 + SMOOTH_LIGHTING_OVERSIZE);
+	f32 y = core::clamp(vertex_pos.Y / BS + 0.5, 0.0 - SMOOTH_LIGHTING_OVERSIZE,
+			1.0 + SMOOTH_LIGHTING_OVERSIZE);
+	f32 z = core::clamp(vertex_pos.Z / BS + 0.5, 0.0 - SMOOTH_LIGHTING_OVERSIZE,
+			1.0 + SMOOTH_LIGHTING_OVERSIZE);
+	f32 lightDay = 0.0; // daylight
+	f32 lightNight = 0.0;
+	f32 lightBoosted = 0.0; // daylight + direct sunlight, if any
+	for (int k = 0; k < 8; ++k) {
+		f32 dx = (k & 4) ? x : 1 - x;
+		f32 dy = (k & 2) ? y : 1 - y;
+		f32 dz = (k & 1) ? z : 1 - z;
+		// Use direct sunlight (255), if any; use daylight otherwise.
+		f32 light_boosted =
+				cur_node.lframe.sunlight[k] ? 255 : cur_node.lframe.lightsDay[k];
+		lightDay += dx * dy * dz * cur_node.lframe.lightsDay[k];
+		lightNight += dx * dy * dz * cur_node.lframe.lightsNight[k];
+		lightBoosted += dx * dy * dz * light_boosted;
+	}
+	return LightInfo{lightDay, lightNight, lightBoosted};
 }
 
 // Calculates vertex color to be used in mapblock mesh (copied from content_mapblock.cpp)
 video::SColor PolyVoxMesher::blendLightColor(const v3f &vertex_pos)
 {
-    LightInfo light = blendLight(vertex_pos);
-    return encode_light(light.getPair(), cur_node.f->light_source);
+	LightInfo light = blendLight(vertex_pos);
+	return encode_light(light.getPair(), cur_node.f->light_source);
 }
 
-video::SColor PolyVoxMesher::blendLightColor(const v3f &vertex_pos, const v3f &vertex_normal)
+video::SColor PolyVoxMesher::blendLightColor(
+		const v3f &vertex_pos, const v3f &vertex_normal)
 {
-    LightInfo light = blendLight(vertex_pos);
-    return encode_light(light.getPair(MYMAX(0.0f, vertex_normal.Y)), cur_node.f->light_source);
+	LightInfo light = blendLight(vertex_pos);
+	return encode_light(
+			light.getPair(MYMAX(0.0f, vertex_normal.Y)), cur_node.f->light_source);
 }
