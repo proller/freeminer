@@ -3,6 +3,7 @@
 // Copyright (C) 2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
 #include "config.h"
+#include "network/networkexceptions.h"
 #if USE_WEBSOCKET || USE_WEBSOCKET_SCTP
 
 #include <iomanip>
@@ -1442,6 +1443,8 @@ void Connection::Serve(Address bind_addr)
 
 void Connection::Connect(Address address)
 {
+	// For WebSocket client connection, we need to establish the connection first
+	m_udpSocket.Connect(address);
 	putCommand(ConnectionCommand::connect(address));
 }
 
