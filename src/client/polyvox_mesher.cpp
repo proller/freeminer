@@ -148,9 +148,9 @@ void PolyVoxMesher::generate()
     resetMaterialMappings();
 
     // Create a PolyVox volume for the entire mesh chunk
-    const u16 chunk_size = m_data->m_mesh_grid.cell_size * MAP_BLOCKSIZE;
-    Region region(Vector3DInt32(0, 0, 0), 
-                  Vector3DInt32(chunk_size - 1, chunk_size - 1, chunk_size - 1));
+    const u16 chunk_size = m_data->m_side_length;
+    Region region(Vector3DInt32(-1, -1, -1),
+                  Vector3DInt32(chunk_size, chunk_size, chunk_size));
     RawVolume<Material8> volume(region);
     
     // Fill the volume with node data
@@ -221,26 +221,24 @@ void PolyVoxMesher::fillVolume(RawVolume<Material8>& volume)
 {
     v3pos_t blockpos_nodes = m_data->m_blockpos * MAP_BLOCKSIZE;
     
-    // Use the same iteration pattern as MapblockMeshGenerator::generate()
     const auto lstep = 1 << m_data->lod_step;
     const auto fstep = 1 << m_data->far_step;
-    
-    // Iterate over the entire mesh chunk (multiple map blocks)
-    const u16 chunk_size_nodes = m_data->m_mesh_grid.cell_size * MAP_BLOCKSIZE;
-    
-    for (cur_node.pf.Z = cur_node.pr.Z = 0; cur_node.pr.Z < chunk_size_nodes; cur_node.pr.Z+=lstep, cur_node.pf.Z+=fstep)
-        for (cur_node.pf.X = cur_node.pr.X = 0; cur_node.pr.X < chunk_size_nodes; cur_node.pr.X += lstep, cur_node.pf.X += fstep) {
-            for (cur_node.pf.Y = cur_node.pr.Y = 0; cur_node.pr.Y < chunk_size_nodes; cur_node.pr.Y += lstep, cur_node.pf.Y += fstep) {
-                // Use the appropriate position based on far_step
+
+    const s16 chunk_size = m_data->m_side_length;
+
+    // Build a dense sampled-grid volume with a one-voxel border so surface
+    // extraction can see adjacent samples across mesh chunk boundaries.
+    for (s16 z = -1; z <= chunk_size; ++z) {
+        for (s16 x = -1; x <= chunk_size; ++x) {
+            for (s16 y = -1; y <= chunk_size; ++y) {
+                cur_node.pr = v3pos_t(x * lstep, y * lstep, z * lstep);
+                cur_node.pf = v3pos_t(x * fstep, y * fstep, z * fstep);
                 cur_node.p = (m_data->far_step ? cur_node.pf : cur_node.pr);
                 MapNode node = m_data->m_vmanip.getNodeNoEx(blockpos_nodes + cur_node.p);
-                Material8 material = nodeToMaterial(node);
-                // PolyVox coordinates are 0-based and relative to the volume
-                if (cur_node.pr.X < chunk_size_nodes && cur_node.pr.Y < chunk_size_nodes && cur_node.pr.Z < chunk_size_nodes) {
-                    volume.setVoxel(cur_node.pr.X, cur_node.pr.Y, cur_node.pr.Z, material);
-                }
+                volume.setVoxel(x, y, z, nodeToMaterial(node));
             }
         }
+    }
 }
 
 void PolyVoxMesher::extractMesh(RawVolume<Material8>& volume)
