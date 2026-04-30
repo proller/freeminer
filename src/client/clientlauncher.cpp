@@ -22,6 +22,8 @@
 #include "version.h"
 #include "renderingengine.h"
 #include "settings.h"
+#include "gettime.h"
+#include "util/numeric.h"
 #include "util/tracy_wrapper.h"
 #include <IGUISpriteBank.h>
 #include <ICameraSceneNode.h>
@@ -147,9 +149,13 @@ void ClientLauncher::run(std::function<void(bool)> resolve)
 	g_clouds_ssrc.reset(createShaderSource());
 	g_clouds_ssrc->addShaderUniformSetterFactory(std::make_unique<FogShaderUniformSetterFactory>());
 	g_menucloudsmgr = m_rendering_engine->get_scene_manager()->createNewSceneManager();
-	g_menuclouds = new Clouds(g_menucloudsmgr, g_clouds_ssrc.get(), -1, rand());
+	{
+		struct tm tm = mt_localtime();
+		u32 seed = (tm.tm_year << 16) | tm.tm_yday; // unique clouds every day
+		g_menuclouds = new Clouds(g_menucloudsmgr, g_clouds_ssrc.get(), -1, seed);
+	}
 	g_menuclouds->setHeight(100.0f);
-	g_menuclouds->update(v3f(0, 0, 0), video::SColor(255, 240, 240, 255));
+	g_menuclouds->update(v3f(0, 0, 0), m_rendering_engine->m_menu_clouds_color);
 	scene::ICameraSceneNode* camera;
 	camera = g_menucloudsmgr->addCameraSceneNode(NULL, v3f(0, 0, 0), v3f(0, 120, 100));
 	camera->setFarValue(10000);
@@ -333,6 +339,15 @@ void ClientLauncher::init_args(GameStartData &start_data, const Settings &cmd_ar
 	if (cmd_args.exists("name"))
 		start_data.name = cmd_args.get("name");
 
+	// If a world was commanded, select it
+	if (!start_data.world_path.empty()) {
+		auto &spec = start_data.world_spec;
+
+		spec.path = start_data.world_path;
+		spec.gameid = getWorldGameId(spec.path, true);
+		spec.name = _("[--world parameter]");
+	}
+
 	random_input = g_settings->getBool("random_input")
 			|| cmd_args.getFlag("random-input");
 
@@ -481,19 +496,8 @@ bool ClientLauncher::launch_game(std::string &error_message,
 		}
 	}
 
-	// If a world was commanded, append and select it
-	// This is provieded by "get_world_from_cmdline()", main.cpp
-	if (!start_data.world_path.empty()) {
-		auto &spec = start_data.world_spec;
-
-		spec.path = start_data.world_path;
-		spec.gameid = getWorldGameId(spec.path, true);
-		spec.name = _("[--world parameter]");
-	}
-
- 	should_run_game = true;
-
-	/* Show the GUI menu
+	/*
+	 * Show the GUI menu
 	 */
 	server_name = "";
 	server_description = "";
@@ -522,10 +526,12 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 		MainMenuData &menudata = *menudata_addr;
 
 		// Skip further loading if there was an exit signal.
-		if (*porting::signal_handler_killstatus()) {
-			delete menudata_addr; menudata_addr = nullptr;
+		if (!m_rendering_engine->run() || *porting::signal_handler_killstatus())
+	       {
+		    delete menudata_addr; menudata_addr = nullptr;
 			resolve(false); return;
-		}
+			//return false;
+		   }
 
 		if (!menudata.script_data.errormessage.empty()) {
 			/* The calling function will pass this back into this function upon the
@@ -546,6 +552,7 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 		int world_index = menudata.selected_world;
 		if (world_index >= 0 && world_index < (int)worldspecs.size()) {
 			start_data.world_spec = worldspecs[world_index];
+			start_data.world_path = start_data.world_spec.path;
 		}
 
 		start_data.name = menudata.name;
@@ -562,11 +569,6 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 	} else {
 		start_data.local_server = !start_data.world_path.empty() &&
 			start_data.address.empty() && !start_data.name.empty();
-	}
-
-	if (!m_rendering_engine->run()) {
-		resolve(false);
-		return;
 	}
 
 	if (!start_data.isSinglePlayer() && start_data.name.empty()) {
@@ -604,12 +606,9 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 		resolve(false); return;
 	}
 
-	auto &worldspec = start_data.world_spec;
-	infostream << "Selected world: " << worldspec.name
-	           << " [" << worldspec.path << "]" << std::endl;
-
+	// For singleplayer and local server
 	if (start_data.address.empty()) {
-		// For singleplayer and local server
+		auto &worldspec = start_data.world_spec;
 		if (worldspec.path.empty()) {
 			error_message = _("No world selected and no address "
 					"provided. Nothing to do.");
@@ -617,30 +616,42 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 			resolve(false); return;
 		}
 
-		if (!fs::PathExists(worldspec.path)) {
+		infostream << "Selected world: " << worldspec.name
+			<< " [" << worldspec.path << "]" << std::endl;
+
+		// Figure out which game we'll be using
+		// Note that start_data.game_spec contains the gameid from the command line
+		bool world_exists = getWorldExists(worldspec.path);
+
+		if (!world_exists) {
 			try {
-				loadGameConfAndInitWorld(worldspec.path, fs::GetFilenameFromPath(worldspec.path.c_str()), start_data.game_spec, true);
-			} catch ( const std::exception & e) {
+				loadGameConfAndInitWorld(worldspec.path,
+						fs::GetFilenameFromPath(worldspec.path.c_str()),
+						start_data.game_spec, true);
+				world_exists = getWorldExists(worldspec.path);
+			} catch (const std::exception &e) {
 				errorstream << "Create world error: " << e.what() << std::endl;
-			error_message = _("Provided world path doesn't exist: ")
-					+ worldspec.path;
-			errorstream << error_message << std::endl;
-			resolve(false); return;
 			}
 		}
 
-		// Load gamespec for required game
-		start_data.game_spec = findWorldSubgame(worldspec.path);
+		if (world_exists) {
+			auto world_game = findWorldSubgame(worldspec.path);
+			if (world_game.isValid())
+				start_data.game_spec = world_game;
+		}
+
 		if (!start_data.game_spec.isValid()) {
-			error_message = _("Could not find or load game: ")
+			if (world_exists) {
+				error_message = gettext("Could not find or load game: ")
 					+ worldspec.gameid;
+			} else {
+				error_message = gettext("World does not exist and no game selected to create one.");
+			}
 			errorstream << error_message << std::endl;
 			resolve(false); return;
 		}
-
-		resolve(true); return;
 	}
-	start_data.world_path = start_data.world_spec.path;
+
 	resolve(true); return;
 }
 

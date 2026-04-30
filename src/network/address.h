@@ -16,9 +16,10 @@
 
 #include <ostream>
 #include <cstring>
-#include <functional>
+#include <string>
 #include "irrlichttypes.h"
-#include "networkexceptions.h"
+
+class BaseException;
 
 struct IPv6AddressBytes
 {

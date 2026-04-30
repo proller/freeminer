@@ -8,8 +8,6 @@
 #include "client/fontengine.h"
 #include "client/guiscalingfilter.h"
 #include "client/renderingengine.h"
-#include "client/shader.h"
-#include "client/tile.h"
 #include "clientdynamicinfo.h"
 #include "config.h"
 #include "content/content.h"
@@ -22,11 +20,10 @@
 #include "porting.h"
 #include "scripting_mainmenu.h"
 #include "settings.h"
-#include "sound.h"
-#include "version.h"
 #include <ICameraSceneNode.h>
 #include <IGUIStaticText.h>
 #include "client/imagefilters.h"
+#include "util/screenshot.h"
 #include "util/tracy_wrapper.h"
 #include "script/common/c_types.h" // LuaError
 
@@ -34,6 +31,7 @@
 	#include "client/sound/sound_openal.h"
 #endif
 
+#include <algorithm>
 #include <csignal>
 
 
@@ -41,6 +39,13 @@
 void TextDestGuiEngine::gotText(const StringMap &fields)
 {
 	m_engine->getScriptIface()->handleMainMenuButtons(fields);
+}
+
+void TextDestGuiEngine::requestScreenshot()
+{
+	if (m_engine) {
+		m_engine->requestScreenshot();
+	}
 }
 
 /******************************************************************************/
@@ -223,7 +228,7 @@ std::string findLocaleFileWithExtension(const std::string &path)
 /******************************************************************************/
 std::string findLocaleFileInMods(const std::string &path, const std::string &filename_no_ext)
 {
-	std::vector<ModSpec> mods = flattenMods(getModsInPath(path, "root", true));
+	std::vector<ModSpec> mods = flattenMods(getModsInPath(path, "root", 0));
 
 	for (const auto &mod : mods) {
 		std::string ret = findLocaleFileWithExtension(
@@ -309,23 +314,6 @@ void GUIEngine::run(std::function<void()> resolve)
 
 	text_height = g_fontengine->getTextHeight();
 
-	// Reset fog color
-	{
-		video::SColor fog_color;
-		video::E_FOG_TYPE fog_type = video::EFT_FOG_LINEAR;
-		f32 fog_start = 0;
-		f32 fog_end = 0;
-		f32 fog_density = 0;
-		bool fog_pixelfog = false;
-		bool fog_rangefog = false;
-		driver->getFog(fog_color, fog_type, fog_start, fog_end, fog_density,
-				fog_pixelfog, fog_rangefog);
-
-		driver->setFog(RenderingEngine::MENU_SKY_COLOR, fog_type, fog_start,
-				fog_end, fog_density, fog_pixelfog, fog_rangefog);
-	}
-
-	//const irr::core::dimension2d<u32> 
 	initial_screen_size = core::dimension2d<u32>(
 			g_settings->getU16("screen_w"),
 			g_settings->getU16("screen_h")
@@ -376,7 +364,8 @@ void GUIEngine::run_loop(std::function<void()> resolve) {
 				last_window_info = window_info;
 			}
 
-			driver->beginScene(true, true, RenderingEngine::MENU_SKY_COLOR);
+			driver->setFog(m_rendering_engine->m_menu_sky_color);
+			driver->beginScene(true, true, m_rendering_engine->m_menu_sky_color);
 
 			if (m_clouds_enabled) {
 				drawClouds(dtime);
@@ -394,6 +383,14 @@ void GUIEngine::run_loop(std::function<void()> resolve) {
 			// The header *can* be drawn after the menu because it never intersects
 			// the menu.
 			drawHeader(driver);
+
+			// Take screenshot if requested
+			// Must be before endScene() to capture the rendered frame
+			if (m_take_screenshot) {
+				m_take_screenshot = false;
+				std::string filename;
+				takeScreenshot(driver, filename);
+			}
 
 			driver->endScene();
 		}
@@ -427,8 +424,20 @@ GUIEngine::~GUIEngine()
 /******************************************************************************/
 void GUIEngine::drawClouds(float dtime)
 {
+	g_menuclouds->update(v3f(0, 0, 0), m_rendering_engine->m_menu_clouds_color);
 	g_menuclouds->step(dtime * 3);
 	g_menucloudsmgr->drawAll();
+}
+
+/******************************************************************************/
+void GUIEngine::setMenuCloudsColor(video::SColor color)
+{
+	m_rendering_engine->m_menu_clouds_color = color;
+}
+
+void GUIEngine::setMenuSkyColor(video::SColor color)
+{
+	m_rendering_engine->m_menu_sky_color = color;
 }
 
 /******************************************************************************/
@@ -446,14 +455,8 @@ void GUIEngine::drawBackground(video::IVideoDriver *driver)
 	v2u32 screensize = driver->getScreenSize();
 
 	video::ITexture* texture = m_textures[TEX_LAYER_BACKGROUND].texture;
-
-	/* If no texture, draw background of solid color */
-	if(!texture){
-		video::SColor color(255,80,58,37);
-		core::rect<s32> rect(0, 0, screensize.X, screensize.Y);
-		driver->draw2DRectangle(color, rect, NULL);
+	if (!texture)
 		return;
-	}
 
 	v2u32 sourcesize = texture->getOriginalSize();
 
@@ -639,7 +642,7 @@ bool GUIEngine::downloadFile(const std::string &url, const std::string &target)
 
 	if (!completed || !fetch_result.succeeded) {
 		target_file.close();
-		fs::DeleteSingleFileOrEmptyDirectory(target);
+		fs::DeleteSingleFileOrEmptyDirectory(target, true);
 		return false;
 	}
 	// TODO: directly stream the response data into the file instead of first
@@ -663,9 +666,13 @@ void GUIEngine::setTopleftText(const std::string &text)
 /******************************************************************************/
 void GUIEngine::updateTopLeftTextSize()
 {
-	core::rect<s32> rect(0, 0, g_fontengine->getTextWidth(m_toplefttext.c_str()),
-		g_fontengine->getTextHeight());
-	rect += v2s32(4, 0);
+	const auto &str = m_toplefttext.getString();
+	u32 lines = std::count(str.begin(), str.end(), L'\n') + 1;
+	core::rect<s32> rect(0, 0,
+		g_fontengine->getTextWidth(str.c_str()),
+		g_fontengine->getTextHeight() * lines
+	);
+	rect += v2s32(4, 4);
 
 	m_irr_toplefttext->remove();
 	m_irr_toplefttext = gui::StaticText::add(m_rendering_engine->get_gui_env(),

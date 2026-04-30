@@ -19,7 +19,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 #ifdef HAVE_COLORIZE_URL
 
-#include "log.h"
+#include <curl/urlapi.h>
 #include "string.h"
 #include <sstream>
 #include <memory>

@@ -54,6 +54,7 @@ public:
 			const GUIChatConsole *chat_console, float dtime);
 
 	void initFlags();
+	Flags &getFlags() { return m_flags; }
 	const Flags &getFlags() const { return m_flags; }
 
 	inline void setInfoText(const std::wstring &str) { m_infotext = str; }
@@ -104,6 +105,6 @@ private:
 	core::rect<s32> m_current_chat_size{0, 0, 0, 0};
 
 	gui::IGUIStaticText *m_guitext_profiler = nullptr; // Profiler text
-	u16 m_profiler_current_page = 0;
-	u16 m_profiler_max_page = 3;
+	u8 m_profiler_current_page = 0;
+	u8 m_profiler_max_page = 1;
 };
