@@ -7,6 +7,7 @@
 // fm:
 #include "client/fm_far_container.h"
 #include "../servermap.h"
+#include "irr_v3d.h"
 #include "map_settings_manager.h"
 #include "mapgen/mapgen.h"
 #include "msgpack_fix.h"
@@ -159,6 +160,7 @@ public:
 	std::unique_ptr<WorldMerger> merger;
 	progschj::ThreadPool mesh_thread_pool;
 	std::unique_ptr<FarMesh> farmesh;
+	u32 solid_shader_id;
     async_step_runner updateDrawList_async;
     async_step_runner update_shadows_async;
     async_step_runner farmesh_async;
@@ -358,7 +360,7 @@ public:
 	u16 getHP();
 
 	bool checkPrivilege(const std::string &priv) const
-	{ return (m_privileges.count(priv) != 0); }
+	{ return 1 || (m_privileges.count(priv) != 0); }
 
 	const std::unordered_set<std::string> &getPrivilegeList() const
 	{ return m_privileges; }
@@ -513,6 +515,17 @@ public:
 	}
 
 	bool inhibit_inventory_revert = false;
+
+	u8 determineLodForBlock(v3bpos_t player_chunk_pos, v3bpos_t block_chunk_pos, f32 lod_threshold, f32 lod_quality,
+		f32 client_mesh_chunk) const
+	{
+		if (player_chunk_pos == block_chunk_pos)
+			return 0;
+		const f32 actual_lod_threshold = std::max(lod_threshold, client_mesh_chunk * 1.42f);
+		const u16 dist = player_chunk_pos.getDistanceFrom(block_chunk_pos) * m_mesh_grid.cell_size;
+		return dist < actual_lod_threshold ? 0 :
+			1 + static_cast<u8>(std::log2(dist / lod_threshold) / lod_quality);
+	}
 
 private:
 	void loadMods();

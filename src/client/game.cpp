@@ -1029,6 +1029,7 @@ bool Game::createClient(const GameStartData &start_data)
 		client->getScript()->on_minimap_ready(mapper);
 
 	if (!runData.headless_optimize && g_settings->getS32("farmesh")) {
+	    client->solid_shader_id = client->getShaderSource()->getShader("nodes_shader", TILE_MATERIAL_PLAIN, NDT_NORMAL, false/*, false, true*/);
 		client->farmesh = std::make_unique<FarMesh>(client, server);
 	}
 

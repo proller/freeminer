@@ -322,6 +322,12 @@ void Client::handleCommand_BlockData(NetworkPacket* pkt)
 			return;
 		}
 		block->deSerializeNetworkSpecific(istr);
+
+/*
+		const auto player_pos = m_mesh_grid.getCellPos(getNodeBlockPos(floatToInt(m_env.getLocalPlayer()->getPosition(), BS)));
+		block->lod = determineLodForBlock(player_pos, m_mesh_grid.getCellPos(p), g_settings->getFloat("lod_threshold"),
+			g_settings->getFloat("lod_quality"), g_settings->getFloat("client_mesh_chunk"));
+*/
 	}
 	else {
 		/*

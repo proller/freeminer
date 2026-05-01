@@ -7,6 +7,7 @@
 #include "EPrimitiveTypes.h"
 #include "client.h"
 #include "client/clientmap.h"
+#include "debug/dump.h"
 #include "mapblock.h"
 #include "node_visuals.h"
 #include "porting.h"
@@ -14,6 +15,7 @@
 #include "mesh.h"
 #include "minimap.h"
 #include "content_mapblock.h"
+#include "lod_mapblock.h"
 #include "util/tracy_wrapper.h"
 #include "client/meshgen/collector.h"
 #include "client/renderingengine.h"
@@ -651,13 +653,16 @@ static void applyColorAndMerge(std::vector<PreMeshBuffer> &prebuffers)
 	}), prebuffers.end());
 }
 
-MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data):
+MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data, const u8 lod, const u32 solid_shader_id):
 
 	far_step{data->far_step},
 	lod_step{data->lod_step},
 	fscale{data->fscale},
 	timestamp{data->timestamp},
 	last_used{static_cast<u32>(client->m_uptime)},
+
+	m_lod(lod),
+	m_solid_shader_id(solid_shader_id),
 
 	m_tsrc(client->getTextureSource()),
 	m_shdrsrc(client->getShaderSource()),
@@ -697,10 +702,18 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data):
 	v3f offset = oposToV3f(intToFloat((data->m_blockpos - mesh_grid.getMeshPos(data->m_blockpos)) * MAP_BLOCKSIZE, BS));
 
 	MeshCollector collector(m_bounding_sphere_center, offset);
+	const bool is_lod_enabled = g_settings->getBool("enable_lod");
+	const bool is_textureless = is_lod_enabled && lod >= g_settings->getU16("lod_texture_threshold");
 
 	{
 		// Generate everything
-		MapblockMeshGenerator(data, &collector).generate();
+DUMP(lod, is_lod_enabled, far_step, lod_step, fscale);
+		#if 0
+		if (lod == 0 || !is_lod_enabled)
+			MapblockMeshGenerator(data, &collector).generate();
+		else
+#endif
+		LodMeshGenerator(data, &collector, is_textureless, solid_shader_id).generate(lod);
 	}
 
 	/*

@@ -6,6 +6,7 @@
 #include "client/fm_farmesh.h"
 #include "client/localplayer.h"
 #include "client/mapblock_mesh.h"
+#include "client/mesh_generator_thread.h"
 #include "clientmap.h"
 #include "emerge.h"
 #include "filesys.h"
@@ -192,12 +193,23 @@ void Client::createFarMesh(MapBlockPtr &block)
 		const auto &blockpos = block->getPos();
 		//const auto &m_camera_offset = m_camera->getOffset();
 		const auto &step = block->far_step;
+
+		const auto &client_map = m_client->getEnv().getClientMap();
+		const auto znew_lod = determineLodForBlock(client_map.far_cam_pos_mesh,
+				block->getPos(), g_settings->getFloat("lod_threshold"),
+				g_settings->getFloat("lod_quality"),
+				g_settings->getFloat("client_mesh_chunk"));
+const auto new_lod = block->far_step;
+//const auto new_lod = block->far_step - 1;
+
 		MeshMakeData mesh_make_data(m_client->getNodeDefManager(),
-				MAP_BLOCKSIZE * m_mesh_grid.cell_size, m_mesh_grid, 0,
+				MAP_BLOCKSIZE * m_mesh_grid.cell_size, m_mesh_grid, 
+		        //new_lod,
+				0, //block->far_step,
 
 				step, &m_client->far_container);
 		mesh_make_data.m_blockpos = blockpos;
-		const auto mesh = std::make_shared<MapBlockMesh>(m_client, &mesh_make_data);
+		const auto mesh = std::make_shared<MapBlockMesh>(m_client, &mesh_make_data, new_lod, solid_shader_id);
 		block->setFarMesh(mesh, step);
 		block->far_step_draw = block->far_step;
 		block->creating_far_mesh = false;

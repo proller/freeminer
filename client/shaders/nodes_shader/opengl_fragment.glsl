@@ -440,7 +440,9 @@ void main(void)
 {
 	vec2 uv = varTexCoord.st;
 
-#ifdef USE_ARRAY_TEXTURE
+#if (MATERIAL_TYPE == TILE_MATERIAL_PLAIN) || (MATERIAL_TYPE == TILE_MATERIAL_PLAIN_ALPHA)
+	vec4 base = vec4(1.0);
+#elif defined(USE_ARRAY_TEXTURE)
 	vec4 base = texture(baseTexture, vec3(uv, varTexLayer)).rgba;
 #else
 	vec4 base = texture2D(baseTexture, uv).rgba;

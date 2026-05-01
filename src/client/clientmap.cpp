@@ -1547,9 +1547,7 @@ void ClientMap::renderMap(video::IVideoDriver* driver, s32 pass)
 
 		// Mesh animation
 		if (pass == scene::ESNRP_SOLID) {
-			// 50 nodes is pretty arbitrary but it should work somewhat nicely
-			float distance_sq = camera_position.getDistanceFromSQ(mesh_sphere_center);
-			bool faraway = distance_sq >= std::pow(BS * 50 + mesh_sphere_radius, 2.0f);
+			bool faraway = block_mesh->m_lod > 0;
 
 			if (is_far)
 				faraway = false;

@@ -11,6 +11,7 @@
 struct MeshMakeData;
 struct MeshCollector;
 
+#if 0
 struct LightPair {
 	u8 lightDay;
 	u8 lightNight;
@@ -43,6 +44,7 @@ struct LightFrame {
 	f32 lightsNight[8];
 	bool sunlight[8];
 };
+#endif
 
 class MapblockMeshGenerator
 {
