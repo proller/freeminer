@@ -107,6 +107,7 @@ private:
 	float *float_offset_cache = nullptr;
 
     // freeminer:
+protected:
 	MapgenV7Params *sp{};
 	//virtual void generateExperimental();
 	// freeminer:
