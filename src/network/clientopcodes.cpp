@@ -30,7 +30,7 @@ const ToClientCommandHandler toClientCommandTable[TOCLIENT_NUM_MSG_TYPES] =
 	null_command_handler, // 0x10
 	{ "TOCLIENT_PUNCH_PLAYER",             TOCLIENT_STATE_CONNECTED, &Client::handleCommand_PunchPlayer }, // 0x11
 	{ "TOCLIENT_BLOCKDATA_FM",             TOCLIENT_STATE_CONNECTED, &Client::handleCommand_BlockDataFm }, // 0x12
-	null_command_handler,
+	{ "TOCLIENT_BLOCKDATAS_FM",            TOCLIENT_STATE_CONNECTED, &Client::handleCommand_BlockDatasFm }, // 0x13
 	null_command_handler,
 	null_command_handler,
 	null_command_handler,

@@ -17,10 +17,9 @@
 #include "profiler.h"
 #include "nodedef.h"
 #include "gamedef.h"
-#include "util/directiontables.h"
 #include "rollback_interface.h"
 #include "environment.h"
-#include "irrlicht_changes/printing.h"
+#include <queue>
 
 /*
 	Map
@@ -818,6 +817,14 @@ MMVManip::MMVManip(Map *map):
 	assert(map);
 }
 
+MMVManip::~MMVManip()
+{
+	for (auto **ref_ref : m_tracked_refs) {
+		assert(*ref_ref == this);
+		*ref_ref = nullptr;
+	}
+}
+
 void MMVManip::initialEmerge(v3s16 p_min, v3s16 p_max, bool load_if_inexistent)
 {
 	TimeTaker timer1("initialEmerge");
@@ -828,13 +835,12 @@ void MMVManip::initialEmerge(v3s16 p_min, v3s16 p_max, bool load_if_inexistent)
 			(p_min*MAP_BLOCKSIZE, (p_max+1)*MAP_BLOCKSIZE-v3s16(1,1,1));
 
 	u32 size_MB = block_area_nodes.getVolume() * sizeof(MapNode) / 1000000U;
-	if(size_MB >= 1)
-	{
-		infostream<<"initialEmerge: area: ";
+	if (size_MB >= 4) {
+		infostream << "initialEmerge: area: ";
 		block_area_nodes.print(infostream);
-		infostream<<" ("<<size_MB<<"MB)";
-		infostream<<" load_if_inexistent="<<load_if_inexistent;
-		infostream<<std::endl;
+		infostream << " (" << size_MB << "MB)" ; // << std::endl;
+		infostream << " load_if_inexistent=" << load_if_inexistent;
+		infostream << std::endl;
 	}
 
 	std::map<v3s16, bool> had_blocks;
@@ -978,6 +984,16 @@ void MMVManip::reparent(Map *map)
 {
 	assert(map && !m_map);
 	m_map = map;
+}
+
+std::list<MMVManip **>::iterator MMVManip::addTrackedRef(MMVManip **ref_ref)
+{
+	return m_tracked_refs.insert(m_tracked_refs.end(), ref_ref);
+}
+
+void MMVManip::removeTrackedRef(std::list<MMVManip **>::iterator it)
+{
+	m_tracked_refs.erase(it);
 }
 
 //END

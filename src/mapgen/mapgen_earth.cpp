@@ -53,6 +53,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mg_biome.h"
 #include "nodedef.h"
 #include "serverenvironment.h"
+#include "servermap.h"
 #include "settings.h"
 #include "voxel.h"
 #include "voxelalgorithms.h"
@@ -232,7 +233,7 @@ MapgenEarth::MapgenEarth(MapgenEarthParams *params_, EmergeParams *emerge) :
 			}
 		}
 
-		if (std::filesystem::file_size(heat_img)) {
+		if (std::filesystem::exists(heat_img) && std::filesystem::file_size(heat_img)) {
 			const auto lock = std::lock_guard(maps_holder->download_lock);
 			if (!maps_holder->heat_image) {
 				maps_holder->heat_image = std::make_unique<PngImage>(heat_img);
@@ -513,11 +514,12 @@ void MapgenEarth::generateBuildings()
 
 		//#define FILE_INCLUDED 1
 		//#include "earth/osmium-inl.h"
-		const auto tc = pos_to_ll(node_min.X, node_min.Z);
-		const auto tc_max = pos_to_ll(node_max.X, node_max.Z);
+		constexpr auto extra = MAP_BLOCKSIZE * 2;
+		const auto coord_min = pos_to_ll(node_min.X - extra, node_min.Z - extra);
+		const auto coord_max = pos_to_ll(node_max.X + extra, node_max.Z + extra);
 		static const auto folder = maps_holder->data_root;
-		const auto lat_dec = lat_start(tc.lat);
-		const auto lon_dec = lon_start(tc.lon);
+		const auto lat_dec = lat_start(coord_min.lat);
+		const auto lon_dec = lon_start(coord_min.lon);
 
 		static const auto timestamp = []() {
 			std::string ts = "latest";
@@ -587,7 +589,7 @@ void MapgenEarth::generateBuildings()
 					break;
 				};
 
-				auto [bbox_next, bb_start, bb_end] = make_bbox(tc, div);
+				auto [bbox_next, bb_start, bb_end] = make_bbox(coord_min, div);
 				const auto bbox_to_filename = [](const auto &bbox_next, const auto div) {
 					auto filename_next = folder + DIR_DELIM + "extract." +
 										 std::to_string(div) + "." + bbox_next +
@@ -596,10 +598,10 @@ void MapgenEarth::generateBuildings()
 				};
 				auto filename_next = bbox_to_filename(bbox_next, div);
 
-				if (!(bb_start.lat <= tc.lat && bb_start.lon <= tc.lon &&
-							bb_end.lat >= tc_max.lat && bb_end.lon >= tc_max.lon)) {
+				if (!(bb_start.lat <= coord_min.lat && bb_start.lon <= coord_min.lon &&
+							bb_end.lat >= coord_max.lat && bb_end.lon >= coord_max.lon)) {
 
-					const auto bbox_exact = bbox_to_string(tc, tc_max);
+					const auto bbox_exact = bbox_to_string(coord_min, coord_max);
 					const auto filename_exact = bbox_to_filename(bbox_exact, 100000);
 					filename_next = filename_exact;
 					bbox_next = bbox_exact;

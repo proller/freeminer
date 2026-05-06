@@ -20,6 +20,7 @@ $0 all
 
 # manual play with gdb trace if segfault
 $0 gdb go
+$0 adan gdb go ---gdb_stay=1
 
 # normal play
 $0 go
@@ -31,9 +32,6 @@ $0 ---cmake_clang=-3.8 go
 
 # run server with debug in gdb
 $0 gdb server
-
-# run server without debug in gdb
-$0 server_gdb_nd
 
 # with periodic profiler
 $0 ----headless ----headless_optimize ----info ---clients_num=10 -profiler_print_interval=5 stress
@@ -240,8 +238,8 @@ our $options = {
         fps_max_unfocused => 10,
     },
     bot_random => {
-        random_input       => 1,
-        continuous_forward => 1,
+        #random_input       => 1,
+        #continuous_forward => 1,
     },
     bot_forward => {
         continuous_forward => 1,
@@ -311,7 +309,7 @@ our $options = {
         '--world'         => $script_path . 'world_fall1',
         mg_name           => 'math',
         mg_math           => {"generator" => "menger_sponge"},
-        static_spawnpoint => '(-70,20020,-190)',
+        static_spawnpoint => '(10,20020,10)',
         mg_flags          => '',                                                                                          # "trees",
     },
     fall3 => {
@@ -415,10 +413,18 @@ $commands = {
         rename qw(CMakeCache.txt CMakeCache.txt.backup);
         rename qw(src/cmake_config.h src/cmake_config.backup);
         sy qq{mkdir -p $build_dir $config->{logdir}};
+
+        my $self = join(' ', $0, (map { /[()\s"]/ ? "'" . $_ . "'" : $_ } @ARGV), '$*');
         file_append(
             "$config->{logdir}/run.sh",
             join "\n",
-            qq{# } . join(' ', $0, map { /[()\s"]/ ? "'" . $_ . "'" : $_ } @ARGV),
+            "cd ..",
+            $self,
+        );
+        file_append(
+            "$config->{logdir}/log.sh",
+            join "\n",
+            qq{# } . $self,
             qq{cd "$build_dir"},
             ""
         );
@@ -496,8 +502,9 @@ $commands = {
           qq{--run-unittests --logfile $config->{logdir}/autotest.$g->{task_name}.test.log},
           options_make([qw(verbose trace)]);
     },
-    set_bot         => {'----bot' => 1, '----bot_random' => 1,},
+    set_bot         => {'----bot' => 1, }, # '----bot_random' => 1,
     run_bot         => ['set_bot', 'set_client', 'run_single'],
+    run             => ['set_client', 'run_single'],
     valgrind => sub {
         $g->{keep_config} = 1;
         $config->{runner} = $config->{runner} . " valgrind @_";
@@ -924,14 +931,14 @@ sub sig(;$$) {
 
 sub sy (@) {
     say 'running ', join ' ', @_;
-    file_append("$config->{logdir}/run.sh", join(' ', @_), "\n");
+    file_append("$config->{logdir}/log.sh", join(' ', @_), "\n");
     return sig system 'bash', '-c', join ' ', @_;
 }
 
 sub sytee (@) {
     my $tee = pop;
     say 'running ', join ' ', @_;
-    file_append("$config->{logdir}/run.sh", join(' ', @_), "\n");
+    file_append("$config->{logdir}/log.sh", join(' ', @_), "\n");
     my $pid = open my $fh, "-|", "@_ 2>&1" or return "can't open @_: $!";
     if ($config->{pid_file}) {
         unlink $config->{pid_file};

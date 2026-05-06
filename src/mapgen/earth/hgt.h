@@ -21,13 +21,16 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
+#include <cmath>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <string>
 #include <vector>
+#include <unordered_map>
+#include <thread>
 
 class height
 {
@@ -89,6 +92,7 @@ public:
 	bool load(ll_t lat, ll_t lon) override;
 };
 
+#if 0
 class height_gebco_tif final : public height
 {
 	const std::string folder;
@@ -107,6 +111,26 @@ public:
 	static int lat90_start(ll_t lat);
 	static int lon90_start(ll_t lon);
 };
+#endif
+
+class height_seabed_tif final : public height
+{
+	const std::string folder;
+	int lat_loading = 200;
+	int lon_loading = 200;
+	std::string file_name(ll_t lat, ll_t lon) override;
+
+protected:
+	std::tuple<size_t, size_t, ll_t, ll_t> ll_to_xy(ll_t lat, ll_t lon) override;
+	int16_t read(uint16_t y, uint16_t x) override;
+
+public:
+	height_seabed_tif(const std::string &folder, ll_t lat, ll_t lon);
+	bool load(ll_t lat, ll_t lon) override;
+	bool ok(ll_t lat, ll_t lon) override;
+	static int lat_start(ll_t lat) { return floor(lat); }
+	static int lon_start(ll_t lon) { return floor(lon); }
+};
 
 class height_dummy final : public height
 {
@@ -124,11 +148,40 @@ public:
 
 class hgts
 {
-	std::map<int, std::map<int, std::shared_ptr<height>>> map1, map90;
+	std::map<int, std::map<int, std::shared_ptr<height>>> map1, map1_seabed; //, map90;
 	const std::string folder;
 	std::mutex mutex;
 
+	// Thread-local cache for container access
+	struct ThreadLocalContainerCache {
+		std::unordered_map<uint64_t, std::weak_ptr<height>> map1_cache;
+		std::unordered_map<uint64_t, std::weak_ptr<height>> map1_seabed_cache;
+	};
+	
+	static thread_local ThreadLocalContainerCache tl_container_cache;
+
+	// Cache key generation for container access (lat/lon tile coordinates)
+	static uint64_t make_tile_key(int lat, int lon) {
+		return (uint64_t(static_cast<uint32_t>(lat)) << 32) | uint64_t(static_cast<uint32_t>(lon));
+	}
+
+	// Layer definition structure
+	struct Layer {
+		std::map<int, std::map<int, std::shared_ptr<height>>>& container;
+		std::unordered_map<uint64_t, std::weak_ptr<height>>& cache;
+		std::function<std::shared_ptr<height>(const std::string&, height::ll_t, height::ll_t)> factory;
+		std::function<height::height_t(height::ll_t)> post_process;
+		std::function<void(std::map<int, std::map<int, std::shared_ptr<height>>>&, 
+						  std::unordered_map<uint64_t, std::weak_ptr<height>>&, 
+						  int, int)> place_dummy;
+		height::height_t min_height;
+		height::height_t max_height;
+	};
+	
+	// Get layer definitions
+	std::vector<Layer> get_layers(const height::ll_t lat, const height::ll_t lon);
+
 public:
 	hgts(const std::string &folder);
-	height::height_t get(height::ll_t lat, height::ll_t lon);
+	height::height_t get(const height::ll_t lat, const height::ll_t lon);
 };

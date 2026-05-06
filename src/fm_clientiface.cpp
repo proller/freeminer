@@ -12,6 +12,7 @@
 #include "server.h"
 #include "emerge.h"
 #include "face_position_cache.h"
+#include "servermap.h"
 #include "threading/lock.h"
 #include "util/directiontables.h"
 #include "util/numeric.h"
@@ -298,7 +299,7 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 			u16 max_simul_dynamic = max_simul_sends_usually;
 
 			// If block is very close, allow full maximum
-			if (d <= BLOCK_SEND_DISABLE_LIMITS_MAX_D)
+			if (d <= BLOCK_ALWAYS_SEND_MAX_D)
 				max_simul_dynamic = max_simul_sends_setting;
 
 			// Don't select too many blocks for sending
@@ -375,7 +376,7 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 				Check if map has this block
 			*/
 
-			MapBlock *block;
+			MapBlockPtr block;
 			if (0) {
 				const auto lock = env->getMap().m_blocks.try_lock_shared_rec();
 				if (!lock->owns_lock()) {
@@ -384,19 +385,20 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 						first_skipped_d = d;
 					continue;
 				}
-				block = env->getMap().getBlockNoCreateNoEx(p);
+				block = env->getMap().getBlock(p);
 			}
-			block = env->getMap().getBlockNoCreateNoEx(p);
+			block = env->getMap().getBlock(p);
 
 			// bool surely_not_found_on_disk = false;
 			// bool block_is_invalid = false;
 			if (block) {
+				const auto lock = block->lock_shared_rec();
 				if (d >= 2 && block->m_is_mono_block &&
 						block->data[0].param0 == CONTENT_AIR) {
 					uint8_t not_air = 0;
 					for (const auto &dir : g_6dirs) {
-						if (const auto *block_near =
-										env->getMap().getBlockNoCreateNoEx(p + dir)) {
+						if (const auto block_near = env->getMap().getBlock(p + dir)) {
+							const auto lock = block_near->lock_shared_rec();
 							if (block_near->m_is_mono_block &&
 									block_near->data[0].param0 != CONTENT_AIR) {
 								++not_air;
@@ -568,13 +570,16 @@ queue_full_break:
 
 uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 {
+
+	TimeTaker time("Server: Send far [ms]");
+
 	const static thread_local auto client_unload_unused_data_timeout =
 			g_settings->getFloat("client_unload_unused_data_timeout");
 	uint16_t sent_cnt{};
 	TRY_UNIQUE_LOCK(far_blocks_requested_mutex)
 	{
 		std::multimap<int32_t, MapBlockPtr> ordered;
-		constexpr uint16_t send_max{50};
+		constexpr uint16_t send_max{100};
 		for (auto &far_blocks : far_blocks_requested) {
 			for (auto &[bpos, step_sent] : far_blocks) {
 				auto &[step, sent_ts] = step_sent;
@@ -612,46 +617,55 @@ uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 		}
 
 		// TODO: why not have?
-		if (farmesh && have_farmesh_quality && farmesh_all_changed) {
+		if (farmesh && have_farmesh_quality && farmesh_all_changed && ordered.empty()) {
 			auto *player = m_env->getPlayer(peer_id);
 			if (!player)
 				return 0;
 
-			auto *sao = player->getPlayerSAO();
+			const auto *sao = player->getPlayerSAO();
 			if (!sao)
 				return 0;
 
-			auto playerpos = sao->getBasePosition();
+			const auto playerpos = sao->getBasePosition();
 
-			auto cbpos = floatToInt(playerpos, BS * MAP_BLOCKSIZE);
+			const auto player_block_pos = floatToInt(playerpos, BS * MAP_BLOCKSIZE);
 
 			const auto cell_size = 1; // FMTODO from remoteclient
-			const auto cell_size_pow = rangeToStep(cell_size);
-			thread_local static const s16 setting_farmesh_all_changed =
+			const auto cell_size_pow = farmesh::rangeToStep(cell_size);
+			thread_local static const pos_t setting_farmesh_all_changed =
 					g_settings->getU32("farmesh_all_changed");
 			const auto &use_farmesh_all_changed =
 					std::min(setting_farmesh_all_changed, farmesh_all_changed);
-			runFarAll(cbpos, cell_size_pow, farmesh, farmesh_quality, false,
-					[this, &ordered, &cbpos, &use_farmesh_all_changed](
-							const v3bpos_t &bpos, const bpos_t &size) -> bool {
+			farmesh::runFarAll(player_block_pos, cell_size_pow, farmesh,
+					farmesh::rangeToStep(farmesh_quality), false, true, 0,
+					[this, &ordered, &player_block_pos, &use_farmesh_all_changed , &sent_cnt](
+							const v3bpos_t &bpos, const bpos_t &size,
+							const block_step_t &step) -> bool {
 						if (!size) {
 							return false;
-						};
+						}
 
 						// TODO: use block center
-						const auto bdist = radius_box(cbpos, bpos);
+						const auto bdist = radius_box(player_block_pos, bpos);
 						if (bdist << MAP_BLOCKP > use_farmesh_all_changed) {
 							return false;
 						}
 
-						block_step_t step = rangeToStep(size);
-						if (far_blocks_requested.size() < step) {
-							far_blocks_requested.resize(step);
+						if (far_blocks_requested.size() >= step) {
+							if (far_blocks_requested[step].contains(bpos)) {
+								return false;
+							}
 						}
-						auto &[stepp, sent_ts] = far_blocks_requested[step][bpos];
-						if (sent_ts < 0) { // <=
+
+						if (far_blocks_sent.size() < step) {
+							far_blocks_sent.resize(step);
+						}
+
+						auto &[_, sent_ts] = far_blocks_sent[step][bpos];
+						if (sent_ts < 0) {
 							return false;
 						}
+
 						const auto dbase = GetFarDatabase(m_env->m_map->m_db.dbase,
 								m_env->m_server->far_dbases, m_env->m_map->m_savedir,
 								step);
@@ -671,17 +685,36 @@ uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
 						sent_ts = -1; //TODO
 						ordered.emplace(sent_ts - step, block);
 
+						if (++sent_cnt > send_max) {
+							return true;
+						}
+
 						return false;
 					});
 		}
 
 		// First with larger iteration and smaller step
-
+		std::vector<MapBlockPtr> blocks;
+		const auto send = [&]() {
+			if (!blocks.empty()) {
+				m_env->m_server->SendBlocksFm(
+						peer_id, blocks, serialization_version, net_proto_version);
+			}
+		};
 		for (auto it = ordered.rbegin(); it != ordered.rend(); ++it) {
 			//	for (const auto &[key, block] : std::views::reverse(ordered)) {
-			m_env->m_server->SendBlockFm(
-					peer_id, it->second, serialization_version, net_proto_version);
+			if (net_proto_version_fm < 3) {
+				m_env->m_server->SendBlockFm(
+						peer_id, it->second, serialization_version, net_proto_version);
+			} else {
+				blocks.emplace_back(it->second);
+				if (blocks.size() >= 100) {
+					send();
+					blocks.clear();
+				}
+			}
 		}
+		send();
 	}
 
 	return sent_cnt;

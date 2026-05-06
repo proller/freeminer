@@ -23,8 +23,7 @@
 #include "nodedef.h"
 #include "scripting_server.h"
 #include "server.h"
-//#include "scripting_game.h"
-#include "sound.h"
+#include "serverenvironment.h"
 #include "util/serialize.h"
 #include <sstream>
 

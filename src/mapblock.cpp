@@ -3,6 +3,7 @@
 // Copyright (C) 2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
 #include "mapblock.h"
+#include "client/node_visuals.h"
 #include "mapnode.h"
 #include "profiler.h"
 #include "servermap.h"
@@ -10,11 +11,9 @@
 #include <memory>
 #include <sstream>
 #include "map.h"
-#include "light.h"
 #include "nodedef.h"
 #include "nodemetadata.h"
 #include "gamedef.h"
-#include "irrlicht_changes/printing.h"
 #include "log.h"
 #include "content_mapnode.h"  // For legacy name-id mapping
 #include "content_nodemeta.h" // For legacy deserialization
@@ -24,6 +23,7 @@
 #include "client/mapblock_mesh.h"
 #endif
 #include "porting.h"
+#include "settings.h"
 #include "util/string.h"
 #include "util/serialize.h"
 #include "util/basic_macros.h"
@@ -129,7 +129,7 @@ void MapBlock::setNode(const v3pos_t &p, const MapNode &n, bool important)
 	data[index] = n;
 
 	modified_light light = modified_light_no;
-	if (f0.light_propagates != f1.light_propagates || f0.solidness != f1.solidness ||
+	if (f0.light_propagates != f1.light_propagates || f0.visuals->solidness != f1.visuals->solidness ||
 			f0.light_source != f1.light_source) /*|| f0.drawtype != f1.drawtype*/
 		light = modified_light_yes;
 	if (important)
@@ -190,14 +190,21 @@ const MapBlock::mesh_type empty_mesh;
 #if CHECK_CLIENT_BUILD()
 const MapBlock::mesh_type MapBlock::getLodMesh(block_step_t step, bool allow_other)
 {
-	if (m_lod_mesh[step] || !allow_other)
-		return m_lod_mesh[step];
+	auto m = m_lod_mesh[step].load();
+	if (m || !allow_other)
+		return m;
 
 	for (int inc = 1; inc < 4; ++inc) {
-		if (step + inc < m_lod_mesh.size() && m_lod_mesh[step + inc])
-			return m_lod_mesh[step + inc];
-		if (step - inc >= 0 && m_lod_mesh[step - inc])
-			return m_lod_mesh[step - inc];
+		if (step + inc < m_lod_mesh.size()) {
+			if (auto mn = m_lod_mesh[step + inc].load()) {
+				return mn;
+			}
+		}
+		if (step - inc >= 0) {
+			if (auto mp = m_lod_mesh[step - inc].load()) {
+				return mp;
+			}
+		}
 	}
 	return empty_mesh;
 }
@@ -209,18 +216,13 @@ const MapBlock::mesh_type MapBlock::getFarMesh(block_step_t step)
 
 void MapBlock::setLodMesh(const MapBlock::mesh_type &rmesh)
 {
-	const auto ms = rmesh->lod_step;
-	if (auto mesh = std::move(m_lod_mesh[ms]))
-		delete_mesh = std::move(mesh);
-	m_lod_mesh[ms] = rmesh;
+	const auto step = rmesh->lod_step;
+	delete_mesh = m_lod_mesh[step].exchange(rmesh);
 }
 
 void MapBlock::setFarMesh(const MapBlock::mesh_type &rmesh, block_step_t step)
 {
-	if (auto mesh = std::move(m_far_mesh[step])) {
-		delete_mesh = std::move(mesh);
-	}
-	m_far_mesh[step] = rmesh;
+	delete_mesh = m_far_mesh[step].exchange(rmesh);
 }
 
 #endif
@@ -542,12 +544,6 @@ void MapBlock::correctBlockNodeIds(const NameIdMapping *nimap, MapNode *nodes,
 		IGameDef *gamedef)
 {
 	const NodeDefManager *nodedef = gamedef->ndef();
-	// This means the block contains incorrect ids, and we contain
-	// the information to convert those to names.
-	// nodedef contains information to convert our names to globally
-	// correct ids.
-	std::unordered_set<content_t> unnamed_contents;
-	std::unordered_set<std::string> unallocatable_contents;
 
 	// Used to cache local to global id lookup.
 	IdIdMapping &mapping_cache = IdIdMapping::giveClearedThreadLocalInstance();
@@ -564,33 +560,22 @@ void MapBlock::correctBlockNodeIds(const NameIdMapping *nimap, MapNode *nodes,
 
 		std::string name;
 		if (!nimap->getName(local_id, name)) {
-			unnamed_contents.insert(local_id);
-			continue;
+			throw SerializationError("MapBlock::correctBlockNodeIds(): "
+				"Block contains id " + itos(local_id) + " with no name mapping");
 		}
 
 		content_t global_id;
 		if (!nodedef->getId(name, global_id)) {
 			global_id = gamedef->allocateUnknownNodeId(name);
 			if (global_id == CONTENT_IGNORE) {
-				unallocatable_contents.insert(name);
-				continue;
+				throw SerializationError("MapBlock::correctBlockNodeIds(): "
+					"Could not allocate global id for node name \"" + name + "\"");
 			}
 		}
 		nodes[i].setContent(global_id);
 
 		// Save previous node local_id & global_id result
 		mapping_cache.set(local_id, global_id);
-	}
-
-	for (const content_t c: unnamed_contents) {
-		errorstream << "correctBlockNodeIds(): IGNORING ERROR: "
-				<< "Block contains id " << c
-				<< " with no name mapping" << std::endl;
-	}
-	for (const std::string &node_name: unallocatable_contents) {
-		errorstream << "correctBlockNodeIds(): IGNORING ERROR: "
-				<< "Could not allocate global id for node name \""
-				<< node_name << "\"" << std::endl;
 	}
 }
 
@@ -928,15 +913,14 @@ void MapBlock::deSerializeNetworkSpecific(std::istream &is)
 		int version = readU8(is);
 		//const u8 version = readU8(is);
 		//if (version != 1)
-			//throw SerializationError("unsupported MapBlock version");
+		//throw SerializationError("unsupported MapBlock version");
 		if (version >= 1) {
-			heat = readF1000(is); // deprecated heat
+			heat = readF1000(is);	  // deprecated heat
 			humidity = readF1000(is); // deprecated humidity
 		}
-
-	} catch(SerializationError &e) {
-		warningstream<<"MapBlock::deSerializeNetworkSpecific(): Ignoring an error"
-				<<": "<<e.what()<<std::endl;
+	} catch (SerializationError &e) {
+		warningstream << "MapBlock::deSerializeNetworkSpecific(): Ignoring an error"
+					  << ": " << e.what() << std::endl;
 	}
 }
 

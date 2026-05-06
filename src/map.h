@@ -4,29 +4,29 @@
 
 #pragma once
 
-#include <cstdint>
-#include <iostream>
-#include <set>
-#include <map>
-#include "irr_v3d.h"
 #include "threading/concurrent_unordered_map.h"
 #include "threading/concurrent_unordered_set.h"
 #include "util/unordered_map_hash.h"
 
+#include <list>
+#include <map>
+#include <ostream>
+#include <set>
+#include <unordered_map>
+
 #include "irrlichttypes_bloated.h"
-#include "mapblock.h"
+#include "mapblock.h" // for forEachNodeInArea
 #include "mapnode.h"
 #include "constants.h"
 #include "voxel.h"
 #include "modifiedstate.h"
-#include "util/numeric.h"
-#include "nodetimer.h"
-#include "debug.h"
+#include "util/numeric.h" // for forEachNodeInArea
 
 /*
 class MapSector;
 */
 class NodeMetadata;
+class NodeTimer;
 class IGameDef;
 
 class MapDatabase;
@@ -63,9 +63,6 @@ struct MapEditEvent
 	MapNode n = CONTENT_AIR;
 	std::vector<v3s16> modified_blocks; // Represents a set
 	bool is_private_change = false;
-	// Setting low_priority to true allows the server
-	// to send this change to clients with some delay.
-	bool low_priority = false;
 
 	MapEditEvent() = default;
 
@@ -290,17 +287,22 @@ public:
 	struct BlockUsed
 	{
 		MapBlockPtr block{};
-		int32_t last_used{};
+		int32_t far_last_used{};
 	};
-	std::array<concurrent_unordered_map<v3bpos_t, BlockUsed>, FARMESH_STEP_MAX> far_blocks_storage;
+	std::array<concurrent_unordered_map<v3bpos_t, BlockUsed>, FARMESH_STEP_MAX>
+			far_blocks_storage;
 	//double m_far_blocks_created = 0;
 	float far_blocks_sent_timer{1};
-	v3pos_t far_blocks_last_cam_pos;
 	std::vector<MapBlockPtr> m_far_blocks_delete_1, m_far_blocks_delete_2;
-	bool m_far_blocks_delete_current {};
+	bool m_far_blocks_delete_current{};
 
 	//static constexpr bool m_far_fast =			true; // show generated far farmesh stable(0) or instant(1)
-	uint32_t far_iteration_use{};
+	v3pos_t far_cam_pos_grid;
+	v3pos_t far_cam_pos_mesh;
+	v3pos_t far_cam_pos_draw;
+	uint32_t far_iteration_grid{};
+	uint32_t far_iteration_mesh{};
+	uint32_t far_iteration_draw{};
 	uint32_t far_iteration_clean{};
 	// MapBlock * getBlockNoCreateNoEx(v3pos_t & p);
 	MapBlockPtr createBlankBlockNoInsert(const v3bpos_t &p);
@@ -336,7 +338,7 @@ public:
 	{
 		return getNodeTry(p);
 	};
-	inline MapNode &getNodeRefUnsafe(const v3pos_t &p) override { return getNodeRef(p); }
+	inline const MapNode getNodeRefUnsafe(const v3pos_t &p) override { return getNodeRef(p); }
 
 	// bool isBlockOccluded(const v3pos_t &pos, const v3pos_t &cam_pos_nodes);
 
@@ -421,7 +423,8 @@ class MMVManip : public VoxelManipulator
 {
 public:
 	MMVManip(Map *map);
-	virtual ~MMVManip() = default;
+	~MMVManip() override;
+	DISABLE_CLASS_COPY(MMVManip)
 
 	/*
 		Loads specified area from map and *adds* it to the area already
@@ -462,6 +465,10 @@ public:
 	// Is it impossible to call initialEmerge / blitBackAll?
 	inline bool isOrphan() const { return !m_map; }
 
+	std::list<MMVManip **>::iterator addTrackedRef(MMVManip **ref_ref);
+
+	void removeTrackedRef(std::list<MMVManip **>::iterator it);
+
 	bool m_is_dirty = false;
 
 protected:
@@ -470,6 +477,10 @@ protected:
 	// may be null
 public:
 	Map *m_map = nullptr;
+
+private:
+	// references to this that need to be cleared on destruction
+	std::list<MMVManip **> m_tracked_refs;
 };
 
 using MapSector = Map::MapSector;

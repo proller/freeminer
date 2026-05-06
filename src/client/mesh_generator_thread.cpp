@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (C) 2013, 2017 celeron55, Perttu Ahola <celeron55@gmail.com>
 
+#include "client/localplayer.h"
+
 #include "mesh_generator_thread.h"
 #include "client/clientmap.h"
 #include "fm_far_calc.h"
@@ -10,6 +12,7 @@
 #include "profiler.h"
 #include "client.h"
 #include "mapblock.h"
+#include "mapblock_mesh.h"
 #include "map.h"
 #include "util/directiontables.h"
 #include "porting.h"
@@ -213,7 +216,7 @@ void MeshUpdateQueue::fillDataFromMapBlocks(QueuedMeshUpdate *q)
 {
 	auto mesh_grid = m_client->getMeshGrid();
 
-	const auto lod_step = getLodStep(m_client->m_env.getClientMap().getControl(),
+	const auto lod_step = farmesh::getLodStep(m_client->m_env.getClientMap().getControl(),
 			getNodeBlockPos(
 					floatToInt(m_client->m_env.getLocalPlayer()->getPosition(), BS)),
 			q->p, m_client->getEnv().getLocalPlayer()->getSpeed().getLength());

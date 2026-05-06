@@ -210,7 +210,12 @@ public:
 				w.nodes.emplace_back(pn);
 			}
 			v.emplace_back(w);
-			arnis::generate_world(editor, v);
+			arnis::FloodFillCache flood_fill_cache;
+			XZBBox xzbbox(editor.mg->node_min.X, editor.mg->node_min.Z,
+					editor.mg->node_max.X, editor.mg->node_max.Z);
+			arnis::BuildingFootprintBitmap building_footprints(xzbbox);
+			arnis::Args args;
+			arnis::generate_world(editor, v, args, flood_fill_cache, building_footprints);
 		} catch (const std::exception &ex) {
 			DUMP(ex.what());
 		}
@@ -230,7 +235,12 @@ public:
 			for (const auto &sn : relation.subitems<osmium::Way>()) {
 				way(sn);
 			}
-			arnis::generate_world(editor, v);
+			arnis::FloodFillCache flood_fill_cache;
+			XZBBox xzbbox(editor.mg->node_min.X, editor.mg->node_min.Z,
+					editor.mg->node_max.X, editor.mg->node_max.Z);
+			arnis::BuildingFootprintBitmap building_footprints(xzbbox);
+			arnis::Args args;
+			arnis::generate_world(editor, v, args, flood_fill_cache, building_footprints);
 		} catch (const std::exception &ex) {
 			DUMP(ex.what());
 		}

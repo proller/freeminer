@@ -9,6 +9,13 @@ Core: fast reliable network protocol, fast multi-threaded server, utf8 chat, bui
 
 Changelog
 ======
+
+### 5.14.0.0 (?)
+  * Farmesh fixes and settings
+     * Works with client_mesh_chunk: Just set client_mesh_chunk=4 for better quality
+     * Night lights: farlights=1
+  * Mapgen Earth: Now with buildings (OSM data + https://github.com/louis-e/arnis ) - no preparation required
+
 ### 5.8.0.0 (?)
   * Farmesh alpha
   * Multi protocol network: Auto use enet for freeminer servers and mt for minetest
@@ -17,6 +24,7 @@ Changelog
 
 ### 5.7.0.0 (?)
   * Tree growth
+
   * Weather tuned
   * Multi protocol network: `cmake -DUSE_MULTI=1` one server for minetest/websocket/enet/sctp clients
   * Added websocket protocol for serve emscripten builds without proxy `cmake -DENABLE_WEBSOCKET=1`

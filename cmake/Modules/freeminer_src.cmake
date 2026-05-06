@@ -75,6 +75,7 @@ if(FETCH_DEPS)
         program_options
         asio
         thread
+        geometry
     )
 
     include(FetchContent)
@@ -92,48 +93,16 @@ if(FETCH_DEPS)
         EXCLUDE_FROM_ALL
     )
     FetchContent_MakeAvailable(Boost)
+    set(Boost_FOUND 1 CACHE INTERNAL "")
+    set(Boost_INCLUDE_DIRS "${BOOST_LIBRARY_INCLUDES} ${boost_SOURCE_DIR}/libs/numeric/conversion/include" CACHE INTERNAL "")
 endif()
 
 if(ENABLE_WEBSOCKET OR ENABLE_WEBSOCKET_SCTP)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp/CMakeLists.txt)
         find_package(Boost)
         if(Boost_FOUND)
-
             if(boost_SOURCE_DIR)
-                include_directories(BEFORE SYSTEM
-                    ${boost_SOURCE_DIR}/libs/align/include
-                    ${boost_SOURCE_DIR}/libs/asio/include
-                    ${boost_SOURCE_DIR}/libs/assert/include
-                    ${boost_SOURCE_DIR}/libs/bind/include
-                    ${boost_SOURCE_DIR}/libs/config/include
-                    ${boost_SOURCE_DIR}/libs/container_hash/include
-                    ${boost_SOURCE_DIR}/libs/container/include
-                    ${boost_SOURCE_DIR}/libs/core/include
-                    ${boost_SOURCE_DIR}/libs/date_time/include
-                    ${boost_SOURCE_DIR}/libs/describe/include
-                    ${boost_SOURCE_DIR}/libs/detail/include
-                    ${boost_SOURCE_DIR}/libs/function/include
-                    ${boost_SOURCE_DIR}/libs/lexical_cast/include
-                    ${boost_SOURCE_DIR}/libs/move/include
-                    ${boost_SOURCE_DIR}/libs/mp11/include
-                    ${boost_SOURCE_DIR}/libs/mpl/include
-                    ${boost_SOURCE_DIR}/libs/numeric/conversion/include
-                    ${boost_SOURCE_DIR}/libs/smart_ptr/include
-                    ${boost_SOURCE_DIR}/libs/static_assert/include
-                    ${boost_SOURCE_DIR}/libs/system/include
-                    ${boost_SOURCE_DIR}/libs/thread/include
-                    ${boost_SOURCE_DIR}/libs/throw_exception/include
-                    ${boost_SOURCE_DIR}/libs/type_index/include
-                    ${boost_SOURCE_DIR}/libs/type_traits/include
-                    ${boost_SOURCE_DIR}/libs/winapi/include
-                    ${boost_SOURCE_DIR}/libs/predef/include
-                    ${boost_SOURCE_DIR}/libs/chrono/include
-                    ${boost_SOURCE_DIR}/libs/io/include
-                    ${boost_SOURCE_DIR}/libs/ratio/include
-                    ${boost_SOURCE_DIR}/libs/tuple/include
-                    ${boost_SOURCE_DIR}/libs/exception/include
-                    ${boost_SOURCE_DIR}/libs/optional/include
-                )
+                include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
             endif()
 
             include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/websocketpp)
@@ -294,7 +263,7 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
             EXCLUDE_FROM_ALL
         )
         FetchContent_MakeAvailable(protozero)
-        set(PROTOZERO_INCLUDE_DIR "${protozero_SOURCE_DIR}")
+        set(PROTOZERO_INCLUDE_DIR "${protozero_SOURCE_DIR}/include")
         set(PROTOZERO_FOUND 1 CACHE INTERNAL "")
 
         FetchContent_Declare(
@@ -310,9 +279,9 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
             GIT_PROGRESS TRUE
             DOWNLOAD_EXTRACT_TIMESTAMP ON
             EXCLUDE_FROM_ALL
-
         )
         FetchContent_MakeAvailable(expat)
+        set(EXPAT_FOUND 1 CACHE INTERNAL "")
         add_library(EXPAT::EXPAT ALIAS expat)
     endif()
     set(Boost_USE_STATIC_LIBS ${BUILD_STATIC_LIBS})
@@ -330,54 +299,11 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
 
         if(NOT OSMIUM_INCLUDE_DIR)
             if(boost_SOURCE_DIR)
+                include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
                 include_directories(BEFORE SYSTEM
-                    ${boost_SOURCE_DIR}/libs/any/include
-                    ${boost_SOURCE_DIR}/libs/assert/include
-                    ${boost_SOURCE_DIR}/libs/config/include
-                    ${boost_SOURCE_DIR}/libs/container_hash/include
-                    ${boost_SOURCE_DIR}/libs/container/include
-                    ${boost_SOURCE_DIR}/libs/core/include
-                    ${boost_SOURCE_DIR}/libs/integer/include
-                    ${boost_SOURCE_DIR}/libs/iterator/include
-                    ${boost_SOURCE_DIR}/libs/lexical_cast/include
-                    ${boost_SOURCE_DIR}/libs/move/include
-                    ${boost_SOURCE_DIR}/libs/preprocessor/include
-                    ${boost_SOURCE_DIR}/libs/program_options/include
-                    ${boost_SOURCE_DIR}/libs/range/include
-                    ${boost_SOURCE_DIR}/libs/static_assert/include
-                    ${boost_SOURCE_DIR}/libs/throw_exception/include
-                    ${boost_SOURCE_DIR}/libs/type_index/include
-                    ${boost_SOURCE_DIR}/libs/type_traits/include
-                    ${boost_SOURCE_DIR}/libs/utility/include
-                    ${boost_SOURCE_DIR}/libs/variant/include
-
-                    ${boost_SOURCE_DIR}/libs/algorithm/include
-                    ${boost_SOURCE_DIR}/libs/array/include
-                    ${boost_SOURCE_DIR}/libs/bind/include
-                    ${boost_SOURCE_DIR}/libs/conversion/include
-                    ${boost_SOURCE_DIR}/libs/detail/include
-                    ${boost_SOURCE_DIR}/libs/function/include
-                    ${boost_SOURCE_DIR}/libs/geometry/include
-                    ${boost_SOURCE_DIR}/libs/graph/include
-                    ${boost_SOURCE_DIR}/libs/math/include
-                    ${boost_SOURCE_DIR}/libs/mpl/include
-                    ${boost_SOURCE_DIR}/libs/multi_index/include
-                    ${boost_SOURCE_DIR}/libs/multiprecision/include
                     ${boost_SOURCE_DIR}/libs/numeric/conversion/include
-                    ${boost_SOURCE_DIR}/libs/parameter/include
-                    ${boost_SOURCE_DIR}/libs/property_map/include
-                    ${boost_SOURCE_DIR}/libs/qvm/include
-                    ${boost_SOURCE_DIR}/libs/rational/include
-                    ${boost_SOURCE_DIR}/libs/smart_ptr/include
-                    ${boost_SOURCE_DIR}/libs/tokenizer/include
-                    ${boost_SOURCE_DIR}/libs/tti/include
-                    ${boost_SOURCE_DIR}/libs/unordered/include
                 )
             endif()
-
-
-
-            #if(ANDROID OR WIN32 OR EMSCRIPTEN OR USE_LIBCXX)
             if(FETCH_DEPS)
                 set(FETCH_OSMIUM 1 CACHE INTERNAL "")
             endif()
@@ -388,18 +314,9 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
                 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/libosmium/cmake")
                 set(Osmium_USE_LZ4 1 CACHE INTERNAL "")
                 add_subdirectory(mapgen/earth/libosmium)
-                set(OSMIUM_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/libosmium/include ${PROTOZERO_INCLUDE_DIR}/include)
-
+                set(OSMIUM_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mapgen/earth/libosmium/include ${Boost_INCLUDE_DIRS})
                 find_package(BZip2)
-                if(BZIP2_FOUND)
-                    list(APPEND OSMIUM_LIRARY BZip2::BZip2)
-                endif()
                 find_package(EXPAT)
-                if(EXPAT_FOUND)
-                    list(APPEND OSMIUM_LIRARY EXPAT::EXPAT)
-                endif()
-                list(APPEND OSMIUM_LIRARY Boost::headers)
-
             else()
                 FetchContent_Declare(libosmium
                     GIT_REPOSITORY https://github.com/osmcode/libosmium
@@ -417,13 +334,19 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
 
                 )
                 FetchContent_MakeAvailable(libosmium)
+                list(APPEND OSMIUM_INCLUDE_DIR ${libosmium_SOURCE_DIR}/include)
+            endif()
 
-                list(APPEND OSMIUM_LIRARY Boost::headers)
-                list(APPEND OSMIUM_INCLUDE_DIR ${libosmium_SOURCE_DIR}/include ${PROTOZERO_INCLUDE_DIR}/include)
+            list(APPEND OSMIUM_INCLUDE_DIR ${PROTOZERO_INCLUDE_DIR})
+            list(APPEND OSMIUM_LIRARY Boost::headers)
+            if(BZIP2_FOUND)
+                list(APPEND OSMIUM_LIRARY BZip2::BZip2)
+            endif()
+            if(EXPAT_FOUND)
+                list(APPEND OSMIUM_LIRARY EXPAT::EXPAT)
             endif()
 
             include_directories(BEFORE SYSTEM ${OSMIUM_INCLUDE_DIR})
-
         endif()
         set(USE_OSMIUM 1)
         message(STATUS "Using osmium ${USE_OSMIUM}: ${OSMIUM_INCLUDE_DIR} : ${OSMIUM_LIRARY}")
@@ -447,29 +370,29 @@ if(ENABLE_OSMIUM AND (OSMIUM_INCLUDE_DIR OR EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/m
 
             add_library(${OSMIUM_TOOL_LIBRARY}
                 ${PROJECT_BINARY_DIR}/${OSMIUM_TOOL_SRC}/version.cpp
-                ${OSMIUM_TOOL_SRC}command_extract.cpp
-                ${OSMIUM_TOOL_SRC}cmd.cpp
                 ${OSMIUM_TOOL_SRC}cmd_factory.cpp
-                ${OSMIUM_TOOL_SRC}id_file.cpp
-                ${OSMIUM_TOOL_SRC}io.cpp
-                ${OSMIUM_TOOL_SRC}util.cpp
+                ${OSMIUM_TOOL_SRC}cmd.cpp
+                ${OSMIUM_TOOL_SRC}command_extract.cpp
                 ${OSMIUM_TOOL_SRC}command_help.cpp
-                ${OSMIUM_TOOL_SRC}option_clean.cpp
                 ${OSMIUM_TOOL_SRC}export/export_format_json.cpp
                 ${OSMIUM_TOOL_SRC}export/export_format_pg.cpp
                 ${OSMIUM_TOOL_SRC}export/export_format_text.cpp
                 ${OSMIUM_TOOL_SRC}export/export_handler.cpp
                 ${OSMIUM_TOOL_SRC}extract/extract_bbox.cpp
-                ${OSMIUM_TOOL_SRC}extract/extract.cpp
                 ${OSMIUM_TOOL_SRC}extract/extract_polygon.cpp
+                ${OSMIUM_TOOL_SRC}extract/extract.cpp
                 ${OSMIUM_TOOL_SRC}extract/geojson_file_parser.cpp
                 ${OSMIUM_TOOL_SRC}extract/geometry_util.cpp
                 ${OSMIUM_TOOL_SRC}extract/osm_file_parser.cpp
                 ${OSMIUM_TOOL_SRC}extract/poly_file_parser.cpp
-                ${OSMIUM_TOOL_SRC}extract/strategy_complete_ways.cpp
                 ${OSMIUM_TOOL_SRC}extract/strategy_complete_ways_with_history.cpp
+                ${OSMIUM_TOOL_SRC}extract/strategy_complete_ways.cpp
                 ${OSMIUM_TOOL_SRC}extract/strategy_simple.cpp
                 ${OSMIUM_TOOL_SRC}extract/strategy_smart.cpp
+                ${OSMIUM_TOOL_SRC}id_file.cpp
+                ${OSMIUM_TOOL_SRC}io.cpp
+                ${OSMIUM_TOOL_SRC}option_clean.cpp
+                ${OSMIUM_TOOL_SRC}util.cpp
             )
             target_link_libraries(${OSMIUM_TOOL_LIBRARY}
                 PRIVATE ${OSMIUM_LIRARY}
@@ -536,21 +459,22 @@ set(FMcommon_SRCS ${FMcommon_SRCS}
     circuit_element_virtual.cpp
     circuit_element.cpp
     circuit.cpp
+    content_abm_grow_tree.cpp
+    content_abm.cpp
     fm_abm_world.cpp
+    fm_abm.cpp
     fm_bitset.cpp
+    fm_clientiface.cpp
+    fm_far_calc.cpp
     fm_liquid.cpp
     fm_map.cpp
     fm_server.cpp
+    fm_serverenvironment.cpp
+    fm_util.cpp
     fm_world_merge.cpp
-    fm_far_calc.cpp
     key_value_storage.cpp
     log_types.cpp
     stat.cpp
-    content_abm_grow_tree.cpp
-    content_abm.cpp
-    fm_abm.cpp
-    fm_clientiface.cpp
-    fm_serverenvironment.cpp
 )
 
 list(APPEND FREEMINER_COMMON_LIBRARIES
