@@ -16,7 +16,7 @@
 #include <filesystem>
 //#include "mapgen/earth/luanti-earth/native/src/downloader.h"
 
-class TileData;
+struct TileData;
 class CpuVoxelizer
 {
 public:

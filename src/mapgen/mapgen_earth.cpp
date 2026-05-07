@@ -34,7 +34,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "constants.h"
 #include "emerge.h"
 #include "mapgen/earth/png_holder.h"
-#include "mapgen/earth/rgb_temp.h"
+//#include "mapgen/earth/rgb_temp.h"
 #include "mapgen/mg_decoration.h"
 #include "mapgen/mg_ore.h"
 #include "server.h"
@@ -304,8 +304,8 @@ ll MapgenEarth::pos_to_ll(const v3pos_t &p)
 
 v2pos_t MapgenEarth::ll_to_pos(const ll &l)
 {
-	return v2pos_t((l.lon / scale.X - center.X) * (EQUATOR_LEN / 360),
-			(l.lat / scale.Z - center.Z) * (EQUATOR_LEN / 360));
+	return v2pos_t((l.lon - center.X) * (EQUATOR_LEN / 360) / scale.X,
+			(l.lat - center.Z) * (EQUATOR_LEN / 360) / scale.Z);
 }
 
 pos_t MapgenEarth::get_height(pos_t x, pos_t z)
@@ -428,6 +428,7 @@ static Vec3 cartesianFromDegrees(double lat, double lon, double h = 0)
 	return {x, y, z};
 }
 
+#include "earth/geoid.h"
 #include "earth/voxel_importer.cpp"
 #include "earth/CpuVoxelizer.cpp"
 #endif
@@ -438,10 +439,25 @@ void MapgenEarth::start_download_and_voxelize(double lat, double lon, double ele
 #if USE_VOXEL_EARTH
 	try {
 		const std::string &apiKeyStr = api_key;
+		const pos_t terrain_y =
+				std::max(get_height(node_min.X + csize.X / 2, node_min.Z + csize.Z / 2),
+						static_cast<pos_t>(water_level)) +
+				1;
 
 		TileDownloader downloader(
 				apiKeyStr, maps_holder->data_root + DIR_DELIM + "voxel_earth");
-		auto tiles = downloader.downloadTiles(lat, lon, elevation, radius);
+		const double horizontal_radius =
+				radius * std::max(std::abs(scale.X), std::abs(scale.Z));
+		double vertical_padding = std::max<double>(csize.Y * std::abs(scale.Y), 64.0);
+		g_settings->getFloatNoEx("voxel_earth_query_vertical_padding", vertical_padding);
+		double query_radius = std::sqrt(horizontal_radius * horizontal_radius +
+										vertical_padding * vertical_padding);
+		g_settings->getFloatNoEx("voxel_earth_query_radius", query_radius);
+		const double terrain_elevation = (terrain_y + center.Y) * scale.Y;
+		const double terrain_ellipsoid_elevation =
+				earth::orthometric_to_ellipsoid_height(lat, lon, terrain_elevation);
+		auto tiles = downloader.downloadTiles(
+				lat, lon, terrain_ellipsoid_elevation, query_radius);
 		bool use_java_voxelizer = false;
 		g_settings->getBoolNoEx("use_java_voxelizer", use_java_voxelizer);
 		bool use_native_voxelizer = !use_java_voxelizer;
@@ -449,7 +465,12 @@ void MapgenEarth::start_download_and_voxelize(double lat, double lon, double ele
 
 		Voxelizer voxelizer;
 		CpuVoxelizer cpuvoxelizer{csize.X * 2, true, true};
-		Vec3 origin = cartesianFromDegrees(lat, lon, elevation);
+		const double chunk_elevation = (elevation + center.Y) * scale.Y;
+		const double chunk_ellipsoid_elevation =
+				earth::orthometric_to_ellipsoid_height(lat, lon, chunk_elevation);
+		Vec3 origin = cartesianFromDegrees(lat, lon, chunk_ellipsoid_elevation);
+		double y_offset_nodes = 0.0;
+		g_settings->getFloatNoEx("voxel_earth_y_offset", y_offset_nodes);
 		// DUMP(node_min, node_max, lat, lon, origin.X, origin.Y, origin.Z, tiles.size());
 		const auto mg = this;
 
@@ -478,8 +499,9 @@ void MapgenEarth::start_download_and_voxelize(double lat, double lon, double ele
 			}
 
 			if (use_native_voxelizer) {
-				VoxelGrid grid = voxelizer.voxelize(
-						tile, resolution, origin.X, origin.Y, origin.Z);
+				VoxelGrid grid = voxelizer.voxelize(tile, resolution, origin.X, origin.Y,
+						origin.Z, y_offset_nodes, center.X, center.Y, center.Z, scale.X,
+						scale.Y, scale.Z, node_min.X, node_min.Y, node_min.Z);
 				for (const auto &v : grid.voxels) {
 					const v3pos_t pos_rel{static_cast<pos_t>(v.x),
 							static_cast<pos_t>(v.y),
@@ -752,7 +774,7 @@ void MapgenEarth::makeChunk(BlockMakeData *data)
 		const auto origin_min = cartesianFromDegrees(tc_min.lat, tc_min.lon, node_min.Y);
 		const auto origin_max = cartesianFromDegrees(tc_max.lat, tc_max.lon, node_max.Y);
 		const auto origin_diff = origin_max - origin_min;
-		const auto radius = csize.X / 2;
+		const auto radius = csize.X / 2; // - MAP_BLOCKSIZE;
 		const auto resolution = csize.X;
 		const auto elevation = node_min.Y + csize.Y / 2;
 		{

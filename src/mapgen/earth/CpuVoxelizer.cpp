@@ -25,6 +25,7 @@
 #include "tiny_gltf.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -149,28 +150,18 @@ public:
 				  << "\n";
 		bool ret = loader.LoadBinaryFromMemory(&model, &err, &warn,
 				reinterpret_cast<const unsigned char *>(glbData.data()), glbData.size());
+		if (!warn.empty()) {
+			std::cerr << "tinygltf warn: " << warn << "\n";
+		}
+		if (!ret) {
+			throw std::runtime_error("Failed to load GLB: " + err);
+		}
 
 		// Containers for raw data
 		FloatArray vx, vy, vz;
 		FloatArray tu, tv;
 		BoolArray hv;
 		IntArray triIdx;
-
-		// Helper to push a vertex
-		auto pushVertex = [&](float x, float y, float z, float u, float v, bool hasUV) {
-			vx.add(x);
-			vy.add(y);
-			vz.add(z);
-			if (hasUV) {
-				tu.add(u);
-				tv.add(v);
-				hv.add(true);
-			} else {
-				tu.add(NAN);
-				tv.add(NAN);
-				hv.add(false);
-			}
-		};
 
 		// Walk the scene graph
 		if (model.scenes.empty()) {
@@ -215,16 +206,28 @@ public:
 			lr.hasUV.push_back(hv.data[i0] || hv.data[i1] || hv.data[i2]);
 		}
 
-		// Load first image as ARGB int array
+		// Load first image as packed RGB ints. tinygltf decodes GLB images to raw
+		// pixel bytes for us.
 		if (!model.images.empty()) {
 			const auto &img = model.images[0];
-			// tinygltf stores image data as raw bytes (usually PNG/JPEG). For simplicity we
-			// assume the image is already decoded to RGBA8. In a full implementation you would
-			// decode using stb_image or similar. Here we just set dummy values.
-			lr.texW = img.width;
-			lr.texH = img.height;
-			lr.texStride = img.width;
-			lr.texPixels.assign(lr.texW * lr.texH, 0xFFFFFFFF); // white placeholder
+			if (img.width > 0 && img.height > 0 && img.bits == 8 &&
+					!img.image.empty() && img.component > 0) {
+				lr.texW = img.width;
+				lr.texH = img.height;
+				lr.texStride = img.width;
+				lr.texPixels.resize(lr.texW * lr.texH);
+				for (int y = 0; y < lr.texH; ++y) {
+					for (int x = 0; x < lr.texW; ++x) {
+						const size_t p =
+								(static_cast<size_t>(y) * lr.texW + x) * img.component;
+						const uint8_t r = img.image[p + 0];
+						const uint8_t g = img.component >= 3 ? img.image[p + 1] : r;
+						const uint8_t b = img.component >= 3 ? img.image[p + 2] : r;
+						lr.texPixels[static_cast<size_t>(y) * lr.texW + x] =
+								(r << 16) | (g << 8) | b;
+					}
+				}
+			}
 		}
 
 		return lr;
@@ -571,10 +574,10 @@ static inline float clamp01(float a)
 
 /* CUDA‑style bilinear sample */
 static std::array<uint8_t, 4> sampleCUDA(const std::vector<int> &pix, int w, int h,
-		int stride, float u, float v, bool flipV)
+	int stride, float u, float v, bool flipV)
 {
 	if (pix.empty() || w <= 0 || h <= 0)
-		return {0, 0, 0, 0}; //0xFFFFFF;
+		return {255, 255, 255, 255};
 	float U = u * (w - 1);
 	float V = (flipV ? (1.0f - v) : v) * (h - 1);
 	int x0 = static_cast<int>(std::floor(U));
@@ -615,9 +618,8 @@ static std::array<uint8_t, 4> sampleCUDA(const std::vector<int> &pix, int w, int
 /* Rasterisation per slab (parallel) */
 
 static int rasterizeSlab(const VoxelTriSOA &T, const IntArray &triList, int z0, int z1,
-		int G, float unit, bool flipV, std::vector<bool> &occ,
-		//std::vector<uint32_t> &colors,
-		std::vector<float> &bestD2, const CpuVoxelizer::callback_t &callback)
+		int G, bool flipV, std::vector<bool> &occ,
+		std::vector<uint32_t> &colors, std::vector<float> &bestD2)
 {
 	const float eps = EPS;
 	const float nearFrac = NEAR_W_FRACTION;
@@ -628,8 +630,6 @@ static int rasterizeSlab(const VoxelTriSOA &T, const IntArray &triList, int z0, 
 	const int *triIdx = triList.data.data();
 	size_t triCount = triList.size();
 
-	int filledHere = 0;
-
 	for (size_t ii = 0; ii < triCount; ++ii) {
 		int i = triIdx[ii];
 
@@ -638,18 +638,11 @@ static int rasterizeSlab(const VoxelTriSOA &T, const IntArray &triList, int z0, 
 		float x1 = T.x1[i], y1 = T.y1[i], z1f = T.z1[i];
 		float x2 = T.x2[i], y2 = T.y2[i], z2f = T.z2[i];
 
-		// Normal & edges
-		float e10x = T.e10x[i], e10y = T.e10y[i], e10z = T.e10z[i];
-		float e20x = T.e20x[i], e20y = T.e20y[i], e20z = T.e20z[i];
 		float nx = T.nx[i], ny = T.ny[i], nz = T.nz[i];
 
 		// AABB in voxel space
-		int minX = clamp(static_cast<int>(std::floor(std::min({x0, x1, x2}))), 0, G - 1);
-		int minY = clamp(static_cast<int>(std::floor(std::min({y0, y1, y2}))), 0, G - 1);
 		int minZ =
 				clamp(static_cast<int>(std::floor(std::min({z00, z1f, z2f}))), 0, G - 1);
-		int maxX = clamp(static_cast<int>(std::ceil(std::max({x0, x1, x2}))), 0, G - 1);
-		int maxY = clamp(static_cast<int>(std::ceil(std::max({y0, y1, y2}))), 0, G - 1);
 		int maxZ =
 				clamp(static_cast<int>(std::ceil(std::max({z00, z1f, z2f}))), 0, G - 1);
 
@@ -659,19 +652,13 @@ static int rasterizeSlab(const VoxelTriSOA &T, const IntArray &triList, int z0, 
 
 		// Dominant axis
 		float abx = std::abs(nx), aby = std::abs(ny), abz = std::abs(nz);
-		int wAxis, uAxis, vAxis;
+		int wAxis;
 		if (abz >= abx && abz >= aby) {
 			wAxis = 2;
-			uAxis = 0;
-			vAxis = 1;
 		} else if (aby >= abx) {
 			wAxis = 1;
-			uAxis = 2;
-			vAxis = 0;
 		} else {
 			wAxis = 0;
-			uAxis = 1;
-			vAxis = 2;
 		}
 
 		// Map to (U,V,W)
@@ -726,9 +713,7 @@ static int rasterizeSlab(const VoxelTriSOA &T, const IntArray &triList, int z0, 
 			continue;
 		float invDen = 1.0f / denom;
 		float dL0du = (V1 - V2) * invDen;
-		float dL0dv = (U2 - U1) * invDen;
 		float dL1du = (V2 - V0) * invDen;
-		float dL1dv = (U0 - U2) * invDen;
 
 		// W interpolation coefficients
 		float Wc0 = W0 - W2;
@@ -747,6 +732,16 @@ static int rasterizeSlab(const VoxelTriSOA &T, const IntArray &triList, int z0, 
 		float tu1 = T.tu1[i], tv1 = T.tv1[i];
 		float tu2 = T.tu2[i], tv2 = T.tv2[i];
 		bool hasUV = T.hasUV[i] && tex != nullptr;
+		auto sampleColor = [&](float l0, float l1, float l2) -> uint32_t {
+			if (!hasUV)
+				return 0xFFFFFF;
+			const auto col = sampleCUDA(T.texPixels, texW, texH, texStride,
+					clamp01(l0 * tu0 + l1 * tu1 + l2 * tu2),
+					clamp01(l0 * tv0 + l1 * tv1 + l2 * tv2), flipV);
+			return (static_cast<uint32_t>(col[0]) << 16) |
+				   (static_cast<uint32_t>(col[1]) << 8) |
+				   static_cast<uint32_t>(col[2]);
+		};
 
 		// Scan rows in V
 		for (int v = vMin; v <= vMax; ++v) {
@@ -793,17 +788,7 @@ static int rasterizeSlab(const VoxelTriSOA &T, const IntArray &triList, int z0, 
 						if (d2 < bestD2[lin]) {
 							bestD2[lin] = d2;
 							occ[lin] = true;
-							//!!!!!!!colors[lin] =
-							if (hasUV) {
-								const auto col = sampleCUDA(T.texPixels, texW, texH,
-										texStride,
-										clamp01(L0 * tu0 + L1 * tu1 + L2 * tu2),
-										clamp01(L0 * tv0 + L1 * tv1 + L2 * tv2), flipV);
-								if (col[3]) {
-									callback(ix, iy, iz, col[0], col[1], col[2], col[3]);
-									++filledHere;
-								}
-							}
+							colors[lin] = sampleColor(L0, L1, L2);
 						}
 					}
 
@@ -835,19 +820,7 @@ static int rasterizeSlab(const VoxelTriSOA &T, const IntArray &triList, int z0, 
 							if (d2b < bestD2[lin2]) {
 								bestD2[lin2] = d2b;
 								occ[lin2] = true;
-								//!!!!!!colors[lin2] =
-								if (hasUV) {
-									const auto col = sampleCUDA(T.texPixels, texW, texH,
-											texStride,
-											clamp01(L0 * tu0 + L1 * tu1 + L2 * tu2),
-											clamp01(L0 * tv0 + L1 * tv1 + L2 * tv2),
-											flipV);
-									if (col[3]) {
-										callback(ix, iy, iz, col[0], col[1], col[2],
-												col[3]);
-										++filledHere;
-									}
-								}
+								colors[lin2] = sampleColor(L0, L1, L2);
 							}
 						}
 					}
@@ -861,7 +834,15 @@ static int rasterizeSlab(const VoxelTriSOA &T, const IntArray &triList, int z0, 
 			}
 		}
 	}
-	return filledHere;
+
+	int count = 0;
+	const int idxStart = z0 * G * G;
+	const int idxEnd = z1 * G * G;
+	for (int p = idxStart; p < idxEnd; ++p) {
+		if (occ[p])
+			++count;
+	}
+	return count;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -950,9 +931,20 @@ CpuVoxelizer::Stats CpuVoxelizer::voxelizeSingleGLB(
 	for (int s = 0; s < slabCount; ++s) {
 		int zStart = s * slabH;
 		int zEnd = std::min(grid_, zStart + slabH);
-		filled += rasterizeSlab(soa, slabBins[s], zStart, zEnd, grid_, 1.0f, FLIP_V, occ,
-				//colors,
-				bestD2, callback);
+		filled += rasterizeSlab(soa, slabBins[s], zStart, zEnd, grid_, FLIP_V, occ,
+				colors, bestD2);
+	}
+
+	for (int i = 0; i < total; ++i) {
+		if (!occ[i])
+			continue;
+		const int z = i / (grid_ * grid_);
+		const int rem = i - z * grid_ * grid_;
+		const int y = rem / grid_;
+		const int x = rem - y * grid_;
+		const uint32_t rgb = colors[i];
+		callback(x - ox, y - oy, z - oz, (rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF,
+				rgb & 0xFF, 0xFF);
 	}
 	/*
 	// Emit JSON and position files
@@ -964,7 +956,7 @@ CpuVoxelizer::Stats CpuVoxelizer::voxelizeSingleGLB(
 	std::filesystem::path posOut = outDir / (base + "_position.json");
 	emitPosition(posOut, ox, oy, oz);
 */
-	return Stats(grid_, soa.n, filled, ox, oy, oz, colors);
+	return Stats{grid_, soa.n, filled, ox, oy, oz, colors};
 }
 
 /* -------------------------------------------------------------------------- */
