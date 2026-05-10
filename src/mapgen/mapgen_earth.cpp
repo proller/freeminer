@@ -31,6 +31,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <tuple>
 #include <filesystem>
 
+#include "content/mods.h"
 #include "constants.h"
 #include "emerge.h"
 #include "mapgen/earth/png_holder.h"
@@ -81,6 +82,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 #undef stoi
+
+#if USE_VOXEL_EARTH
+#include "mapgen/earth/voxel_importer.cpp"
+#endif
 
 std::unique_ptr<maps_holder_t> MapgenEarth::maps_holder;
 
@@ -152,6 +157,25 @@ MapgenEarth::MapgenEarth(MapgenEarthParams *params_, EmergeParams *emerge) :
 		MapgenV7((MapgenV7Params *)params_, emerge)
 {
 	ndef = emerge->ndef;
+#if USE_VOXEL_EARTH
+	std::vector<std::string> texture_dirs;
+	std::string pure_colors_path;
+	fs::GetRecursiveDirs(texture_dirs, g_settings->get("texture_path"));
+	fs::GetRecursiveDirs(texture_dirs,
+			porting::path_user + DIR_DELIM + "textures" + DIR_DELIM + "server");
+	if (emerge->server) {
+		if (const SubgameSpec *gamespec = emerge->server->getGameSpec())
+			fs::GetRecursiveDirs(texture_dirs, gamespec->path + DIR_DELIM + "textures");
+		if (const ModSpec *mod = emerge->server->getModSpec("luanti_earth"))
+			pure_colors_path = mod->path + DIR_DELIM + "colors.lua";
+		const auto &mods = emerge->server->getMods();
+		for (auto it = mods.crbegin(); it != mods.crend(); ++it) {
+			fs::GetRecursiveDirs(texture_dirs, it->path + DIR_DELIM + "textures");
+			fs::GetRecursiveDirs(texture_dirs, it->path + DIR_DELIM + "media");
+		}
+	}
+	voxel_importer::init_block_palette(ndef, texture_dirs, pure_colors_path);
+#endif
 	// mg_params = (MapgenEarthParams *)params_->sparams;
 	mg_params = params_;
 
@@ -429,7 +453,6 @@ static Vec3 cartesianFromDegrees(double lat, double lon, double h = 0)
 }
 
 #include "earth/geoid.h"
-#include "earth/voxel_importer.cpp"
 #include "earth/CpuVoxelizer.cpp"
 #endif
 
@@ -756,7 +779,7 @@ void MapgenEarth::makeChunk(BlockMakeData *data)
 	cave_prepare(node_min, node_max, sp->paramsj.get("cave_indev", -100).asInt());
 	//==========
 
-	bool voxel_earth = true;
+	bool voxel_earth = false;
 	g_settings->getBoolNoEx("voxel_earth", voxel_earth);
 
 #if USE_VOXEL_EARTH
@@ -782,7 +805,7 @@ void MapgenEarth::makeChunk(BlockMakeData *data)
 					tc.lat, tc.lon, elevation, radius, resolution, key);
 		}
 	} else
-#else
+#endif
 	{
 		// Generate base and mountain terrain
 		pos_t stone_surface_max_y = generateTerrain();
@@ -834,10 +857,9 @@ void MapgenEarth::makeChunk(BlockMakeData *data)
 
 		generateBuildings();
 	}
-#endif
 
-		// Update liquids
-		updateLiquid(&data->transforming_liquid, full_node_min, full_node_max);
+	// Update liquids
+	updateLiquid(&data->transforming_liquid, full_node_min, full_node_max);
 
 	// Calculate lighting
 	// Limit floatland shadows
