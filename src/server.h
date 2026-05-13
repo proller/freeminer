@@ -52,7 +52,7 @@ class EnvThread;
 class AbmThread;
 class AbmWorldThread;
 class WorldMergeThread;
-
+class MapgenVoxelEarth;
 
 
 class ClientNotFoundException : public BaseException
@@ -853,7 +853,8 @@ public:
 
 
 	// freeminer:
-private:
+friend MapgenVoxelEarth;
+	private:
 	int save(float dtime, float dedicated_server_step = 0.1, bool breakable = false);
 
 	//fmtodo: remove:

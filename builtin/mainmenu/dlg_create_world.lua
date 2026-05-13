@@ -220,22 +220,20 @@ local function create_world_formspec(dialogdata)
 	end
 
 	local mg_specific_flags = function(mapgen, y)
-		if not flag_checkboxes[mapgen] then
-			return "", y
-		end
-		if disallowed_mapgen_settings["mg"..mapgen.."_spflags"] then
-			return "", y
-		end
 		local form = ""
-		for _, tab in pairs(flag_checkboxes[mapgen]) do
-			local id = "flag_"..mapgen.."_"..tab[1]:gsub("_", "-")
-			form = form .. ("checkbox[0,%f;%s;%s;%s]"):
-				format(y, id, tab[2], strflag(flags[mapgen], tab[1]))
 
-			if tab[3] then
-				form = form .. "tooltip["..id..";"..tab[3].."]"
+		if flag_checkboxes[mapgen] and
+				not disallowed_mapgen_settings["mg"..mapgen.."_spflags"] then
+			for _, tab in pairs(flag_checkboxes[mapgen]) do
+				local id = "flag_"..mapgen.."_"..tab[1]:gsub("_", "-")
+				form = form .. ("checkbox[0,%f;%s;%s;%s]"):
+					format(y, id, tab[2], strflag(flags[mapgen], tab[1]))
+
+				if tab[3] then
+					form = form .. "tooltip["..id..";"..tab[3].."]"
+				end
+				y = y + 0.5
 			end
-			y = y + 0.5
 		end
 
 -- fm:
@@ -244,8 +242,8 @@ local function create_world_formspec(dialogdata)
 			form = form .. "label[0,"..(y+0.1)..";" .. fgettext("Preset") .. "]"
 			y = y + 0.5
 			form = form .. "dropdown[0,"..y..";6.3;mg_preset;"
-   			for preset, opt in pairs(mg_preset[mapgen]) do
-				form = form .. preset .. ","
+			for _, preset in ipairs(mg_preset[mapgen]) do
+				form = form .. preset.name .. ","
 			end
 			form = form .. ";" .. "]"
 		end
@@ -308,6 +306,16 @@ local function create_world_formspec(dialogdata)
 		label_spflags = "label[0,"..y_start..";" .. fgettext("Mapgen-specific flags") .. "]"
 	end
 
+	local voxel_earth_fields = ""
+	local devtest_y = 3.5
+	if current_mg == "voxel_earth" then
+		voxel_earth_fields =
+			"field[0.3,4.1;6,0.5;te_voxel_earth_api_key;" ..
+			fgettext("Voxel Earth API key") ..
+			";" .. core.formspec_escape(dialogdata.voxel_earth_api_key or "") .. "]"
+		devtest_y = 5.0
+	end
+
 	local retval =
 		"size[12.25,7.4,true]" ..
 
@@ -328,12 +336,13 @@ local function create_world_formspec(dialogdata)
 
 	retval = retval ..
 		"label[0,2;" .. fgettext("Mapgen") .. "]"..
-		"dropdown[0,2.5;6.3;dd_mapgen;" .. mglist .. ";" .. selindex .. "]"
+		"dropdown[0,2.5;6.3;dd_mapgen;" .. mglist .. ";" .. selindex .. "]" ..
+		voxel_earth_fields
 
 	-- Warning when making a devtest world
 	if game.id == "devtest" then
 		retval = retval ..
-			"container[0,3.5]" ..
+			"container[0," .. devtest_y .. "]" ..
 			"box[0,0;5.8,1.7;#ff8800]" ..
 			"textarea[0.4,0.1;6,1.8;;;"..
 			fgettext("Development Test is meant for developers.") .. "]" ..
@@ -411,6 +420,8 @@ local function create_world_buttonhandler(this, fields)
 		if message == nil then
 			this.data.seed = fields["te_seed"] or ""
 			this.data.mg = fields["dd_mapgen"]
+			this.data.voxel_earth_api_key =
+				fields["te_voxel_earth_api_key"] or this.data.voxel_earth_api_key
 
 			-- actual names as used by engine
 			local settings = {
@@ -430,10 +441,22 @@ local function create_world_buttonhandler(this, fields)
 				mgflat_spflags = table_to_flags(this.data.flags.flat),
 			}
 
+			if settings.mg_name == "voxel_earth" and
+					this.data.voxel_earth_api_key ~= "" then
+				settings.voxel_earth_api_key = this.data.voxel_earth_api_key
+			end
+
 -- fm:
-			if fields["mg_preset"] and mg_preset[settings.mg_name][fields["mg_preset"]] then
-				for opt, val in pairs(mg_preset[settings.mg_name][fields["mg_preset"]]) do
-					settings[opt] = val;
+			if fields["mg_preset"] and mg_preset[settings.mg_name] then
+				for _, preset in ipairs(mg_preset[settings.mg_name]) do
+					if preset.name == fields["mg_preset"] then
+						for opt, val in pairs(preset) do
+							if opt ~= "name" then
+								settings[opt] = val;
+							end
+						end
+						break;
+					end
 				end
 			end
 -- ===
@@ -456,6 +479,9 @@ local function create_world_buttonhandler(this, fields)
 
 	this.data.worldname = fields["te_world_name"]
 	this.data.seed = fields["te_seed"] or ""
+	if fields["te_voxel_earth_api_key"] ~= nil then
+		this.data.voxel_earth_api_key = fields["te_voxel_earth_api_key"]
+	end
 
 	if fields["games"] then
 		local gameindex = core.get_textlist_index("games")
@@ -510,6 +536,7 @@ function create_create_world_dlg()
 		worldname = "",
 		-- settings the world is created with:
 		seed = core.settings:get("fixed_map_seed") or "",
+		voxel_earth_api_key = core.settings:get("voxel_earth_api_key") or "",
 		flags = {
 			main = core.settings:get_flags("mg_flags"),
 

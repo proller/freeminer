@@ -20,6 +20,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <memory>
@@ -31,10 +32,11 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <filesystem>
 
 #include "constants.h"
-#include "debug/dump.h"
 #include "emerge.h"
 #include "mapgen/earth/png_holder.h"
 #include "mapgen/earth/rgb_temp.h"
+#include "mapgen/mg_decoration.h"
+#include "mapgen/mg_ore.h"
 #include "server.h"
 #include "filesys.h"
 #include "irr_v2d.h"
@@ -53,7 +55,6 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "serverenvironment.h"
 #include "servermap.h"
 #include "settings.h"
-#include "util/timetaker.h"
 #include "voxel.h"
 #include "voxelalgorithms.h"
 #if USE_OSMIUM
@@ -74,6 +75,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mapgen/earth/osmium-tool/src/command_extract.hpp"
 #endif
 #endif
+
+#undef stoi
 
 std::unique_ptr<maps_holder_t> MapgenEarth::maps_holder;
 
@@ -276,11 +279,14 @@ const MapNode &MapgenEarth::visible_content(const v3pos_t &p, bool use_weather)
 					   : visible_surface_hot;
 }
 
+//constexpr double EARTH_RADIUS = 6378137.0;
+//constexpr double EQUATOR_LEN = EARTH_RADIUS * 3.14159265358979323846 * 2;
+
 constexpr double EQUATOR_LEN{40075696.0};
 ll MapgenEarth::pos_to_ll(const pos_t x, const pos_t z)
 {
-	const auto lon = ((ll_t)x * scale.X) / (EQUATOR_LEN / 360) + center.X;
-	const auto lat = ((ll_t)z * scale.Z) / (EQUATOR_LEN / 360) + center.Z;
+	const auto lon = ((ll_t)x * scale.X) / (EQUATOR_LEN / 360.0) + center.X;
+	const auto lat = ((ll_t)z * scale.Z) / (EQUATOR_LEN / 360.0) + center.Z;
 	if (lat < 90 && lat > -90 && lon < 180 && lon > -180) {
 		return {(ll_t)lat, (ll_t)lon};
 	} else {
@@ -294,8 +300,8 @@ ll MapgenEarth::pos_to_ll(const v3pos_t &p)
 
 v2pos_t MapgenEarth::ll_to_pos(const ll &l)
 {
-	return v2pos_t((l.lon / scale.X - center.X) * (EQUATOR_LEN / 360),
-			(l.lat / scale.Z - center.Z) * (EQUATOR_LEN / 360));
+	return v2pos_t((l.lon - center.X) * (EQUATOR_LEN / 360) / scale.X,
+			(l.lat - center.Z) * (EQUATOR_LEN / 360) / scale.Z);
 }
 
 pos_t MapgenEarth::get_height(pos_t x, pos_t z)
@@ -397,11 +403,10 @@ auto make_bbox(const auto &tc, auto div)
 	const ll end{floor01(tc.lat + (1.0 / div), div), floor01(tc.lon + (1.0 / div), div)};
 	const auto bbox = bbox_to_string(start, end);
 	return std::make_tuple(bbox, start, end);
-};
+}
 
 void MapgenEarth::generateBuildings()
 {
-
 #if USE_OSMIUM
 	TimeTaker timer("earth buildings", {}, PRECISION_MILLI);
 	std::string use_file;
@@ -479,7 +484,7 @@ void MapgenEarth::generateBuildings()
 
 			for (auto div = 10; div <= 10000; div *= 10) {
 				std::error_code ec;
-				const auto size = std::filesystem::file_size(use_file, ec);
+				// const auto size = std::filesystem::file_size(use_file, ec);
 				if (ec) {
 					break;
 				};
@@ -602,3 +607,95 @@ maps_holder_t::~maps_holder_t()
 #endif
 	}
 };
+
+void MapgenEarth::makeChunk(BlockMakeData *data)
+{
+	// Pre-conditions
+	assert(data->vmanip);
+	assert(data->nodedef);
+
+	//TimeTaker t("makeChunk");
+
+	this->generating = true;
+	this->vm = data->vmanip;
+	this->ndef = data->nodedef;
+
+	auto blockpos_min = data->blockpos_min;
+	auto blockpos_max = data->blockpos_max;
+	node_min = blockpos_min * MAP_BLOCKSIZE;
+	node_max = (blockpos_max + v3pos_t(1, 1, 1)) * MAP_BLOCKSIZE - v3pos_t(1, 1, 1);
+	full_node_min = (blockpos_min - 1) * MAP_BLOCKSIZE;
+	full_node_max = (blockpos_max + 2) * MAP_BLOCKSIZE - v3pos_t(1, 1, 1);
+
+	blockseed = getBlockSeed2(full_node_min, seed);
+
+	//freeminer:
+	layers_prepare(node_min, node_max);
+	cave_prepare(node_min, node_max, sp->paramsj.get("cave_indev", -100).asInt());
+	//==========
+
+	// Generate base and mountain terrain
+	pos_t stone_surface_max_y = generateTerrain();
+
+	// Create heightmap
+	updateHeightmap(node_min, node_max);
+
+	// Init biome generator, place biome-specific nodes, and build biomemap
+	if (flags & MG_BIOMES) {
+		biomegen->calcBiomeNoise(node_min);
+		generateBiomes();
+	}
+
+	// Generate tunnels, caverns and large randomwalk caves
+	if (flags & MG_CAVES) {
+		// Generate tunnels first as caverns confuse them
+		generateCavesNoiseIntersection(stone_surface_max_y);
+
+		// Generate caverns
+		bool near_cavern = false;
+		if (spflags & MGV7_CAVERNS)
+			near_cavern = generateCavernsNoise(stone_surface_max_y);
+
+		// Generate large randomwalk caves
+		if (near_cavern)
+			// Disable large randomwalk caves in this mapchunk by setting
+			// 'large cave depth' to world base. Avoids excessive liquid in
+			// large caverns and floating blobs of overgenerated liquid.
+			generateCavesRandomWalk(stone_surface_max_y, -MAX_MAP_GENERATION_LIMIT);
+		else
+			generateCavesRandomWalk(stone_surface_max_y, large_cave_depth);
+	}
+
+	// Generate the registered ores
+	if (flags & MG_ORES)
+		m_emerge->oremgr->placeAllOres(this, blockseed, node_min, node_max);
+
+	// Generate dungeons
+	if (flags & MG_DUNGEONS)
+		generateDungeons(stone_surface_max_y);
+
+	// Generate the registered decorations
+	if (flags & MG_DECORATIONS)
+		m_emerge->decomgr->placeAllDecos(this, blockseed, node_min, node_max);
+
+	// Sprinkle some dust on top after everything else was generated
+	if (flags & MG_BIOMES)
+		dustTopNodes();
+
+	generateBuildings();
+
+	// Update liquids
+	updateLiquid(&data->transforming_liquid, full_node_min, full_node_max);
+
+	// Calculate lighting
+	// Limit floatland shadows
+	bool propagate_shadow =
+			!((spflags & MGV7_FLOATLANDS) && node_max.Y >= floatland_ymin - csize.Y * 2 &&
+					node_min.Y <= floatland_ymax);
+
+	if (flags & MG_LIGHT)
+		calcLighting(node_min - v3pos_t(0, 1, 0), node_max + v3pos_t(0, 1, 0),
+				full_node_min, full_node_max, propagate_shadow);
+
+	this->generating = false;
+}
