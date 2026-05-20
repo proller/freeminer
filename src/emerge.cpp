@@ -60,6 +60,7 @@ EmergeParams::EmergeParams(EmergeManager *parent, const BiomeGen *biomegen,
 	const OreManager *oremgr, const DecorationManager *decomgr,
 	const SchematicManager *schemmgr) :
 	ndef(parent->ndef),
+	server(parent->m_server),
 	enable_mapgen_debug_info(parent->enable_mapgen_debug_info),
 	gen_notify_on(parent->gen_notify_on),
 	gen_notify_on_deco_ids(&parent->gen_notify_on_deco_ids),
@@ -361,7 +362,7 @@ bool EmergeManager::isBlockInQueue(v3bpos_t pos)
 
 v3bpos_t EmergeManager::getContainingChunk(v3bpos_t blockpos, v3bpos_t chunksize)
 {
-	v3bpos_t chunk_offset = -chunksize / 2;
+	auto chunk_offset = -chunksize / 2;
 
 	return getContainerPos(blockpos - chunk_offset, chunksize)
 		* chunksize + chunk_offset;

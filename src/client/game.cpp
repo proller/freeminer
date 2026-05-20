@@ -430,6 +430,7 @@ Game::Game() :
 		"repeat_place_time", "repeat_dig_time", "noclip", "free_move", "fog_start",
 		"cinematic", "cinematic_camera_smoothing", "camera_smoothing", "invert_mouse",
 		"enable_hotbar_mouse_wheel", "invert_hotbar_mouse_wheel", "pause_on_lost_focus",
+		"keyboard_camera_speed",
 	};
 	for (auto s : settings)
 		g_settings->registerChangedCallback(s, &settingChangedCallback, this);
@@ -549,7 +550,7 @@ void Game::run()
 
 	double run_time = 0;
 
-	set_light_table(g_settings->getFloat("display_gamma"));
+	set_light_curve(g_settings->getFloat("display_gamma"));
 
 	m_touch_simulate_aux1 = g_settings->getBool("fast_move")
 			&& client->checkPrivilege("fast");
@@ -708,6 +709,13 @@ void Game::shutdown()
 
 	if (g_touchcontrols)
 		g_touchcontrols->hide();
+
+	// Restore normal mouse cursor
+	auto *cur_control = device->getCursorControl();
+	if (cur_control) {
+		cur_control->setVisible(true);
+		cur_control->setRelativeMode(false);
+	}
 
 	clouds.reset();
 
@@ -1226,12 +1234,8 @@ bool Game::connectToServer(const GameStartData &start_data,
 			if (*connection_aborted)
 				break;
 
-			if (client->accessDenied()) {
-				*error_message = fmtgettext("Access denied. Reason: %s", client->accessDeniedReason().c_str());
-				*reconnect_requested = client->reconnectRequested();
-				errorstream << *error_message << std::endl;
-				return false;
-			}
+			if (!checkConnection())
+				break;
 
 			if (input->cancelPressed()) {
 				*connection_aborted = true;
@@ -1409,10 +1413,14 @@ inline void Game::updateInteractTimers(f32 dtime)
 
 /* returns false if game should exit, otherwise true
  */
-inline bool Game::checkConnection()
+bool Game::checkConnection()
 {
 	if (client->accessDenied()) {
-		*error_message = fmtgettext("Access denied. Reason: %s", client->accessDeniedReason().c_str());
+		// May be mod-provided, thus may contain color and translation
+		const std::string reason = wide_to_utf8(
+			unescape_translate(utf8_to_wide(client->accessDeniedReason())));
+
+		*error_message = fmtgettext("Access denied. Reason: %s", reason.c_str());
 		*reconnect_requested = client->reconnectRequested();
 		errorstream << *error_message << std::endl;
 		return false;
@@ -1491,6 +1499,11 @@ void Game::updateProfilers(const RunStats &stats, const FpsControl &draw_times,
 			stats2.PrimitivesDrawn / float(stats2.Drawcalls));
 	g_profiler->avg("Irr: HW buffers uploaded", stats2.HWBuffersUploaded);
 	g_profiler->avg("Irr: HW buffers active", stats2.HWBuffersActive);
+	u32 skinned_meshes = stats2.SWSkinnedMeshes + stats2.HWSkinnedMeshes;
+	if (skinned_meshes > 0) {
+		f32 use_pct = std::floor(100.0f * stats2.HWSkinnedMeshes / skinned_meshes);
+		g_profiler->avg("Irr: HW skinning use [%]", use_pct);
+	}
 
 	if (profiler_interval.step(dtime, profiler_print_interval)) {
 		if (print_to_log) {
@@ -1605,7 +1618,7 @@ void Game::processUserInput(f32 dtime)
 	}
 
 	if (!guienv->hasFocus(gui_chat_console.get()) && gui_chat_console->isOpen()
-		&& !gui_chat_console->isMyChild(guienv->getFocus()))
+		&& !gui_chat_console->isMyDescendant(guienv->getFocus()))
 	{
 		gui_chat_console->closeConsoleAtOnce();
 	}
@@ -2378,9 +2391,10 @@ bool Game::isTouchShootlineUsed() const
 
 void Game::updateCameraOrientation(CameraOrientation *cam, float dtime)
 {
+	f32 sens_scale = getSensitivityScaleFactor();
+
 	if (g_touchcontrols) {
 		// User setting is already applied by TouchControls.
-		f32 sens_scale = getSensitivityScaleFactor();
 		cam->camera_yaw   += g_touchcontrols->getYawChange()   * sens_scale;
 		cam->camera_pitch += g_touchcontrols->getPitchChange() * sens_scale;
 	} else {
@@ -2391,7 +2405,6 @@ void Game::updateCameraOrientation(CameraOrientation *cam, float dtime)
 			dist.Y = -dist.Y;
 		}
 
-		f32 sens_scale = getSensitivityScaleFactor();
 		cam->camera_yaw   -= dist.X * m_cache_mouse_sensitivity * sens_scale;
 		cam->camera_pitch += dist.Y * m_cache_mouse_sensitivity * sens_scale;
 
@@ -2400,11 +2413,22 @@ void Game::updateCameraOrientation(CameraOrientation *cam, float dtime)
 	}
 
 	if (m_cache_enable_joysticks) {
-		f32 sens_scale = getSensitivityScaleFactor();
 		f32 c = m_cache_joystick_frustum_sensitivity * dtime * sens_scale;
 		cam->camera_yaw -= input->joystick.getAxisWithoutDead(JA_FRUSTUM_HORIZONTAL) * c;
 		cam->camera_pitch += input->joystick.getAxisWithoutDead(JA_FRUSTUM_VERTICAL) * c;
 	}
+
+	// Keyboard look
+	const f32 rate = m_cache_keyboard_camera_speed * dtime * sens_scale;
+
+	if (input->isKeyDown(KeyType::CAMERA_YAW_LEFT))
+		cam->camera_yaw += rate;
+	if (input->isKeyDown(KeyType::CAMERA_YAW_RIGHT))
+		cam->camera_yaw -= rate;
+	if (input->isKeyDown(KeyType::CAMERA_PITCH_UP))
+		cam->camera_pitch -= rate;
+	if (input->isKeyDown(KeyType::CAMERA_PITCH_DOWN))
+		cam->camera_pitch += rate;
 
 	cam->camera_pitch = rangelim(cam->camera_pitch, -90, 90);
 }
@@ -2609,8 +2633,10 @@ void Game::handleClientEvent_PlayerDamage(ClientEvent *event, CameraOrientation 
 			player->getCAO()->getProperties().hp_max : PLAYER_MAX_HP_DEFAULT;
 		f32 damage_ratio = event->player_damage.amount / hp_max;
 
-		runData.damage_flash += 95.0f + 64.f * damage_ratio;
-		runData.damage_flash = MYMIN(runData.damage_flash, 127.0f);
+		if (g_settings->getBool("hurt_flash_enabled")) {
+			runData.damage_flash += 95.0f + 64.f * damage_ratio;
+			runData.damage_flash = MYMIN(runData.damage_flash, 127.0f);
+		}
 
 		player->hurt_tilt_timer = 1.5f;
 		player->hurt_tilt_strength =
@@ -2717,8 +2743,8 @@ void Game::handleClientEvent_HudAdd(ClientEvent *event, CameraOrientation *cam)
 	e->dir    = event->hudadd->dir;
 	e->align  = event->hudadd->align;
 	e->offset = event->hudadd->offset;
-	e->world_pos = oposToV3f(event->hudadd->world_pos);
-	e->size      = event->hudadd->size;
+	e->world_pos = event->hudadd->world_pos;
+	e->size      = v2f::from(event->hudadd->size);
 	e->z_index   = event->hudadd->z_index;
 	e->text2     = event->hudadd->text2;
 	e->style     = event->hudadd->style;
@@ -2782,7 +2808,7 @@ void Game::handleClientEvent_HudChange(ClientEvent *event, CameraOrientation *ca
 
 		CASE_SET(HUD_STAT_WORLD_POS, world_pos, v3fdata);
 
-		CASE_SET(HUD_STAT_SIZE, size, v2s32data);
+		CASE_SET(HUD_STAT_SIZE, size, v2fdata);
 
 		CASE_SET(HUD_STAT_Z_INDEX, z_index, data);
 
@@ -2865,6 +2891,8 @@ void Game::handleClientEvent_SetSky(ClientEvent *event, CameraOrientation *cam)
 		sky->setFogStart(rangelim(g_settings->getFloat("fog_start"), 0.0f, 0.99f));
 
 	sky->setFogColor(event->set_sky->fog_color);
+
+	sky->setAutoCaveBrightness(event->set_sky->auto_dim_skybox);
 
 	delete event->set_sky;
 }
@@ -3102,6 +3130,7 @@ void Game::processPlayerInteraction(f32 dtime, bool show_hud)
 
 	switch (camera->getCameraMode()) {
 	case CAMERA_MODE_ANY:
+	case CameraMode_END:
 		assert(false);
 		break;
 	case CAMERA_MODE_FIRST:
@@ -3910,14 +3939,16 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 		Calculate general brightness
 	*/
 	u32 daynight_ratio = client->getEnv().getDayNightRatio();
-	float time_brightness = decode_light_f((float)daynight_ratio / 1000.0);
+	float time_brightness = decode_light_f((float)daynight_ratio / 1000.0f);
 	float direct_brightness = time_brightness;
-	bool sunlight_seen = false;
+	bool sunlight_seen {};
 
 	// When in noclip mode force same sky brightness as above ground so you
 	// can see properly
-	if (draw_control->allow_noclip && m_cache_enable_free_move &&
-		client->checkPrivilege("fly")) {
+	bool noclip_fly = draw_control->allow_noclip &&
+			m_cache_enable_free_move &&
+			client->checkPrivilege("fly");
+	if (!sky->getAutoCaveBrightness() || noclip_fly) {
 		direct_brightness = time_brightness;
 		sunlight_seen = true;
 	} else if (!runData.headless_optimize) {
@@ -4022,7 +4053,9 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 		// Update wielded tool
 		ItemStack selected_item, hand_item;
 		ItemStack &tool_item = player->getWieldedItem(&selected_item, &hand_item);
-		camera->wield(tool_item);
+
+		bool skip_anim = client->consumeSkipNextWieldAnimation();
+		camera->wield(tool_item, !skip_anim);
 	}
 
 	/*
@@ -4162,17 +4195,23 @@ void Game::updateShadows()
 
 	float in_timeofday = std::fmod(runData.time_of_day_smooth, 1.0f);
 
-	float timeoftheday = getWickedTimeOfDay(in_timeofday);
-	bool is_day = timeoftheday > 0.25 && timeoftheday < 0.75;
-	bool is_shadow_visible = is_day ? sky->getSunVisible() : sky->getMoonVisible();
 	const auto &lighting = client->getEnv().getLocalPlayer()->getLighting();
-	shadow->setShadowIntensity(is_shadow_visible ? lighting.shadow_intensity : 0.0f);
 	shadow->setShadowTint(lighting.shadow_tint);
 
-	timeoftheday = std::fmod(timeoftheday + 0.75f, 0.5f) + 0.25f;
 	const float offset_constant = 10000.0f;
 
-	v3f light = is_day ? sky->getSunDirection() : sky->getMoonDirection();
+	v3f light;
+	if (lighting.shadow_direction.getLengthSQ() > 0.0f) {
+		// Custom shadow direction: bypass sun/moon visibility check
+		shadow->setShadowIntensity(lighting.shadow_intensity);
+		light = lighting.shadow_direction;
+	} else {
+		float timeoftheday = getWickedTimeOfDay(in_timeofday);
+		bool is_day = timeoftheday > 0.25f && timeoftheday < 0.75f;
+		bool is_shadow_visible = is_day ? sky->getSunVisible() : sky->getMoonVisible();
+		shadow->setShadowIntensity(is_shadow_visible ? lighting.shadow_intensity : 0.0f);
+		light = is_day ? sky->getSunDirection() : sky->getMoonDirection();
+	}
 
 	v3f sun_pos = light * offset_constant;
 	shadow->getDirectionalLight().setDirection(sun_pos);
@@ -4311,6 +4350,7 @@ void Game::readSettings()
 	m_cache_enable_joysticks             = g_settings->getBool("enable_joysticks");
 	m_cache_enable_fog                   = g_settings->getBool("enable_fog");
 	m_cache_mouse_sensitivity            = g_settings->getFloat("mouse_sensitivity", 0.001f, 10.0f);
+	m_cache_keyboard_camera_speed        = g_settings->getFloat("keyboard_camera_speed", 0.001f, 720.0f);
 	m_cache_joystick_frustum_sensitivity = std::max(g_settings->getFloat("joystick_frustum_sensitivity"), 0.001f);
 	m_repeat_place_time                  = g_settings->getFloat("repeat_place_time", 0.16f, 2.0f);
 	m_repeat_dig_time                    = g_settings->getFloat("repeat_dig_time", 0.0f, 2.0f);

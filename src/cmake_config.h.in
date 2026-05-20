@@ -22,11 +22,13 @@
 #cmakedefine01 USE_MULTI
 #cmakedefine01 USE_OSMIUM
 #cmakedefine01 USE_OSMIUM_TOOL
+#cmakedefine01 USE_VOXEL_EARTH
 #cmakedefine01 USE_SCTP
 #cmakedefine01 USE_SQLITE3
 #cmakedefine01 USE_TIFF
 #cmakedefine01 USE_WEBSOCKET
 #cmakedefine01 USE_WEBSOCKET_SCTP
+#cmakedefine01 USE_CLIENT_MCP
 #cmakedefine01 USE_UNWIND
 #cmakedefine01 Backtrace_FOUND
 #cmakedefine01 USE_ATOMIC_SHARED_PTR

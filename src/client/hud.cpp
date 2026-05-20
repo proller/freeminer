@@ -322,7 +322,7 @@ bool Hud::hasElementOfType(HudElementType type)
 // Calculates screen position of waypoint. Returns true if waypoint is visible (in front of the player), else false.
 bool Hud::calculateScreenPos(const v3pos_t &camera_offset, HudElement *e, v2s32 *pos)
 {
-	v3opos_t w_pos_o = v3fToOpos(e->world_pos) * BS;
+	v3opos_t w_pos_o = e->world_pos * BS;
 	scene::ICameraSceneNode* camera =
 		client->getSceneManager()->getActiveCamera();
 	auto w_pos = oposToV3f(w_pos_o - intToFloat(camera_offset, (opos_t)BS));
@@ -358,12 +358,12 @@ void Hud::drawLuaElements(const v3pos_t &camera_offset)
 	HudElement hotbar;
 	if (client->getProtoVersion() < 44 && (player->hud_flags & HUD_FLAG_MINIMAP_VISIBLE)) {
 		minimap = {HUD_ELEM_MINIMAP, v2f(1, 0), "", v2f(), "", 0 , 0, 0, v2f(-1, 1),
-				v2f(-10, 10), v3f(), v2s32(256, 256), 0, "", 0};
+				v2f(-10, 10), v3opos_t(), v2f(256.0f, 256.0f), 0, "", 0};
 		elems.push_back(&minimap);
 	}
 	if (client->getProtoVersion() < 46 && player->hud_flags & HUD_FLAG_HOTBAR_VISIBLE) {
 		hotbar = {HUD_ELEM_HOTBAR, v2f(0.5, 1), "", v2f(), "", 0 , 0, 0, v2f(0, -1),
-				v2f(0, -4), v3f(), v2s32(), 0, "", 0};
+				v2f(0, -4), v3opos_t(), v2f(), 0, "", 0};
 		elems.push_back(&hotbar);
 	}
 
@@ -468,7 +468,7 @@ void Hud::drawLuaElements(const v3pos_t &camera_offset)
 				if (draw_precision) {
 					std::ostringstream os;
 					v3opos_t p_pos = player->getPosition() / BS;
-					float distance = std::floor(precision * p_pos.getDistanceFrom(v3fToOpos(e->world_pos))) / precision;
+					auto distance = std::floor(precision * p_pos.getDistanceFrom(e->world_pos)) / precision;
 					os << distance << unit;
 					text = unescape_translate(utf8_to_wide(os.str()));
 					bounds.LowerRightCorner.X = bounds.UpperLeftCorner.X + font->getDimension(text.c_str()).Width;
@@ -654,7 +654,7 @@ void Hud::drawCompassRotate(HudElement *e, video::ITexture *texture,
 
 void Hud::drawStatbar(v2s32 pos, u16 corner, u16 drawdir,
 		const std::string &texture, const std::string &bgtexture,
-		s32 count, s32 maxcount, v2s32 offset, v2s32 size)
+		s32 count, s32 maxcount, v2s32 offset, v2f size)
 {
 	const video::SColor color(255, 255, 255, 255);
 	const video::SColor colors[] = {color, color, color, color};
@@ -670,7 +670,7 @@ void Hud::drawStatbar(v2s32 pos, u16 corner, u16 drawdir,
 
 	core::dimension2di srcd(stat_texture->getOriginalSize());
 	core::dimension2di dstd;
-	if (size == v2s32()) {
+	if (size == v2f()) {
 		dstd = srcd;
 		dstd.Height *= m_scale_factor;
 		dstd.Width  *= m_scale_factor;

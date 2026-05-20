@@ -26,9 +26,11 @@ endif()
 file(GLOB_RECURSE client_HDRS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
 
 set(client_SRCS
-	${CMAKE_CURRENT_SOURCE_DIR}/fm_farmesh.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/fm_client_mcp.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/fm_client.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/fm_far_container.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/fm_farmesh.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/mcp_player_control.cpp
 
 	${client_HDRS}
 	${sound_SRCS}
@@ -82,6 +84,7 @@ set(client_SRCS
 	${CMAKE_CURRENT_SOURCE_DIR}/texturesource.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/imagesource.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/wieldmesh.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/mod_vfs.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/shadows/dynamicshadows.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/shadows/dynamicshadowsrender.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/shadows/shadowsshadercallbacks.cpp

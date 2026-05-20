@@ -55,7 +55,12 @@ public:
 	u32 getSize() const { return m_datasize; }
 	session_t getPeerId() const { return m_peer_id; }
 	u16 getCommand() const { return m_command; }
+
+	/// Read OR write offset (context-depending)
+	inline u32 getOffset() const { return m_read_offset; }
+
 	u32 getRemainingBytes() const { return m_datasize - m_read_offset; }
+	inline bool hasRemainingBytes() const { return getRemainingBytes() != 0; }
 
 	// Returns a pointer to buffer data.
 	// A better name for this would be getRawString()
@@ -133,6 +138,9 @@ public:
 
 	void writeV3S32(const v3s32 &src);
 	v3s32 readV3S32();
+
+	NetworkPacket &readPos(pos_t& dst);
+	NetworkPacket &writePos(pos_t src);
 
 #if USE_POS32 == 32
 	NetworkPacket &operator>>(v3pos_t &dst);
