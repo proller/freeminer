@@ -9,6 +9,7 @@
 /******************************************************************************/
 #include "irrlichttypes.h"
 #include "guiFormSpecMenu.h"
+#include "statusTextHelper.h"
 #include "client/clouds.h"
 #include "client/sound.h"
 #include "util/enriched_string.h"
@@ -17,6 +18,7 @@
 #include "clientdynamicinfo.h"
 
 #include <csignal>
+#include <memory>
 
 /******************************************************************************/
 /* Structs and macros                                                         */
@@ -289,6 +291,9 @@ private:
 	gui::IGUIStaticText *m_irr_toplefttext = nullptr;
 	/** and text that is in it */
 	EnrichedString m_toplefttext;
+
+	/** status message element for menu notifications */
+	std::unique_ptr<StatusTextHelper> m_status_text;
 
 	/** do preprocessing for cloud subsystem */
 	void drawClouds(float dtime);

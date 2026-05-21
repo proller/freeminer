@@ -383,29 +383,35 @@ void GameFormSpec::showPauseMenu()
 
 	os << "formspec_version[1]" << SIZE_TAG
 		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_continue;"
+		// TRANSLATORS: Pause menu button, try to keep the translation short
 		<< strgettext("Continue") << "]";
 
 	if (!simple_singleplayer_mode) {
 		os << "button[4," << (ypos++) << ";3,0.5;btn_change_password;"
+			// TRANSLATORS: Pause menu button, try to keep the translation short
 			<< strgettext("Change Password") << "]";
 	} else {
 		os << "field[4.95,0;5,1.5;;" << strgettext("Game paused") << ";]";
 	}
 
 	os	<< "button[4," << (ypos++) << ";3,0.5;btn_settings;"
+		// TRANSLATORS: Try to keep the translation short
 		<< strgettext("Settings") << "]";
 
 #ifndef __ANDROID__
 #if USE_SOUND
 	os << "button[4," << (ypos++) << ";3,0.5;btn_sound;"
+		// TRANSLATORS: Pause menu button, try to keep the translation short
 		<< strgettext("Sound Volume") << "]";
 #endif
 #endif
 
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_exit_menu;"
+		// TRANSLATORS: Pause menu button, try to keep the translation short
 		<< strgettext("Exit to Menu") << "]";
 #if !__EMSCRIPTEN__
 	os		<< "button_exit[4," << (ypos++) << ";3,0.5;btn_exit_os;"
+		// TRANSLATORS: Pause menu button, try to keep the translation short (OS = Operating System)
 		<< strgettext("Exit to OS")   << "]";
 #endif
 	if (!control_text.empty()) {
@@ -415,6 +421,7 @@ void GameFormSpec::showPauseMenu()
 		<< "\n"
 		<<  strgettext("Game info:") << "\n";
 	const std::string &address = m_client->getAddressName();
+	// TRANSLATORS: Game mode (server or singleplayer)
 	os << strgettext("- Mode: ");
 	if (!simple_singleplayer_mode) {
 		if (address.empty())
@@ -441,7 +448,7 @@ void GameFormSpec::showPauseMenu()
 		if (!simple_singleplayer_mode) {
 			if (damage) {
 				const std::string &pvp = g_settings->getBool("enable_pvp") ? on : off;
-				//~ PvP = Player versus Player
+				// TRANSLATORS: PvP = Player versus Player
 				os << strgettext("- PvP: ") << pvp << "\n";
 			}
 			os << strgettext("- Public: ") << announced << "\n";
