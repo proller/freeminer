@@ -314,12 +314,13 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 	if (cmd_args.getFlag("run-tests")) {
 		porting::attachOrCreateConsole();
 #if BUILD_UNITTESTS
-		return run_catch2_tests(argc - non_test_argc + 1, &argv[non_test_argc - 1]);
+		resolve(run_catch2_tests(argc - non_test_argc + 1, &argv[non_test_argc - 1]));
+		return;
 #else
 		errorstream << "Unittest support is not enabled in this binary. "
 			<< "If you want to enable it, compile project with BUILD_UNITTESTS=1 flag."
 			<< std::endl;
-		return 1;
+		resolve(1); return;
 #endif
 	}
 

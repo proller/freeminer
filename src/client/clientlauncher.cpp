@@ -154,7 +154,7 @@ void ClientLauncher::run(std::function<void(bool)> resolve)
 	} catch (BaseException &e) {
 		errorstream << e.what() << std::endl;
 		RenderingEngine::showErrorMessageBox(e.what());
-		return false;
+		resolve(false); return;
 	}
 
 	// Create the menu clouds
@@ -173,7 +173,7 @@ void ClientLauncher::run(std::function<void(bool)> resolve)
 	} catch (BaseException &e) {
 		errorstream << e.what() << std::endl;
 		RenderingEngine::showErrorMessageBox(e.what());
-		return false;
+		resolve(false); return;
 	}
 	g_menuclouds->setHeight(100.0f);
 	g_menuclouds->update(v3f(0, 0, 0), m_rendering_engine->m_menu_clouds_color);
@@ -241,6 +241,11 @@ void ClientLauncher::run_loop(std::function<void(bool)> resolve) {
 				core::rect<s32>(0, 0, 10000, 10000));
 
 		launch_game([this, resolve](bool should_run_game) { run_after_launch_game(resolve, should_run_game); });
+#ifdef NDEBUG
+		} catch (BaseException &e) {
+			errorstream << e.what() << std::endl;
+		}
+#endif
 }
 
 void ClientLauncher::run_after_launch_game(std::function<void(bool)> resolve, bool should_run_game) {
