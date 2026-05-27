@@ -15,6 +15,7 @@ class OGLBufferObject
 public:
 	enum Target : GLenum {
 		TARGET_VBO = GL_ARRAY_BUFFER,
+		TARGET_IBO = GL_ELEMENT_ARRAY_BUFFER,
 		TARGET_UBO = GL_UNIFORM_BUFFER,
 	};
 
@@ -40,14 +41,14 @@ public:
 	 * @param offset offset to upload at
 	 * @param usage usage pattern passed to GL (only if buffer is new)
 	 * @param mustShrink force re-create of buffer if it became smaller
-	 * @note modifies GL_ARRAY_BUFFER binding
+	 * @note modifies the target binding
 	 */
 	void upload(const void *data, size_t size, size_t offset,
 		GLenum usage, bool mustShrink = false);
 
 	/**
 	 * Free buffer in GL.
-	 * @note modifies GL_ARRAY_BUFFER binding
+	 * @note modifies the target binding
 	 */
 	void destroy();
 

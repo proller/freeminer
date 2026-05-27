@@ -158,7 +158,7 @@ COpenGL3DriverBase::COpenGL3DriverBase(const SIrrlichtCreationParameters &params
 		CurrentRenderMode(ERM_NONE), Transformation3DChanged(true),
 		OGLES2ShaderPath(params.OGLES2ShaderPath),
 		ContextManager(contextManager), EnableErrorTest(params.DriverDebug)
-		,QuadIndexVBO(OGLBufferObject::Target::TARGET_VBO)
+		,QuadIndexVBO(OGLBufferObject::TARGET_IBO)
 {
 	if (!ContextManager)
 		return;
