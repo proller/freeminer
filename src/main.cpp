@@ -3,12 +3,7 @@
 // Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
 #include <map>
-#include <algorithm>
-
 #include "irrlichttypes_bloated.h"
-#include "irrlicht.h" // createDevice
-#include "irrlicht_changes/printing.h"
-#include "benchmark/benchmark.h"
 #include "chat_interface.h"
 #include "debug.h"
 #include "profiler.h"
@@ -21,6 +16,7 @@
 #include "gettext.h"
 #include "log.h"
 #include "log_internal.h"
+#include "util/serialize.h"
 #include "util/quicktune.h"
 #include "httpfetch.h"
 #include "gameparams.h"
@@ -29,16 +25,23 @@
 #include "player.h"
 #include "porting.h"
 #include "serialization.h" // SER_FMT_VER_HIGHEST_*
+#include "serverenvironment.h"
+#include "servermap.h"
+#include "settings.h"
 #include "network/socket.h"
+#include "network/networkexceptions.h"
 #include "mapblock.h"
 #if USE_CURSES
 	#include "terminal_chat_console.h"
 #endif
 #if CHECK_CLIENT_BUILD()
-#include "gui/guiMainMenu.h"
 #include "client/clientlauncher.h"
-#include "gui/guiEngine.h"
-#include "gui/mainmenumanager.h"
+#endif
+#if BUILD_UNITTESTS
+#include "test/test.h"
+#endif
+#if BUILD_BENCHMARKS
+#include "benchmark/benchmark.h"
 #endif
 
 #include "fm_util.h"
@@ -80,6 +83,7 @@ extern "C" {
 #define ENV_NO_COLOR "NO_COLOR"
 #define ENV_CLICOLOR "CLICOLOR"
 #define ENV_CLICOLOR_FORCE "CLICOLOR_FORCE"
+#define ENV_LOG_TIMESTAMP "LOG_TIMESTAMP"
 
 typedef std::map<std::string, ValueSpec> OptionList;
 
@@ -87,6 +91,7 @@ typedef std::map<std::string, ValueSpec> OptionList;
  * Private functions
  **********************************************************************/
 
+static int get_non_test_argc(int argc, char *argv[]);
 static void get_env_opts(Settings &args);
 static bool get_cmdline_opts(int argc, char *argv[], Settings *cmd_args);
 static void set_allowed_options(OptionList *allowed_options);
@@ -152,9 +157,11 @@ int main(int argc, char *argv[])
 
 	porting::osSpecificInit();
 
+	int non_test_argc = get_non_test_argc(argc, argv);
+
 	Settings cmd_args;
 	get_env_opts(cmd_args);
-	bool cmd_args_ok = get_cmdline_opts(argc, argv, &cmd_args);
+	bool cmd_args_ok = get_cmdline_opts(non_test_argc, argv, &cmd_args);
 	if (!cmd_args_ok
 			|| cmd_args.getFlag("help")
 			|| cmd_args.exists("nonopt1")) {
@@ -254,7 +261,7 @@ int main(int argc, char *argv[])
 	if (g_settings->getBool("enable_console"))
 		porting::attachOrCreateConsole();
 
-	// Run unit tests
+	// Run legacy and Catch2 unit tests
 	if (cmd_args.getFlag("run-unittests")) {
 		porting::attachOrCreateConsole();
 #if BUILD_UNITTESTS
@@ -270,14 +277,24 @@ int main(int argc, char *argv[])
 #endif
 	}
 
-	// Run benchmarks
+	// Run Catch2 unit tests
+	if (cmd_args.getFlag("run-tests")) {
+		porting::attachOrCreateConsole();
+#if BUILD_UNITTESTS
+		return run_catch2_tests(argc - non_test_argc + 1, &argv[non_test_argc - 1]);
+#else
+		errorstream << "Unittest support is not enabled in this binary. "
+			<< "If you want to enable it, compile project with BUILD_UNITTESTS=1 flag."
+			<< std::endl;
+		return 1;
+#endif
+	}
+
+	// Run Catch2 benchmarks
 	if (cmd_args.getFlag("run-benchmarks")) {
 		porting::attachOrCreateConsole();
 #if BUILD_BENCHMARKS
-		if (cmd_args.exists("test-module"))
-			return run_benchmarks(cmd_args.get("test-module").c_str()) ? 0 : 1;
-		else
-			return run_benchmarks() ? 0 : 1;
+		return run_catch2_benchmarks(argc - non_test_argc + 1, &argv[non_test_argc - 1]);
 #else
 		errorstream << "Benchmark support is not enabled in this binary. "
 			<< "If you want to enable it, compile project with BUILD_BENCHMARKS=1 flag."
@@ -328,13 +345,25 @@ int main(int argc, char *argv[])
  *****************************************************************************/
 
 
+static int get_non_test_argc(int argc, char *argv[])
+{
+	for (int i = 1; i < argc; i++) {
+		if (!strcmp(argv[i], "--run-tests"))
+			return i + 1;
+		if (!strcmp(argv[i], "--run-benchmarks"))
+			return i + 1;
+	}
+
+	return argc;
+}
+
 static void get_env_opts(Settings &args)
 {
 	// CLICOLOR is a de-facto standard option for colors <https://bixense.com/clicolors/>
 	// CLICOLOR != 0: ANSI colors are supported (auto-detection, this is the default)
 	// CLICOLOR == 0: ANSI colors are NOT supported
 	const char *clicolor = std::getenv(ENV_CLICOLOR);
-	if (clicolor && std::string(clicolor) == "0") {
+	if (clicolor && std::string_view(clicolor) == "0") {
 		args.set("color", "never");
 	}
 	// NO_COLOR only specifies that no color is allowed.
@@ -345,10 +374,15 @@ static void get_env_opts(Settings &args)
 	}
 	// CLICOLOR_FORCE is another option, which should turn on colors "no matter what".
 	const char *clicolor_force = std::getenv(ENV_CLICOLOR_FORCE);
-	if (clicolor_force && std::string(clicolor_force) != "0") {
+	if (clicolor_force && std::string_view(clicolor_force) != "0") {
 		// should ALWAYS have colors, so we ignore tty (no "auto")
 		args.set("color", "always");
 	}
+
+	// No standard, Luanti-specific
+	const char *log_ts = std::getenv(ENV_LOG_TIMESTAMP);
+	if (log_ts)
+		args.set("log-timestamp", log_ts);
 }
 
 static bool get_cmdline_opts(int argc, char *argv[], Settings *cmd_args)
@@ -380,9 +414,11 @@ static void set_allowed_options(OptionList *allowed_options)
 	allowed_options->insert(std::make_pair("port", ValueSpec(VALUETYPE_STRING,
 			_("Set network port (UDP)"))));
 	allowed_options->insert(std::make_pair("run-unittests", ValueSpec(VALUETYPE_FLAG,
-			_("Run unit tests and exit"))));
+			_("Run legacy unit tests and Catch2 tests and exit"))));
+	allowed_options->insert(std::make_pair("run-tests", ValueSpec(VALUETYPE_FLAG,
+			_("Run Catch2 unit tests and exit; all following args are passed to Catch2"))));
 	allowed_options->insert(std::make_pair("run-benchmarks", ValueSpec(VALUETYPE_FLAG,
-			_("Run benchmarks and exit"))));
+			_("Run Catch2 benchmarks and exit; all following args are passed to Catch2"))));
 	allowed_options->insert(std::make_pair("test-module", ValueSpec(VALUETYPE_STRING,
 			_("Only run the specified test module or benchmark"))));
 	allowed_options->insert(std::make_pair("map-dir", ValueSpec(VALUETYPE_STRING,
@@ -396,8 +432,10 @@ static void set_allowed_options(OptionList *allowed_options)
 			"'name' lists names, 'both' lists both)"))));
 	allowed_options->insert(std::make_pair("quiet", ValueSpec(VALUETYPE_FLAG,
 			_("Print only errors to console"))));
-	allowed_options->insert(std::make_pair("color", ValueSpec(VALUETYPE_STRING,
-			_("Coloured logs ('always', 'never' or 'auto'), defaults to 'auto'"))));
+	allowed_options->emplace("color", ValueSpec(VALUETYPE_STRING,
+			_("Coloured logs ('always', 'never' or 'auto'), default: 'auto'")));
+	allowed_options->emplace("log-timestamp", ValueSpec(VALUETYPE_STRING,
+			_("Timestamped logs ('wall', 'relative' or 'none'), default: 'wall'")));
 	allowed_options->insert(std::make_pair("info", ValueSpec(VALUETYPE_FLAG,
 			_("Print more information to console"))));
 	allowed_options->insert(std::make_pair("verbose",  ValueSpec(VALUETYPE_FLAG,
@@ -569,11 +607,9 @@ static bool setup_log_params(const Settings &cmd_args)
 		g_logger.addOutputMaxLevel(&stderr_output, LL_ERROR);
 	}
 
-	// Coloured log messages (see log.h)
+	// Message color
 	std::string color_mode;
-	if (cmd_args.exists("color")) {
-		color_mode = cmd_args.get("color");
-	}
+	cmd_args.getNoEx("color", color_mode);
 	if (!color_mode.empty()) {
 		if (color_mode == "auto") {
 			Logger::color_mode = LOG_COLOR_AUTO;
@@ -583,6 +619,22 @@ static bool setup_log_params(const Settings &cmd_args)
 			Logger::color_mode = LOG_COLOR_NEVER;
 		} else {
 			errorstream << "Invalid color mode: " << color_mode << std::endl;
+			return false;
+		}
+	}
+
+	// Timestamp
+	std::string ts_mode;
+	cmd_args.getNoEx("log-timestamp", ts_mode);
+	if (!ts_mode.empty()) {
+		if (ts_mode == "wall") {
+			Logger::timestamp_mode = LOG_TIMESTAMP_WALL;
+		} else if (ts_mode == "relative") {
+			Logger::timestamp_mode = LOG_TIMESTAMP_RELATIVE;
+		} else if (ts_mode == "none") {
+			Logger::timestamp_mode = LOG_TIMESTAMP_NONE;
+		} else {
+			errorstream << "Invalid timestamp mode: " << ts_mode << std::endl;
 			return false;
 		}
 	}
@@ -1102,8 +1154,7 @@ static bool get_game_from_cmdline(GameParams *game_params, const Settings &cmd_a
 			errorstream << "Game \"" << gameid << "\" not found" << std::endl;
 			return false;
 		}
-		dstream << _("Using game specified by --gameid on the command line")
-		        << std::endl;
+		infostream << "Using commanded gameid [" << commanded_gamespec.id << "]" << std::endl;
 		game_params->game_spec = commanded_gamespec;
 		return true;
 	}
@@ -1113,18 +1164,19 @@ static bool get_game_from_cmdline(GameParams *game_params, const Settings &cmd_a
 
 static bool determine_subgame(GameParams *game_params)
 {
+	if (!game_params->is_dedicated_server) {
+		// ClientLauncher has its own logic to choose a game
+		return true;
+	}
+
 	SubgameSpec gamespec;
+	// assert(!game_params->world_path.empty());	// Pre-condition
 
-	//assert(!game_params->world_path.empty());	// Pre-condition
-
-	// If world doesn't exist
-	if (game_params->world_path.empty()
-		|| !getWorldExists(game_params->world_path)) {
+	if (game_params->world_path.empty() || !getWorldExists(game_params->world_path)) {
 		// Try to take gamespec from command line
 		if (game_params->game_spec.isValid()) {
 			gamespec = game_params->game_spec;
-			infostream << "Using commanded gameid [" << gamespec.id << "]" << std::endl;
-		} else if (game_params->is_dedicated_server) {
+		} else {
 			auto games = getAvailableGameIds();
 			// If there's exactly one obvious choice then do the right thing
 			if (games.size() > 1)
@@ -1157,16 +1209,12 @@ static bool determine_subgame(GameParams *game_params)
 				            << world_gameid << "]" << std::endl;
 			}
 		} else {
-			// If world contains an embedded game, use it;
-			// Otherwise find world from local system.
 			gamespec = findWorldSubgame(game_params->world_path);
 			infostream << "Using world gameid [" << gamespec.id << "]" << std::endl;
 		}
 	}
 
 	if (!gamespec.isValid()) {
-		if (!game_params->is_dedicated_server)
-			return true; // not an error, this would prevent the main menu from running
 		errorstream << "Game [" << gamespec.id << "] could not be found."
 		            << std::endl;
 		return false;
@@ -1339,7 +1387,7 @@ static bool migrate_map_database(const GameParams &game_params, const Settings &
 	u64 last_update_time = 0;
 	volatile auto &kill = *porting::signal_handler_killstatus();
 
-	std::vector<v3s16> blocks;
+	std::vector<v3bpos_t> blocks;
 	old_db->listAllLoadableBlocks(blocks);
 	new_db->beginSave();
 	for (auto it = blocks.begin(); it != blocks.end(); ++it) {
@@ -1408,7 +1456,7 @@ static bool recompress_map_database(const GameParams &game_params, const Setting
 	const s16 map_compression_level = rangelim(g_settings->getS16("map_compression_level_disk"), -1, 9);
 
 	// This is ok because the server doesn't actually run
-	std::vector<v3s16> blocks;
+	std::vector<v3bpos_t> blocks;
 	db->listAllLoadableBlocks(blocks);
 	db->beginSave();
 	std::istringstream iss(std::ios_base::binary);
@@ -1427,7 +1475,7 @@ static bool recompress_map_database(const GameParams &game_params, const Setting
 		iss.clear();
 
 		{
-			MapBlock mb(v3s16(0,0,0), &server);
+			MapBlock mb(v3bpos_t(0,0,0), &server);
 			ServerMap::deSerializeBlock(&mb, iss);
 
 			oss.str("");

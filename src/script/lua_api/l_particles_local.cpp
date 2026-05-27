@@ -7,7 +7,6 @@
 #include "common/c_content.h"
 #include "common/c_converter.h"
 #include "lua_api/l_internal.h"
-#include "lua_api/l_object.h"
 #include "lua_api/l_particleparams.h"
 #include "client/particles.h"
 #include "client/client.h"
@@ -22,7 +21,7 @@ int ModApiParticlesLocal::l_add_particle(lua_State *L)
 
 	lua_getfield(L, 1, "pos");
 	if (lua_istable(L, -1))
-		p.pos = check_v3f(L, -1);
+		p.pos = check_v3o(L, -1);
 	lua_pop(L, 1);
 
 	lua_getfield(L, 1, "velocity");

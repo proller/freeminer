@@ -9,10 +9,7 @@
 #include "irrlichttypes.h"
 #include "irr_v2d.h"
 #include "mapblock.h"
-#include <ostream>
 #include <memory>
-#include <map>
-#include <vector>
 
 class Map;
 class IGameDef;
@@ -28,21 +25,21 @@ class MapSector
 {
 public:
 
-	MapSector(Map *parent, v2s16 pos, IGameDef *gamedef);
+	MapSector(Map *parent, v2bpos_t pos, IGameDef *gamedef);
 	virtual ~MapSector();
 
 	/// @brief Deletes all blocks (regardless of reference count).
 	/// @param used_count output: number of blocks which were still ref'd
 	void deleteBlocks(size_t *used_count = nullptr);
 
-	v2s16 getPos() const
+	v2bpos_t getPos() const
 	{
 		return m_pos;
 	}
 
-	MapBlock *getBlockNoCreateNoEx(s16 y);
-	std::unique_ptr<MapBlock> createBlankBlockNoInsert(s16 y);
-	MapBlock *createBlankBlock(s16 y);
+	MapBlock *getBlockNoCreateNoEx(bpos_t y);
+	std::unique_ptr<MapBlock> createBlankBlockNoInsert(bpos_t y);
+	MapBlock *createBlankBlock(bpos_t y);
 
 	void insertBlock(std::unique_ptr<MapBlock> block);
 
@@ -69,23 +66,23 @@ public:
 protected:
 
 	// The pile of MapBlocks
-	std::unordered_map<s16, std::unique_ptr<MapBlock>> m_blocks;
+	std::unordered_map<bpos_t, std::unique_ptr<MapBlock>> m_blocks;
 
 	Map *m_parent;
 	// Position on parent (in MapBlock widths)
-	v2s16 m_pos;
+	v2bpos_t m_pos;
 
 	IGameDef *m_gamedef;
 
 	// Last-used block is cached here for quicker access.
 	// Be sure to set this to nullptr when the cached block is deleted
 	MapBlock *m_block_cache = nullptr;
-	s16 m_block_cache_y;
+	bpos_t m_block_cache_y;
 
 	/*
 		Private methods
 	*/
-	MapBlock *getBlockBuffered(s16 y);
+	MapBlock *getBlockBuffered(bpos_t y);
 
 };
 

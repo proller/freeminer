@@ -32,7 +32,7 @@ struct GameFormSpec
 	// Used by the Lua pause menu environment to show formspecs.
 	// Currently only used for the in-game settings menu.
 	void showPauseMenuFormSpec(const std::string &formspec, const std::string &formname);
-	void showNodeFormspec(const std::string &formspec, const v3s16 &nodepos);
+	void showNodeFormspec(const std::string &formspec, const v3pos_t &nodepos);
 	/// If `!fs_override`: Uses `player->inventory_formspec`.
 	/// If ` fs_override`: Uses a temporary formspec until an update is received.
 	void showPlayerInventory(const std::string *fs_override);

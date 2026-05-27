@@ -6,7 +6,6 @@
 
 #include "irr_v3d.h"
 
-#include <map>
 #include <vector>
 #include <unordered_map>
 #include <mutex>
@@ -17,10 +16,10 @@
  */
 class FacePositionCache {
 public:
-	static const std::vector<v3s16> &getFacePositions(u16 d);
+	static const std::vector<v3pos_t> &getFacePositions(u16 d);
 
 private:
-	static const std::vector<v3s16> &generateFacePosition(u16 d);
-	static std::unordered_map<u16, std::vector<v3s16>> cache;
+	static const std::vector<v3pos_t> &generateFacePosition(u16 d);
+	static std::unordered_map<u16, std::vector<v3pos_t>> cache;
 	static std::mutex cache_mutex;
 };

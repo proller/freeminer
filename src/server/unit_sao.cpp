@@ -8,7 +8,7 @@
 #include "serverenvironment.h"
 #include "util/serialize.h"
 
-UnitSAO::UnitSAO(ServerEnvironment *env, v3f pos) : ServerActiveObject(env, pos)
+UnitSAO::UnitSAO(ServerEnvironment *env, v3opos_t pos) : ServerActiveObject(env, pos)
 {
 	// Initialize something to armor groups
 	m_armor_groups["fleshy"] = 100;
@@ -321,9 +321,9 @@ std::string UnitSAO::generateUpdateBoneOverrideCommand(
 	props.rotation.next.toEuler(euler_rot);
 	writeV3F32(os, euler_rot * core::RADTODEG);
 	writeV3F32(os, props.scale.vector);
-	writeF32(os, props.position.interp_timer);
-	writeF32(os, props.rotation.interp_timer);
-	writeF32(os, props.scale.interp_timer);
+	writeF32(os, props.position.interp_duration);
+	writeF32(os, props.rotation.interp_duration);
+	writeF32(os, props.scale.interp_duration);
 	writeU8(os, (props.position.absolute & 1) << 0
 	          | (props.rotation.absolute & 1) << 1
 	          | (props.scale.absolute & 1) << 2);
@@ -366,7 +366,7 @@ std::string UnitSAO::generateUpdateArmorGroupsCommand() const
 	return os.str();
 }
 
-std::string UnitSAO::generateUpdatePositionCommand(const v3f &position,
+std::string UnitSAO::generateUpdatePositionCommand(const v3opos_t &position,
 		const v3f &velocity, const v3f &acceleration, const v3f &rotation,
 		bool do_interpolate, bool is_movement_end, f32 update_interval)
 {
@@ -374,7 +374,7 @@ std::string UnitSAO::generateUpdatePositionCommand(const v3f &position,
 	// command
 	writeU8(os, AO_CMD_UPDATE_POSITION);
 	// pos
-	writeV3F32(os, position);
+	writeV3O(os, position);
 	// velocity
 	writeV3F32(os, velocity);
 	// acceleration

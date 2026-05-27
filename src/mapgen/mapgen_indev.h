@@ -113,7 +113,7 @@ public:
 	~MapgenIndev();
 
 	void calculateNoise() override;
-	int generateGround() override;
+	pos_t generateGround() override;
 	void generateCaves(int max_stone_y) override;
 	void generateExperimental() override;
 	bool getFloatlandTerrainFromMap(int idx_xyz, float float_offset);

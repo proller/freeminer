@@ -6,7 +6,7 @@
 
 #include <string>
 #include "irrlichttypes.h"
-#include "client/hud.h" // HudElementStat
+#include "hud_element.h" // HudElementStat
 
 struct ParticleParameters;
 struct ParticleSpawnerParameters;
@@ -49,8 +49,8 @@ struct ClientEventHudAdd
 	std::string text, text2;
 	u32 number, item, dir, style;
 	v2f align, offset;
-	v3f world_pos;
-	v2s32 size;
+	v3opos_t world_pos;
+	v2f size;
 	s16 z_index;
 };
 
@@ -61,7 +61,7 @@ struct ClientEventHudChange
 	v2f v2fdata;
 	std::string sdata;
 	u32 data;
-	v3f v3fdata;
+	v3opos_t v3fdata;
 	v2s32 v2s32data;
 };
 

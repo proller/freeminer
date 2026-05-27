@@ -7,6 +7,7 @@
 #include "irrlichttypes.h"
 
 extern const u16 LATEST_PROTOCOL_VERSION;
+extern const u16 PROTOCOL_VERSION_32BIT;
 
 // Server's supported network protocol range
 constexpr u16 SERVER_PROTOCOL_VERSION_MIN = 37;
@@ -83,7 +84,7 @@ enum ToClientCommand : u16
 
 	TOCLIENT_ADDNODE = 0x21,
 	/*
-		v3s16 position
+		v3pos_t position
 		serialized mapnode
 		u8 keep_metadata
 	*/
@@ -95,7 +96,8 @@ enum ToClientCommand : u16
 
 	TOCLIENT_INVENTORY = 0x27,
 	/*
-		serialized inventory
+		<long string> serialized inventory
+		bool skip_wield_anim
 	*/
 
 	TOCLIENT_TIME_OF_DAY = 0x29,
@@ -488,7 +490,7 @@ enum ToClientCommand : u16
 		v2f1000 align
 		v2f1000 offset
 		v3f1000 world_pos
-		v2s32 size
+		v2f size	// if protocol >= 52. Otherwise, v2s32
 		s16 z_index
 		u16 len3
 		u8[len3] text2
@@ -700,6 +702,13 @@ enum ToClientCommand : u16
 			f32 speed_dark_bright
 			f32 speed_bright_dark
 			f32 center_weight_power
+		f32 volumetric_light_strength
+		SColor shadow_tint
+		bloom parameters
+			f32 bloom_intensity
+			f32 bloom_strength_factor
+			f32 bloom_radius
+		v3f shadow_direction ({0,0,0} = unset)
 	*/
 
 	TOCLIENT_SPAWN_PARTICLE_BATCH = 0x64,
@@ -769,8 +778,8 @@ enum ToServerCommand : u16
 	/*
 		[0] u16 command
 		[2] u8 count
-		[3] v3s16 pos_0
-		[3+6] v3s16 pos_1
+		[3] v3pos_t pos_0
+		[3+6] v3pos_t pos_1
 		...
 	*/
 
@@ -778,8 +787,8 @@ enum ToServerCommand : u16
 	/*
 		[0] u16 command
 		[2] u8 count
-		[3] v3s16 pos_0
-		[3+6] v3s16 pos_1
+		[3] v3pos_t pos_0
+		[3+6] v3pos_t pos_1
 		...
 	*/
 
@@ -832,7 +841,7 @@ enum ToServerCommand : u16
 
 	TOSERVER_NODEMETA_FIELDS = 0x3b,
 	/*
-		v3s16 p
+		v3pos_t p
 		u16 len
 		u8[len] form name (reserved for future use)
 		u16 number of fields

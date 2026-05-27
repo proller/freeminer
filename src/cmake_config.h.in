@@ -22,11 +22,13 @@
 #cmakedefine01 USE_MULTI
 #cmakedefine01 USE_OSMIUM
 #cmakedefine01 USE_OSMIUM_TOOL
+#cmakedefine01 USE_VOXEL_EARTH
 #cmakedefine01 USE_SCTP
 #cmakedefine01 USE_SQLITE3
 #cmakedefine01 USE_TIFF
 #cmakedefine01 USE_WEBSOCKET
 #cmakedefine01 USE_WEBSOCKET_SCTP
+#cmakedefine01 USE_CLIENT_MCP
 #cmakedefine01 USE_UNWIND
 #cmakedefine01 Backtrace_FOUND
 #cmakedefine01 USE_ATOMIC_SHARED_PTR
@@ -62,6 +64,8 @@
 #cmakedefine01 USE_SYSTEM_JSONCPP
 #cmakedefine01 USE_REDIS
 #cmakedefine01 USE_OPENSSL
+#define USE_POS32 @USE_POS32@
+#define USE_OPOS64 @USE_OPOS64@
 #cmakedefine01 HAVE_ENDIAN_H
 #cmakedefine01 HAVE_STRLCPY
 #cmakedefine01 HAVE_MALLOC_TRIM
@@ -73,5 +77,4 @@
 #cmakedefine01 CURSES_HAVE_NCURSESW_CURSES_H
 #cmakedefine01 BUILD_UNITTESTS
 #cmakedefine01 BUILD_BENCHMARKS
-#cmakedefine01 USE_SDL2
 #cmakedefine01 BUILD_WITH_TRACY

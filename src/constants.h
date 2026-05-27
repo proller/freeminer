@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "config.h"
+
 /*
 	All kinds of constants.
 
@@ -41,10 +43,10 @@
     Server
 */
 
-// This many blocks are sent when player is building
-#define LIMITED_MAX_SIMULTANEOUS_BLOCK_SENDS 0
-// Override for the previous one when distance of block is very low
-#define BLOCK_SEND_DISABLE_LIMITS_MAX_D 1
+// Reduces block send rate while player is building
+#define LIMITED_BLOCK_SENDS_FACTOR 0.33f
+// Override for the previous one for blocks that are close by
+#define BLOCK_ALWAYS_SEND_MAX_D 1
 
 /*
     Client/Server
@@ -61,12 +63,18 @@
 // I really don't want to make every algorithm to check if it's going near
 // the limit or not, so this is lower.
 // This is the maximum value the setting map_generation_limit can be
-#if USE_POS32
+#if USE_POS32 == 64
+#define MAX_MAP_GENERATION_LIMIT (9223372036854775807)
+#define MAX_MAP_GENERATION_LIMITF (9223372036854775808.0)
+#define FARMESH_LIMIT (100000)
+#elif USE_POS32
 #define MAX_MAP_GENERATION_LIMIT (2147483008)
+#define MAX_MAP_GENERATION_LIMITF MAX_MAP_GENERATION_LIMIT
 #define FARMESH_LIMIT (100000)
 #else
 #define MAX_MAP_GENERATION_LIMIT (31007)
-#define FARMESH_LIMIT (31007)
+#define MAX_MAP_GENERATION_LIMITF MAX_MAP_GENERATION_LIMIT
+#define FARMESH_LIMIT MAX_MAP_GENERATION_LIMIT
 #endif
 
 // fm 32bit prepare (keep 31k)
@@ -132,3 +140,7 @@
 // The intent is to ensure that the rendering doesn't turn terribly blurry
 // when filtering is enabled.
 #define TEXTURE_FILTER_MIN_SIZE 192U
+
+// Resolution of clocks that SSCSM has access to, in us.
+// Used as countermeasure against side-channel attacks.
+#define SSCSM_CLOCK_RESOLUTION_US 20

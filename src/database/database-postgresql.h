@@ -7,7 +7,6 @@
 #include <string>
 #include <libpq-fe.h>
 #include "database.h"
-#include "util/basic_macros.h"
 
 // Template class for PostgreSQL based data storage
 class Database_PostgreSQL : public Database
@@ -41,9 +40,9 @@ protected:
 		return (float) atof(PQgetvalue(res, row, col));
 	}
 
-	inline v3s16 pg_to_v3s16(PGresult *res, int row, int col)
+	inline v3bpos_t pg_to_v3bpos_t(PGresult *res, int row, int col)
 	{
-		return v3s16(
+		return v3bpos_t(
 			pg_to_int(res, row, col),
 			pg_to_int(res, row, col + 1),
 			pg_to_int(res, row, col + 2)
@@ -110,10 +109,10 @@ public:
 	MapDatabasePostgreSQL(const std::string &connect_string);
 	virtual ~MapDatabasePostgreSQL() = default;
 
-	bool saveBlock(const v3s16 &pos, std::string_view data);
-	void loadBlock(const v3s16 &pos, std::string *block);
-	bool deleteBlock(const v3s16 &pos);
-	void listAllLoadableBlocks(std::vector<v3s16> &dst);
+	bool saveBlock(const v3bpos_t &pos, std::string_view data);
+	void loadBlock(const v3bpos_t &pos, std::string *block);
+	bool deleteBlock(const v3bpos_t &pos);
+	void listAllLoadableBlocks(std::vector<v3bpos_t> &dst);
 
 	PARENT_CLASS_FUNCS
 

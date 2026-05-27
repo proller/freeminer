@@ -4,7 +4,6 @@
 
 #include "numeric.h"
 
-#include "log.h"
 #include "constants.h" // BS, MAP_BLOCKSIZE
 #include "noise.h" // PcgRandom
 #include <cstring>
@@ -38,6 +37,11 @@ float myrand_float()
 }
 
 int myrand_range(int min, int max)
+{
+	return g_pcgrand.range(min, max);
+}
+
+long myrand_range(long min, long max)
 {
 	return g_pcgrand.range(min, max);
 }
@@ -89,22 +93,21 @@ u64 murmur_hash_64_ua(const void *key, size_t len, unsigned int seed)
 }
 
 
-bool isBlockInSight(v3s16 blockpos_b, v3f camera_pos, v3f camera_dir,
+bool isBlockInSight(v3pos_t blockpos_b, v3opos_t camera_pos, v3f camera_dir,
 		f32 camera_fov, f32 range, f32 *distance_ptr)
 {
-	v3s16 blockpos_nodes = blockpos_b * MAP_BLOCKSIZE;
+	v3pos_t blockpos_nodes = blockpos_b * MAP_BLOCKSIZE;
 
 	// Block center position
-	v3f blockpos = v3f::from(blockpos_nodes + MAP_BLOCKSIZE / 2) * BS;
+	v3opos_t blockpos = v3opos_t::from(blockpos_nodes + MAP_BLOCKSIZE / 2) * BS;
 
 	// Block position relative to camera
 	//v3f blockpos_relative = blockpos - camera_pos;
 
 	// Total distance
-/*
-	f32 d = MYMAX(0, blockpos_relative.getLength() - BLOCK_MAX_RADIUS);
-*/	
-	f32 d = radius_box(blockpos, camera_pos);
+//	f32 d = std::max(0.0f, blockpos_relative.getLength() - BLOCK_MAX_RADIUS);
+
+	opos_t d = radius_box(blockpos, camera_pos);
 
 	if (distance_ptr)
 		*distance_ptr = d;
@@ -127,10 +130,10 @@ bool isBlockInSight(v3s16 blockpos_b, v3f camera_pos, v3f camera_dir,
 	f32 adjdist = BLOCK_MAX_RADIUS / cos((M_PI - camera_fov) / 2);
 
 	// Block position relative to adjusted camera
-	v3f blockpos_adj = blockpos - (camera_pos - camera_dir * adjdist);
+	auto blockpos_adj = blockpos - (camera_pos - v3fToOpos(camera_dir) * adjdist);
 
 	// Distance in camera direction (+=front, -=back)
-	f32 dforward = blockpos_adj.dotProduct(camera_dir);
+	auto dforward = blockpos_adj.dotProduct(v3fToOpos(camera_dir));
 
 	// Cosine of the angle between the camera direction
 	// and the block direction (camera_dir is an unit vector)

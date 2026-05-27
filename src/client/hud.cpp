@@ -5,7 +5,8 @@
 // Copyright (C) 2010-2013 kwolekr, Ryan Kwolek <kwolekr@minetest.net>
 
 #include "client/clientmap.h"
-#include "client/hud.h"
+
+#include "hud.h"
 #include <string>
 #include <iostream>
 #include <cmath>
@@ -17,7 +18,6 @@
 #include "client.h"
 #include "inventory.h"
 #include "shader.h"
-#include "client/tile.h"
 #include "localplayer.h"
 #include "camera.h"
 #include "fontengine.h"
@@ -30,6 +30,8 @@
 #include "util/enriched_string.h"
 #include "irrlicht_changes/CGUITTFont.h"
 #include "gui/drawItemStack.h"
+#include <ICameraSceneNode.h>
+#include <IMesh.h>
 
 #define OBJECT_CROSSHAIR_LINE_SIZE 8
 #define CROSSHAIR_LINE_SIZE 10
@@ -318,12 +320,12 @@ bool Hud::hasElementOfType(HudElementType type)
 }
 
 // Calculates screen position of waypoint. Returns true if waypoint is visible (in front of the player), else false.
-bool Hud::calculateScreenPos(const v3s16 &camera_offset, HudElement *e, v2s32 *pos)
+bool Hud::calculateScreenPos(const v3pos_t &camera_offset, HudElement *e, v2s32 *pos)
 {
-	v3f w_pos = e->world_pos * BS;
+	v3opos_t w_pos_o = e->world_pos * BS;
 	scene::ICameraSceneNode* camera =
 		client->getSceneManager()->getActiveCamera();
-	w_pos -= intToFloat(camera_offset, BS);
+	auto w_pos = oposToV3f(w_pos_o - intToFloat(camera_offset, (opos_t)BS));
 	core::matrix4 trans = camera->getProjectionMatrix();
 	trans *= camera->getViewMatrix();
 	f32 transformed_pos[4] = { w_pos.X, w_pos.Y, w_pos.Z, 1.0f };
@@ -337,7 +339,7 @@ bool Hud::calculateScreenPos(const v3s16 &camera_offset, HudElement *e, v2s32 *p
 	return true;
 }
 
-void Hud::drawLuaElements(const v3s16 &camera_offset)
+void Hud::drawLuaElements(const v3pos_t &camera_offset)
 {
 	const u32 text_height = g_fontengine->getTextHeight();
 	gui::IGUIFont *const font = g_fontengine->getFont();
@@ -356,12 +358,12 @@ void Hud::drawLuaElements(const v3s16 &camera_offset)
 	HudElement hotbar;
 	if (client->getProtoVersion() < 44 && (player->hud_flags & HUD_FLAG_MINIMAP_VISIBLE)) {
 		minimap = {HUD_ELEM_MINIMAP, v2f(1, 0), "", v2f(), "", 0 , 0, 0, v2f(-1, 1),
-				v2f(-10, 10), v3f(), v2s32(256, 256), 0, "", 0};
+				v2f(-10, 10), v3opos_t(), v2f(256.0f, 256.0f), 0, "", 0};
 		elems.push_back(&minimap);
 	}
 	if (client->getProtoVersion() < 46 && player->hud_flags & HUD_FLAG_HOTBAR_VISIBLE) {
 		hotbar = {HUD_ELEM_HOTBAR, v2f(0.5, 1), "", v2f(), "", 0 , 0, 0, v2f(0, -1),
-				v2f(0, -4), v3f(), v2s32(), 0, "", 0};
+				v2f(0, -4), v3opos_t(), v2f(), 0, "", 0};
 		elems.push_back(&hotbar);
 	}
 
@@ -396,9 +398,16 @@ void Hud::drawLuaElements(const v3s16 &camera_offset)
 				if (textfont->getType() == gui::EGFT_CUSTOM)
 					ttfont = static_cast<gui::CGUITTFont *>(textfont);
 
-				video::SColor color(255, (e->number >> 16) & 0xFF,
-										 (e->number >> 8)  & 0xFF,
-										 (e->number >> 0)  & 0xFF);
+				u32 num = e->number;
+				u8 alpha = (num >> 24) & 0xFF;
+				if (alpha == 0)
+					alpha = 0xFF; // Backwards compatibility
+
+				video::SColor color = video::SColor(alpha,
+						(num >> 16) & 0xFF,
+						(num >> 8)  & 0xFF,
+						(num >> 0)  & 0xFF);
+
 				EnrichedString text(unescape_string(utf8_to_wide(e->text)), color);
 				core::dimension2d<u32> textsize = textfont->getDimension(text.c_str());
 
@@ -458,8 +467,8 @@ void Hud::drawLuaElements(const v3s16 &camera_offset)
 				font->draw(text.c_str(), bounds + v2s32((e->align.X - 1.0) * bounds.getWidth() / 2, 0), color);
 				if (draw_precision) {
 					std::ostringstream os;
-					v3f p_pos = player->getPosition() / BS;
-					float distance = std::floor(precision * p_pos.getDistanceFrom(e->world_pos)) / precision;
+					v3opos_t p_pos = player->getPosition() / BS;
+					auto distance = std::floor(precision * p_pos.getDistanceFrom(e->world_pos)) / precision;
 					os << distance << unit;
 					text = unescape_translate(utf8_to_wide(os.str()));
 					bounds.LowerRightCorner.X = bounds.UpperLeftCorner.X + font->getDimension(text.c_str()).Width;
@@ -645,7 +654,7 @@ void Hud::drawCompassRotate(HudElement *e, video::ITexture *texture,
 
 void Hud::drawStatbar(v2s32 pos, u16 corner, u16 drawdir,
 		const std::string &texture, const std::string &bgtexture,
-		s32 count, s32 maxcount, v2s32 offset, v2s32 size)
+		s32 count, s32 maxcount, v2s32 offset, v2f size)
 {
 	const video::SColor color(255, 255, 255, 255);
 	const video::SColor colors[] = {color, color, color, color};
@@ -661,7 +670,7 @@ void Hud::drawStatbar(v2s32 pos, u16 corner, u16 drawdir,
 
 	core::dimension2di srcd(stat_texture->getOriginalSize());
 	core::dimension2di dstd;
-	if (size == v2s32()) {
+	if (size == v2f()) {
 		dstd = srcd;
 		dstd.Height *= m_scale_factor;
 		dstd.Width  *= m_scale_factor;
@@ -860,11 +869,11 @@ void Hud::drawCrosshair()
 	}
 }
 
-void Hud::setSelectionPos(const v3f &pos, const v3s16 &camera_offset)
+void Hud::setSelectionPos(const v3opos_t &pos, const v3pos_t &camera_offset)
 {
 	m_camera_offset = camera_offset;
 	m_selection_pos = pos;
-	m_selection_pos_with_offset = pos - intToFloat(camera_offset, BS);
+	m_selection_pos_with_offset = oposToV3f(pos - intToFloat(camera_offset, BS));
 }
 
 void Hud::drawSelectionMesh()
@@ -934,7 +943,9 @@ void Hud::drawBlockBounds()
 
 	u16 mesh_chunk_size = std::max<u16>(1, g_settings->getU16("client_mesh_chunk"));
 
-	// 3s16 pos = player->getStandingNodePos();
+/*
+	auto pos = player->getStandingNodePos();
+*/
 
     const auto is_each_mode= m_block_bounds_mode == BLOCK_BOUNDS_FAR_DRAWN_EACH;
 	if (m_block_bounds_mode == BLOCK_BOUNDS_FAR_DRAWN || is_each_mode) {
@@ -1062,20 +1073,18 @@ void Hud::drawBlockBounds()
 		}
 	} else {
 
-	v3s16 block_pos = getContainerPos(player->getStandingNodePos(), MAP_BLOCKSIZE);
+	auto block_pos = getContainerPos(player->getStandingNodePos(), MAP_BLOCKSIZE);
+	auto cam_offset = intToFloat(client->getCamera()->getOffset(), (opos_t)BS);
+	v3opos_t half_node = v3opos_t(BS, BS, BS) / 2.0f;
 
-	v3f cam_offset = intToFloat(client->getCamera()->getOffset(), BS);
-
-	v3f half_node = v3f(BS, BS, BS) / 2.0f;
-	v3f base_corner = intToFloat(block_pos * MAP_BLOCKSIZE, BS) - cam_offset - half_node;
-
+	v3f base_corner = oposToV3f(intToFloat(block_pos * MAP_BLOCKSIZE, (opos_t)BS) - cam_offset - half_node);
 	s16 radius = m_block_bounds_mode == BLOCK_BOUNDS_NEAR ?
 			rangelim(g_settings->getU16("show_block_bounds_radius_near"), 0, 1000) : 0;
 
 	for (s16 x = -radius; x <= radius + 1; x++)
 	for (s16 y = -radius; y <= radius + 1; y++) {
 		// Red for mesh chunk edges, yellow for other block edges.
-		auto choose_color = [&](s16 x_base, s16 y_base) {
+		auto choose_color = [&](bpos_t x_base, bpos_t y_base) {
 			// See also MeshGrid::isMeshPos().
 			// If the block is mesh pos, it means it's at the (-,-,-) corner of
 			// the mesh. And we're drawing a (-,-) edge of this block. Hence,
@@ -1108,7 +1117,7 @@ void Hud::drawBlockBounds()
   }
 }
 
-void Hud::updateSelectionMesh(const v3s16 &camera_offset)
+void Hud::updateSelectionMesh(const v3pos_t &camera_offset)
 {
 	m_camera_offset = camera_offset;
 	if (m_mode != HIGHLIGHT_HALO)
@@ -1145,7 +1154,7 @@ void Hud::updateSelectionMesh(const v3s16 &camera_offset)
 	m_halo_boxes.clear();
 
 	for (const auto &selection_box : m_selection_boxes) {
-		halo_box.addInternalBox(selection_box);
+		halo_box.addInternalBox(aabb3f(selection_box.MinEdge, selection_box.MinEdge));
 	}
 
 	m_halo_boxes.push_back(halo_box);

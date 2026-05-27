@@ -8,6 +8,7 @@
 #include <set>
 #include <shared_mutex>
 #include <vector>
+#include <set>
 #include "../activeobjectmgr.h"
 #include "serveractiveobject.h"
 #include "util/k_d_tree.h"
@@ -34,16 +35,16 @@ public:
 
 	void invalidateActiveObjectObserverCaches();
 
-	void updateObjectPos(u16 id, v3f pos);
+	void updateObjectPos(u16 id, v3opos_t pos);
 
-	void getObjectsInsideRadius(v3f pos, float radius,
+	void getObjectsInsideRadius(v3opos_t pos, float radius,
 			std::vector<ServerActiveObjectPtr> &result,
 			std::function<bool(const ServerActiveObjectPtr &obj)> include_obj_cb);
-	void getObjectsInArea(const aabb3f &box,
+	void getObjectsInArea(const aabb3o &box,
 			std::vector<ServerActiveObjectPtr> &result,
 			std::function<bool(const ServerActiveObjectPtr &obj)> include_obj_cb);
 	void getAddedActiveObjectsAroundPos(
-			v3f player_pos, const std::string &player_name,
+			v3opos_t player_pos, const std::string &player_name,
 			f32 radius, f32 player_radius,
 			const std::set<u16> &current_objects,
 			std::vector<u16> &added_objects);

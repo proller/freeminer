@@ -10,6 +10,7 @@
 #include "serialization.h"
 #include "noise.h"
 #include "inventory.h"
+#include "util/serialize.h"
 #include "voxel.h"
 
 class TestMapBlock : public TestBase
@@ -108,8 +109,8 @@ void TestMapBlock::testMonoblock(IGameDef *gamedef)
 	UASSERT(block.data[0].param0 == 42);
 
 	VoxelManipulator vmm;
-	v3s16 data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
-	vmm.addArea(VoxelArea(block.getPosRelative(), block.getPosRelative() + data_size + v3s16(1,1,1)));
+	v3pos_t data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
+	vmm.addArea(VoxelArea(block.getPosRelative(), block.getPosRelative() + data_size + v3pos_t(1,1,1)));
 	block.copyTo(vmm);
 	UASSERT(block.m_is_mono_block);
 	UASSERT(vmm.getNode({5,5,5}).param0 == 42);
@@ -319,7 +320,7 @@ void TestMapBlock::testLoad29(IGameDef *gamedef)
 	UASSERT(content_chest != CONTENT_IGNORE);
 
 	// there are bricks at each corner
-	const v3s16 pl[] = {
+	const v3pos_t pl[] = {
 		{0, 0, 0}, {15, 0, 0}, {0, 15, 0}, {0, 0, 15},
 		{15, 15, 0}, {15, 0, 15}, {0, 15, 15}, {15, 15, 15},
 	};

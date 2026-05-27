@@ -11,7 +11,7 @@
 #include <CMeshBuffer.h>
 #include "irr_ptr.h"
 #include "irr_aabb3d.h"
-#include "../hud.h"
+#include "hud_element.h"
 
 class Client;
 class ITextureSource;
@@ -71,13 +71,13 @@ public:
 	void resizeHotbar();
 	void drawCrosshair();
 	void drawSelectionMesh();
-	void updateSelectionMesh(const v3s16 &camera_offset);
+	void updateSelectionMesh(const v3pos_t &camera_offset);
 
 	std::vector<aabb3f> *getSelectionBoxes() { return &m_selection_boxes; }
 
-	void setSelectionPos(const v3f &pos, const v3s16 &camera_offset);
+	void setSelectionPos(const v3opos_t &pos, const v3pos_t &camera_offset);
 
-	v3f getSelectionPos() const { return m_selection_pos; }
+	v3opos_t getSelectionPos() const { return m_selection_pos; }
 
 	void setSelectionRotationRadians(v3f rotation)
 	{
@@ -101,13 +101,13 @@ public:
 
 	bool hasElementOfType(HudElementType type);
 
-	void drawLuaElements(const v3s16 &camera_offset);
+	void drawLuaElements(const v3pos_t &camera_offset);
 
 private:
-	bool calculateScreenPos(const v3s16 &camera_offset, HudElement *e, v2s32 *pos);
+	bool calculateScreenPos(const v3pos_t &camera_offset, HudElement *e, v2s32 *pos);
 	void drawStatbar(v2s32 pos, u16 corner, u16 drawdir,
 			const std::string &texture, const std::string& bgtexture,
-			s32 count, s32 maxcount, v2s32 offset, v2s32 size = v2s32());
+			s32 count, s32 maxcount, v2s32 offset, v2f size = v2f());
 
 	void drawItems(v2s32 screen_pos, v2s32 screen_offset, s32 itemcount, v2f alignment,
 			s32 inv_offset, InventoryList *mainlist, u16 selectitem,
@@ -129,7 +129,7 @@ private:
 
 	float m_hud_scaling; // cached minetest setting
 	float m_scale_factor;
-	v3s16 m_camera_offset;
+	v3pos_t m_camera_offset;
 	v2u32 m_screensize;
 	v2s32 m_displaycenter;
 	s32 m_hotbar_imagesize; // Takes hud_scaling into account, updated by resizeHotbar()
@@ -138,7 +138,7 @@ private:
 
 	std::vector<aabb3f> m_selection_boxes;
 	std::vector<aabb3f> m_halo_boxes;
-	v3f m_selection_pos;
+	v3opos_t m_selection_pos;
 	v3f m_selection_pos_with_offset;
 	v3f m_selection_rotation_radians;
 

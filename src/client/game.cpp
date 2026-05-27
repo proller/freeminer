@@ -2,15 +2,13 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
-#include "game.h"
+#include "network/connection.h"
+
+#include "game_internal.h"
 
 #include <cmath>
-#include "client/renderingengine.h"
-#include "camera.h"
-#include "client.h"
-#include "client/clientevent.h"
+#include <csignal>
 #include "client/gameui.h"
-#include "client/game_formspec.h"
 #include "client/inputhandler.h"
 #include "client/texturepaths.h"
 #include "client/keys.h"
@@ -19,23 +17,21 @@
 #include "client/sound.h"
 #include "clientmap.h"
 #include "clientmedia.h" // For clientMediaUpdateCacheCopy
-#include "clouds.h"
 #include "config.h"
 #include "content_cao.h"
 #include "content/subgames.h"
 #include "client/event_manager.h"
 #include "fontengine.h"
-#include "gui/touchcontrols.h"
 #include "itemdef.h"
-#include "log.h"
-#include "log_internal.h"
 #include "gameparams.h"
 #include "gettext.h"
 #include "gui/guiChatConsole.h"
 #include "texturesource.h"
 #include "gui/mainmenumanager.h"
 #include "gui/profilergraph.h"
+#include "localplayer.h"
 #include "minimap.h"
+#include "network/networkexceptions.h"
 #include "nodedef.h"         // Needed for determining pointing to nodes
 #include "nodemetadata.h"
 #include "particles.h"
@@ -45,19 +41,17 @@
 #include "server.h"
 #include "settings.h"
 #include "shader.h"
-#include "sky.h"
+#include "sound_maker.h"
 #include "threading/lambda.h"
 #include "translation.h"
 #include "util/basic_macros.h"
 #include "util/directiontables.h"
-#include "util/pointedthing.h"
 #include "util/quicktune_shortcutter.h"
-#include "irr_ptr.h"
 #include "version.h"
 #include "script/scripting_client.h"
 #include "hud.h"
-#include "clientdynamicinfo.h"
-#include <IAnimatedMeshSceneNode.h>
+#include <AnimatedMeshSceneNode.h>
+#include <ICameraSceneNode.h>
 #include "util/tracy_wrapper.h"
 #include "item_visuals_manager.h"
 
@@ -74,127 +68,6 @@
 	#include "client/sound/sound_openal.h"
 #endif
 
-#include <csignal>
-
-class NodeDugEvent : public MtEvent
-{
-public:
-	v3s16 p;
-	MapNode n;
-
-	NodeDugEvent(v3s16 p, MapNode n):
-		p(p),
-		n(n)
-	{}
-	Type getType() const { return NODE_DUG; }
-};
-
-class SoundMaker
-{
-	ISoundManager *m_sound;
-	const NodeDefManager *m_ndef;
-
-public:
-	bool makes_footstep_sound = true;
-	float m_player_step_timer = 0.0f;
-	float m_player_jump_timer = 0.0f;
-
-	SoundSpec m_player_step_sound;
-	SoundSpec m_player_leftpunch_sound;
-	// Second sound made on left punch, currently used for item 'use' sound
-	SoundSpec m_player_leftpunch_sound2;
-	SoundSpec m_player_rightpunch_sound;
-
-	SoundMaker(ISoundManager *sound, const NodeDefManager *ndef) :
-		m_sound(sound), m_ndef(ndef) {}
-
-	void playPlayerStep()
-	{
-		if (m_player_step_timer <= 0 && m_player_step_sound.exists()) {
-			m_player_step_timer = 0.03;
-			if (makes_footstep_sound)
-				m_sound->playSound(0, m_player_step_sound);
-		}
-	}
-
-	void playPlayerJump()
-	{
-		if (m_player_jump_timer <= 0.0f) {
-			m_player_jump_timer = 0.2f;
-			m_sound->playSound(0, SoundSpec("player_jump", 0.5f));
-		}
-	}
-
-	static void viewBobbingStep(MtEvent *e, void *data)
-	{
-		SoundMaker *sm = (SoundMaker *)data;
-		sm->playPlayerStep();
-	}
-
-	static void playerRegainGround(MtEvent *e, void *data)
-	{
-		SoundMaker *sm = (SoundMaker *)data;
-		sm->playPlayerStep();
-	}
-
-	static void playerJump(MtEvent *e, void *data)
-	{
-		SoundMaker *sm = (SoundMaker *)data;
-		sm->playPlayerJump();
-	}
-
-	static void cameraPunchLeft(MtEvent *e, void *data)
-	{
-		SoundMaker *sm = (SoundMaker *)data;
-		sm->m_sound->playSound(0, sm->m_player_leftpunch_sound);
-		sm->m_sound->playSound(0, sm->m_player_leftpunch_sound2);
-	}
-
-	static void cameraPunchRight(MtEvent *e, void *data)
-	{
-		SoundMaker *sm = (SoundMaker *)data;
-		sm->m_sound->playSound(0, sm->m_player_rightpunch_sound);
-	}
-
-	static void nodeDug(MtEvent *e, void *data)
-	{
-		SoundMaker *sm = (SoundMaker *)data;
-		NodeDugEvent *nde = (NodeDugEvent *)e;
-		sm->m_sound->playSound(0, sm->m_ndef->get(nde->n).sound_dug);
-	}
-
-	static void playerDamage(MtEvent *e, void *data)
-	{
-		SoundMaker *sm = (SoundMaker *)data;
-		sm->m_sound->playSound(0, SoundSpec("player_damage", 0.5));
-	}
-
-	static void playerFallingDamage(MtEvent *e, void *data)
-	{
-		SoundMaker *sm = (SoundMaker *)data;
-		sm->m_sound->playSound(0, SoundSpec("player_falling_damage", 0.5));
-	}
-
-	void registerReceiver(MtEventManager *mgr)
-	{
-		mgr->reg(MtEvent::VIEW_BOBBING_STEP, SoundMaker::viewBobbingStep, this);
-		mgr->reg(MtEvent::PLAYER_REGAIN_GROUND, SoundMaker::playerRegainGround, this);
-		mgr->reg(MtEvent::PLAYER_JUMP, SoundMaker::playerJump, this);
-		mgr->reg(MtEvent::CAMERA_PUNCH_LEFT, SoundMaker::cameraPunchLeft, this);
-		mgr->reg(MtEvent::CAMERA_PUNCH_RIGHT, SoundMaker::cameraPunchRight, this);
-		mgr->reg(MtEvent::NODE_DUG, SoundMaker::nodeDug, this);
-		mgr->reg(MtEvent::PLAYER_DAMAGE, SoundMaker::playerDamage, this);
-		mgr->reg(MtEvent::PLAYER_FALLING_DAMAGE, SoundMaker::playerFallingDamage, this);
-	}
-
-	void step(float dtime)
-	{
-		m_player_step_timer -= dtime;
-		m_player_jump_timer -= dtime;
-	}
-};
-
-
 typedef s32 SamplerLayer_t;
 
 
@@ -202,21 +75,29 @@ class GameGlobalShaderUniformSetter : public IShaderUniformSetter
 {
 	Sky *m_sky;
 	Client *m_client;
+
 	CachedVertexShaderSetting<float> m_animation_timer_vertex{"animationTimer"};
 	CachedPixelShaderSetting<float> m_animation_timer_pixel{"animationTimer"};
 	CachedVertexShaderSetting<float>
 		m_animation_timer_delta_vertex{"animationTimerDelta"};
 	CachedPixelShaderSetting<float>
 		m_animation_timer_delta_pixel{"animationTimerDelta"};
+	int m_crack_animation_length_i;
+	CachedPixelShaderSetting<float> m_crack_animation_length{"crackAnimationLength"};
+	int m_crack_level_i = -1;
+	CachedPixelShaderSetting<float> m_crack_level{"crackLevel"};
+	int m_crack_texture_scale_i = 0;
+	CachedPixelShaderSetting<float> m_crack_texture_scale{"crackTextureScale"};
 	CachedPixelShaderSetting<float, 3> m_day_light{"dayLight"};
 	CachedPixelShaderSetting<float, 3> m_minimap_yaw{"yawVec"};
 	CachedPixelShaderSetting<float, 3> m_camera_offset_pixel{"cameraOffset"};
 	CachedVertexShaderSetting<float, 3> m_camera_offset_vertex{"cameraOffset"};
-	CachedPixelShaderSetting<float, 3> m_camera_position_pixel{ "cameraPosition" };
-	CachedVertexShaderSetting<float, 3> m_camera_position_vertex{ "cameraPosition" };
+	CachedPixelShaderSetting<float, 3> m_camera_position_pixel{"cameraPosition"};
+	CachedVertexShaderSetting<float, 3> m_camera_position_vertex{"cameraPosition"};
 	CachedVertexShaderSetting<float, 2> m_texel_size0_vertex{"texelSize0"};
 	CachedPixelShaderSetting<float, 2> m_texel_size0_pixel{"texelSize0"};
 	v2f m_texel_size0;
+
 	CachedStructPixelShaderSetting<float, 7> m_exposure_params_pixel{
 		"exposureParams",
 		std::array<const char*, 7> {
@@ -258,9 +139,9 @@ public:
 
 	void setSky(Sky *sky) { m_sky = sky; }
 
-	GameGlobalShaderUniformSetter(Sky *sky, Client *client) :
+	GameGlobalShaderUniformSetter(Sky *sky, Game *game) :
 		m_sky(sky),
-		m_client(client)
+		m_client(game->getClient())
 	{
 		for (auto &name : SETTING_CALLBACKS)
 			g_settings->registerChangedCallback(name, settingsCallback, this);
@@ -268,6 +149,7 @@ public:
 		m_user_exposure_compensation = g_settings->getFloat("exposure_compensation", -1.0f, 1.0f);
 		m_bloom_enabled = g_settings->getBool("enable_bloom");
 		m_volumetric_light_enabled = g_settings->getBool("enable_volumetric_lighting") && m_bloom_enabled;
+		m_crack_animation_length_i = game->crack_animation_length;
 	}
 
 	~GameGlobalShaderUniformSetter()
@@ -330,16 +212,25 @@ public:
 			m_minimap_yaw.set(minimap_yaw, services);
 		}
 
-		v3f offset = intToFloat(m_client->getCamera()->getOffset(), BS);
+		auto offset = posToFloat(m_client->getCamera()->getOffset(), BS);
 		m_camera_offset_pixel.set(offset, services);
 		m_camera_offset_vertex.set(offset, services);
 
-		v3f camera_position = m_client->getCamera()->getPosition();
+		auto camera_position = oposToV3f(m_client->getCamera()->getPosition());
 		m_camera_position_pixel.set(camera_position, services);
 		m_camera_position_pixel.set(camera_position, services);
 
 		m_texel_size0_vertex.set(m_texel_size0, services);
 		m_texel_size0_pixel.set(m_texel_size0, services);
+
+		{
+			float tmp = m_crack_animation_length_i;
+			m_crack_animation_length.set(&tmp, services);
+			tmp = m_crack_level_i;
+			m_crack_level.set(&tmp, services);
+			tmp = m_crack_texture_scale_i;
+			m_crack_texture_scale.set(&tmp, services);
+		}
 
 		const auto &lighting = m_client->getEnv().getLocalPlayer()->getLighting();
 
@@ -414,6 +305,11 @@ public:
 
 	void onSetMaterial(const video::SMaterial &material) override
 	{
+		// This is set only for node materials which have a crack, see mapblock_mesh.cpp.
+		auto pair = MapBlockMesh::unpackCrackMaterialParam(material.MaterialTypeParam);
+		m_crack_level_i = pair.first;
+		m_crack_texture_scale_i = pair.second;
+
 		video::ITexture *texture = material.getTexture(0);
 		if (texture) {
 			core::dimension2du size = texture->getSize();
@@ -428,11 +324,11 @@ public:
 class GameGlobalShaderUniformSetterFactory : public IShaderUniformSetterFactory
 {
 	Sky *m_sky = nullptr;
-	Client *m_client;
-	std::vector<GameGlobalShaderUniformSetter *> created_nosky;
+	Game *m_game;
+	std::vector<GameGlobalShaderUniformSetter*> created_nosky;
 public:
-	GameGlobalShaderUniformSetterFactory(Client *client) :
-		m_client(client)
+	GameGlobalShaderUniformSetterFactory(Game *game) :
+		m_game(game)
 	{}
 
 	void setSky(Sky *sky)
@@ -444,9 +340,11 @@ public:
 		created_nosky.clear();
 	}
 
-	virtual IShaderUniformSetter* create()
+	virtual IShaderUniformSetter* create(const std::string &name)
 	{
-		auto *scs = new GameGlobalShaderUniformSetter(m_sky, m_client);
+		if (str_starts_with(name, "shadow/"))
+			return nullptr;
+		auto *scs = new GameGlobalShaderUniformSetter(m_sky, m_game);
 		if (!m_sky)
 			created_nosky.push_back(scs);
 		return scs;
@@ -461,32 +359,12 @@ public:
 
 	void onGenerate(const std::string &name, ShaderConstants &constants) override
 	{
-		if (constants.find("DRAWTYPE") == constants.end())
+		if (constants.find("MATERIAL_TYPE") == constants.end())
 			return; // not a node shader
-		[[maybe_unused]] const auto drawtype =
-			static_cast<NodeDrawType>(std::get<int>(constants["DRAWTYPE"]));
 		[[maybe_unused]] const auto material_type =
 			static_cast<MaterialType>(std::get<int>(constants["MATERIAL_TYPE"]));
 
 #define PROVIDE(constant) constants[ #constant ] = (int)constant
-
-		PROVIDE(NDT_NORMAL);
-		PROVIDE(NDT_AIRLIKE);
-		PROVIDE(NDT_LIQUID);
-		PROVIDE(NDT_FLOWINGLIQUID);
-		PROVIDE(NDT_GLASSLIKE);
-		PROVIDE(NDT_ALLFACES);
-		PROVIDE(NDT_ALLFACES_OPTIONAL);
-		PROVIDE(NDT_TORCHLIKE);
-		PROVIDE(NDT_SIGNLIKE);
-		PROVIDE(NDT_PLANTLIKE);
-		PROVIDE(NDT_FENCELIKE);
-		PROVIDE(NDT_RAILLIKE);
-		PROVIDE(NDT_NODEBOX);
-		PROVIDE(NDT_GLASSLIKE_FRAMED);
-		PROVIDE(NDT_FIRELIKE);
-		PROVIDE(NDT_GLASSLIKE_FRAMED_OPTIONAL);
-		PROVIDE(NDT_PLANTLIKE_ROOTED);
 
 		PROVIDE(TILE_MATERIAL_BASIC);
 		PROVIDE(TILE_MATERIAL_ALPHA);
@@ -540,399 +418,6 @@ public:
 /****************************************************************************
  ****************************************************************************/
 
-const static float object_hit_delay = 0.2;
-
-const static u16 bbox_debug_flag = scene::EDS_BBOX_ALL;
-
-/* The reason the following structs are not anonymous structs within the
- * class is that they are not used by the majority of member functions and
- * many functions that do require objects of thse types do not modify them
- * (so they can be passed as a const qualified parameter)
- */
-
-struct GameRunData {
-	//freeminer:
-	v3f update_draw_list_last_cam_pos;
-	unsigned int autoexit = 0;
-	bool profiler_state = false;
-	bool headless_optimize = false;
-	bool no_output = false;
-	float dedicated_server_step = 0.1;
-	int errors = 0;
-	bool show_block_boundaries = false;
-	bool connected = false;
-	bool reconnect = false;
-    //==
-
-
-
-	u16 dig_index;
-	u16 new_playeritem;
-	PointedThing pointed_old;
-	bool digging;
-	bool punching;
-	bool btn_down_for_dig;
-	bool dig_instantly;
-	bool digging_blocked;
-	bool reset_jump_timer;
-	float nodig_delay_timer;
-	float dig_time;
-	float dig_time_complete;
-	float repeat_place_timer;
-	float object_hit_delay_timer;
-	float time_from_last_punch;
-	ClientActiveObjectPtr selected_object;
-
-	float jump_timer_up;          // from key up until key down
-	float jump_timer_down;        // since last key down
-	float jump_timer_down_before; // from key down until key down again
-
-	float damage_flash;
-	float update_draw_list_timer = 5;
-	float touch_blocks_timer;
-
-	f32 fog_range;
-
-	v3f update_draw_list_last_cam_dir;
-
-	float time_of_day_smooth;
-};
-
-class Game;
-
-struct ClientEventHandler
-{
-	void (Game::*handler)(ClientEvent *, CameraOrientation *);
-};
-
-/****************************************************************************
- THE GAME
- ****************************************************************************/
-
-using PausedNodesList = std::vector<std::pair<irr_ptr<scene::IAnimatedMeshSceneNode>, float>>;
-
-/* This is not intended to be a public class. If a public class becomes
- * desirable then it may be better to create another 'wrapper' class that
- * hides most of the stuff in this class (nothing in this class is required
- * by any other file) but exposes the public methods/data only.
- */
-class Game {
-public:
-	Game();
-	~Game();
-
-	bool startup(volatile std::sig_atomic_t *kill,
-			InputHandler *input,
-			RenderingEngine *rendering_engine,
-			const GameStartData &game_params,
-			std::string &error_message,
-			bool *reconnect,
-			ChatBackend *chat_backend);
-
-	void run();
-	void shutdown();
-
-protected:
-
-	// Basic initialisation
-	bool init(const std::string &map_dir, const std::string &address,
-			u16 port, const SubgameSpec &gamespec);
-	bool initSound();
-	bool createServer(const std::string &map_dir,
-			const SubgameSpec &gamespec, u16 port);
-	void copyServerClientCache();
-
-	// Client creation
-	bool createClient(const GameStartData &start_data);
-	bool initGui();
-
-	// Client connection
-	bool connectToServer(const GameStartData &start_data,
-			bool *connect_ok, bool *aborted);
-	bool getServerContent(bool *aborted);
-
-	// Main loop
-
-	void updateInteractTimers(f32 dtime);
-	bool checkConnection();
-	void processQueues();
-	void updateProfilers(const RunStats &stats, const FpsControl &draw_times, f32 dtime);
-	void updateDebugState();
-	void updateStats(RunStats *stats, const FpsControl &draw_times, f32 dtime);
-	void updateProfilerGraphs(ProfilerGraph *graph);
-
-	// Input related
-	void processUserInput(f32 dtime);
-	void processKeyInput();
-	void processItemSelection(u16 *new_playeritem);
-	bool shouldShowTouchControls();
-
-	void dropSelectedItem(bool single_item = false);
-	void openConsole(float scale, const wchar_t *line=NULL);
-	void toggleFreeMove();
-	void toggleFreeMoveAlt();
-	void togglePitchMove();
-	void toggleFast();
-	void toggleNoClip();
-	void toggleCinematic();
-
-	void toggleBlockBounds();
-	void toggleAutoforward();
-
-	void toggleMinimap(bool shift_pressed);
-	void toggleFog();
-	void toggleDebug();
-	void toggleUpdateCamera();
-
-	void increaseViewRange();
-	void decreaseViewRange();
-	void toggleFullViewRange();
-	void checkZoomEnabled();
-
-	void updateCameraDirection(CameraOrientation *cam, float dtime);
-	void updateCameraOrientation(CameraOrientation *cam, float dtime);
-	bool getTogglableKeyState(GameKeyType key, bool toggling_enabled, bool prev_key_state);
-	void updatePlayerControl(const CameraOrientation &cam);
-	void updatePauseState();
-	void step(f32 dtime);
-	void processClientEvents(CameraOrientation *cam);
-	void updateCameraMode(); // call after changing it
-	void updateCameraOffset();
-	void updateCamera(f32 dtime);
-	void updateSound(f32 dtime);
-	void processPlayerInteraction(f32 dtime, bool show_hud);
-	/*!
-	 * Returns the object or node the player is pointing at.
-	 * Also updates the selected thing in the Hud.
-	 *
-	 * @param[in]  shootline         the shootline, starting from
-	 * the camera position. This also gives the maximal distance
-	 * of the search.
-	 * @param[in]  liquids_pointable if false, liquids are ignored
-	 * @param[in]  pointabilities    item specific pointable overriding
-	 * @param[in]  look_for_object   if false, objects are ignored
-	 * @param[in]  camera_offset     offset of the camera
-	 * @param[out] selected_object   the selected object or
-	 * NULL if not found
-	 */
-	PointedThing updatePointedThing(
-			const core::line3d<f32> &shootline, bool liquids_pointable,
-			const std::optional<Pointabilities> &pointabilities,
-			bool look_for_object, const v3s16 &camera_offset);
-	void handlePointingAtNothing(const ItemStack &playerItem);
-	void handlePointingAtNode(const PointedThing &pointed,
-			const ItemStack &selected_item, const ItemStack &hand_item, f32 dtime);
-	void handlePointingAtObject(const PointedThing &pointed, const ItemStack &playeritem,
-			const ItemStack &hand_item, const v3f &player_position, bool show_debug);
-	void handleDigging(const PointedThing &pointed, const v3s16 &nodepos,
-			const ItemStack &selected_item, const ItemStack &hand_item, f32 dtime);
-	void updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
-			const CameraOrientation &cam);
-	void updateClouds(float dtime);
-	void updateShadows();
-	void drawScene(ProfilerGraph *graph, RunStats *stats);
-
-	// Misc
-	void showOverlayMessage(const std::string &msg, float dtime, int percent,
-			float *indef_pos = nullptr);
-
-	inline bool fogEnabled()
-	{
-		// Client setting only takes effect if fog distance unlimited or debug priv
-		if (sky->getFogDistance() < 0 || client->checkPrivilege("debug"))
-			return m_cache_enable_fog;
-		return true;
-	}
-
-	static void settingChangedCallback(const std::string &setting_name, void *data);
-	void readSettings();
-
-	inline bool isKeyDown(GameKeyType k)
-	{
-		return input->isKeyDown(k);
-	}
-	inline bool wasKeyDown(GameKeyType k)
-	{
-		return input->wasKeyDown(k);
-	}
-	inline bool wasKeyPressed(GameKeyType k)
-	{
-		return input->wasKeyPressed(k);
-	}
-	inline bool wasKeyReleased(GameKeyType k)
-	{
-		return input->wasKeyReleased(k);
-	}
-
-#ifdef __ANDROID__
-	void handleAndroidChatInput();
-#endif
-
-private:
-	struct Flags {
-		bool disable_camera_update = false;
-		/// 0 = no debug text active, see toggleDebug() for the rest
-		int debug_state = 0;
-	};
-
-
-	// fm:
-	void enableCinematic();
-	void disableCinematic();
-	void dropSelectedStack();
-
-	GUITable *playerlist {};
-	video::SColor console_bg {};
-	bool m_cinematic {};
-	std::unique_ptr<RaycastState> pointedRaycastState;
-	PointedThing pointed;
-	// ==:
-
-
-	void pauseAnimation();
-	void resumeAnimation();
-
-	// ClientEvent handlers
-	void handleClientEvent_None(ClientEvent *event, CameraOrientation *cam);
-	void handleClientEvent_PlayerDamage(ClientEvent *event, CameraOrientation *cam);
-	void handleClientEvent_PlayerForceMove(ClientEvent *event, CameraOrientation *cam);
-	void handleClientEvent_DeathscreenLegacy(ClientEvent *event, CameraOrientation *cam);
-	void handleClientEvent_ShowFormSpec(ClientEvent *event, CameraOrientation *cam);
-	void handleClientEvent_ShowCSMFormSpec(ClientEvent *event, CameraOrientation *cam);
-	void handleClientEvent_ShowPauseMenuFormSpec(ClientEvent *event, CameraOrientation *cam);
-	void handleClientEvent_HandleParticleEvent(ClientEvent *event,
-		CameraOrientation *cam);
-	void handleClientEvent_HudAdd(ClientEvent *event, CameraOrientation *cam);
-	void handleClientEvent_HudRemove(ClientEvent *event, CameraOrientation *cam);
-	void handleClientEvent_HudChange(ClientEvent *event, CameraOrientation *cam);
-	void handleClientEvent_SetSky(ClientEvent *event, CameraOrientation *cam);
-	void handleClientEvent_SetSun(ClientEvent *event, CameraOrientation *cam);
-	void handleClientEvent_SetMoon(ClientEvent *event, CameraOrientation *cam);
-	void handleClientEvent_SetStars(ClientEvent *event, CameraOrientation *cam);
-	void handleClientEvent_OverrideDayNigthRatio(ClientEvent *event,
-		CameraOrientation *cam);
-	void handleClientEvent_CloudParams(ClientEvent *event, CameraOrientation *cam);
-	void handleClientEvent_UpdateCamera(ClientEvent *event, CameraOrientation *cam);
-
-	void updateChat(f32 dtime);
-
-	bool nodePlacement(const ItemDefinition &selected_def, const ItemStack &selected_item,
-		const v3s16 &nodepos, const v3s16 &neighborpos, const PointedThing &pointed,
-		const NodeMetadata *meta);
-	static const ClientEventHandler clientEventHandler[CLIENTEVENT_MAX];
-
-	f32 getSensitivityScaleFactor() const;
-
-	InputHandler *input = nullptr;
-
-	Client *client = nullptr;
-	Server *server = nullptr;
-
-	ClientDynamicInfo client_display_info{};
-	float dynamic_info_send_timer = 0;
-
-	IWritableTextureSource *texture_src = nullptr;
-	IWritableShaderSource *shader_src = nullptr;
-
-	// When created, these will be filled with data received from the server
-	IWritableItemDefManager *itemdef_manager = nullptr;
-	NodeDefManager *nodedef_manager = nullptr;
-	std::unique_ptr<ItemVisualsManager> m_item_visuals_manager;
-
-	std::unique_ptr<ISoundManager> sound_manager;
-	SoundMaker *soundmaker = nullptr;
-
-	ChatBackend *chat_backend = nullptr;
-	CaptureLogOutput m_chat_log_buf;
-
-	EventManager *eventmgr = nullptr;
-	QuicktuneShortcutter *quicktune = nullptr;
-
-	std::unique_ptr<GameUI> m_game_ui;
-	irr_ptr<GUIChatConsole> gui_chat_console;
-	MapDrawControl *draw_control = nullptr;
-	Camera *camera = nullptr;
-	irr_ptr<Clouds> clouds;
-	irr_ptr<Sky> sky;
-	Hud *hud = nullptr;
-	Minimap *mapper = nullptr;
-	GameFormSpec m_game_formspec;
-
-	// Map server hud ids to client hud ids
-	std::unordered_map<u32, u32> m_hud_server_to_client;
-
-public:
-	GameRunData runData;
-	Flags m_flags;
-private:
-	/* 'cache'
-	   This class does take ownership/responsibily for cleaning up etc of any of
-	   these items (e.g. device)
-	*/
-	IrrlichtDevice             *device;
-	RenderingEngine            *m_rendering_engine;
-	video::IVideoDriver        *driver;
-	scene::ISceneManager       *smgr;
-	volatile std::sig_atomic_t *kill;
-	std::string                *error_message;
-	bool                       *reconnect_requested;
-	PausedNodesList             paused_animated_nodes;
-
-	bool simple_singleplayer_mode;
-	/* End 'cache' */
-
-	/* Pre-calculated values
-	 */
-	int crack_animation_length = 0;
-
-	IntervalLimiter profiler_interval;
-
-	/*
-	 * TODO: Local caching of settings is not optimal and should at some stage
-	 *       be updated to use a global settings object for getting thse values
-	 *       (as opposed to the this local caching). This can be addressed in
-	 *       a later release.
-	 */
-	bool m_cache_doubletap_jump;
-	bool m_cache_toggle_sneak_key;
-	bool m_cache_toggle_aux1_key;
-	bool m_cache_enable_joysticks;
-	bool m_cache_enable_fog;
-	bool m_cache_enable_noclip;
-	bool m_cache_enable_free_move;
-	f32  m_cache_mouse_sensitivity;
-	f32  m_cache_joystick_frustum_sensitivity;
-	f32  m_repeat_place_time;
-	f32  m_repeat_dig_time;
-	f32  m_cache_cam_smoothing;
-
-	bool m_invert_mouse;
-	bool m_enable_hotbar_mouse_wheel;
-	bool m_invert_hotbar_mouse_wheel;
-
-	bool m_first_loop_after_window_activation = false;
-	bool m_camera_offset_changed = false;
-	bool m_game_focused = false;
-
-	bool m_does_lost_focus_pause_game = false;
-
-	// if true, (almost) the whole game is paused
-	// this happens in pause menu in singleplayer
-	bool m_is_paused = false;
-
-	bool m_touch_simulate_aux1 = false;
-	inline bool isTouchShootlineUsed()
-	{
-		return g_touchcontrols && g_touchcontrols->isShootlineAvailable() &&
-				camera->getCameraMode() == CAMERA_MODE_FIRST;
-	}
-#ifdef __ANDROID__
-	bool m_android_chat_open = false;
-#endif
-
-	float m_shutdown_progress = 0.0f;
-};
-
 Game::Game() :
 	m_chat_log_buf(g_logger),
 	m_game_ui(new GameUI())
@@ -945,6 +430,7 @@ Game::Game() :
 		"repeat_place_time", "repeat_dig_time", "noclip", "free_move", "fog_start",
 		"cinematic", "cinematic_camera_smoothing", "camera_smoothing", "invert_mouse",
 		"enable_hotbar_mouse_wheel", "invert_hotbar_mouse_wheel", "pause_on_lost_focus",
+		"keyboard_camera_speed",
 	};
 	for (auto s : settings)
 		g_settings->registerChangedCallback(s, &settingChangedCallback, this);
@@ -956,7 +442,7 @@ Game::Game() :
 Game::~Game()
 {
 	delete client;
-	delete soundmaker;
+	soundmaker.reset();
 	sound_manager.reset();
 
 	delete server;
@@ -1064,7 +550,7 @@ void Game::run()
 
 	double run_time = 0;
 
-	set_light_table(g_settings->getFloat("display_gamma"));
+	set_light_curve(g_settings->getFloat("display_gamma"));
 
 	m_touch_simulate_aux1 = g_settings->getBool("fast_move")
 			&& client->checkPrivilege("fast");
@@ -1152,10 +638,22 @@ void Game::run()
 		processUserInput(dtime);
 		// Update camera before player movement to avoid camera lag of one frame
 		updateCameraDirection(&cam_view_target, dtime);
-		cam_view.camera_yaw += (cam_view_target.camera_yaw -
-				cam_view.camera_yaw) * m_cache_cam_smoothing;
-		cam_view.camera_pitch += (cam_view_target.camera_pitch -
-				cam_view.camera_pitch) * m_cache_cam_smoothing;
+		if (m_cache_cam_smoothing <= 0.0f) {
+			cam_view.camera_yaw = cam_view_target.camera_yaw;
+			cam_view.camera_pitch = cam_view_target.camera_pitch;
+		} else {
+			f32 cam_damp_lambda = 1.0f / m_cache_cam_smoothing * dtime;
+			cam_view.camera_yaw = damp(
+					cam_view.camera_yaw,
+					cam_view_target.camera_yaw,
+					cam_damp_lambda
+			);
+			cam_view.camera_pitch = damp(
+					cam_view.camera_pitch,
+					cam_view_target.camera_pitch,
+					cam_damp_lambda
+			);
+		}
 		updatePlayerControl(cam_view);
 
 		updatePauseState();
@@ -1212,6 +710,13 @@ void Game::shutdown()
 	if (g_touchcontrols)
 		g_touchcontrols->hide();
 
+	// Restore normal mouse cursor
+	auto *cur_control = device->getCursorControl();
+	if (cur_control) {
+		cur_control->setVisible(true);
+		cur_control->setRelativeMode(false);
+	}
+
 	clouds.reset();
 
 	gui_chat_console.reset();
@@ -1239,8 +744,7 @@ void Game::shutdown()
 
 	delete client;
 	client = nullptr;
-	delete soundmaker;
-	soundmaker = nullptr;
+	soundmaker.reset();
 	sound_manager.reset();
 
 	auto stop_thread = runInThread([=] {
@@ -1325,10 +829,7 @@ bool Game::initSound()
 		sound_manager = std::make_unique<DummySoundManager>();
 	}
 
-	soundmaker = new SoundMaker(sound_manager.get(), nodedef_manager);
-	if (!soundmaker)
-		return false;
-
+	soundmaker = std::make_unique<SoundMaker>(sound_manager.get(), nodedef_manager);
 	soundmaker->registerReceiver(eventmgr);
 
 	return true;
@@ -1468,10 +969,19 @@ bool Game::createClient(const GameStartData &start_data)
 		return false;
 	}
 
+	// Pre-calculate crack length
+	{
+		auto size = texture_src->getTextureDimensions("crack_anylength.png");
+		if (size.Width && size.Height)
+			crack_animation_length = size.Height / size.Width;
+		else
+			crack_animation_length = 5;
+	}
+
 	shader_src->addShaderConstantSetter(
 		std::make_unique<NodeShaderConstantSetter>());
 
-	auto scsf_up = std::make_unique<GameGlobalShaderUniformSetterFactory>(client);
+	auto scsf_up = std::make_unique<GameGlobalShaderUniformSetterFactory>(this);
 	auto* scsf = scsf_up.get();
 	shader_src->addShaderUniformSetterFactory(std::move(scsf_up));
 
@@ -1498,17 +1008,6 @@ bool Game::createClient(const GameStartData &start_data)
 	 */
 	sky = make_irr<Sky>(-1, m_rendering_engine, texture_src, shader_src);
 	scsf->setSky(sky.get());
-
-	/* Pre-calculated values
-	 */
-	video::ITexture *t = texture_src->getTexture("crack_anylength.png");
-	if (t) {
-		v2u32 size = t->getOriginalSize();
-		if (size.X)
-		crack_animation_length = size.Y / size.X;
-	} else {
-		crack_animation_length = 0;
-	}
 
 	if (!initGui())
 		return false;
@@ -1734,12 +1233,8 @@ bool Game::connectToServer(const GameStartData &start_data,
 			if (*connection_aborted)
 				break;
 
-			if (client->accessDenied()) {
-				*error_message = fmtgettext("Access denied. Reason: %s", client->accessDeniedReason().c_str());
-				*reconnect_requested = client->reconnectRequested();
-				errorstream << *error_message << std::endl;
-				return false;
-			}
+			if (!checkConnection())
+				break;
 
 			if (input->cancelPressed()) {
 				*connection_aborted = true;
@@ -1871,7 +1366,8 @@ bool Game::getServerContent(bool *aborted)
 				message << " (" << cur << ' ' << cur_unit << ")";
 			}
 
-			progress = 30 + client->mediaReceiveProgress() * 35 + 0.5;
+			// 30% -> 65%
+			progress = 30 + std::ceil(client->mediaReceiveProgress() * 35 + 0.5f);
 			m_rendering_engine->draw_load_screen(utf8_to_wide(message.str()), guienv,
 				texture_src, dtime, progress);
 		}
@@ -1916,10 +1412,14 @@ inline void Game::updateInteractTimers(f32 dtime)
 
 /* returns false if game should exit, otherwise true
  */
-inline bool Game::checkConnection()
+bool Game::checkConnection()
 {
 	if (client->accessDenied()) {
-		*error_message = fmtgettext("Access denied. Reason: %s", client->accessDeniedReason().c_str());
+		// May be mod-provided, thus may contain color and translation
+		const std::string reason = wide_to_utf8(
+			unescape_translate(utf8_to_wide(client->accessDeniedReason())));
+
+		*error_message = fmtgettext("Access denied. Reason: %s", reason.c_str());
 		*reconnect_requested = client->reconnectRequested();
 		errorstream << *error_message << std::endl;
 		return false;
@@ -1984,16 +1484,6 @@ void Game::updateProfilers(const RunStats &stats, const FpsControl &draw_times,
 		profiler_print_interval = 3;
 	}
 
-	if (profiler_interval.step(dtime, profiler_print_interval)) {
-		if (print_to_log) {
-			infostream << "Profiler:" << std::endl;
-			g_profiler->print(infostream);
-		}
-
-		m_game_ui->updateProfiler();
-		g_profiler->clear();
-	}
-
 	// Update graphs
 	g_profiler->graphAdd("Time non-rendering [us]",
 		draw_times.busy_time - stats.drawtime);
@@ -2008,6 +1498,21 @@ void Game::updateProfilers(const RunStats &stats, const FpsControl &draw_times,
 			stats2.PrimitivesDrawn / float(stats2.Drawcalls));
 	g_profiler->avg("Irr: HW buffers uploaded", stats2.HWBuffersUploaded);
 	g_profiler->avg("Irr: HW buffers active", stats2.HWBuffersActive);
+	u32 skinned_meshes = stats2.SWSkinnedMeshes + stats2.HWSkinnedMeshes;
+	if (skinned_meshes > 0) {
+		f32 use_pct = std::floor(100.0f * stats2.HWSkinnedMeshes / skinned_meshes);
+		g_profiler->avg("Irr: HW skinning use [%]", use_pct);
+	}
+
+	if (profiler_interval.step(dtime, profiler_print_interval)) {
+		if (print_to_log) {
+			infostream << "Profiler:" << std::endl;
+			g_profiler->print(infostream);
+		}
+
+		m_game_ui->updateProfiler();
+		g_profiler->clear();
+	}
 }
 
 void Game::updateStats(RunStats *stats, const FpsControl &draw_times,
@@ -2112,7 +1617,7 @@ void Game::processUserInput(f32 dtime)
 	}
 
 	if (!guienv->hasFocus(gui_chat_console.get()) && gui_chat_console->isOpen()
-		&& !gui_chat_console->isMyChild(guienv->getFocus()))
+		&& !gui_chat_console->isMyDescendant(guienv->getFocus()))
 	{
 		gui_chat_console->closeConsoleAtOnce();
 	}
@@ -2638,13 +2143,11 @@ void Game::toggleMinimap(bool shift_pressed)
 	// -->
 	u32 hud_flags = client->getEnv().getLocalPlayer()->hud_flags;
 
-	if (hud_flags & HUD_FLAG_MINIMAP_VISIBLE) {
 	// If radar is disabled, try to find a non radar mode or fall back to 0
-		if (!(hud_flags & HUD_FLAG_MINIMAP_RADAR_VISIBLE))
-			while (mapper->getModeIndex() &&
-					mapper->getModeDef().type == MINIMAP_TYPE_RADAR)
-				mapper->nextMode();
-	}
+	if (!(hud_flags & HUD_FLAG_MINIMAP_RADAR_VISIBLE))
+		while (mapper->getModeIndex() &&
+				mapper->getModeDef().type == MINIMAP_TYPE_RADAR)
+			mapper->nextMode();
 	// <--
 	// End of 'not so satifying code'
 	if (hud && hud->hasElementOfType(HUD_ELEM_MINIMAP))
@@ -2741,7 +2244,7 @@ void Game::toggleBlockBoundaries(float *statustext_time, VolatileRunFlags *flags
 void Game::increaseViewRange()
 {
 	pos_t range = g_settings->getPos("viewing_range");
-	int range_new = range + 10;
+	pos_t range_new = range + 10;
 	s16 server_limit = sky->getFogDistance();
 
 	{ //fm:
@@ -2829,10 +2332,10 @@ void Game::updateCameraDirection(CameraOrientation *cam, float dtime)
 {
 	auto *cur_control = device->getCursorControl();
 
-	/* With CIrrDeviceSDL on Linux and Windows, enabling relative mouse mode
-	somehow results in simulated mouse events being generated from touch events,
-	although SDL_HINT_MOUSE_TOUCH_EVENTS and SDL_HINT_TOUCH_MOUSE_EVENTS are set to 0.
-	Since Minetest has its own code to synthesize mouse events from touch events,
+	/* On Linux and Windows, enabling relative mouse mode somehow results
+	in simulated mouse events being generated from touch events, even though
+	SDL_HINT_MOUSE_TOUCH_EVENTS and SDL_HINT_TOUCH_MOUSE_EVENTS are set to 0.
+	Since we have our own code to synthesize mouse events from touch events,
 	this results in duplicated input. To avoid that, we don't enable relative
 	mouse mode if we're in touchscreen mode. */
 	if (cur_control)
@@ -2879,11 +2382,18 @@ f32 Game::getSensitivityScaleFactor() const
 	return std::tan(fov_y / 2.0f) * 1.3763819f;
 }
 
+bool Game::isTouchShootlineUsed() const
+{
+	return g_touchcontrols && g_touchcontrols->isShootlineAvailable() &&
+			camera->getCameraMode() == CAMERA_MODE_FIRST;
+}
+
 void Game::updateCameraOrientation(CameraOrientation *cam, float dtime)
 {
+	f32 sens_scale = getSensitivityScaleFactor();
+
 	if (g_touchcontrols) {
 		// User setting is already applied by TouchControls.
-		f32 sens_scale = getSensitivityScaleFactor();
 		cam->camera_yaw   += g_touchcontrols->getYawChange()   * sens_scale;
 		cam->camera_pitch += g_touchcontrols->getPitchChange() * sens_scale;
 	} else {
@@ -2894,7 +2404,6 @@ void Game::updateCameraOrientation(CameraOrientation *cam, float dtime)
 			dist.Y = -dist.Y;
 		}
 
-		f32 sens_scale = getSensitivityScaleFactor();
 		cam->camera_yaw   -= dist.X * m_cache_mouse_sensitivity * sens_scale;
 		cam->camera_pitch += dist.Y * m_cache_mouse_sensitivity * sens_scale;
 
@@ -2903,11 +2412,22 @@ void Game::updateCameraOrientation(CameraOrientation *cam, float dtime)
 	}
 
 	if (m_cache_enable_joysticks) {
-		f32 sens_scale = getSensitivityScaleFactor();
 		f32 c = m_cache_joystick_frustum_sensitivity * dtime * sens_scale;
 		cam->camera_yaw -= input->joystick.getAxisWithoutDead(JA_FRUSTUM_HORIZONTAL) * c;
 		cam->camera_pitch += input->joystick.getAxisWithoutDead(JA_FRUSTUM_VERTICAL) * c;
 	}
+
+	// Keyboard look
+	const f32 rate = m_cache_keyboard_camera_speed * dtime * sens_scale;
+
+	if (input->isKeyDown(KeyType::CAMERA_YAW_LEFT))
+		cam->camera_yaw += rate;
+	if (input->isKeyDown(KeyType::CAMERA_YAW_RIGHT))
+		cam->camera_yaw -= rate;
+	if (input->isKeyDown(KeyType::CAMERA_PITCH_UP))
+		cam->camera_pitch -= rate;
+	if (input->isKeyDown(KeyType::CAMERA_PITCH_DOWN))
+		cam->camera_pitch += rate;
 
 	cam->camera_pitch = rangelim(cam->camera_pitch, -90, 90);
 }
@@ -2930,7 +2450,7 @@ void Game::updatePlayerControl(const CameraOrientation &cam)
 	// In free move (fly), the "toggle_sneak_key" setting would prevent precise
 	// up/down movements. Hence, enable the feature only during 'normal' movement.
 	const bool allow_sneak_toggle = m_cache_toggle_sneak_key &&
-		!player->getPlayerSettings().free_move;
+		!(player->getPlayerSettings().free_move && client->checkPrivilege("fly"));
 
 	//TimeTaker tt("update player control", NULL, PRECISION_NANO);
 
@@ -3048,7 +2568,7 @@ static void pauseNodeAnimation(PausedNodesList &paused, scene::ISceneNode *node)
 		pauseNodeAnimation(paused, child);
 	if (node->getType() != scene::ESNT_ANIMATED_MESH)
 		return;
-	auto animated_node = static_cast<scene::IAnimatedMeshSceneNode *>(node);
+	auto animated_node = static_cast<scene::AnimatedMeshSceneNode *>(node);
 	float speed = animated_node->getAnimationSpeed();
 	if (!speed)
 		return;
@@ -3086,7 +2606,7 @@ const ClientEventHandler Game::clientEventHandler[CLIENTEVENT_MAX] = {
 	{&Game::handleClientEvent_SetSun},
 	{&Game::handleClientEvent_SetMoon},
 	{&Game::handleClientEvent_SetStars},
-	{&Game::handleClientEvent_OverrideDayNigthRatio},
+	{&Game::handleClientEvent_OverrideDayNightRatio},
 	{&Game::handleClientEvent_CloudParams},
 	{&Game::handleClientEvent_UpdateCamera},
 };
@@ -3112,8 +2632,10 @@ void Game::handleClientEvent_PlayerDamage(ClientEvent *event, CameraOrientation 
 			player->getCAO()->getProperties().hp_max : PLAYER_MAX_HP_DEFAULT;
 		f32 damage_ratio = event->player_damage.amount / hp_max;
 
-		runData.damage_flash += 95.0f + 64.f * damage_ratio;
-		runData.damage_flash = MYMIN(runData.damage_flash, 127.0f);
+		if (g_settings->getBool("hurt_flash_enabled")) {
+			runData.damage_flash += 95.0f + 64.f * damage_ratio;
+			runData.damage_flash = MYMIN(runData.damage_flash, 127.0f);
+		}
 
 		player->hurt_tilt_timer = 1.5f;
 		player->hurt_tilt_strength =
@@ -3221,7 +2743,7 @@ void Game::handleClientEvent_HudAdd(ClientEvent *event, CameraOrientation *cam)
 	e->align  = event->hudadd->align;
 	e->offset = event->hudadd->offset;
 	e->world_pos = event->hudadd->world_pos;
-	e->size      = event->hudadd->size;
+	e->size      = v2f::from(event->hudadd->size);
 	e->z_index   = event->hudadd->z_index;
 	e->text2     = event->hudadd->text2;
 	e->style     = event->hudadd->style;
@@ -3285,7 +2807,7 @@ void Game::handleClientEvent_HudChange(ClientEvent *event, CameraOrientation *ca
 
 		CASE_SET(HUD_STAT_WORLD_POS, world_pos, v3fdata);
 
-		CASE_SET(HUD_STAT_SIZE, size, v2s32data);
+		CASE_SET(HUD_STAT_SIZE, size, v2fdata);
 
 		CASE_SET(HUD_STAT_Z_INDEX, z_index, data);
 
@@ -3323,7 +2845,7 @@ void Game::handleClientEvent_SetSky(ClientEvent *event, CameraOrientation *cam)
 		);
 	} else if (event->set_sky->type == "skybox" &&
 			event->set_sky->textures.size() == 6) {
-		// Disable the dyanmic mesh skybox:
+		// Disable the dynamic mesh skybox:
 		sky->setVisible(false);
 		// Set fog colors:
 		sky->setFallbackBgColor(event->set_sky->bgcolor);
@@ -3369,6 +2891,8 @@ void Game::handleClientEvent_SetSky(ClientEvent *event, CameraOrientation *cam)
 
 	sky->setFogColor(event->set_sky->fog_color);
 
+	sky->setAutoCaveBrightness(event->set_sky->auto_dim_skybox);
+
 	delete event->set_sky;
 }
 
@@ -3399,10 +2923,11 @@ void Game::handleClientEvent_SetStars(ClientEvent *event, CameraOrientation *cam
 	sky->setStarColor(event->star_params->starcolor);
 	sky->setStarScale(event->star_params->scale);
 	sky->setStarDayOpacity(event->star_params->day_opacity);
+	sky->setStarSeed(event->star_params->star_seed);
 	delete event->star_params;
 }
 
-void Game::handleClientEvent_OverrideDayNigthRatio(ClientEvent *event,
+void Game::handleClientEvent_OverrideDayNightRatio(ClientEvent *event,
 		CameraOrientation *cam)
 {
 	client->getEnv().setDayNightRatioOverride(
@@ -3528,11 +3053,11 @@ void Game::updateCameraOffset()
 {
 	ClientEnvironment &env = client->getEnv();
 
-	v3s16 old_camera_offset = camera->getOffset();
+	auto old_camera_offset = camera->getOffset();
 
 	camera->updateOffset();
 
-	v3s16 camera_offset = camera->getOffset();
+	auto camera_offset = camera->getOffset();
 
 	m_camera_offset_changed = camera_offset != old_camera_offset;
 	if (!m_camera_offset_changed)
@@ -3565,26 +3090,21 @@ void Game::updateSound(f32 dtime)
 	// Update sound listener
 	LocalPlayer *player = client->getEnv().getLocalPlayer();
 	ClientActiveObject *parent = player->getParent();
-	v3s16 camera_offset = camera->getOffset();
+	v3pos_t camera_offset = camera->getOffset();
 	sound_manager->updateListener(
 			(1.0f/BS) * camera->getCameraNode()->getPosition()
-					+ intToFloat(camera_offset, 1.0f),
+					+ posToFloat(camera_offset, 1.0f),
 			(1.0f/BS) * (parent ? parent->getVelocity() : player->getSpeed()),
 			camera->getDirection(),
 			camera->getCameraNode()->getUpVector());
 
 	sound_volume_control(sound_manager.get(), device->isWindowActive());
 
-	// Tell the sound maker whether to make footstep sounds
-	soundmaker->makes_footstep_sound = player->makes_footstep_sound;
-
-	//	Update sound maker
-	if (player->makes_footstep_sound)
-		soundmaker->step(dtime);
-
+	// Update sound maker
 	ClientMap &map = client->getEnv().getClientMap();
 	MapNode n = map.getNode(player->getFootstepNodePos());
-	soundmaker->m_player_step_sound = nodedef_manager->get(n).sound_footstep;
+	soundmaker->update(dtime, player->makes_footstep_sound,
+			nodedef_manager->get(n).sound_footstep);
 }
 
 
@@ -3593,7 +3113,7 @@ void Game::processPlayerInteraction(f32 dtime, bool show_hud)
 	LocalPlayer *player = client->getEnv().getLocalPlayer();
 
 	const v3f camera_direction = camera->getDirection();
-	const v3s16 camera_offset  = camera->getOffset();
+	const v3pos_t camera_offset  = camera->getOffset();
 
 	/*
 		Calculate what block is the crosshair pointing to
@@ -3605,10 +3125,11 @@ void Game::processPlayerInteraction(f32 dtime, bool show_hud)
 	const ItemDefinition &selected_def = tool_item.getDefinition(itemdef_manager);
 	f32 d = getToolRange(tool_item, hand_item, itemdef_manager);
 
-	core::line3d<f32> shootline;
+	core::line3d<opos_t> shootline;
 
 	switch (camera->getCameraMode()) {
 	case CAMERA_MODE_ANY:
+	case CameraMode_END:
 		assert(false);
 		break;
 	case CAMERA_MODE_FIRST:
@@ -3625,15 +3146,16 @@ void Game::processPlayerInteraction(f32 dtime, bool show_hud)
 		d = 0;
 		break;
 	}
-	shootline.end = shootline.start + camera_direction * BS * d;
+	shootline.end = shootline.start + v3fToOpos(camera_direction * BS * d);
 
 	if (isTouchShootlineUsed()) {
-		shootline = g_touchcontrols->getShootline();
+		shootline = {v3fToOpos(g_touchcontrols->getShootline().start), v3fToOpos(g_touchcontrols->getShootline().end)};
+
 		// Scale shootline to the acual distance the player can reach
 		shootline.end = shootline.start +
 				shootline.getVector().normalize() * BS * d;
-		shootline.start += intToFloat(camera_offset, BS);
-		shootline.end += intToFloat(camera_offset, BS);
+		shootline.start += intToFloat(camera_offset, (opos_t)BS);
+		shootline.end += intToFloat(camera_offset, (opos_t)BS);
 	}
 
 	updatePointedThing(shootline,
@@ -3687,7 +3209,7 @@ void Game::processPlayerInteraction(f32 dtime, bool show_hud)
 
 		if (!runData.digging) {
 			client->interact(INTERACT_STOP_DIGGING, runData.pointed_old);
-			client->setCrack(-1, v3s16(0, 0, 0));
+			client->setCrack(-1, v3pos_t(0, 0, 0));
 			runData.dig_time = 0.0;
 		}
 	} else if (runData.dig_instantly && wasKeyReleased(KeyType::DIG)) {
@@ -3718,7 +3240,7 @@ void Game::processPlayerInteraction(f32 dtime, bool show_hud)
 	} else if (pointed.type == POINTEDTHING_NODE) {
 		handlePointingAtNode(pointed, selected_item, hand_item, dtime);
 	} else if (pointed.type == POINTEDTHING_OBJECT) {
-		v3f player_position  = player->getPosition();
+		auto player_position  = player->getPosition();
 		bool basic_debug_allowed = client->checkPrivilege("debug") || (player->hud_flags & HUD_FLAG_BASIC_DEBUG);
 		handlePointingAtObject(pointed, tool_item, hand_item, player_position,
 				m_game_ui->m_flags.show_basic_debug && basic_debug_allowed);
@@ -3752,11 +3274,11 @@ void Game::processPlayerInteraction(f32 dtime, bool show_hud)
 
 
 PointedThing Game::updatePointedThing(
-	const core::line3d<f32> &shootline,
+	const core::line3d<opos_t> &shootline,
 	bool liquids_pointable,
 	const std::optional<Pointabilities> &pointabilities,
 	bool look_for_object,
-	const v3s16 &camera_offset)
+	const v3pos_t &camera_offset)
 {
 	std::vector<aabb3f> *selectionboxes = hud->getSelectionBoxes();
 	selectionboxes->clear();
@@ -3798,7 +3320,7 @@ PointedThing Game::updatePointedThing(
 		aabb3f selection_box{{0.0f, 0.0f, 0.0f}};
 		if (show_entity_selectionbox && runData.selected_object->doShowSelectionBox() &&
 				runData.selected_object->getSelectionBox(&selection_box)) {
-			v3f pos = runData.selected_object->getPosition();
+			auto pos = runData.selected_object->getPosition();
 			selectionboxes->emplace_back(selection_box);
 			hud->setSelectionPos(pos, camera_offset);
 			GenericCAO* gcao = dynamic_cast<GenericCAO*>(runData.selected_object.get());
@@ -3830,15 +3352,15 @@ PointedThing Game::updatePointedThing(
 
 	// Update selection mesh light level and vertex colors
 	if (!selectionboxes->empty()) {
-		v3f pf = hud->getSelectionPos();
-		v3s16 p = floatToInt(pf, BS);
+		v3opos_t pf = hud->getSelectionPos();
+		v3pos_t p = oposToPos(pf, BS);
 
 		// Get selection mesh light level
 		MapNode n = map.getNode(p);
 		u16 node_light = getInteriorLight(n, -1, nodedef);
 		u16 light_level = node_light;
 
-		for (const v3s16 &dir : g_6dirs) {
+		for (const v3pos_t &dir : g_6dirs) {
 			n = map.getNode(p + dir);
 			node_light = getInteriorLight(n, -1, nodedef);
 			if (node_light > light_level)
@@ -3878,8 +3400,8 @@ void Game::handlePointingAtNothing(const ItemStack &playerItem)
 void Game::handlePointingAtNode(const PointedThing &pointed,
 	const ItemStack &selected_item, const ItemStack &hand_item, f32 dtime)
 {
-	v3s16 nodepos = pointed.node_undersurface;
-	v3s16 neighborpos = pointed.node_abovesurface;
+	v3pos_t nodepos = pointed.node_undersurface;
+	v3pos_t neighborpos = pointed.node_abovesurface;
 
 	/*
 		Check information text of node
@@ -3932,7 +3454,7 @@ void Game::handlePointingAtNode(const PointedThing &pointed,
 }
 
 bool Game::nodePlacement(const ItemDefinition &selected_def,
-	const ItemStack &selected_item, const v3s16 &nodepos, const v3s16 &neighborpos,
+	const ItemStack &selected_item, const v3pos_t &nodepos, const v3pos_t &neighborpos,
 	const PointedThing &pointed, const NodeMetadata *meta)
 {
 	const auto &prediction = selected_def.node_placement_prediction;
@@ -3969,7 +3491,7 @@ bool Game::nodePlacement(const ItemDefinition &selected_def,
 
 	verbosestream << "Node placement prediction for "
 		<< selected_def.name << " is " << prediction << std::endl;
-	v3s16 p = neighborpos;
+	v3pos_t p = neighborpos;
 
 	// Place inside node itself if buildable_to
 	MapNode n_under = map.getNode(nodepos, &is_valid_position);
@@ -4012,15 +3534,15 @@ bool Game::nodePlacement(const ItemDefinition &selected_def,
 		predicted_node.setParam2(*place_param2);
 	} else if (predicted_f.param_type_2 == CPT2_WALLMOUNTED ||
 			predicted_f.param_type_2 == CPT2_COLORED_WALLMOUNTED) {
-		v3s16 dir = nodepos - neighborpos;
+		v3pos_t dir = nodepos - neighborpos;
 
 		if (abs(dir.Y) > MYMAX(abs(dir.X), abs(dir.Z))) {
 			// If you change this code, also change builtin/game/item.lua
 			u8 predicted_param2 = dir.Y < 0 ? 1 : 0;
 			if (selected_def.wallmounted_rotate_vertical) {
 				bool rotate90 = false;
-				v3f ppos = client->getEnv().getLocalPlayer()->getPosition() / BS;
-				v3f pdir = v3f::from(neighborpos) - ppos;
+				auto ppos = client->getEnv().getLocalPlayer()->getPosition() / BS;
+				auto pdir = v3opos_t::from(neighborpos) - ppos;
 				switch (predicted_f.drawtype) {
 					case NDT_TORCHLIKE: {
 						rotate90 = !((pdir.X < 0 && pdir.Z > 0) ||
@@ -4053,7 +3575,7 @@ bool Game::nodePlacement(const ItemDefinition &selected_def,
 			predicted_f.param_type_2 == CPT2_COLORED_FACEDIR ||
 			predicted_f.param_type_2 == CPT2_4DIR ||
 			predicted_f.param_type_2 == CPT2_COLORED_4DIR) {
-		v3s16 dir = nodepos - floatToInt(client->getEnv().getLocalPlayer()->getPosition(), BS);
+		v3pos_t dir = nodepos - floatToInt(client->getEnv().getLocalPlayer()->getPosition(), BS);
 
 		if (abs(dir.X) > abs(dir.Z)) {
 			predicted_node.setParam2(dir.X < 0 ? 3 : 1);
@@ -4065,12 +3587,12 @@ bool Game::nodePlacement(const ItemDefinition &selected_def,
 	// Check attachment if node is in group attached_node
 	int an = itemgroup_get(predicted_f.groups, "attached_node");
 	if (an != 0) {
-		v3s16 pp;
+		v3pos_t pp;
 
 		if (an == 3) {
-			pp = p + v3s16(0, -1, 0);
+			pp = p + v3pos_t(0, -1, 0);
 		} else if (an == 4) {
-			pp = p + v3s16(0, 1, 0);
+			pp = p + v3pos_t(0, 1, 0);
 		} else if (an == 2) {
 			if (predicted_f.param_type_2 == CPT2_FACEDIR ||
 					predicted_f.param_type_2 == CPT2_COLORED_FACEDIR ||
@@ -4084,7 +3606,7 @@ bool Game::nodePlacement(const ItemDefinition &selected_def,
 				predicted_f.param_type_2 == CPT2_COLORED_WALLMOUNTED) {
 			pp = p + predicted_node.getWallMountedDir(nodedef);
 		} else {
-			pp = p + v3s16(0, -1, 0);
+			pp = p + v3pos_t(0, -1, 0);
 		}
 
 		if (!nodedef->get(map.getNode(pp)).walkable) {
@@ -4130,8 +3652,8 @@ bool Game::nodePlacement(const ItemDefinition &selected_def,
 				g_settings->getBool("enable_build_where_you_stand") ||
 				(client->checkPrivilege("noclip") && g_settings->getBool("noclip")) ||
 				(predicted_f.walkable &&
-					neighborpos != player->getStandingNodePos() + v3s16(0, 1, 0) &&
-					neighborpos != player->getStandingNodePos() + v3s16(0, 2, 0))) {
+					neighborpos != player->getStandingNodePos() + v3pos_t(0, 1, 0) &&
+					neighborpos != player->getStandingNodePos() + v3pos_t(0, 2, 0))) {
 */
 		if (player->canPlaceNode(p, predicted_node)) {
 			// This triggers the required mesh update too
@@ -4155,7 +3677,7 @@ bool Game::nodePlacement(const ItemDefinition &selected_def,
 }
 
 void Game::handlePointingAtObject(const PointedThing &pointed, const ItemStack &tool_item,
-		const ItemStack &hand_item, const v3f &player_position, bool show_debug)
+		const ItemStack &hand_item, const v3opos_t &player_position, bool show_debug)
 {
 	if (!runData.selected_object) {
 		return;
@@ -4194,8 +3716,8 @@ void Game::handlePointingAtObject(const PointedThing &pointed, const ItemStack &
 
 		if (do_punch_damage) {
 			// Report direct punch
-			v3f objpos = runData.selected_object->getPosition();
-			v3f dir = (objpos - player_position).normalize();
+			v3opos_t objpos = runData.selected_object->getPosition();
+			v3f dir = (oposToV3f(objpos - player_position)).normalize();
 
 			bool disable_send = runData.selected_object->directReportPunch(
 					dir, &tool_item, &hand_item, runData.time_from_last_punch);
@@ -4211,7 +3733,7 @@ void Game::handlePointingAtObject(const PointedThing &pointed, const ItemStack &
 }
 
 
-void Game::handleDigging(const PointedThing &pointed, const v3s16 &nodepos,
+void Game::handleDigging(const PointedThing &pointed, const v3pos_t &nodepos,
 		const ItemStack &selected_item, const ItemStack &hand_item, f32 dtime)
 {
 	// See also: serverpackethandle.cpp, action == 2
@@ -4240,8 +3762,7 @@ void Game::handleDigging(const PointedThing &pointed, const v3s16 &nodepos,
 	} else {
 		runData.dig_time_complete = params.time;
 
-		client->getParticleManager()->addNodeParticle(client,
-				player, nodepos, n, features);
+		client->getParticleManager()->addNodeParticle(player, nodepos, n);
 	}
 
 	if (!runData.digging) {
@@ -4285,7 +3806,7 @@ void Game::handleDigging(const PointedThing &pointed, const v3s16 &nodepos,
 		client->setCrack(runData.dig_index, nodepos);
 	} else {
 		infostream << "Digging completed" << std::endl;
-		client->setCrack(-1, v3s16(0, 0, 0));
+		client->setCrack(-1, v3pos_t(0, 0, 0));
 
 		runData.dig_time = 0;
 		runData.digging = false;
@@ -4326,8 +3847,7 @@ void Game::handleDigging(const PointedThing &pointed, const v3s16 &nodepos,
 
 		client->interact(INTERACT_DIGGING_COMPLETED, pointed);
 
-		client->getParticleManager()->addDiggingParticles(client,
-			player, nodepos, n, features);
+		client->getParticleManager()->addDiggingParticles(player, nodepos, n);
 
 		// Send event to trigger sound
 		client->getEventManager()->put(new NodeDugEvent(nodepos, n));
@@ -4418,14 +3938,16 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 		Calculate general brightness
 	*/
 	u32 daynight_ratio = client->getEnv().getDayNightRatio();
-	float time_brightness = decode_light_f((float)daynight_ratio / 1000.0);
+	float time_brightness = decode_light_f((float)daynight_ratio / 1000.0f);
 	float direct_brightness = time_brightness;
-	bool sunlight_seen = false;
+	bool sunlight_seen {};
 
 	// When in noclip mode force same sky brightness as above ground so you
 	// can see properly
-	if (draw_control->allow_noclip && m_cache_enable_free_move &&
-		client->checkPrivilege("fly")) {
+	bool noclip_fly = draw_control->allow_noclip &&
+			m_cache_enable_free_move &&
+			client->checkPrivilege("fly");
+	if (!sky->getAutoCaveBrightness() || noclip_fly) {
 		direct_brightness = time_brightness;
 		sunlight_seen = true;
 	} else if (!runData.headless_optimize) {
@@ -4530,7 +4052,9 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 		// Update wielded tool
 		ItemStack selected_item, hand_item;
 		ItemStack &tool_item = player->getWieldedItem(&selected_item, &hand_item);
-		camera->wield(tool_item);
+
+		bool skip_anim = client->consumeSkipNextWieldAnimation();
+		camera->wield(tool_item, !skip_anim);
 	}
 
 	/*
@@ -4620,7 +4144,7 @@ void Game::updateClouds(float dtime)
 		this->clouds->step(dtime);
 		// this->camera->getPosition is not enough for third-person camera.
 		v3f camera_node_position = this->camera->getCameraNode()->getPosition();
-		v3s16 camera_offset      = this->camera->getOffset();
+		v3pos_t camera_offset      = this->camera->getOffset();
 		camera_node_position.X   = camera_node_position.X + camera_offset.X * BS;
 		camera_node_position.Y   = camera_node_position.Y + camera_offset.Y * BS;
 		camera_node_position.Z   = camera_node_position.Z + camera_offset.Z * BS;
@@ -4670,17 +4194,23 @@ void Game::updateShadows()
 
 	float in_timeofday = std::fmod(runData.time_of_day_smooth, 1.0f);
 
-	float timeoftheday = getWickedTimeOfDay(in_timeofday);
-	bool is_day = timeoftheday > 0.25 && timeoftheday < 0.75;
-	bool is_shadow_visible = is_day ? sky->getSunVisible() : sky->getMoonVisible();
 	const auto &lighting = client->getEnv().getLocalPlayer()->getLighting();
-	shadow->setShadowIntensity(is_shadow_visible ? lighting.shadow_intensity : 0.0f);
 	shadow->setShadowTint(lighting.shadow_tint);
 
-	timeoftheday = std::fmod(timeoftheday + 0.75f, 0.5f) + 0.25f;
 	const float offset_constant = 10000.0f;
 
-	v3f light = is_day ? sky->getSunDirection() : sky->getMoonDirection();
+	v3f light;
+	if (lighting.shadow_direction.getLengthSQ() > 0.0f) {
+		// Custom shadow direction: bypass sun/moon visibility check
+		shadow->setShadowIntensity(lighting.shadow_intensity);
+		light = lighting.shadow_direction;
+	} else {
+		float timeoftheday = getWickedTimeOfDay(in_timeofday);
+		bool is_day = timeoftheday > 0.25f && timeoftheday < 0.75f;
+		bool is_shadow_visible = is_day ? sky->getSunVisible() : sky->getMoonVisible();
+		shadow->setShadowIntensity(is_shadow_visible ? lighting.shadow_intensity : 0.0f);
+		light = is_day ? sky->getSunDirection() : sky->getMoonDirection();
+	}
 
 	v3f sun_pos = light * offset_constant;
 	shadow->getDirectionalLight().setDirection(sun_pos);
@@ -4746,8 +4276,11 @@ void Game::drawScene(ProfilerGraph *graph, RunStats *stats)
 	*/
 	v2u32 screensize = this->driver->getScreenSize();
 
-	if (this->m_game_ui->m_flags.show_profiler_graph)
-		graph->draw(10, screensize.Y - 10, driver, g_fontengine->getFont());
+	if (this->m_game_ui->m_flags.show_profiler_graph) {
+		auto font = g_fontengine->getFont(
+			g_fontengine->getDefaultFontSize() * 0.9f, FM_Mono);
+		graph->draw(10, screensize.Y - 10, driver, font);
+	}
 
 	/*
 		Damage flash
@@ -4816,6 +4349,7 @@ void Game::readSettings()
 	m_cache_enable_joysticks             = g_settings->getBool("enable_joysticks");
 	m_cache_enable_fog                   = g_settings->getBool("enable_fog");
 	m_cache_mouse_sensitivity            = g_settings->getFloat("mouse_sensitivity", 0.001f, 10.0f);
+	m_cache_keyboard_camera_speed        = g_settings->getFloat("keyboard_camera_speed", 0.001f, 720.0f);
 	m_cache_joystick_frustum_sensitivity = std::max(g_settings->getFloat("joystick_frustum_sensitivity"), 0.001f);
 	m_repeat_place_time                  = g_settings->getFloat("repeat_place_time", 0.16f, 2.0f);
 	m_repeat_dig_time                    = g_settings->getFloat("repeat_dig_time", 0.0f, 2.0f);
@@ -4824,12 +4358,12 @@ void Game::readSettings()
 	m_cache_enable_free_move             = g_settings->getBool("free_move");
 
 	m_cache_cam_smoothing = 0;
-	if (m_cinematic)
-		m_cache_cam_smoothing = 1 - g_settings->getFloat("cinematic_camera_smoothing");
+	if (g_settings->getBool("cinematic"))
+		m_cache_cam_smoothing = g_settings->getFloat("cinematic_camera_smoothing");
 	else
-		m_cache_cam_smoothing = 1 - g_settings->getFloat("camera_smoothing");
+		m_cache_cam_smoothing = g_settings->getFloat("camera_smoothing");
 
-	m_cache_cam_smoothing = rangelim(m_cache_cam_smoothing, 0.01f, 1.0f);
+	m_cache_cam_smoothing = std::max(0.0f, m_cache_cam_smoothing);
 	m_cache_mouse_sensitivity = rangelim(m_cache_mouse_sensitivity, 0.001, 100.0);
 
 	m_invert_mouse = g_settings->getBool("invert_mouse");

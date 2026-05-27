@@ -5,8 +5,7 @@
 #include "lua_api/l_nodetimer.h"
 #include "lua_api/l_internal.h"
 #include "serverenvironment.h"
-#include "map.h"
-
+#include "servermap.h"
 
 int NodeTimerRef::gc_object(lua_State *L) {
 	NodeTimerRef *o = *(NodeTimerRef **)(lua_touserdata(L, 1));
@@ -70,7 +69,7 @@ int NodeTimerRef::l_get_elapsed(lua_State *L)
 
 // Creates an NodeTimerRef and leaves it on top of stack
 // Not callable from Lua; all references are created on the C side.
-void NodeTimerRef::create(lua_State *L, v3s16 p, ServerMap *map)
+void NodeTimerRef::create(lua_State *L, v3pos_t p, ServerMap *map)
 {
 	NodeTimerRef *o = new NodeTimerRef(p, map);
 	*(void **)(lua_newuserdata(L, sizeof(void *))) = o;

@@ -7,11 +7,16 @@
 #pragma once
 
 #include "fm_weather.h"
+#include "irr_v3d.h"
+#include "util/unordered_map_hash.h"
+
+#include "constants.h"
 #include "noise.h"
 #include "nodedef.h"
 #include "util/string.h"
 #include "util/container.h"
 #include <utility>
+#include <set>
 
 #define MAPGEN_DEFAULT MAPGEN_V7
 #define MAPGEN_DEFAULT_NAME "v7"
@@ -68,7 +73,7 @@ class GenerateNotifier {
 public:
 	struct GenNotifyEvent {
 		GenNotifyType type;
-		v3s16 pos;
+		v3pos_t pos;
 		u32 id; // for GENNOTIFY_DECORATION
 	};
 
@@ -78,10 +83,10 @@ public:
 	GenerateNotifier(u32 notify_on, const std::set<u32> *notify_on_deco_ids,
 		const std::set<std::string> *notify_on_custom);
 
-	bool addEvent(GenNotifyType type, v3s16 pos);
-	bool addDecorationEvent(v3s16 pos, u32 deco_id);
+	bool addEvent(GenNotifyType type, v3pos_t pos);
+	bool addDecorationEvent(v3pos_t pos, u32 deco_id);
 	bool setCustom(const std::string &key, const std::string &value);
-	void getEvents(std::map<std::string, std::vector<v3s16>> &map) const;
+	void getEvents(std::map<std::string, std::vector<v3pos_t>> &map) const;
 	const StringMap &getCustomData() const { return m_notify_custom; }
 	void clearEvents();
 
@@ -89,7 +94,7 @@ private:
 	u32 m_notify_on = 0;
 	const std::set<u32> *m_notify_on_deco_ids = nullptr;
 	const std::set<std::string> *m_notify_on_custom = nullptr;
-	std::list<GenNotifyEvent> m_notify_events;
+	std::vector<GenNotifyEvent> m_notify_events;
 	StringMap m_notify_custom;
 
 	inline bool shouldNotifyOn(GenNotifyType type) const {
@@ -99,10 +104,12 @@ private:
 
 // Order must match the order of 'static MapgenDesc g_reg_mapgens[]' in mapgen.cpp
 enum MapgenType {
-    // freeminer:
+	// freeminer:
 	MAPGEN_EARTH,
+	MAPGEN_VOXEL_EARTH,
 	MAPGEN_MATH,
 	MAPGEN_INDEV,
+	MAPGEN_EROSION,
     // ==========
 
 	MAPGEN_V7,
@@ -122,19 +129,16 @@ struct MapgenParams {
 	virtual ~MapgenParams();
 
 	MapgenType mgtype = MAPGEN_DEFAULT;
-	s16 chunksize = 5;
+	v3bpos_t chunksize = v3bpos_t(5);
 	u64 seed = 0;
-	s16 water_level = 1;
+	pos_t water_level = 1;
 	s16 liquid_pressure = 0;
-	s16 mapgen_limit = MAX_MAP_GENERATION_LIMIT;
+	pos_t mapgen_limit = MAX_MAP_GENERATION_LIMIT;
 	// Flags set in readParams
 	u32 flags = 0;
 	u32 spflags = 0;
 
 	BiomeParamsOriginal *bparams = nullptr;
-
-	s16 mapgen_edge_min = -MAX_MAP_GENERATION_LIMIT;
-	s16 mapgen_edge_max = MAX_MAP_GENERATION_LIMIT;
 
 	virtual void readParams(const Settings *settings);
 	virtual void writeParams(Settings *settings) const;
@@ -143,8 +147,8 @@ struct MapgenParams {
 
 	s32 getSpawnRangeMax();
 
-private:
-	bool m_mapgen_edges_calculated = false;
+	// Mostly arbitrary limit
+	constexpr static u32 MAX_CHUNK_VOLUME = 2000;
 };
 
 
@@ -161,8 +165,8 @@ class Mapgen {
 public:
 	// Seed used for noises (truncated from the map seed)
 	s32 seed = 0;
-	int water_level = 0;
-	int mapgen_limit = 0;
+	pos_t water_level = 0;
+	pos_t mapgen_limit = 0;
 	u32 flags = 0;
 	bool generating = false;
 	int id = -1;
@@ -175,9 +179,10 @@ public:
 
 	// Chunk-specific seed used to place ores and decorations
 	u32 blockseed;
-	s16 *heightmap = nullptr;
+	pos_t *heightmap = nullptr;
 	biome_t *biomemap = nullptr;
-	v3s16 csize;
+	// Chunk size in nodes
+	v3pos_t csize;
 
 	BiomeGen *biomegen = nullptr;
 	GenerateNotifier gennotify;
@@ -189,15 +194,15 @@ public:
 
 	virtual MapgenType getType() const { return MAPGEN_INVALID; }
 
-	static u32 getBlockSeed(v3s16 p, s32 seed);
-	static u32 getBlockSeed2(v3s16 p, s32 seed);
-	s16 findGroundLevel(v2s16 p2d, s16 ymin, s16 ymax);
-	s16 findLiquidSurface(v2s16 p2d, s16 ymin, s16 ymax);
-	void updateHeightmap(v3s16 nmin, v3s16 nmax);
-	void getSurfaces(v2s16 p2d, s16 ymin, s16 ymax,
-		std::vector<s16> &floors, std::vector<s16> &ceilings);
+	static u32 getBlockSeed(v3pos_t p, s32 seed);
+	static u32 getBlockSeed2(v3pos_t p, s32 seed);
+	pos_t findGroundLevel(v2pos_t p2d, pos_t ymin, pos_t ymax);
+	pos_t findLiquidSurface(v2pos_t p2d, pos_t ymin, pos_t ymax);
+	void updateHeightmap(v3pos_t nmin, v3pos_t nmax);
+	void getSurfaces(v2pos_t p2d, pos_t ymin, pos_t ymax,
+		std::vector<pos_t> &floors, std::vector<pos_t> &ceilings);
 
-	void updateLiquid(UniqueQueue<v3s16> *trans_liquid, v3s16 nmin, v3s16 nmax);
+	void updateLiquid(UniqueQueue<v3pos_t> *trans_liquid, v3pos_t nmin, v3pos_t nmax);
 
 	/**
 	 * Set light in entire area to fixed value.
@@ -205,7 +210,7 @@ public:
 	 * @param nmin Area to operate on
 	 * @param nmax ^
 	 */
-	void setLighting(u8 light, v3s16 nmin, v3s16 nmax);
+	void setLighting(u8 light, v3pos_t nmin, v3pos_t nmax);
 	/**
 	 * Run all lighting calculations.
 	 * @param nmin Area to spread sunlight in
@@ -214,7 +219,7 @@ public:
 	 * @param full_nmax ^
 	 * @param propagate_shadow see propagateSunlight()
 	 */
-	void calcLighting(v3s16 nmin, v3s16 nmax, v3s16 full_nmin, v3s16 full_nmax,
+	void calcLighting(v3pos_t nmin, v3pos_t nmax, v3pos_t full_nmin, v3pos_t full_nmax,
 		bool propagate_shadow = true);
 	/**
 	 * Spread sunlight from the area above downwards.
@@ -224,17 +229,17 @@ public:
 	 * @param nmax ^
 	 * @param propagate_shadow Ignore obstructions above and spread sun anyway
 	 */
-	void propagateSunlight(v3s16 nmin, v3s16 nmax, bool propagate_shadow);
+	void propagateSunlight(v3pos_t nmin, v3pos_t nmax, bool propagate_shadow);
 	/**
 	 * Spread light in the given area.
 	 * Artificial light is taken from nodedef, sunlight must already be set.
 	 * @param nmin Area to operate on
 	 * @param nmax ^
 	 */
-	void spreadLight(const v3s16 &nmin, const v3s16 &nmax);
+	void spreadLight(const v3pos_t &nmin, const v3pos_t &nmax);
 
 	virtual void makeChunk(BlockMakeData *data) {}
-	virtual int getGroundLevelAtPoint(v2s16 p) { return 0; }
+	virtual pos_t getGroundLevelAtPoint(v2pos_t p) { return 0; }
 
 	// freeminer:
 	ServerEnvironment *env {};
@@ -264,7 +269,7 @@ public:
 	// within 16 nodes of water_level). If a suitable spawn level cannot be
 	// found at the specified (X, Z) 'MAX_MAP_GENERATION_LIMIT' is returned to
 	// signify this and to cause Server::findSpawnPos() to try another (X, Z).
-	virtual int getSpawnLevelAtPoint(v2s16 p) { return 0; }
+	virtual pos_t getSpawnLevelAtPoint(v2pos_t p) { return 0; }
 
 	// Mapgen management functions
 	static MapgenType getMapgenType(const std::string &mgname);
@@ -285,8 +290,8 @@ private:
 	 * @param light Light value (contains both banks)
 	 *
 	 */
-	void lightSpread(VoxelArea &a, std::queue<std::pair<v3s16, u8>> &queue,
-		const v3s16 &p, u8 light);
+	void lightSpread(VoxelArea &a, std::queue<std::pair<v3pos_t, u8>> &queue,
+		const v3pos_t &p, u8 light);
 
 		//, unordered_map_v3pos<u8> & skip, int r = 0
 
@@ -318,24 +323,24 @@ public:
 
 	virtual void generateBiomes();
 	virtual void dustTopNodes();
-	virtual void generateCavesNoiseIntersection(s16 max_stone_y);
-	virtual void generateCavesRandomWalk(s16 max_stone_y, s16 large_cave_ymax);
-	virtual bool generateCavernsNoise(s16 max_stone_y);
-	virtual void generateDungeons(s16 max_stone_y);
+	virtual void generateCavesNoiseIntersection(pos_t max_stone_y);
+	virtual void generateCavesRandomWalk(pos_t max_stone_y, pos_t large_cave_ymax);
+	virtual bool generateCavernsNoise(pos_t max_stone_y);
+	virtual void generateDungeons(pos_t max_stone_y);
 
 	virtual void generateBuildings() {};
 
 protected:
-	BiomeManager *m_bmgr;
+	BiomeManager *m_bmgr = nullptr;
 
-	Noise *noise_filler_depth;
+	Noise *noise_filler_depth = nullptr;
 
 public:
-	v3s16 node_min;
-	v3s16 node_max;
+	v3pos_t node_min;
+	v3pos_t node_max;
 protected:
-	v3s16 full_node_min;
-	v3s16 full_node_max;
+	v3pos_t full_node_min;
+	v3pos_t full_node_max;
 
 	content_t c_stone;
 	content_t c_water_source;
@@ -364,11 +369,11 @@ protected:
 	int large_cave_num_min;
 	int large_cave_num_max;
 	float large_cave_flooded;
-	s16 large_cave_depth;
-	s16 dungeon_ymin;
-	s16 dungeon_ymax;
+	pos_t large_cave_depth;
+	pos_t dungeon_ymin;
+	pos_t dungeon_ymax;
 };
 
 // Calculate exact edges of the outermost mapchunks that are within the set
 // mapgen_limit. Returns the minimum and maximum edges in nodes in that order.
-std::pair<s16, s16> get_mapgen_edges(s16 mapgen_limit, s16 chunksize);
+std::pair<v3bpos_t, v3bpos_t> get_mapgen_edges(pos_t mapgen_limit, v3bpos_t chunksize);

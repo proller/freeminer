@@ -3,20 +3,17 @@
 // Copyright (C) 2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
 #include "rollback.h"
-#include <fstream>
+#include "exceptions.h"
 #include <list>
-#include <sstream>
 #include "log.h"
-#include "mapnode.h"
 #include "gamedef.h"
 #include "nodedef.h"
-#include "util/serialize.h"
 #include "util/string.h"
 #include "util/numeric.h"
 #include "inventorymanager.h" // deserializing InventoryLocations
 #include "filesys.h"
 
-#define POINTS_PER_NODE (16.0)
+#define POINTS_PER_NODE (16.0f)
 
 #define SQLRES(f, good) \
 	if ((f) != (good)) {\
@@ -43,11 +40,11 @@ public:
 		return *this;
 	}
 
-	int id;
+	int id = 0;
 };
 
 struct ActionRow {
-	int          id;
+	int          id = 0;
 	int          actor;
 	time_t       timestamp;
 	int          type;
@@ -241,7 +238,6 @@ bool RollbackManager::createTables()
 		"CREATE INDEX IF NOT EXISTS `actionIndex` ON `action`(`x`,`y`,`z`,`timestamp`,`actor`);\n"
 		"CREATE INDEX IF NOT EXISTS `actionTimestampActorIndex` ON `action`(`timestamp`,`actor`);\n",
 		NULL, NULL, NULL));
-	verbosestream << "SQL Rollback: SQLite3 database structure was created" << std::endl;
 
 #endif
 	return true;
@@ -252,14 +248,11 @@ bool RollbackManager::initDatabase()
 {
 	verbosestream << "RollbackManager: Database connection setup" << std::endl;
 
-	bool needs_create = !fs::PathExists(database_path);
 #if USE_SQLITE3
 	SQLOK(sqlite3_open_v2(database_path.c_str(), &db,
 			SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL));
 
-	if (needs_create) {
-		createTables();
-	}
+	createTables();
 
 	SQLOK(sqlite3_prepare_v2(db,
 		"INSERT INTO `action` (\n"
@@ -375,7 +368,7 @@ bool RollbackManager::initDatabase()
 	SQLOK(sqlite3_reset(stmt_knownNode_select));
 #endif
 
-	return needs_create;
+	return true;
 }
 
 
@@ -541,7 +534,6 @@ ActionRow RollbackManager::actionRowFromRollbackAction(const RollbackAction & ac
 {
 	ActionRow row;
 
-	row.id        = 0;
 	row.actor     = getActorId(action.actor);
 	row.timestamp = action.unix_time;
 	row.type      = action.type;
@@ -596,7 +588,7 @@ const std::list<RollbackAction> RollbackManager::rollbackActionsFromActionRows(
 			break;
 
 		case RollbackAction::TYPE_SET_NODE:
-			action.p            = v3s16(row.x, row.y, row.z);
+			action.p            = v3pos_t(row.x, row.y, row.z);
 			action.n_old.name   = getNodeName(row.oldNode);
 			action.n_old.param1 = row.oldParam1;
 			action.n_old.param2 = row.oldParam2;
@@ -608,7 +600,7 @@ const std::list<RollbackAction> RollbackManager::rollbackActionsFromActionRows(
 			break;
 
 		default:
-			throw ("W.T.F.");
+			assert(false);
 			break;
 		}
 
@@ -640,7 +632,7 @@ const std::list<ActionRow> RollbackManager::getRowsSince(time_t firstTime, const
 
 
 const std::list<ActionRow> RollbackManager::getRowsSince_range(
-		time_t start_time, v3s16 p, int range, int limit)
+		time_t start_time, v3pos_t p, int range, int limit)
 {
 #if USE_SQLITE3
 
@@ -665,7 +657,7 @@ const std::list<ActionRow> RollbackManager::getRowsSince_range(
 
 
 const std::list<RollbackAction> RollbackManager::getActionsSince_range(
-		time_t start_time, v3s16 p, int range, int limit)
+		time_t start_time, v3pos_t p, int range, int limit)
 {
 	return rollbackActionsFromActionRows(getRowsSince_range(start_time, p, range, limit));
 }
@@ -680,8 +672,8 @@ const std::list<RollbackAction> RollbackManager::getActionsSince(
 
 // Get nearness factor for subject's action for this action
 // Return value: 0 = impossible, >0 = factor
-float RollbackManager::getSuspectNearness(bool is_guess, v3s16 suspect_p,
-		time_t suspect_t, v3s16 action_p, time_t action_t)
+float RollbackManager::getSuspectNearness(bool is_guess, v3pos_t suspect_p,
+		time_t suspect_t, v3pos_t action_p, time_t action_t)
 {
 	// Suspect cannot cause things in the past
 	if (action_t < suspect_t) {
@@ -690,17 +682,15 @@ float RollbackManager::getSuspectNearness(bool is_guess, v3s16 suspect_p,
 	// Start from 100
 	int f = 100;
 	// Distance (1 node = -x points)
-	f -= POINTS_PER_NODE * intToFloat(suspect_p, 1).getDistanceFrom(intToFloat(action_p, 1));
+	f -= POINTS_PER_NODE * intToFloat(suspect_p, (float)1).getDistanceFrom(intToFloat(action_p, (float)1));
 	// Time (1 second = -x points)
 	f -= 1 * (action_t - suspect_t);
 	// If is a guess, halve the points
 	if (is_guess) {
-		f *= 0.5;
+		f /= 2;
 	}
 	// Limit to 0
-	if (f < 0) {
-		f = 0;
-	}
+	f = MYMAX(f, 0);
 	return f;
 }
 
@@ -720,7 +710,7 @@ void RollbackManager::reportAction(const RollbackAction &action_)
 	action.actor_is_guess = current_actor_is_guess;
 
 	if (action.actor.empty()) { // If actor is not known, find out suspect or cancel
-		v3s16 p;
+		v3pos_t p;
 		if (!action.getPosition(&p)) {
 			return;
 		}
@@ -752,18 +742,17 @@ void RollbackManager::setActor(const std::string & actor, bool is_guess)
 	current_actor_is_guess = is_guess;
 }
 
-std::string RollbackManager::getSuspect(v3s16 p, float nearness_shortcut,
+std::string RollbackManager::getSuspect(v3pos_t p, float nearness_shortcut,
 		float min_nearness)
 {
 	if (!current_actor.empty()) {
 		return current_actor;
 	}
-	int cur_time = time(0);
+	time_t cur_time = time(0);
 	time_t first_time = cur_time - (100 - min_nearness);
 	RollbackAction likely_suspect;
 	float likely_suspect_nearness = 0;
-	for (std::list<RollbackAction>::const_reverse_iterator
-	     i = action_latest_buffer.rbegin();
+	for (auto i = action_latest_buffer.rbegin();
 	     i != action_latest_buffer.rend(); ++i) {
 		if (i->unix_time < first_time) {
 			break;
@@ -772,7 +761,7 @@ std::string RollbackManager::getSuspect(v3s16 p, float nearness_shortcut,
 			continue;
 		}
 		// Find position of suspect or continue
-		v3s16 suspect_p;
+		v3pos_t suspect_p;
 		if (!i->getPosition(&suspect_p)) {
 			continue;
 		}
@@ -825,14 +814,19 @@ void RollbackManager::addAction(const RollbackAction & action)
 	if (action_todisk_buffer.size() >= 500) {
 		flush();
 	}
+	// Cut off latest log sometimes
+	while (action_latest_buffer.size() >= 500) {
+		action_latest_buffer.pop_front();
+	}
 }
 
-std::list<RollbackAction> RollbackManager::getNodeActors(v3s16 pos, int range,
+std::list<RollbackAction> RollbackManager::getNodeActors(v3pos_t pos, int range,
 		time_t seconds, int limit)
 {
-	flush();
 	time_t cur_time = time(0);
 	time_t first_time = cur_time - seconds;
+
+	flush();
 
 	return getActionsSince_range(first_time, pos, range, limit);
 }

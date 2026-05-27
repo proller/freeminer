@@ -10,7 +10,6 @@
 #include "client/client.h"
 #include "client/renderingengine.h"
 #include "client/texturesource.h"
-#include "hud.h"
 #include "inventory.h"
 #include "util/string.h"
 #include "irrlicht_changes/CGUITTFont.h"
@@ -554,7 +553,7 @@ u32 ParsedText::parseTag(const wchar_t *text, u32 cursor)
 				std::string str = attrs["rotate"];
 				std::vector<std::string> parts = split(str, ',');
 				if (parts.size() == 3) {
-					m_element->rotation = v3s16 (
+					m_element->rotation = v3s16(
 							rangelim(stoi(parts[0]), -1000, 1000),
 							rangelim(stoi(parts[1]), -1000, 1000),
 							rangelim(stoi(parts[2]), -1000, 1000));
@@ -1026,7 +1025,7 @@ GUIHyperText::GUIHyperText(const wchar_t *text, IGUIEnvironment *environment,
 			RelativeRect.getWidth() - m_scrollbar_width, 0,
 			RelativeRect.getWidth(), RelativeRect.getHeight());
 
-	m_vscrollbar = new GUIScrollBar(Environment, this, -1, rect, false, true, tsrc);
+	m_vscrollbar = new GUIScrollBar(Environment, this, -1, rect, false, tsrc);
 	m_vscrollbar->setVisible(false);
 }
 

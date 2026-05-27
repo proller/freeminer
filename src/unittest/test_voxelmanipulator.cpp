@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (C) 2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
+#include "irr_v3d.h"
 #include "test.h"
 
 #include <memory>
@@ -45,24 +46,24 @@ void TestVoxelManipulator::testBasic(const NodeDefManager *nodedef)
 	UASSERT(v.m_area.hasEmptyExtent());
 
 	infostream << "*** Setting (-1,0,-1) ***" << std::endl;
-	v.setNode(v3s16(-1,0,-1), MapNode(t_CONTENT_GRASS));
+	v.setNode(v3pos_t(-1,0,-1), MapNode(t_CONTENT_GRASS));
 
 	v.print(infostream, nodedef);
-	UASSERT(v.getNode(v3s16(-1,0,-1)).getContent() == t_CONTENT_GRASS);
+	UASSERT(v.getNode(v3pos_t(-1,0,-1)).getContent() == t_CONTENT_GRASS);
 
 	infostream << "*** Reading from inexistent (0,0,-1) ***" << std::endl;
 
-	EXCEPTION_CHECK(InvalidPositionException, v.getNode(v3s16(0,0,-1)));
+	EXCEPTION_CHECK(InvalidPositionException, v.getNode(v3pos_t(0,0,-1)));
 	v.print(infostream, nodedef);
 
 	infostream << "*** Adding area ***" << std::endl;
 
-	VoxelArea a(v3s16(-1,-1,-1), v3s16(1,1,1));
+	VoxelArea a(v3pos_t(-1,-1,-1), v3pos_t(1,1,1));
 	v.addArea(a);
 	v.print(infostream, nodedef);
 
-	UASSERT(v.getNode(v3s16(-1,0,-1)).getContent() == t_CONTENT_GRASS);
-	EXCEPTION_CHECK(InvalidPositionException, v.getNode(v3s16(0,1,1)));
+	UASSERT(v.getNode(v3pos_t(-1,0,-1)).getContent() == t_CONTENT_GRASS);
+	EXCEPTION_CHECK(InvalidPositionException, v.getNode(v3pos_t(0,1,1)));
 }
 
 void TestVoxelManipulator::testEmerge(IGameDef *gamedef)
@@ -77,8 +78,8 @@ void TestVoxelManipulator::testEmerge(IGameDef *gamedef)
 
 	// emerge something
 	vm.initialEmerge({0,0,0}, {0,0,0});
-	UASSERTEQ(auto, vm.m_area.MinEdge, v3s16(0));
-	UASSERTEQ(auto, vm.m_area.MaxEdge, v3s16(bs-1));
+	UASSERTEQ(auto, vm.m_area.MinEdge, v3pos_t(0));
+	UASSERTEQ(auto, vm.m_area.MaxEdge, v3pos_t(bs-1));
 	UASSERTEQ(auto, vm.getNodeNoExNoEmerge({0,0,0}).getContent(), CONTENT_AIR);
 
 	map.setNode({0,   1,0}, t_CONTENT_BRICK);
@@ -125,10 +126,10 @@ void TestVoxelManipulator::testBlitBack(IGameDef *gamedef)
 	UASSERT(vm2->isOrphan());
 	vm2->reparent(&map);
 
-	std::map<v3s16, MapBlock*> modified;
+	std::map<v3bpos_t, MapBlock*> modified;
 	vm2->blitBackAll(&modified);
 	UASSERTEQ(size_t, modified.size(), 1);
-	UASSERTEQ(auto, modified.begin()->first, v3s16(0,0,0));
+	UASSERTEQ(auto, modified.begin()->first, v3bpos_t(0,0,0));
 
 	UASSERTEQ(auto, map.getNode({0,0,0}).getContent(), t_CONTENT_STONE);
 	UASSERTEQ(auto, map.getNode({1,1,1}).getContent(), t_CONTENT_GRASS);
@@ -145,7 +146,7 @@ void TestVoxelManipulator::testBlitBack2(IGameDef *gamedef)
 
 	// Create a vmanip "manually" without using initialEmerge
 	MMVManip vm(&map);
-	vm.addArea(VoxelArea({0,0,0}, v3s16(1,2,1) * bs - v3s16(1)));
+	vm.addArea(VoxelArea({0,0,0}, v3pos_t(1,2,1) * bs - v3pos_t(1)));
 
 	// Lower block is initialized with ignore, upper with lava
 	for(s16 z=0; z<bs; z++)
@@ -155,7 +156,7 @@ void TestVoxelManipulator::testBlitBack2(IGameDef *gamedef)
 		vm.setNodeNoEmerge({x,y,z}, c);
 	}
 	// But pretend the upper block was not actually initialized
-	vm.setFlags(VoxelArea({0,bs,0}, v3s16(1,2,1) * bs - v3s16(1)), VOXELFLAG_NO_DATA);
+	vm.setFlags(VoxelArea({0,bs,0}, v3pos_t(1,2,1) * bs - v3pos_t(1)), VOXELFLAG_NO_DATA);
 	// Add a node to the lower one
 	vm.setNodeNoEmerge({0,1,0}, t_CONTENT_TORCH);
 
@@ -170,11 +171,11 @@ void TestVoxelManipulator::testBlitBack2(IGameDef *gamedef)
 	}
 
 	// Now blit it back
-	std::map<v3s16, MapBlock*> modified;
+	std::map<v3bpos_t, MapBlock*> modified;
 	vm.blitBackAll(&modified);
 	// The lower block data should have been written
 	UASSERTEQ(size_t, modified.size(), 1);
-	UASSERTEQ(auto, modified.begin()->first, v3s16(0,0,0));
+	UASSERTEQ(auto, modified.begin()->first, v3bpos_t(0,0,0));
 	UASSERTEQ(auto, map.getNode({0,1,0}).getContent(), t_CONTENT_TORCH);
 	// The upper one should not!
 	UASSERTEQ(auto, map.getNode({0,bs,0}).getContent(), CONTENT_AIR);

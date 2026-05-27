@@ -12,27 +12,39 @@
 #include "msgpack_fix.h"
 #include "threading/ThreadPool.h"
 #include "threading/async.h"
+#include "player.h"
+#include <chrono>
+#include <mutex>
+#include <thread>
+
+#if USE_CLIENT_MCP
+// WebSocket includes
+//#include "network/ws/wssocket.h"
+#include <websocketpp/server.hpp>
+#include <websocketpp/config/asio.hpp>
+#include <json/json.h>
+#endif
+
 constexpr const auto FARMESH_DEFAULT_MAPGEN = MAPGEN_FLAT;
 // ==
 
 #include "clientenvironment.h"
-#include "irrlichttypes.h"
-#include <ostream>
-#include <map>
-#include <memory>
-#include <set>
-#include <vector>
-#include <unordered_set>
 #include "gamedef.h"
+#include "gameparams.h" // ELoginRegister
 #include "inventorymanager.h"
+#include "irrlichttypes.h"
 #include "network/address.h"
 #include "network/networkprotocol.h" // multiple enums
 #include "network/peerhandler.h"
-#include "gameparams.h"
-#include "script/common/c_types.h" // LuaError
 #include "util/numeric.h"
 #include "util/string.h" // StringMap
-#include "config.h"
+
+#include <map>
+#include <memory>
+#include <ostream>
+#include <set>
+#include <unordered_set>
+#include <vector>
 
 #if !IS_CLIENT_BUILD
 #error Do not include in server builds
@@ -49,6 +61,7 @@ class ISoundManager;
 class IWritableItemDefManager;
 class IWritableShaderSource;
 class IWritableTextureSource;
+class LuaError;
 class MapDatabase;
 class MeshUpdateManager;
 class Minimap;
@@ -59,6 +72,8 @@ class NodeDefManager;
 class ParticleManager;
 class RenderingEngine;
 class SingleMediaDownloader;
+class ClientScripting;
+class SSCSMController;
 struct ChatMessage;
 struct ClientDynamicInfo;
 struct ClientEvent;
@@ -67,6 +82,7 @@ struct MapNode;
 struct PlayerControl;
 struct PointedThing;
 struct ItemVisualsManager;
+struct ModVFS;
 
 namespace scene {
 class IAnimatedMesh;
@@ -114,9 +130,9 @@ private:
 	std::map<u16, u32> m_packets;
 };
 
-class ClientScripting;
 class WorldMerger;
 class FarMesh;
+class MCPPlayerControl;
 
 class Client : public con::PeerHandler, public InventoryManager, public IGameDef
 {
@@ -126,7 +142,42 @@ private:
 	bool is_simple_singleplayer_game {};
 	float m_timelapse_timer {-1};
 
+#if USE_CLIENT_MCP
+	// MCP Player Control
+	std::unique_ptr<MCPPlayerControl> m_mcp_player_control;
+
 public:
+
+	// Getter for MCP Player Control
+	MCPPlayerControl* getMCPPlayerControl() { return m_mcp_player_control.get(); }
+
+	// Accessor for the current pointed thing (to be implemented)
+	PointedThing getCurrentPointedThing() const;
+	
+	// Accessor for world content around player
+	Json::Value getWorldContentAroundPlayer(int radius_blocks = 10);
+
+	// WebSocket server for MCP integration
+	typedef websocketpp::server<websocketpp::config::asio> mcp_ws_server_t;
+	typedef websocketpp::server<websocketpp::config::asio>::message_ptr message_ptr;
+
+	// WebSocket server methods
+	void onWebSocketMessage(websocketpp::connection_hdl hdl, mcp_ws_server_t::message_ptr msg);
+
+private:
+	mcp_ws_server_t m_mcp_websocket_server;
+	bool m_websocket_server_running = false;
+	std::thread m_websocket_server_thread;
+	std::mutex m_mcp_control_mutex;
+	bool m_has_mcp_control_override = false;
+	PlayerControl m_mcp_control_override;
+	std::chrono::steady_clock::time_point m_mcp_control_override_until;
+
+#endif
+public:
+void startMCPWebSocketServer(int port = 3001);
+	void stopMCPWebSocketServer();
+
 	std::atomic<double> m_uptime {};
 	bool use_weather {};
 	unsigned int overload {};
@@ -143,6 +194,7 @@ public:
 	void createFarMesh(MapBlockPtr &block);
 	void registerClientSettingsCallbacks();
 	void onSettingChanged(const std::string &name);
+	void setMCPPlayerControl(PlayerControl control, u32 duration_ms);
 
 	std::unique_ptr<Server> m_localserver;
 	std::string m_world_path;
@@ -162,6 +214,7 @@ public:
     async_step_runner updateDrawList_async;
     async_step_runner update_shadows_async;
     async_step_runner farmesh_async;
+
 	// ==
 
 public:
@@ -188,14 +241,6 @@ public:
 
 	~Client();
 	DISABLE_CLASS_COPY(Client);
-
-	// Load local mods into memory
-	void scanModSubfolder(const std::string &mod_name, const std::string &mod_path,
-				std::string mod_subpath);
-	inline void scanModIntoMemory(const std::string &mod_name, const std::string &mod_path)
-	{
-		scanModSubfolder(mod_name, mod_path, "");
-	}
 
 	/*
 	 request all threads managed by client to be stopped
@@ -292,7 +337,7 @@ public:
 
 	void interact(InteractAction action, const PointedThing &pointed);
 
-	void sendNodemetaFields(v3s16 p, const std::string &formname,
+	void sendNodemetaFields(v3pos_t p, const std::string &formname,
 		const StringMap &fields);
 	void sendInventoryFields(const std::string &formname,
 		const StringMap &fields);
@@ -321,9 +366,9 @@ public:
 	void removeNode(v3pos_t p, int fast = 0);
 
 	// helpers to enforce CSM restrictions
-	MapNode CSMGetNode(v3s16 p, bool *is_valid_position);
-	int CSMClampRadius(v3s16 pos, int radius);
-	v3s16 CSMClampPos(v3s16 pos);
+	MapNode CSMGetNode(v3pos_t p, bool *is_valid_position);
+	int CSMClampRadius(v3pos_t pos, int radius);
+	v3pos_t CSMClampPos(v3pos_t pos);
 
 	void addNode(v3pos_t p, MapNode n, bool remove_metadata = true, int fast = 0);
 
@@ -332,6 +377,8 @@ public:
 	// Returns true if the inventory of the local player has been
 	// updated from the server. If it is true, it is set to false.
 	bool updateWieldedItem();
+
+	bool consumeSkipNextWieldAnimation();
 
 	/* InventoryManager interface */
 	Inventory* getInventory(const InventoryLocation &loc) override;
@@ -350,9 +397,10 @@ public:
 		return m_animation_time;
 	}
 
+	/// @return integer ∊ [0, crack_animation_length] or -1 for invalid
 	int getCrackLevel();
-	v3s16 getCrackPos();
-	void setCrack(int level, v3s16 pos);
+	v3pos_t getCrackPos();
+	void setCrack(int level, v3pos_t pos);
 
 	u16 getHP();
 
@@ -370,7 +418,7 @@ public:
 	void addUpdateMeshTask(v3bpos_t blockpos, bool ack_to_server=false, bool urgent=false, int step = 0);
 	// Including blocks at appropriate edges
 	void addUpdateMeshTaskWithEdge(v3pos_t blockpos, bool ack_to_server=false, bool urgent=false);
-	void addUpdateMeshTaskForNode(v3s16 nodepos, bool ack_to_server=false, bool urgent=false);
+	void addUpdateMeshTaskForNode(v3pos_t nodepos, bool ack_to_server=false, bool urgent=false);
 
 	bool hasClientEvents() const { return !m_client_event_queue.empty(); }
 	// Get event from queue. If queue is empty, it triggers an assertion failure.
@@ -385,10 +433,7 @@ public:
 		m_access_denied = true;
 		m_access_denied_reason = reason;
 	}
-	inline void setFatalError(const LuaError &e)
-	{
-		setFatalError(std::string("Lua: ") + e.what());
-	}
+	void setFatalError(const LuaError &e);
 
 	// Renaming accessDeniedReason to better name could be good as it's used to
 	// disconnect client when CSM failed.
@@ -423,7 +468,7 @@ public:
 
 	void drawLoadScreen(const std::wstring &text, float dtime, int percent);
 	void afterContentReceived();
-	void showUpdateProgressTexture(void *args, u32 progress, u32 max_progress);
+	void showUpdateProgressTexture(void *args, float progress);
 
 	float getRTT();
 	float getCurRate();
@@ -452,7 +497,7 @@ public:
 	bool checkLocalPrivilege(const std::string &priv)
 	{ return checkPrivilege(priv); }
 	virtual scene::IAnimatedMesh* getMesh(const std::string &filename, bool cache = false);
-	const std::string* getModFile(std::string filename);
+	ModVFS *getModVFS() { return m_mod_vfs.get(); }
 	ModStorageDatabase *getModStorageDatabase() override { return m_mod_storage_database; }
 
 	ItemVisualsManager *getItemVisualsManager() { return m_item_visuals_manager; }
@@ -517,6 +562,20 @@ public:
 	bool inhibit_inventory_revert = false;
 
 private:
+	struct PendingMediaDownload {
+		// Tokens to ack to the server. multiple because server can send duplicate
+		// requests
+		std::vector<u32> tokens;
+		std::string name; // Filename
+		std::shared_ptr<SingleMediaDownloader> d;
+
+		PendingMediaDownload(u32 token, const std::string &name,
+				const std::shared_ptr<SingleMediaDownloader> &d) : name(name), d(d)
+		{
+			tokens.push_back(token);
+		}
+	};
+
 	void loadMods();
 
 	// Virtual methods from con::PeerHandler
@@ -535,8 +594,8 @@ private:
 
 	void sendInit(const std::string &playerName);
 	void startAuth(AuthMechanism chosen_auth_mechanism);
-	void sendDeletedBlocks(std::vector<v3s16> &blocks);
-	void sendGotBlocks(const std::vector<v3s16> &blocks);
+	void sendDeletedBlocks(std::vector<v3bpos_t> &blocks);
+	void sendGotBlocks(const std::vector<v3bpos_t> &blocks);
 	void sendRemovedSounds(const std::vector<s32> &soundList);
 
 	bool canSendChatMessage() const;
@@ -545,6 +604,7 @@ private:
 	float m_connection_reinit_timer = 0.1f;
 	float m_avg_rtt_timer = 0.0f;
 	float m_playerpos_send_timer = 0.0f;
+	int m_playerpos_repeat_count = 0;
 	IntervalLimiter m_map_timer_and_unload_interval;
 
 	IWritableTextureSource *m_tsrc;
@@ -578,6 +638,7 @@ private:
 	u16 m_proto_ver = 0;
 
 	bool m_update_wielded_item = false;
+	bool m_skip_next_wield_animation = false;
 	std::unique_ptr<Inventory> m_inventory_from_server;
 	float m_inventory_from_server_age = 0.0f;
 	s32 m_mapblock_limit_logged = 0;
@@ -585,7 +646,7 @@ private:
 	// Block mesh animation parameters
 	float m_animation_time = 0.0f;
 	std::atomic_int m_crack_level {-1};
-	v3s16 m_crack_pos;
+	v3pos_t m_crack_pos;
 	std::queue<std::wstring> m_out_chat_queue;
 	u32 m_last_chat_message_sent;
 	float m_chat_message_allowance = 5.0f;
@@ -594,7 +655,7 @@ private:
 	// The authentication methods we can use to enter sudo mode (=change password)
 	u32 m_sudo_auth_methods;
 
-	// The seed returned by the server in TOCLIENT_INIT is stored here
+	// The seed returned by the server in TOCLIENT_AUTH_ACCEPT is stored here
 	u64 m_map_seed = 0;
 
 	// Auth data
@@ -618,8 +679,8 @@ private:
 	std::vector<std::string> m_remote_media_servers;
 	// Media downloader, only exists during init
 	std::unique_ptr<ClientMediaDownloader> m_media_downloader;
-	// Pending downloads of dynamic media (key: token)
-	std::vector<std::pair<u32, std::shared_ptr<SingleMediaDownloader>>> m_pending_media_downloads;
+	// Pending downloads of dynamic media
+	std::vector<PendingMediaDownload> m_pending_media_downloads;
 
 	// An interval for generally sending object positions and stuff
 	float m_recommended_send_interval = 0.1f;
@@ -657,7 +718,10 @@ private:
 	ModStorageDatabase *m_mod_storage_database = nullptr;
 	float m_mod_storage_save_timer = 10.0f;
 	std::vector<ModSpec> m_mods;
-	StringMap m_mod_vfs;
+	std::unique_ptr<ModVFS> m_mod_vfs;
+
+	// SSCSM
+	std::unique_ptr<SSCSMController> m_sscsm_controller;
 
 	bool m_shutdown = false;
 

@@ -43,7 +43,7 @@ end
 -- Chat command handler
 --
 
-core.chatcommands = core.registered_chatcommands -- BACKWARDS COMPATIBILITY
+core.chatcommands = core.registered_chatcommands -- backwards compatibility
 
 local msg_time_threshold =
 	tonumber(core.settings:get("chatcommand_msg_time_threshold")) or 0.1
@@ -531,7 +531,7 @@ end
 
 -- Teleports player <name> to <p> if possible
 local function teleport_to_pos(name, p)
-	local lm = 31007 -- equals MAX_MAP_GENERATION_LIMIT in C++
+	local lm = tonumber(core.settings:get("mapgen_limit")) -- equals MAX_MAP_GENERATION_LIMIT in C++
 	if p.x < -lm or p.x > lm or p.y < -lm or p.y > lm
 			or p.z < -lm or p.z > lm then
 		return false, S("Cannot teleport out of map bounds!")
@@ -903,6 +903,7 @@ core.register_chatcommand("spawnentity", {
 core.register_chatcommand("pulverize", {
 	params = "",
 	description = S("Destroy item in hand"),
+	privs = {give=true},
 	func = function(name, param)
 		local player = core.get_player_by_name(name)
 		if not player then
@@ -1316,6 +1317,7 @@ core.register_chatcommand("last-login", {
 core.register_chatcommand("clearinv", {
 	params = S("[<name>]"),
 	description = S("Clear the inventory of yourself or another player"),
+	privs = {give=true},
 	func = function(name, param)
 		local player
 		if param and param ~= "" and param ~= name then
@@ -1360,7 +1362,7 @@ local function handle_kill_command(killer, victim)
 		core.log("action", string.format("%s killed %s", killer, victim))
 	end
 	-- Kill victim
-	victimref:set_hp(0)
+	victimref:set_hp(0, {type="set_hp", custom_type="__builtin:kill_command"})
 	return true, S("@1 has been killed.", victim)
 end
 

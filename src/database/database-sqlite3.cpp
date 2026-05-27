@@ -268,7 +268,7 @@ void MapDatabaseSQLite3::initStatements()
 	}
 }
 
-inline int MapDatabaseSQLite3::bindPos(sqlite3_stmt *stmt, v3s16 pos, int index)
+inline int MapDatabaseSQLite3::bindPos(sqlite3_stmt *stmt, v3bpos_t pos, int index)
 {
 	if (m_new_format) {
 		int_to_sqlite(stmt, index, pos.X);
@@ -281,7 +281,7 @@ inline int MapDatabaseSQLite3::bindPos(sqlite3_stmt *stmt, v3s16 pos, int index)
 	}
 }
 
-bool MapDatabaseSQLite3::deleteBlock(const v3s16 &pos)
+bool MapDatabaseSQLite3::deleteBlock(const v3bpos_t &pos)
 {
 	verifyDatabase();
 
@@ -297,7 +297,7 @@ bool MapDatabaseSQLite3::deleteBlock(const v3s16 &pos)
 	return good;
 }
 
-bool MapDatabaseSQLite3::saveBlock(const v3s16 &pos, std::string_view data)
+bool MapDatabaseSQLite3::saveBlock(const v3bpos_t &pos, std::string_view data)
 {
 	std::lock_guard<std::mutex> lock(mutex);
 
@@ -312,7 +312,7 @@ bool MapDatabaseSQLite3::saveBlock(const v3s16 &pos, std::string_view data)
 	return true;
 }
 
-void MapDatabaseSQLite3::loadBlock(const v3s16 &pos, std::string *block)
+void MapDatabaseSQLite3::loadBlock(const v3bpos_t &pos, std::string *block)
 {
 	std::lock_guard<std::mutex> lock(mutex);
 
@@ -333,11 +333,11 @@ void MapDatabaseSQLite3::loadBlock(const v3s16 &pos, std::string *block)
 	sqlite3_reset(m_stmt_read);
 }
 
-void MapDatabaseSQLite3::listAllLoadableBlocks(std::vector<v3s16> &dst)
+void MapDatabaseSQLite3::listAllLoadableBlocks(std::vector<v3bpos_t> &dst)
 {
 	verifyDatabase();
 
-	v3s16 p;
+	v3bpos_t p;
 	while (sqlite3_step(m_stmt_list) == SQLITE_ROW) {
 		if (m_new_format) {
 			p.X = sqlite_to_int(m_stmt_list, 0);
@@ -486,7 +486,7 @@ void PlayerDatabaseSQLite3::savePlayer(RemotePlayer *player)
 	PlayerSAO* sao = player->getPlayerSAO();
 	sanity_check(sao);
 
-	const v3f &pos = sao->getBasePosition();
+	const v3opos_t &pos = sao->getBasePosition();
 	// Begin save in brace is mandatory
 	if (!playerDataExists(player->getName())) {
 		beginSave();
@@ -582,7 +582,7 @@ bool PlayerDatabaseSQLite3::loadPlayer(RemotePlayer *player, PlayerSAO *sao)
 	}
 	sao->setLookPitch(sqlite_to_float(m_stmt_player_load, 0));
 	sao->setPlayerYaw(sqlite_to_float(m_stmt_player_load, 1));
-	sao->setBasePosition(sqlite_to_v3f(m_stmt_player_load, 2));
+	sao->setBasePosition(v3fToOpos(sqlite_to_v3f(m_stmt_player_load, 2)));
 	sao->setHPRaw((u16) MYMIN(sqlite_to_int(m_stmt_player_load, 5), U16_MAX));
 	sao->setBreath((u16) MYMIN(sqlite_to_int(m_stmt_player_load, 6), U16_MAX), false);
 	sqlite3_reset(m_stmt_player_load);

@@ -3,64 +3,71 @@
 // Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
 #include "server.h"
-#include "irr_v2d.h"
-#include "network/connection.h"
-#include "network/networkpacket.h"
-#include "network/networkprotocol.h"
-#include "network/serveropcodes.h"
-#include "server/ban.h"
-#include "environment.h"
-#include "servermap.h"
-#include "threading/mutex_auto_lock.h"
-#include "constants.h"
-#include "voxel.h"
+
+#include "chat_interface.h"
+#include "chatmessage.h"
 #include "config.h"
-#include "version.h"
-#include "filesys.h"
-#include "mapblock.h"
-#include "server/serveractiveobject.h"
-#include "serialization.h" // SER_FMT_VER_INVALID
-#include "settings.h"
-#include "profiler.h"
-#include "log.h"
-#include "scripting_server.h"
-#include "nodedef.h"
-#include "itemdef.h"
-#include "craftdef.h"
-#include "emerge.h"
-#include "mapgen/mapgen.h"
-#include "mapgen/mg_biome.h"
-#include "content_mapnode.h"
+#include "constants.h"
 #include "content_nodemeta.h"
-#include "content/mods.h"
-#include "modchannels.h"
-#include "server/serverlist.h"
-#include "util/string.h"
+#include "craftdef.h"
+#include "environment.h"
+#include "filesys.h"
+#include "gameparams.h"
+#include "gettext.h"
+#include "irr_v2d.h"
+#include "itemdef.h"
+#include "log.h"
+#include "mapblock.h"
+#include "nodedef.h"
+#include "particles.h"
+#include "profiler.h"
+#include "remoteplayer.h"
+#include "server/ban.h"
+#include "serverenvironment.h"
+#include "servermap.h"
+#include "server/player_sao.h"
 #include "server/rollback.h"
-#include "util/serialize.h"
-#include "util/thread.h"
-#include "defaultsettings.h"
-#include "server/mods.h"
+#include "server/serveractiveobject.h"
+#include "server/serverinventorymgr.h"
+#include "server/serverlist.h"
+#include "settings.h"
+#include "translation.h"
 #include "util/base64.h"
 #include "util/hashing.h"
 #include "util/hex.h"
+#include "util/serialize.h"
+#include "util/string.h"
+#include "util/thread.h"
+#include "util/tracy_wrapper.h"
+#include "version.h"
+
+// Mapgen
+#include "emerge.h"
+#include "mapgen/mapgen.h"
+#include "mapgen/mg_biome.h"
+
+// Modding
+#include "modchannels.h"
+#include "script/common/c_types.h" // LuaError
+#include "scripting_server.h"
+#include "server/mods.h" // ServerModManager
+
+// Network
+#include "network/connection.h"
+#include "network/networkexceptions.h"
+#include "network/networkpacket.h"
+#include "network/networkprotocol.h"
+#include "network/serveropcodes.h"
+#include "serialization.h" // SER_FMT_VER_INVALID
+
+// Database
 #include "database/database.h"
-#include "chatmessage.h"
-#include "chat_interface.h"
-#include "remoteplayer.h"
-#include "server/player_sao.h"
-#include "server/serverinventorymgr.h"
-#include "translation.h"
 #include "database/database-sqlite3.h"
 #if USE_POSTGRESQL
 #include "database/database-postgresql.h"
 #endif
 #include "database/database-files.h"
 #include "database/database-dummy.h"
-#include "gameparams.h"
-#include "particles.h"
-#include "gettext.h"
-#include "util/tracy_wrapper.h"
 
 #include <iostream>
 #include <queue>
@@ -209,7 +216,7 @@ v3f ServerPlayingSound::getPos(ServerEnvironment *env, bool *pos_exists) const
 				return v3f(0,0,0);
 			if (pos_exists)
 				*pos_exists = true;
-			return sao->getBasePosition();
+			return oposToV3f(sao->getBasePosition());
 		}
 	}
 
@@ -269,6 +276,24 @@ std::wstring Server::ShutdownState::getShutdownTimerMessage() const
 	ws << L"*** Server shutting down in "
 		<< duration_to_string(myround(m_timer)).c_str() << ".";
 	return ws.str();
+}
+
+static void enrich_exception(BaseException &e, const NetworkPacket &pkt, bool include_pos)
+{
+	const u16 cmd = pkt.getCommand();
+	std::ostringstream oss;
+	if (cmd < TOSERVER_NUM_MSG_TYPES)
+		oss << " name=" << toServerCommandTable[cmd].name;
+
+	if (include_pos) {
+		// (not necessary for PacketError: already in e.what())
+
+		oss << " cmd=" << cmd
+			<< " offset=" << pkt.getOffset()
+			<< " size=" << pkt.getSize();
+	}
+
+	e.append(" @").append(oss.str());
 }
 
 /*
@@ -374,13 +399,15 @@ Server::~Server()
 
 	actionstream << "Server: Shutting down" << std::endl;
 
+	auto old_async_fatal_error = m_async_fatal_error.get();
+
 	// Stop server step from happening
 	if (m_thread) {
 
 		if (m_env) m_env->getServerMap().save(MOD_STATE_WRITE_AT_UNLOAD); // save before merge thread exit
 
 		stop();
-		delete m_thread;
+		// (Do not delete yet. Accessed by setAsyncFatalError().)
 	}
 
 	// Stop all emerge activity and finish off mapgen callbacks. Do this before
@@ -444,12 +471,18 @@ Server::~Server()
 	// Clean up files
 	for (auto &it : m_media) {
 		if (it.second.delete_at_shutdown) {
-			fs::DeleteSingleFileOrEmptyDirectory(it.second.path);
+			fs::DeleteSingleFileOrEmptyDirectory(it.second.path, true);
 		}
 	}
 
 	// emerge may depend on definition managers, so destroy first
 	m_emerge.reset();
+
+	// Catch one async error that just happened while this dtor is running
+	auto async_fatal_error = m_async_fatal_error.get();
+	if (old_async_fatal_error != async_fatal_error) {
+		errorstream << "Server: new AsyncErr during shutdown: " << async_fatal_error;
+	}
 
 	// Delete the rest in the reverse order of creation
 	delete m_game_settings;
@@ -459,6 +492,7 @@ Server::~Server()
 	delete m_itemdef;
 	delete m_nodedef;
 	delete m_craftdef;
+	delete m_thread;
 
 	while (!m_unsent_map_edit_queue.empty()) {
 		delete m_unsent_map_edit_queue.pop_front();
@@ -695,7 +729,7 @@ void Server::start()
 #if USE_POS32
 				<< " map" << USE_POS32 << " \t"
 #endif
-#if USE_OPOS32
+#if USE_OPOS64
 				<< " obj" << USE_OPOS64 << " \t"
 #endif
 #if ENABLE_THREADS
@@ -986,7 +1020,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 
 		ScopeProfiler sp(g_profiler, "Server: liquid transform");
 
-		std::map<v3s16, MapBlock*> modified_blocks;
+		std::map<v3bpos_t, MapBlock*> modified_blocks;
 		m_env->getServerMap().transformLiquids(modified_blocks, m_env);
 
 		if (!modified_blocks.empty()) {
@@ -1264,7 +1298,7 @@ void Server::AsyncRunStep(float dtime, bool initial_step)
 		Profiler prof;
 
 		size_t block_count = 0;
-		std::unordered_set<v3s16> node_meta_updates;
+		std::unordered_set<v3pos_t> node_meta_updates;
 
 		const auto end_ms = porting::getTimeMs() + max_cycle_ms;
 #if !ENABLE_THREADS
@@ -1450,8 +1484,13 @@ u16 Server::Receive(float min_time)
 		} catch (const con::InvalidIncomingDataException &e) {
 			infostream << "Server::Receive(): InvalidIncomingDataException: what()="
 					<< e.what() << std::endl;
-		} catch (const SerializationError &e) {
+		} catch (SerializationError &e) {
+			enrich_exception(e, pkt, true);
 			infostream << "Server::Receive(): SerializationError: what()="
+					<< e.what() << std::endl;
+		} catch (PacketError &e) {
+			enrich_exception(e, pkt, false);
+			actionstream << "Server::Receive(): PacketError: what()="
 					<< e.what() << std::endl;
 		} catch (const ClientStateError &e) {
 			errorstream << "ClientStateError: peer=" << peer_id << " what()="
@@ -1664,8 +1703,9 @@ void Server::ProcessData(NetworkPacket *pkt)
 			return;
 		}
 
-		u8 peer_ser_ver = getClient(peer_id, CS_InitDone)->serialization_version;
-
+		RemoteClient * client = getClient(peer_id, CS_InitDone);
+		u8 peer_ser_ver = client->serialization_version;
+		pkt->setProtoVer(client->net_proto_version);
 		if(peer_ser_ver == SER_FMT_VER_INVALID) {
 			errorstream << "Server: Peer serialization format invalid. "
 					"Skipping incoming command "
@@ -1691,10 +1731,6 @@ void Server::ProcessData(NetworkPacket *pkt)
 		handleCommand(pkt);
 	} catch (SendFailedException &e) {
 		errorstream << "Server::ProcessData(): SendFailedException: "
-				<< "what=" << e.what()
-				<< std::endl;
-	} catch (PacketError &e) {
-		actionstream << "Server::ProcessData(): PacketError: "
 				<< "what=" << e.what()
 				<< std::endl;
 	}
@@ -1925,7 +1961,7 @@ void Server::SendNodeDef(session_t peer_id,
 	Non-static send methods
 */
 
-void Server::SendInventory(RemotePlayer *player, bool incremental)
+void Server::SendInventory(RemotePlayer *player, bool incremental, bool skip_wield_anim)
 {
 	// Do not send new format to old clients
 	incremental &= player->protocol_version >= 38;
@@ -1942,8 +1978,15 @@ void Server::SendInventory(RemotePlayer *player, bool incremental)
 	player->inventory.serialize(os, incremental);
 	player->inventory.setModified(false);
 	player->setModified(true);
+	std::string content = os.str();
 
-	pkt.putRawString(os.str());
+	if (player->protocol_version >= 52) {
+		pkt.putLongString(content);
+		pkt << skip_wield_anim;
+	} else {
+		pkt.putRawString(content);
+	}
+
 	Send(&pkt);
 }
 
@@ -1994,7 +2037,7 @@ void Server::SendSpawnParticles(RemotePlayer *player,
 	const float radius_sq = radius * radius;
 
 	PlayerSAO *sao = player->getPlayerSAO();
-	if (!sao)
+	if (!sao || sao->isGone())
 		return;
 
 	std::ostringstream particle_batch_data(std::ios_base::binary);
@@ -2009,7 +2052,7 @@ void Server::SendSpawnParticles(RemotePlayer *player,
 		if (player->protocol_version < 50) {
 			// Client only supports TOCLIENT_SPAWN_PARTICLE,
 			// so turn the written particle into a packet immediately
-			NetworkPacket pkt(TOCLIENT_SPAWN_PARTICLE, particle_data_str.size(), player->getPeerId());
+			NetworkPacket pkt(TOCLIENT_SPAWN_PARTICLE, particle_data_str.size(), player->getPeerId(), player->protocol_version);
 			pkt.putRawString(particle_data_str);
 			Send(&pkt);
 		} else {
@@ -2076,7 +2119,7 @@ void Server::SendAddParticleSpawner(const std::string &to_player,
 			PlayerSAO *sao = player->getPlayerSAO();
 			if (!sao)
 				return;
-			if (sao->getBasePosition().getDistanceFromSQ(pos) > radius_sq)
+			if (sao->getBasePosition().getDistanceFromSQ(v3fToOpos(pos)) > radius_sq)
 				return;
 		}
 
@@ -2108,7 +2151,7 @@ void Server::SendAddParticleSpawner(session_t peer_id, u16 protocol_version,
 	assert(peer_id != PEER_ID_INEXISTENT);
 	assert(protocol_version != 0);
 
-	NetworkPacket pkt(TOCLIENT_ADD_PARTICLESPAWNER, 100, peer_id);
+	NetworkPacket pkt(TOCLIENT_ADD_PARTICLESPAWNER, 100, peer_id, protocol_version);
 
 	pkt << p.amount << p.time;
 
@@ -2207,12 +2250,19 @@ void Server::SendDeleteParticleSpawner(session_t peer_id, u32 id)
 
 void Server::SendHUDAdd(session_t peer_id, u32 id, HudElement *form)
 {
-	NetworkPacket pkt(TOCLIENT_HUDADD, 0 , peer_id);
+	auto protocol_version = m_clients.getProtocolVersion(peer_id);
+	NetworkPacket pkt(TOCLIENT_HUDADD, 0 , peer_id, protocol_version);
 
 	pkt << id << (u8) form->type << form->pos << form->name << form->scale
 			<< form->text << form->number << form->item << form->dir
-			<< form->align << form->offset << form->world_pos << form->size
-			<< form->z_index << form->text2 << form->style;
+			<< form->align << form->offset << form->world_pos;
+
+	if (m_clients.getProtocolVersion(peer_id) >= 52)
+		pkt << form->size;
+	else
+		pkt << v2s32::from(form->size);
+
+	pkt << form->z_index << form->text2 << form->style;
 
 	Send(&pkt);
 }
@@ -2244,9 +2294,14 @@ void Server::SendHUDChange(session_t peer_id, u32 id, HudElementStat stat, void 
 		case HUD_STAT_WORLD_POS:
 			pkt << *(v3f *) value;
 			break;
-		case HUD_STAT_SIZE:
-			pkt << *(v2s32 *) value;
+		case HUD_STAT_SIZE: {
+			v2f *v = (v2f *) value;
+			if (m_clients.getProtocolVersion(peer_id) >= 52)
+				pkt << *v;
+			else
+				pkt << v2s32::from(*v);
 			break;
+		}
 		default: // all other types
 			pkt << *(u32 *) value;
 			break;
@@ -2273,7 +2328,9 @@ void Server::SendHUDSetParam(session_t peer_id, u16 param, std::string_view valu
 
 void Server::SendSetSky(session_t peer_id, const SkyboxParams &params)
 {
-	NetworkPacket pkt(TOCLIENT_SET_SKY, 0, peer_id);
+
+	auto protocol_version = m_clients.getProtocolVersion(peer_id);
+	NetworkPacket pkt(TOCLIENT_SET_SKY, 0, peer_id, protocol_version);
 
 	// Handle prior clients here
 	if (m_clients.getProtocolVersion(peer_id) < 39) {
@@ -2298,8 +2355,12 @@ void Server::SendSetSky(session_t peer_id, const SkyboxParams &params)
 				<< c.night_sky << c.night_horizon << c.indoors;
 		}
 
-		pkt << params.body_orbit_tilt << params.fog_distance << params.fog_start
+		pkt << params.body_orbit_tilt;
+		pkt.writePos(params.fog_distance);
+		pkt << params.fog_start
 			<< params.fog_color;
+
+		pkt << params.auto_dim_skybox;
 	}
 
 	Send(&pkt);
@@ -2329,7 +2390,7 @@ void Server::SendSetStars(session_t peer_id, const StarParams &params)
 
 	pkt << params.visible << params.count
 		<< params.starcolor << params.scale
-		<< params.day_opacity;
+		<< params.day_opacity << params.star_seed;
 
 	Send(&pkt);
 }
@@ -2372,6 +2433,8 @@ void Server::SendSetLighting(session_t peer_id, const Lighting &lighting)
 	pkt << lighting.bloom_intensity << lighting.bloom_strength_factor <<
 			lighting.bloom_radius;
 
+	pkt << lighting.shadow_direction;
+
 	Send(&pkt);
 }
 
@@ -2410,7 +2473,7 @@ void Server::SendMovePlayer(PlayerSAO *sao)
 	// Send attachment updates instantly to the client prior updating position
 	sao->sendOutdatedData();
 
-	NetworkPacket pkt(TOCLIENT_MOVE_PLAYER, sizeof(v3f) + sizeof(f32) * 2, sao->getPeerID());
+	NetworkPacket pkt(TOCLIENT_MOVE_PLAYER, sizeof_v3opos(sao->getPlayer()->protocol_version) + sizeof(f32) * 2, sao->getPeerID(), sao->getPlayer()->protocol_version);
 	pkt << sao->getBasePosition() << sao->getLookPitch() << sao->getRotation().Y;
 
 	{
@@ -2424,7 +2487,7 @@ void Server::SendMovePlayer(PlayerSAO *sao)
 	Send(&pkt);
 }
 
-void Server::SendMovePlayerRel(session_t peer_id, const v3f &added_pos)
+void Server::SendMovePlayerRel(session_t peer_id, const v3opos_t &added_pos)
 {
 	NetworkPacket pkt(TOCLIENT_MOVE_PLAYER_REL, 0, peer_id);
 	pkt << added_pos;
@@ -2689,7 +2752,7 @@ s32 Server::playSound(ServerPlayingSound &params, bool ephemeral)
 				continue;
 
 			if (pos_exists) {
-				if(sao->getBasePosition().getDistanceFrom(pos) >
+				if(sao->getBasePosition().getDistanceFrom(v3fToOpos(pos)) >
 						params.max_hear_distance)
 					continue;
 			}
@@ -2764,33 +2827,23 @@ void Server::fadeSound(s32 handle, float step, float gain)
 		m_playing_sounds.erase(it);
 }
 
-void Server::sendRemoveNode(v3s16 p, std::unordered_set<u16> *far_players,
+void Server::sendRemoveNode(v3pos_t p, std::unordered_set<u16> *far_players,
 		float far_d_nodes)
 {
-	v3f p_f = intToFloat(p, BS);
-	v3s16 block_pos = getNodeBlockPos(p);
-
-	NetworkPacket pkt(TOCLIENT_REMOVENODE, 6);
-	pkt << p;
-
-	sendNodeChangePkt(pkt, block_pos, p_f, far_d_nodes, far_players);
+	sendNodeChangePkt(TOCLIENT_REMOVENODE, {}, p, far_d_nodes, far_players);
 }
 
-void Server::sendAddNode(v3s16 p, MapNode n, std::unordered_set<u16> *far_players,
+void Server::sendAddNode(v3pos_t p, MapNode n, std::unordered_set<u16> *far_players,
 		float far_d_nodes, bool remove_metadata)
 {
-	v3f p_f = intToFloat(p, BS);
-	v3s16 block_pos = getNodeBlockPos(p);
-
-	NetworkPacket pkt(TOCLIENT_ADDNODE, 6 + 2 + 1 + 1 + 1);
-	pkt << p << n.param0 << n.param1 << n.param2
-			<< (u8) (remove_metadata ? 0 : 1);
-	sendNodeChangePkt(pkt, block_pos, p_f, far_d_nodes, far_players);
+	sendNodeChangePkt(TOCLIENT_ADDNODE, n, p, far_d_nodes, far_players, remove_metadata);
 }
 
-void Server::sendNodeChangePkt(NetworkPacket &pkt, v3s16 block_pos,
-		v3f p, float far_d_nodes, std::unordered_set<u16> *far_players)
+void Server::sendNodeChangePkt(u16 command, const MapNode& n, v3pos_t p_int, float far_d_nodes, std::unordered_set<u16> *far_players, bool remove_metadata)
 {
+	v3opos_t p = intToFloat(p_int, (opos_t)BS);
+	v3bpos_t block_pos = getNodeBlockPos(p_int);
+
 	float maxd = far_d_nodes * BS;
 	std::vector<session_t> clients = m_clients.getClientIDs();
 	ClientInterface::AutoLock clientlock(m_clients);
@@ -2813,11 +2866,22 @@ void Server::sendNodeChangePkt(NetworkPacket &pkt, v3s16 block_pos,
 			continue;
 		}
 
-		Send(client_id, &pkt);
+		if (command == TOCLIENT_ADDNODE) {
+			NetworkPacket pkt(TOCLIENT_ADDNODE,
+					sizeof_v3pos(player->protocol_version) + 2 + 1 + 1 + 1, 0,
+					player->protocol_version);
+			pkt << p << n.param0 << n.param1 << n.param2 << (u8)(remove_metadata ? 0 : 1);
+			m_clients.send(client_id, &pkt);
+		} else if (command == TOCLIENT_REMOVENODE) {
+			NetworkPacket pkt(TOCLIENT_REMOVENODE, sizeof_v3pos(player->protocol_version),
+					0, player->protocol_version);
+			pkt << p;
+			m_clients.send(client_id, &pkt);
+		}
 	}
 }
 
-void Server::sendMetadataChanged(const std::unordered_set<v3s16> &positions, float far_d_nodes)
+void Server::sendMetadataChanged(const std::unordered_set<v3pos_t> &positions, float far_d_nodes)
 {
 	NodeMetadataList meta_updates_list(false);
 	std::ostringstream os(std::ios::binary);
@@ -2831,17 +2895,17 @@ void Server::sendMetadataChanged(const std::unordered_set<v3s16> &positions, flo
 			continue;
 
 		ServerActiveObject *player = getPlayerSAO(i);
-		v3s16 player_pos;
+		v3pos_t player_pos;
 		if (player)
 			player_pos = floatToInt(player->getBasePosition(), BS);
 
-		for (const v3s16 pos : positions) {
+		for (const v3pos_t pos : positions) {
 			NodeMetadata *meta = m_env->getMap().getNodeMetadata(pos);
 
 			if (!meta)
 				continue;
 
-			v3s16 block_pos = getNodeBlockPos(pos);
+			v3bpos_t block_pos = getNodeBlockPos(pos);
 			if (!client->isBlockSent(block_pos) ||
 					player_pos.getDistanceFrom(pos) > far_d_nodes) {
 				client->SetBlockNotSent(block_pos);
@@ -2892,7 +2956,7 @@ void Server::SendBlockNoLock(session_t peer_id, MapBlock *block, u8 ver,
 		sptr = &s;
 	}
 
-	NetworkPacket pkt(TOCLIENT_BLOCKDATA, 2 + 2 + 2 + sptr->size(), peer_id);
+	NetworkPacket pkt(TOCLIENT_BLOCKDATA, sizeof_v3pos(m_env->getPlayer(peer_id)->protocol_version) + sptr->size(), peer_id, m_env->getPlayer(peer_id)->protocol_version);
 	pkt << block->getPos();
 	pkt.putRawString(*sptr);
 	pkt << block->far_step;
@@ -2996,7 +3060,7 @@ int Server::SendBlocks(float dtime)
 	return total;
 }
 
-bool Server::SendBlock(session_t peer_id, const v3s16 &blockpos)
+bool Server::SendBlock(session_t peer_id, const v3bpos_t &blockpos)
 {
 	MapBlock *block = m_env->getMap().getBlockNoCreateNoEx(blockpos);
 	if (!block)
@@ -3032,7 +3096,7 @@ size_t Server::addMediaFile(const std::string &filename,
 		".tr", ".po", ".mo",
 		// Fonts
 		".ttf", ".woff",
-		NULL
+		nullptr
 	};
 	if (removeStringEnd(filename, supported_ext).empty()) {
 		infostream << "Server: ignoring unsupported file extension: \""
@@ -3065,9 +3129,15 @@ size_t Server::addMediaFile(const std::string &filename,
 		*digest_to = sha1;
 
 	// Put in list
-	m_media[filename] = MediaInfo(filepath, sha1);
+	m_media.insert_or_assign(filename, MediaInfo(filepath, sha1));
 	verbosestream << "Server: " << sha1_hex << " is " << filename
 			<< " (" << (filedata.size() >> 10) << "KiB)" << std::endl;
+	
+	// Invalidate cached translations if we just added a translation file
+	if (Translations::isTranslationFile(filename)) {
+		// (could be optimized to clear only the relevant one, but not critical here)
+		server_translations.clear();
+	}
 
 	size_t size = filedata.length();
 
@@ -3084,21 +3154,23 @@ void Server::fillMediaCache()
 	std::vector<std::string> paths;
 
 	// ordered in descending priority
-	paths.push_back(getBuiltinLuaPath() + DIR_DELIM + "locale");
-	fs::GetRecursiveDirs(paths, porting::path_user + DIR_DELIM + "textures" + DIR_DELIM + "server");
-	fs::GetRecursiveDirs(paths, m_gamespec.path + DIR_DELIM + "textures");
+	paths.push_back(getBuiltinLuaPath() + DIR_DELIM "locale");
+	fs::GetRecursiveDirs(paths,
+		porting::path_user + DIR_DELIM "textures" DIR_DELIM "server");
+	fs::GetRecursiveDirs(paths,
+		m_gamespec.path + DIR_DELIM "textures");
 	m_modmgr->getModsMediaPaths(paths);
 
 	unsigned int size_total = 0;
 	// Collect media file information from paths into cache
 	for (const std::string &mediapath : paths) {
 		std::vector<fs::DirListNode> dirlist = fs::GetDirListing(mediapath);
-		for (const fs::DirListNode &dln : dirlist) {
+		for (const auto &dln : dirlist) {
 			if (dln.dir) // Ignore dirs (already in paths)
 				continue;
 
 			const std::string &filename = dln.name;
-			if (m_media.find(filename) != m_media.end()) // Do not override
+			if (m_media.count(filename) > 0) // Do not override
 				continue;
 
 			std::string filepath = mediapath;
@@ -3115,20 +3187,13 @@ void Server::fillMediaCache()
 
 void Server::sendMediaAnnouncement(session_t peer_id, const std::string &lang_code)
 {
-	std::string translation_formats[3] = { ".tr", ".po", ".mo" };
-	std::string lang_suffixes[3];
-	for (size_t i = 0; i < 3; i++) {
-		lang_suffixes[i].append(".").append(lang_code).append(translation_formats[i]);
-	}
-
 	auto include = [&] (const std::string &name, const MediaInfo &info) -> bool {
 		if (info.no_announce)
 			return false;
-		for (size_t j = 0; j < 3; j++) {
-			if (str_ends_with(name, translation_formats[j]) && !str_ends_with(name, lang_suffixes[j])) {
-				return false;
-			}
-		}
+		// Only send translations matching the client's language
+		auto this_lang_code = Translations::getFileLanguage(name);
+		if (!this_lang_code.empty() && this_lang_code != lang_code)
+			return false;
 		return true;
 	};
 
@@ -3337,11 +3402,12 @@ void Server::stepPendingDynMediaCallbacks(float dtime)
 
 		const auto &name = state.filename;
 		if (!name.empty()) {
-			assert(m_media.count(name));
-			sanity_check(m_media[name].ephemeral);
+			auto it = m_media.find(name);
+			assert(it != m_media.end());
+			sanity_check(it->second.ephemeral);
 
-			fs::DeleteSingleFileOrEmptyDirectory(m_media[name].path);
-			m_media.erase(name);
+			fs::DeleteSingleFileOrEmptyDirectory(it->second.path, true);
+			m_media.erase(it);
 		}
 		getScriptIface()->freeDynamicMediaCallback(token);
 		return true;
@@ -4446,6 +4512,11 @@ void Server::setAsyncFatalError(const std::string &error)
 		m_thread->stop();
 }
 
+void Server::setAsyncFatalError(const LuaError &e)
+{
+	setAsyncFatalError(std::string("Lua: ") + e.what());
+}
+
 // Not thread-safe.
 void Server::addShutdownError(const ModError &e)
 {
@@ -4463,16 +4534,21 @@ void Server::addShutdownError(const ModError &e)
 	}
 }
 
+Map &Server::getMap()
+{
+	return m_env->getMap();
+}
+
 #if 1
-v3f Server::findSpawnPos(const std::string &player_name)
+v3opos_t Server::findSpawnPos(const std::string &player_name)
 {
 	ServerMap &map = m_env->getServerMap();
 
-	v3f nodeposf;
+	v3opos_t nodeposf;
 
 	pos_t find = 0;
 	g_settings->getPosNoEx("static_spawnpoint_find", find);
-	std::optional<v3f> staticSpawnPoint;
+	std::optional<v3opos_t> staticSpawnPoint;
 	if (g_settings->getV3FNoEx("static_spawnpoint_" + player_name, staticSpawnPoint) && staticSpawnPoint.has_value()) {
 		nodeposf = *staticSpawnPoint;
 		if (!find) {
@@ -4497,7 +4573,7 @@ v3f Server::findSpawnPos(const std::string &player_name)
 	for (s32 i = 0; i < 4000 && !is_good; i++) {
 		s32 range = MYMIN(1 + i, range_max);
 		// We're going to try to throw the player to this position
-		v2s16 nodepos2d = v2s16(
+		v2pos_t nodepos2d = v2pos_t(
 		    nodeposf.X
 			-range + myrand_range(0, range*2),
 		    nodeposf.Z
@@ -4559,7 +4635,7 @@ v3f Server::findSpawnPos(const std::string &player_name)
 		return nodeposf;
 
 	// No suitable spawn point found, return fallback 0,0,0
-	return v3f(0.0f, 0.0f, 0.0f);
+	return v3opos_t(0.0f, 0.0f, 0.0f);
 }
 #endif
 
@@ -4605,7 +4681,7 @@ v3f Server::findSpawnPos()
 
 			/*MT :
 					// Get spawn level at point
-					s16 spawn_level = m_emerge->getSpawnLevelAtPoint(nodepos2d);
+					pos_t spawn_level = m_emerge->getSpawnLevelAtPoint(nodepos2d);
 					// Continue if MAX_MAP_GENERATION_LIMIT was returned by
 					// the mapgen to signify an unsuitable spawn position
 					if (spawn_level == MAX_MAP_GENERATION_LIMIT)

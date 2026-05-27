@@ -24,11 +24,10 @@
 #include "remoteplayer.h"
 #include "scripting_server.h"
 #include "server.h"
-#include "util/serialize.h"
+#include "servermap.h"
 #include "util/numeric.h"
 #include "util/basic_macros.h"
 #include "util/pointedthing.h"
-#include "threading/mutex_auto_lock.h"
 #include "filesys.h"
 #include "gameparams.h"
 #include "database/database-dummy.h"
@@ -40,7 +39,6 @@
 #if USE_LEVELDB
 #include "database/database-leveldb.h"
 #endif
-#include "irrlicht_changes/printing.h"
 #include "server/luaentity_sao.h"
 #include "server/player_sao.h"
 
@@ -56,9 +54,9 @@ static constexpr u32 BLOCK_RESAVE_TIMESTAMP_DIFF = 60; // in units of game time
 	ActiveBlockList
 */
 
-static void fillRadiusBlock(v3s16 p0, s16 r, std::set<v3s16> &list)
+static void fillRadiusBlock(v3bpos_t p0, s16 r, std::set<v3bpos_t> &list)
 {
-	v3s16 p;
+	v3bpos_t p;
 	for(p.X=p0.X-r; p.X<=p0.X+r; p.X++)
 	for(p.Y=p0.Y-r; p.Y<=p0.Y+r; p.Y++)
 	for(p.Z=p0.Z-r; p.Z<=p0.Z+r; p.Z++) {
@@ -69,14 +67,14 @@ static void fillRadiusBlock(v3s16 p0, s16 r, std::set<v3s16> &list)
 	}
 }
 
-static void fillViewConeBlock(v3s16 p0,
+static void fillViewConeBlock(v3bpos_t p0,
 	const s16 r,
-	const v3f camera_pos,
+	const v3opos_t camera_pos,
 	const v3f camera_dir,
 	const float camera_fov,
-	std::set<v3s16> &list)
+	std::set<v3bpos_t> &list)
 {
-	v3s16 p;
+	v3bpos_t p;
 	const s16 r_nodes = r * BS * MAP_BLOCKSIZE;
 	for (p.X = p0.X - r; p.X <= p0.X+r; p.X++)
 	for (p.Y = p0.Y - r; p.Y <= p0.Y+r; p.Y++)
@@ -90,17 +88,17 @@ static void fillViewConeBlock(v3s16 p0,
 void ActiveBlockList::update(std::vector<PlayerSAO*> &active_players,
 	s16 active_block_range,
 	s16 active_object_range,
-	std::set<v3s16> &blocks_removed,
-	std::set<v3s16> &blocks_added,
-	std::set<v3s16> &extra_blocks_added)
+	std::set<v3bpos_t> &blocks_removed,
+	std::set<v3bpos_t> &blocks_added,
+	std::set<v3bpos_t> &extra_blocks_added)
 {
 	/*
 		Create the new list
 	*/
-	std::set<v3s16> newlist = m_forceloaded_list;
-	std::set<v3s16> extralist;
+	std::set<v3bpos_t> newlist = m_forceloaded_list;
+	std::set<v3bpos_t> extralist;
 	for (const PlayerSAO *playersao : active_players) {
-		v3s16 pos = getNodeBlockPos(floatToInt(playersao->getBasePosition(), BS));
+		auto pos = getNodeBlockPos(floatToInt(playersao->getBasePosition(), BS));
 		fillRadiusBlock(pos, active_block_range, newlist);
 
 		s16 player_ao_range = std::min(active_object_range, playersao->getWantedRange());
@@ -127,7 +125,7 @@ void ActiveBlockList::update(std::vector<PlayerSAO*> &active_players,
 			std::inserter(blocks_added, blocks_added.end()));
 
 	// 2. remove duplicate blocks from the extra list
-	for (v3s16 p : newlist) {
+	for (const auto &p : newlist) {
 		extralist.erase(p);
 	}
 
@@ -174,7 +172,7 @@ void ActiveBlockList::update(std::vector<PlayerSAO*> &active_players,
 void OnMapblocksChangedReceiver::onMapEditEvent(const MapEditEvent &event)
 {
 	assert(receiving);
-	for (const v3s16 &p : event.modified_blocks) {
+	for (const v3bpos_t &p : event.modified_blocks) {
 		modified_blocks.insert(p);
 	}
 }
@@ -201,7 +199,7 @@ ServerEnvironment::ServerEnvironment(std::unique_ptr<ServerMap> map,
 	m_use_weather_biome = g_settings->getBool("weather_biome");
 
 	// Init custom SAO
-	v3f nullpos;
+	v3opos_t nullpos;
 	//epixel::Creature* c = new epixel::Creature(NULL, nullpos, "", "");
 	epixel::ItemSAO* i = new epixel::ItemSAO(this, nullpos, "", "");
 	epixel::FallingSAO* f = new epixel::FallingSAO(this, nullpos, "", "");
@@ -303,8 +301,12 @@ void ServerEnvironment::init()
 
 void ServerEnvironment::deactivateBlocksAndObjects()
 {
+	// Prevent any funny business from happening in case further callbacks
+	// try to add new objects.
+	m_shutting_down = true;
+
 	// Clear active block list.
-	// This makes the next one delete all active objects.
+	// This makes the next code delete all active objects.
 	m_active_blocks.clear();
 
 	deactivateFarObjects(true);
@@ -312,6 +314,7 @@ void ServerEnvironment::deactivateBlocksAndObjects()
 
 ServerEnvironment::~ServerEnvironment()
 {
+	m_script = nullptr;
 	assert(m_active_blocks.size() == 0); // deactivateBlocksAndObjects does this
 
 	removeRemovedObjects(50000);
@@ -333,11 +336,14 @@ ServerEnvironment::~ServerEnvironment()
 	for (RemotePlayer *m_player : m_players) {
 		delete m_player;
 	}
+	m_players.clear();
 
 	}
 
 	delete m_player_database;
+	m_player_database = nullptr;
 	delete m_auth_database;
+	m_auth_database = nullptr;
 }
 
 Map & ServerEnvironment::getMap()
@@ -630,7 +636,7 @@ void ServerEnvironment::activateBlock(MapBlock *block)
 		return;
 
 	// Run node timers
-	block->step((float)dtime_s, [&](v3s16 p, MapNode n, NodeTimer t) -> bool {
+	block->step((float)dtime_s, [&](v3pos_t p, MapNode n, NodeTimer t) -> bool {
 		return m_script->node_on_timer(p, n, t.elapsed, t.timeout);
 	});
 }
@@ -738,7 +744,7 @@ bool ServerEnvironment::removeNode(v3pos_t p, s16 fast, bool important)
 	return true;
 }
 
-bool ServerEnvironment::swapNode(v3s16 p, const MapNode &n, s16 fast)
+bool ServerEnvironment::swapNode(v3pos_t p, const MapNode &n, s16 fast)
 {
 	if (fast) {
 		try {
@@ -769,12 +775,12 @@ bool ServerEnvironment::swapNode(v3s16 p, const MapNode &n, s16 fast)
 	return true;
 }
 
-u8 ServerEnvironment::findSunlight(v3s16 pos) const
+u8 ServerEnvironment::findSunlight(v3pos_t pos) const
 {
 	// Directions for neighboring nodes with specified order
-	static const v3s16 dirs[] = {
-		v3s16(-1, 0, 0), v3s16(1, 0, 0), v3s16(0, 0, -1), v3s16(0, 0, 1),
-		v3s16(0, -1, 0), v3s16(0, 1, 0)
+	static const v3pos_t dirs[] = {
+		v3pos_t(-1, 0, 0), v3pos_t(1, 0, 0), v3pos_t(0, 0, -1), v3pos_t(0, 0, 1),
+		v3pos_t(0, -1, 0), v3pos_t(0, 1, 0)
 	};
 
 	const NodeDefManager *ndef = m_server->ndef();
@@ -783,7 +789,7 @@ u8 ServerEnvironment::findSunlight(v3s16 pos) const
 	u8 found_light = 0;
 
 	struct stack_entry {
-		v3s16 pos;
+		v3pos_t pos;
 		s16 dist;
 	};
 	std::stack<stack_entry> stack;
@@ -796,11 +802,11 @@ u8 ServerEnvironment::findSunlight(v3s16 pos) const
 		struct stack_entry e = stack.top();
 		stack.pop();
 
-		v3s16 currentPos = e.pos;
+		v3pos_t currentPos = e.pos;
 		s8 dist = e.dist + 1;
 
-		for (const v3s16& off : dirs) {
-			v3s16 neighborPos = currentPos + off;
+		for (const v3pos_t& off : dirs) {
+			v3pos_t neighborPos = currentPos + off;
 			s64 neighborHash = MapDatabase::getBlockAsInteger(neighborPos);
 
 			// Do not walk neighborPos multiple times unless the distance to the start
@@ -814,7 +820,7 @@ u8 ServerEnvironment::findSunlight(v3s16 pos) const
 			MapNode node = m_map->getNode(neighborPos, &is_position_ok);
 			if (!is_position_ok) {
 				// This happens very rarely because the map at currentPos is loaded
-				m_map->emergeBlock(neighborPos, false);
+				m_map->emergeBlock(getNodeBlockPos(neighborPos), false);
 				node = m_map->getNode(neighborPos, &is_position_ok);
 				if (!is_position_ok)
 					continue; // not generated
@@ -879,7 +885,7 @@ void ServerEnvironment::clearObjects(ClearObjectsMode mode)
 	m_ao_manager.clearIf(cb_removal);
 
 	// Get list of loaded blocks
-	std::vector<v3s16> loaded_blocks;
+	std::vector<v3bpos_t> loaded_blocks;
 	infostream << "ServerEnvironment::clearObjects(): "
 		<< "Listing all loaded blocks" << std::endl;
 	m_map->listAllLoadedBlocks(loaded_blocks);
@@ -888,7 +894,7 @@ void ServerEnvironment::clearObjects(ClearObjectsMode mode)
 		<< loaded_blocks.size()<<std::endl;
 
 	// Get list of loadable blocks
-	std::vector<v3s16> loadable_blocks;
+	std::vector<v3bpos_t> loadable_blocks;
 	if (mode == CLEAR_OBJECTS_MODE_FULL) {
 		infostream << "ServerEnvironment::clearObjects(): "
 			<< "Listing all loadable blocks" << std::endl;
@@ -905,7 +911,7 @@ void ServerEnvironment::clearObjects(ClearObjectsMode mode)
 		<< " blocks" << std::endl;
 
 	// Grab a reference on each loaded block to avoid unloading it
-	for (v3s16 p : loaded_blocks) {
+	for (v3bpos_t p : loaded_blocks) {
 		MapBlock *block = m_map->getBlockNoCreateNoEx(p);
 		if (!block)
 			continue;
@@ -924,7 +930,7 @@ void ServerEnvironment::clearObjects(ClearObjectsMode mode)
 	u32 num_objs_cleared = 0;
 	for (auto i = loadable_blocks.begin();
 		i != loadable_blocks.end(); ++i) {
-		v3s16 p = *i;
+		v3bpos_t p = *i;
 		MapBlock *block = m_map->emergeBlock(p, false);
 		if (!block) {
 			errorstream << "ServerEnvironment::clearObjects(): "
@@ -955,7 +961,7 @@ void ServerEnvironment::clearObjects(ClearObjectsMode mode)
 	m_map->unloadUnreferencedBlocks();
 
 	// Drop references that were added above
-	for (v3s16 p : loaded_blocks) {
+	for (v3bpos_t p : loaded_blocks) {
 		MapBlock *block = m_map->getBlockNoCreateNoEx(p);
 		if (!block)
 			continue;
@@ -1084,9 +1090,9 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 				g_settings->getS16("active_object_send_range_blocks");
 		static thread_local const s16 active_block_range =
 				g_settings->getS16("active_block_range");
-		std::set<v3s16> blocks_removed;
-		//std::set<v3s16> blocks_added;
-		std::set<v3s16> extra_blocks_added;
+		std::set<v3bpos_t> blocks_removed;
+		//std::set<v3bpos_t> blocks_added;
+		std::set<v3bpos_t> extra_blocks_added;
 		m_active_blocks.update(players, active_block_range, active_object_range,
 			blocks_removed, m_blocks_added, extra_blocks_added);
 
@@ -1098,7 +1104,7 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 		deactivateFarObjects(false);
 
 /*
-		for (const v3s16 &p: blocks_removed) {
+		for (const v3bpos_t &p: blocks_removed) {
 			MapBlock *block = m_map->getBlockNoCreateNoEx(p);
 			if (!block)
 				continue;
@@ -1120,7 +1126,7 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 		   ++n;
 		   const auto p = *i;
 /*		
-		for (const v3s16 &p: blocks_added) {
+		for (const auto &p: blocks_added) {
 */
 			MapBlock *block = m_map->getBlockOrEmerge(p, true);
 			if (!block) {
@@ -1143,7 +1149,7 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 		}
   	    m_blocks_added.erase(m_blocks_added.begin(), i);
 
-		for (const v3s16 &p: extra_blocks_added) {
+		for (const auto &p: extra_blocks_added) {
 			// only activate if the block is already loaded
 			MapBlock *block = m_map->getBlockNoCreateNoEx(p);
 			if (!block) {
@@ -1216,7 +1222,7 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 			const auto dtime = uptime - block->m_node_timers.m_uptime_last;
 			block->m_node_timers.m_uptime_last = uptime;
 
-			block->step(dtime, [&](v3s16 p, MapNode n, NodeTimer t) -> bool {
+			block->step(dtime, [&](v3pos_t p, MapNode n, NodeTimer t) -> bool {
 				return m_script->node_on_timer(p, n, t.elapsed, t.timeout);
 			});
 
@@ -1250,8 +1256,7 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 		//int abms_run = 0;
 		int blocks_cached = 0;
 
-
-		std::vector<v3s16> output(m_active_blocks.m_abm_list.size());
+		std::vector<v3bpos_t> output(m_active_blocks.m_abm_list.size());
 
        {
 		const auto lock = m_active_blocks.m_list.lock_shared_rec();
@@ -1266,7 +1271,7 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 		// determine the time budget for ABMs
 		u32 calls = 0; // end_ms = porting::getTimeMs() + max_cycle_ms; 
 		u32 max_time_ms = m_cache_abm_interval * 1000 * m_cache_abm_time_budget;
-		for (const v3s16 &p : output) {
+		for (const auto &p : output) {
 /*
 			if (n++ < m_active_block_abm_last)
 				continue;
@@ -1431,7 +1436,7 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 	// Notify mods of modified mapblocks
 	if (m_on_mapblocks_changed_receiver.receiving &&
 			!m_on_mapblocks_changed_receiver.modified_blocks.empty()) {
-		std::unordered_set<v3s16> modified_blocks;
+		std::unordered_set<v3bpos_t> modified_blocks;
 		std::swap(modified_blocks, m_on_mapblocks_changed_receiver.modified_blocks);
 		m_script->on_mapblocks_changed(modified_blocks);
 	}
@@ -1440,7 +1445,7 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 	m_step_time_counter->increment(end_time - start_time);
 }
 
-ServerEnvironment::BlockStatus ServerEnvironment::getBlockStatus(v3s16 blockpos)
+ServerEnvironment::BlockStatus ServerEnvironment::getBlockStatus(v3bpos_t blockpos)
 {
 	if (m_active_blocks.contains(blockpos))
 		return BS_ACTIVE;
@@ -1500,6 +1505,12 @@ u16 ServerEnvironment::addActiveObject(std::shared_ptr<ServerActiveObject> objec
 {
 	if (!object)
 		return 0;
+	//assert(object);	// Pre-condition
+	if (m_shutting_down) {
+		warningstream << "ServerEnvironment: refusing to add active object "
+			"during shutdown: " << object->getDescription() << std::endl;
+		return 0;
+	}
 	m_added_objects++;
 	u16 id = addActiveObjectRaw(std::move(object), nullptr, 0);
 	return id;
@@ -1605,7 +1616,7 @@ void ServerEnvironment::getRemovedActiveObjects(PlayerSAO *playersao, s16 radius
 }
 
 void ServerEnvironment::setStaticForActiveObjectsInBlock(
-	v3s16 blockpos, bool static_exists, v3s16 static_block)
+	v3bpos_t blockpos, bool static_exists, v3bpos_t static_block)
 {
 	MapBlock *block = m_map->getBlockNoCreateNoEx(blockpos);
 	if (!block)
@@ -1641,11 +1652,11 @@ bool ServerEnvironment::getActiveObjectMessage(ActiveObjectMessage *dest)
 }
 
 void ServerEnvironment::getSelectedActiveObjects(
-	const core::line3d<f32> &shootline_on_map,
+	const core::line3d<opos_t> &shootline_on_map,
 	std::vector<PointedThing> &objects,
 	const std::optional<Pointabilities> &pointabilities)
 {
-	const v3f line_vector = shootline_on_map.getVector();
+	const auto line_vector = shootline_on_map.getVector();
 
 	auto process = [&] (ServerActiveObjectPtr obj) -> bool {
 		if (obj->isGone())
@@ -1654,10 +1665,10 @@ void ServerEnvironment::getSelectedActiveObjects(
 		if (!obj->getSelectionBox(&selection_box))
 			return false;
 
-		v3f pos = obj->getBasePosition();
-		v3f rel_pos = shootline_on_map.start - pos;
+		v3opos_t pos = obj->getBasePosition();
+		v3opos_t rel_pos = shootline_on_map.start - pos;
 
-		v3f current_intersection;
+		v3opos_t current_intersection;
 		v3f current_normal;
 		v3f current_raw_normal;
 
@@ -1699,7 +1710,7 @@ void ServerEnvironment::getSelectedActiveObjects(
 		return false;
 	};
 
-	aabb3f search_area(shootline_on_map.start, shootline_on_map.end);
+	aabb3o search_area(shootline_on_map.start, shootline_on_map.end);
 	search_area.repair();
 	search_area.MinEdge -= 5 * BS;
 	search_area.MaxEdge += 5 * BS;
@@ -1750,10 +1761,10 @@ u16 ServerEnvironment::addActiveObjectRaw(std::shared_ptr<ServerActiveObject> ob
 	// Add static data to block
 	else if (object->isStaticAllowed())
 	{
-		v3f objectpos = object->getBasePosition();
+		auto objectpos = object->getBasePosition();
 		StaticObject s_obj(object, objectpos);
 		// Add to the block where the object is located in
-		v3s16 blockpos = getNodeBlockPos(floatToInt(objectpos, BS));
+		v3bpos_t blockpos = getNodeBlockPos(floatToInt(objectpos, BS));
 		MapBlock *block = m_map->emergeBlock(blockpos);
 		if (block) {
 			block->m_static_objects.setActive(object->getId(), s_obj);
@@ -1766,7 +1777,7 @@ u16 ServerEnvironment::addActiveObjectRaw(std::shared_ptr<ServerActiveObject> ob
 			block->raiseModified(MOD_STATE_WRITE_NEEDED,
 				MOD_REASON_ADD_ACTIVE_OBJECT_RAW);
 		} else {
-			v3s16 p = floatToInt(objectpos, BS);
+			v3pos_t p = floatToInt(objectpos, BS);
 			errorstream << "ServerEnvironment::addActiveObjectRaw(): "
 				<< "could not emerge block " << p << " for storing id="
 				<< object->getId() << " statically" << std::endl;
@@ -1877,7 +1888,7 @@ static void print_hexdump(std::ostream &o, const std::string &data)
 }
 
 std::unique_ptr<ServerActiveObject> ServerEnvironment::createSAO(ActiveObjectType type,
-		v3f pos, const std::string &data)
+		v3opos_t pos, const std::string &data)
 {
 	switch (type) {
 		case ACTIVEOBJECT_TYPE_LUAENTITY:
@@ -1897,7 +1908,7 @@ std::unique_ptr<ServerActiveObject> ServerEnvironment::createSAO(ActiveObjectTyp
 */
 void ServerEnvironment::activateObjects(MapBlock *block, u32 dtime_s)
 {
-	if (block == NULL)
+	if (!block || m_shutting_down)
 		return;
 
 	if (!block->onObjectsActivation())
@@ -1990,7 +2001,7 @@ void ServerEnvironment::deactivateFarObjects(const bool _force_delete)
 		if (!force_delete && obj->isGone())
 			return false;
 
-		const v3f &objectpos = obj->getBasePosition();
+		const auto &objectpos = obj->getBasePosition();
 
 		if (!force_delete && obj->getType() == ACTIVEOBJECT_TYPE_PLAYER) {
 			//infostream<<"deactivating far object player id=" <<id<< std::endl;
@@ -1999,7 +2010,7 @@ void ServerEnvironment::deactivateFarObjects(const bool _force_delete)
 
 
 		// The block in which the object resides in
-		v3s16 blockpos_o = getNodeBlockPos(floatToInt(objectpos, BS));
+		v3bpos_t blockpos_o = getNodeBlockPos(floatToInt(objectpos, BS));
 
 		v3pos_t static_block;
 		{
@@ -2089,7 +2100,7 @@ void ServerEnvironment::deactivateFarObjects(const bool _force_delete)
 
            if (!obj->isGone()) {
 			// Add to the block where the object is located in
-			v3s16 blockpos = getNodeBlockPos(floatToInt(objectpos, BS));
+			v3bpos_t blockpos = getNodeBlockPos(floatToInt(objectpos, BS));
 			u16 store_id = pending_delete ? id : 0;
 			if (!saveStaticToBlock(blockpos, store_id, obj, s_obj, reason))
 				force_delete = true;
@@ -2143,7 +2154,7 @@ void ServerEnvironment::deleteStaticFromBlock(
 }
 
 bool ServerEnvironment::saveStaticToBlock(
-		v3s16 blockpos, u16 store_id,
+		v3bpos_t blockpos, u16 store_id,
 		ServerActiveObject *obj, const StaticObject &s_obj,
 		u32 mod_reason)
 {

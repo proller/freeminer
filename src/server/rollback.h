@@ -9,7 +9,7 @@
 #include "rollback_interface.h"
 #include <list>
 #include <vector>
-
+#include <deque>
 #include "config.h"
 #if USE_SQLITE3
 #include "sqlite3.h"
@@ -20,7 +20,7 @@ class IGameDef;
 struct ActionRow;
 struct Entity;
 
-class RollbackManager: public IRollbackManager
+class RollbackManager final : public IRollbackManager
 {
 public:
 	RollbackManager(const std::string & world_path, IGameDef * gamedef);
@@ -30,12 +30,12 @@ public:
 	std::string getActor();
 	bool isActorGuess();
 	void setActor(const std::string & actor, bool is_guess);
-	std::string getSuspect(v3s16 p, float nearness_shortcut,
+	std::string getSuspect(v3pos_t p, float nearness_shortcut,
 			float min_nearness);
 	void flush();
 
 	void addAction(const RollbackAction & action);
-	std::list<RollbackAction> getNodeActors(v3s16 pos, int range,
+	std::list<RollbackAction> getNodeActors(v3pos_t pos, int range,
 			time_t seconds, int limit);
 	std::list<RollbackAction> getRevertActions(
 			const std::string & actor_filter, time_t seconds);
@@ -58,14 +58,14 @@ private:
 			const std::list<ActionRow> & rows);
 	const std::list<ActionRow> getRowsSince(time_t firstTime,
 			const std::string & actor);
-	const std::list<ActionRow> getRowsSince_range(time_t firstTime, v3s16 p,
+	const std::list<ActionRow> getRowsSince_range(time_t firstTime, v3pos_t p,
 			int range, int limit);
-	const std::list<RollbackAction> getActionsSince_range(time_t firstTime, v3s16 p,
+	const std::list<RollbackAction> getActionsSince_range(time_t firstTime, v3pos_t p,
 			int range, int limit);
 	const std::list<RollbackAction> getActionsSince(time_t firstTime,
 			const std::string & actor = "");
-	static float getSuspectNearness(bool is_guess, v3s16 suspect_p,
-		time_t suspect_t, v3s16 action_p, time_t action_t);
+	static float getSuspectNearness(bool is_guess, v3pos_t suspect_p,
+		time_t suspect_t, v3pos_t action_p, time_t action_t);
 
 
 	IGameDef *gamedef = nullptr;
@@ -73,22 +73,23 @@ private:
 	std::string current_actor;
 	bool current_actor_is_guess = false;
 
-	std::list<RollbackAction> action_todisk_buffer;
-	std::list<RollbackAction> action_latest_buffer;
+	std::vector<RollbackAction> action_todisk_buffer;
+	std::deque<RollbackAction> action_latest_buffer;
 
 	std::string database_path;
 #if USE_SQLITE3
-	sqlite3 * db;
-	sqlite3_stmt * stmt_insert;
-	sqlite3_stmt * stmt_replace;
-	sqlite3_stmt * stmt_select;
-	sqlite3_stmt * stmt_select_range;
-	sqlite3_stmt * stmt_select_withActor;
-	sqlite3_stmt * stmt_knownActor_select;
-	sqlite3_stmt * stmt_knownActor_insert;
-	sqlite3_stmt * stmt_knownNode_select;
-	sqlite3_stmt * stmt_knownNode_insert;
+	sqlite3 *db = nullptr;
+	sqlite3_stmt *stmt_insert = nullptr;
+	sqlite3_stmt *stmt_replace = nullptr;
+	sqlite3_stmt *stmt_select = nullptr;
+	sqlite3_stmt *stmt_select_range = nullptr;
+	sqlite3_stmt *stmt_select_withActor = nullptr;
+	sqlite3_stmt *stmt_knownActor_select = nullptr;
+	sqlite3_stmt *stmt_knownActor_insert = nullptr;
+	sqlite3_stmt *stmt_knownNode_select = nullptr;
+	sqlite3_stmt *stmt_knownNode_insert = nullptr;
 #endif
+
 	std::vector<Entity> knownActors;
 	std::vector<Entity> knownNodes;
 };

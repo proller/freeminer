@@ -23,10 +23,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "guiVolumeChange.h"
-#include "debug.h"
 #include "guiButton.h"
 #include "guiScrollBar.h"
-#include "serialization.h"
 #include <string>
 #include <IGUICheckBox.h>
 #include <IGUIButton.h>
@@ -88,7 +86,7 @@ void GUIVolumeChange::regenerateGui(v2u32 screensize)
 		core::rect<s32> rect(0, 0, 300 * s, 20 * s);
 		rect = rect + v2s32(size.X / 2 - 150 * s, size.Y / 2);
 		auto e = make_irr<GUIScrollBar>(Environment, this,
-				ID_soundSlider, rect, true, false, m_tsrc);
+				ID_soundSlider, rect, true, m_tsrc);
 		e->setMax(100);
 		e->setPos(volume);
 	}

@@ -25,6 +25,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "map.h"
 #include "mapgen/mapgen_v6.h"
 #include "serverenvironment.h"
+#include "servermap.h"
 #include "util/numeric.h"
 #include "log_types.h"
 #include "emerge.h"
@@ -379,7 +380,7 @@ void MapgenIndev::generateExperimental()
 {
 }
 
-int MapgenIndev::generateGround()
+pos_t MapgenIndev::generateGround()
 {
 	//TimeTaker timer1("Generating ground level");
 	MapNode n_air(CONTENT_AIR), n_water_source(c_water_source);

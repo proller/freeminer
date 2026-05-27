@@ -8,11 +8,12 @@
 #include <atomic>
 #include <set>
 #include "constants.h"
-#include "irr_v3d.h"
+#include "inventorymanager.h" // InventoryLocation
 #include "metadata.h"
 #include "network/networkprotocol.h"
 #include "unit_sao.h"
 #include "util/numeric.h"
+#include <set>
 
 /*
 	PlayerSAO needs some internals exposed.
@@ -83,10 +84,10 @@ public:
 	std::string getClientInitializationData(u16 protocol_version) override;
 	void getStaticData(std::string *result) const override;
 	void step(float dtime, bool send_recommended) override;
-	void setBasePosition(v3f position);
-	void setPos(const v3f &pos) override;
-	void addPos(const v3f &added_pos) override;
-	void moveTo(v3f pos, bool continuous) override;
+	void setBasePosition(v3opos_t position);
+	void setPos(const v3opos_t &pos) override;
+	void addPos(const v3opos_t &added_pos) override;
+	void moveTo(v3opos_t pos, bool continuous) override;
 	void setPlayerYaw(const float yaw);
 	std::string getGUID() const override { return m_player_name; }
 	// Data should not be sent at player initialization
@@ -109,7 +110,7 @@ public:
 		Interaction interface
 	*/
 
-	u32 punch(v3f dir, const ToolCapabilities *toolcap, ServerActiveObject *puncher,
+	u32 punch(v3f dir, const ToolCapabilities &toolcap, ServerActiveObject *puncher,
 			float time_from_last_punch, u16 initial_wear = 0) override;
 	void rightClick(ServerActiveObject *clicker) override;
 	void setHP(s32 hp, const PlayerHPChangeReason &reason) override
@@ -145,23 +146,23 @@ public:
 
 	// Cheat prevention
 
-	v3f getLastGoodPosition() const { return m_last_good_position; }
+	v3opos_t getLastGoodPosition() const { return m_last_good_position; }
 	float resetTimeFromLastPunch()
 	{
 		const auto lock = lock_unique_rec();
 		float r = m_time_from_last_punch;
-		m_time_from_last_punch = 0.0;
+		m_time_from_last_punch = 0;
 		return r;
 	}
-	void noCheatDigStart(const v3s16 &p)
+	void noCheatDigStart(const v3pos_t &p)
 	{
 		const auto lock = lock_unique_rec();
 		m_nocheat_dig_pos = p;
 		m_nocheat_dig_time = 0;
 	}
-	v3s16 getNoCheatDigPos() { return m_nocheat_dig_pos; }
+	v3pos_t getNoCheatDigPos() { return m_nocheat_dig_pos; }
 	float getNoCheatDigTime() { return m_nocheat_dig_time; }
-	void noCheatDigEnd() { m_nocheat_dig_pos = v3s16(32767, 32767, 32767); }
+	void noCheatDigEnd() { m_nocheat_dig_pos = v3pos_t(32767, 32767, 32767); }
 	LagPool &getDigPool() { return m_dig_pool; }
 	void setMaxSpeedOverride(const v3f &vel);
 	// Returns true if cheated
@@ -177,13 +178,13 @@ public:
 	inline void setNewPlayer() { m_is_new_player = true; }
 	inline bool isNewPlayer()  { return m_is_new_player; }
 
-	bool getCollisionBox(aabb3f *toset) const override;
+	bool getCollisionBox(aabb3o *toset) const override;
 	bool getSelectionBox(aabb3f *toset) const override;
 	bool collideWithObjects() const override { return true; }
 
 	void finalize(RemotePlayer *player, const std::set<std::string> &privs);
 
-	v3f getEyePosition() const { return getBasePosition() + getEyeOffset(); }
+	v3opos_t getEyePosition() const { return getBasePosition() + v3fToOpos(getEyeOffset()); }
 	v3f getEyeOffset() const;
 	float getZoomFOV() const;
 
@@ -203,13 +204,13 @@ private:
 	LagPool m_dig_pool;
 	LagPool m_move_pool;
 public:
-	v3f m_last_good_position;
+	v3opos_t m_last_good_position;
 	float m_time_from_last_teleport = 0.0f;
 	float m_time_from_last_punch = 0.0f;
-	v3s16 m_nocheat_dig_pos = v3s16(32767, 32767, 32767);
+	v3pos_t m_nocheat_dig_pos = v3pos_t(32767, 32767, 32767);
 	float m_nocheat_dig_time = 0.0f;
 	float m_max_speed_override_time = 0.0f;
-	v3f m_max_speed_override = v3f(0.0f, 0.0f, 0.0f);
+	v3opos_t m_max_speed_override = v3opos_t(0.0f, 0.0f, 0.0f);
 
 	// Timers
 	IntervalLimiter m_breathing_interval;
@@ -261,9 +262,9 @@ struct PlayerHPChangeReason
 
 	// For PLAYER_PUNCH
 	ServerActiveObject *object = nullptr;
-	// For NODE_DAMAGE
+	// For NODE_DAMAGE and DROWNING
 	std::string node;
-	v3s16 node_pos;
+	v3pos_t node_pos;
 
 	inline bool hasLuaReference() const { return lua_reference >= 0; }
 
@@ -315,5 +316,5 @@ struct PlayerHPChangeReason
 	{
 	}
 
-	PlayerHPChangeReason(Type type, std::string node, v3s16 node_pos) : type(type), node(node), node_pos(node_pos) {}
+	PlayerHPChangeReason(Type type, std::string node, v3pos_t node_pos) : type(type), node(node), node_pos(node_pos) {}
 };

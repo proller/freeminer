@@ -10,21 +10,24 @@
 #else //TODO
 
 #include "chatmessage.h"
+#include "irr_v3d.h"
 #include "server.h"
+#include "serverenvironment.h"
 #include "log.h"
 #include "emerge.h"
+#include "itemdef.h"
 #include "mapblock.h"
 #include "modchannels.h"
 #include "nodedef.h"
+#include "porting.h" // strcasecmp
 #include "remoteplayer.h"
 #include "rollback_interface.h"
 #include "scripting_server.h"
 #include "serialization.h"
 #include "settings.h"
 #include "tool.h"
-#include "version.h"
-#include "irrlicht_changes/printing.h"
 #include "network/connection.h"
+#include "network/networkexceptions.h"
 #include "network/networkpacket.h"
 #include "network/networkprotocol.h"
 #include "network/serveropcodes.h"
@@ -33,7 +36,6 @@
 #include "util/auth.h"
 #include "util/base64.h"
 #include "util/pointedthing.h"
-#include "util/serialize.h"
 #include "util/srp.h"
 #include "clientdynamicinfo.h"
 
@@ -277,6 +279,13 @@ void Server::handleCommand_Init2(NetworkPacket* pkt)
 	session_t peer_id = pkt->getPeerId();
 	verbosestream << "Server: Got TOSERVER_INIT2 from " << peer_id << std::endl;
 
+	RemoteClient *client = getClientNoEx(peer_id, CS_Invalid);
+	if (!client || client->getState() != CS_AwaitingInit2) {
+		actionstream << "Server: Ignoring TOSERVER_INIT2 in wrong state from "
+			<< peer_id << std::endl;
+		return;
+	}
+
 	m_clients.event(peer_id, CSE_GotInit2);
 	u16 protocol_version = m_clients.getProtocolVersion(peer_id);
 
@@ -303,9 +312,6 @@ void Server::handleCommand_Init2(NetworkPacket* pkt)
 
 	// Send media announcement
 	sendMediaAnnouncement(peer_id, lang);
-
-	RemoteClient *client = getClient(peer_id, CS_InitDone);
-	assert(client);
 
 	// Keep client language for server translations
 	client->setLangCode(lang);
@@ -426,8 +432,8 @@ void Server::handleCommand_GotBlocks(NetworkPacket* pkt)
 	/*
 		[0] u16 command
 		[2] u8 count
-		[3] v3s16 pos_0
-		[3+6] v3s16 pos_1
+		[3] v3pos_t pos_0
+		[3+6] v3pos_t pos_1
 		...
 	*/
 
@@ -440,7 +446,7 @@ void Server::handleCommand_GotBlocks(NetworkPacket* pkt)
 		return;
 
 	for (u16 i = 0; i < count; i++) {
-		v3s16 p;
+		v3bpos_t p;
 		*pkt >> p;
 		client->GotBlock(p);
 	}
@@ -450,15 +456,12 @@ void Server::handleCommand_GotBlocks(NetworkPacket* pkt)
 void Server::process_PlayerPos(RemotePlayer *player, PlayerSAO *playersao,
 	NetworkPacket *pkt)
 {
-	if (pkt->getRemainingBytes() < 12 + 12 + 4 + 4 + 4 + 1 + 1)
-		return;
-
 	v3s32 ps, ss;
 	s32 f32pitch, f32yaw;
 	u8 f32fov;
 
-	*pkt >> ps;
-	*pkt >> ss;
+    ps = pkt->readV3S32();
+    ss = pkt->readV3S32();
 	*pkt >> f32pitch;
 	*pkt >> f32yaw;
 
@@ -477,23 +480,35 @@ void Server::process_PlayerPos(RemotePlayer *player, PlayerSAO *playersao,
 	fov = (f32)f32fov / 80.0f;
 	*pkt >> wanted_range;
 
-	if (pkt->getRemainingBytes() >= 1)
+	bool have_movement_data = false;
+	do {
+		if (!pkt->hasRemainingBytes())
+			break;
+		// >= 5.8.0-dev
 		*pkt >> bits;
 
-	if (pkt->getRemainingBytes() >= 8) {
+		if (!pkt->hasRemainingBytes())
+			break;
+		// >= 5.10.0-dev
 		f32 movement_speed;
 		*pkt >> movement_speed;
 		if (movement_speed != movement_speed) // NaN
 			movement_speed = 0.0f;
 		player->control.movement_speed = std::clamp(movement_speed, 0.0f, 1.0f);
 		*pkt >> player->control.movement_direction;
-	} else {
+		have_movement_data = true;
+	} while (0);
+
+	if (!have_movement_data) {
 		player->control.movement_speed = 0.0f;
 		player->control.movement_direction = 0.0f;
 		player->control.setMovementFromKeys();
 	}
 
-	v3f position((f32)ps.X / 100.0f, (f32)ps.Y / 100.0f, (f32)ps.Z / 100.0f);
+	v3opos_t position((opos_t)ps.X / 100.0f, (opos_t)ps.Y / 100.0f, (opos_t)ps.Z / 100.0f);
+	if (pkt->getRemainingBytes() >= 24 && pkt->getProtoVer() >= PROTOCOL_VERSION_32BIT) {
+		*pkt >> position;
+	}
 	v3f speed((f32)ss.X / 100.0f, (f32)ss.Y / 100.0f, (f32)ss.Z / 100.0f);
 
 	pitch = modulo360f(pitch);
@@ -577,8 +592,8 @@ void Server::handleCommand_DeletedBlocks(NetworkPacket* pkt)
 	/*
 		[0] u16 command
 		[2] u8 count
-		[3] v3s16 pos_0
-		[3+6] v3s16 pos_1
+		[3] v3pos_t pos_0
+		[3+6] v3pos_t pos_1
 		...
 	*/
 
@@ -591,7 +606,7 @@ void Server::handleCommand_DeletedBlocks(NetworkPacket* pkt)
 		return;
 
 	for (u16 i = 0; i < count; i++) {
-		v3s16 p;
+		v3bpos_t p;
 		*pkt >> p;
 		client->SetBlockDeleted(p);
 	}
@@ -673,8 +688,8 @@ void Server::handleCommand_InventoryAction(NetworkPacket* pkt)
 		case InventoryLocation::NODEMETA:
 			{
 				// Check for out-of-range interaction
-				v3f node_pos   = intToFloat(loc.p, BS);
-				v3f player_pos = player->getPlayerSAO()->getEyePosition();
+				v3opos_t node_pos   = intToFloat(loc.p, BS);
+				v3opos_t player_pos = player->getPlayerSAO()->getEyePosition();
 				f32 d = player_pos.getDistanceFrom(node_pos);
 				return checkInteractDistance(player, d, "inventory");
 			}
@@ -876,7 +891,9 @@ void Server::handleCommand_PlayerItem(NetworkPacket* pkt)
 
 	*pkt >> item;
 
-	if (item >= player->getMaxHotbarItemcount()) {
+	if (player->getMaxHotbarItemcount() == 0) {
+		return; // ignore silently
+	} else if (item >= player->getMaxHotbarItemcount()) {
 		actionstream << "Player " << player->getName()
 			<< " tried to access item=" << item
 			<< " out of hotbar_itemcount="
@@ -964,7 +981,7 @@ void Server::handleCommand_Interact(NetworkPacket *pkt)
 		if (pointed.type == POINTEDTHING_NODE) {
 			// Re-send block to revert change on client-side
 			RemoteClient *client = getClient(peer_id);
-			v3s16 blockpos = getNodeBlockPos(pointed.node_undersurface);
+			v3bpos_t blockpos = getNodeBlockPos(pointed.node_undersurface);
 			client->SetBlockNotSent(blockpos);
 		}
 		// Call callbacks
@@ -974,11 +991,12 @@ void Server::handleCommand_Interact(NetworkPacket *pkt)
 
 	process_PlayerPos(player, playersao, pkt);
 
-	v3f player_pos = playersao->getLastGoodPosition();
+	v3opos_t player_pos = playersao->getLastGoodPosition();
 
 	// Update wielded item
-
-	if (item_i >= player->getMaxHotbarItemcount()) {
+	if (player->getMaxHotbarItemcount() == 0) {
+		return; // ignore silently
+	} else if (item_i >= player->getMaxHotbarItemcount()) {
 		actionstream << "Player " << player->getName()
 			<< " tried to access item=" << item_i
 			<< " out of hotbar_itemcount="
@@ -1015,12 +1033,12 @@ void Server::handleCommand_Interact(NetworkPacket *pkt)
 		RemoteClient *client = getClient(peer_id);
 		// Digging completed -> under
 		if (action == INTERACT_DIGGING_COMPLETED) {
-			v3s16 blockpos = getNodeBlockPos(pointed.node_undersurface);
+			v3bpos_t blockpos = getNodeBlockPos(pointed.node_undersurface);
 			client->SetBlockNotSent(blockpos);
 		}
 		// Placement -> above
 		else if (action == INTERACT_PLACE) {
-			v3s16 blockpos = getNodeBlockPos(pointed.node_abovesurface);
+			v3bpos_t blockpos = getNodeBlockPos(pointed.node_abovesurface);
 			client->SetBlockNotSent(blockpos);
 		}
 		return;
@@ -1035,7 +1053,7 @@ void Server::handleCommand_Interact(NetworkPacket *pkt)
 	if ((action == INTERACT_START_DIGGING || action == INTERACT_DIGGING_COMPLETED ||
 			action == INTERACT_PLACE || action == INTERACT_USE) &&
 			(anticheat_flags & AC_INTERACTION) && !isSingleplayer()) {
-		v3f target_pos = player_pos;
+		v3opos_t target_pos = player_pos;
 		if (pointed.type == POINTEDTHING_NODE) {
 			target_pos = intToFloat(pointed.node_undersurface, BS);
 		} else if (pointed.type == POINTEDTHING_OBJECT) {
@@ -1053,7 +1071,7 @@ void Server::handleCommand_Interact(NetworkPacket *pkt)
 			if (pointed.type == POINTEDTHING_NODE) {
 				// Re-send block to revert change on client-side
 				RemoteClient *client = getClient(peer_id);
-				v3s16 blockpos = getNodeBlockPos(pointed.node_undersurface);
+				v3bpos_t blockpos = getNodeBlockPos(pointed.node_undersurface);
 				client->SetBlockNotSent(blockpos);
 			}
 			return;
@@ -1073,7 +1091,7 @@ void Server::handleCommand_Interact(NetworkPacket *pkt)
 			MapNode n(CONTENT_IGNORE);
 			bool pos_ok;
 
-			v3s16 p_under = pointed.node_undersurface;
+			v3pos_t p_under = pointed.node_undersurface;
 			n = m_env->getMap().getNode(p_under, &pos_ok);
 			if (!pos_ok) {
 				infostream << "Server: Not punching: Node not found. "
@@ -1097,15 +1115,15 @@ void Server::handleCommand_Interact(NetworkPacket *pkt)
 
 		ItemStack selected_item, hand_item;
 		ItemStack tool_item = playersao->getWieldedItem(&selected_item, &hand_item);
-		ToolCapabilities toolcap =
+		const ToolCapabilities &toolcap =
 				tool_item.getToolCapabilities(m_itemdef, &hand_item);
-		v3f dir = (pointed_object->getBasePosition() -
-				(playersao->getBasePosition() + playersao->getEyeOffset())
+		v3f dir = oposToV3f(pointed_object->getBasePosition() -
+				(playersao->getBasePosition() + v3fToOpos(playersao->getEyeOffset()))
 					).normalize();
 		float time_from_last_punch =
 			playersao->resetTimeFromLastPunch();
 
-		u32 wear = pointed_object->punch(dir, &toolcap, playersao,
+		u32 wear = pointed_object->punch(dir, toolcap, playersao,
 				time_from_last_punch, tool_item.wear);
 
 		stat.add("punch", player->getName());
@@ -1128,7 +1146,7 @@ void Server::handleCommand_Interact(NetworkPacket *pkt)
 		if (pointed.type != POINTEDTHING_NODE)
 			return;
 		bool pos_ok;
-		v3s16 p_under = pointed.node_undersurface;
+		v3pos_t p_under = pointed.node_undersurface;
 		MapNode n = m_env->getMap().getNode(p_under, &pos_ok);
 		if (!pos_ok) {
 			infostream << "Server: Not finishing digging: Node not found. "
@@ -1140,7 +1158,7 @@ void Server::handleCommand_Interact(NetworkPacket *pkt)
 		/* Cheat prevention */
 		bool is_valid_dig = true;
 		if ((anticheat_flags & AC_DIGGING) && !isSingleplayer()) {
-			v3s16 nocheat_p = playersao->getNoCheatDigPos();
+			v3pos_t nocheat_p = playersao->getNoCheatDigPos();
 			float nocheat_t = playersao->getNoCheatDigTime();
 			playersao->noCheatDigEnd();
 			// If player didn't start digging this, ignore dig
@@ -1216,7 +1234,7 @@ void Server::handleCommand_Interact(NetworkPacket *pkt)
 		if (is_valid_dig && n.getContent() != CONTENT_IGNORE)
 			m_script->node_on_dig(p_under, n, playersao);
 
-		v3s16 blockpos = getNodeBlockPos(p_under);
+		v3bpos_t blockpos = getNodeBlockPos(p_under);
 		RemoteClient *client = getClient(peer_id);
 		// Send unusual result (that is, node not being removed)
 		if (m_env->getMap().getNode(p_under).getContent() != CONTENT_AIR)
@@ -1232,11 +1250,6 @@ void Server::handleCommand_Interact(NetworkPacket *pkt)
 	case INTERACT_PLACE: {
 		std::optional<ItemStack> selected_item;
 		getWieldedItem(playersao, selected_item);
-
-		// Reset build time counter
-		if (pointed.type == POINTEDTHING_NODE &&
-				selected_item->getDefinition(m_itemdef).type == ITEM_NODE)
-			getClient(peer_id)->m_time_from_building = 0.0;
 
 		const bool had_prediction = !selected_item->getDefinition(m_itemdef).
 			node_placement_prediction.empty();
@@ -1258,6 +1271,10 @@ void Server::handleCommand_Interact(NetworkPacket *pkt)
 					SendInventory(player, true);
 			}
 
+			// on_secondary_use might have removed the object
+			if (pointed_object->isGone())
+				return;
+
 			pointed_object->rightClick(playersao);
 		} else if (m_script->item_OnPlace(selected_item, playersao, pointed)) {
 			// Placement was handled in lua
@@ -1272,11 +1289,13 @@ void Server::handleCommand_Interact(NetworkPacket *pkt)
 		if (pointed.type != POINTEDTHING_NODE)
 			return;
 
+		getClient(peer_id)->m_time_from_building = 0;
+
 		// If item has node placement prediction, always send the
 		// blocks to make sure the client knows what exactly happened
 		RemoteClient *client = getClient(peer_id);
-		v3s16 blockpos = getNodeBlockPos(pointed.node_abovesurface);
-		v3s16 blockpos2 = getNodeBlockPos(pointed.node_undersurface);
+		v3bpos_t blockpos = getNodeBlockPos(pointed.node_abovesurface);
+		v3bpos_t blockpos2 = getNodeBlockPos(pointed.node_undersurface);
 		if (had_prediction) {
 			client->SetBlockNotSent(blockpos);
 			if (blockpos2 != blockpos)
@@ -1395,7 +1414,7 @@ void Server::handleCommand_NodeMetaFields(NetworkPacket* pkt)
 		return;
 	}
 
-	v3s16 p;
+	v3pos_t p;
 	std::string formname;
 	StringMap fields;
 
@@ -1730,7 +1749,9 @@ void Server::handleCommand_SrpBytesM(NetworkPacket* pkt)
 	srp_verifier_verify_session((SRPVerifier *) client->auth_data,
 		(unsigned char *)bytes_M.c_str(), &bytes_HAMK);
 
-	if (!bytes_HAMK) {
+	// skip authentication check for singleplayer world.
+	const bool is_true_singleplayer = isSingleplayer() && (strcasecmp(playername.c_str(), "singleplayer") == 0);
+	if (!bytes_HAMK && !is_true_singleplayer) {
 		if (wantSudo) {
 			actionstream << "Server: User " << playername << " at " << addr_s
 				<< " tried to change their password, but supplied wrong"
@@ -1882,11 +1903,11 @@ void Server::handleCommand_UpdateClientInfo(NetworkPacket *pkt)
 	*pkt >> info.real_hud_scaling;
 	*pkt >> info.max_fs_size.X;
 	*pkt >> info.max_fs_size.Y;
-	try {
-		// added in 5.9.0
+	info.touch_controls = false;
+
+	if (pkt->hasRemainingBytes()) {
+		// >= 5.9.0-dev
 		*pkt >> info.touch_controls;
-	} catch (PacketError &e) {
-		info.touch_controls = false;
 	}
 
 	session_t peer_id = pkt->getPeerId();

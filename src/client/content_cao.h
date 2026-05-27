@@ -14,12 +14,12 @@
 #include "itemgroup.h"
 #include "client/tile.h"
 #include <cassert>
-#include <map>
 #include <memory>
 
 namespace scene {
 	class IMeshSceneNode;
 	class IBillboardSceneNode;
+	class AnimatedMeshSceneNode;
 }
 
 class Client;
@@ -74,7 +74,6 @@ struct MeshAnimationInfo {
 class GenericCAO : public ClientActiveObject
 {
 private:
-	static constexpr auto EMT_INVALID = video::EMT_FORCE_32BIT;
 
 	// Only set at initialization
 	std::string m_name = "";
@@ -89,7 +88,7 @@ private:
 
 	// Visuals
 	scene::IMeshSceneNode *m_meshnode = nullptr;
-	scene::IAnimatedMeshSceneNode *m_animated_meshnode = nullptr;
+	scene::AnimatedMeshSceneNode *m_animated_meshnode = nullptr;
 	std::shared_ptr<WieldMeshSceneNode> m_wield_meshnode;
 	scene::IBillboardSceneNode *m_spritenode = nullptr;
 	scene::IDummyTransformationSceneNode *m_matrixnode = nullptr;
@@ -101,15 +100,15 @@ private:
 	std::vector<MeshAnimationInfo> m_meshnode_animation;
 
 	// Material
-	video::E_MATERIAL_TYPE m_material_type = EMT_INVALID;
+	video::E_MATERIAL_TYPE m_material_type = video::EMT_INVALID;
 
 	// Movement
-	v3f m_position = v3f(0.0f, 10.0f * BS, 0);
+	v3opos_t m_position{0.0f, 10.0f * BS, 0};
 	v3f m_velocity;
 	v3f m_acceleration;
 	v3f m_rotation;
 	u16 m_hp = 1;
-	SmoothTranslator<v3f> pos_translator;
+	SmoothTranslator<v3opos_t> pos_translator;
 	SmoothTranslatorWrappedv3f rot_translator;
 
 	// Spritesheet stuff
@@ -174,13 +173,13 @@ public:
 
 	void processInitData(const std::string &data);
 
-	bool getCollisionBox(aabb3f *toset) const override;
+	bool getCollisionBox(aabb3o *toset) const override;
 
 	bool collideWithObjects() const override;
 
 	virtual bool getSelectionBox(aabb3f *toset) const override;
 
-	const v3f getPosition() const override final;
+	const v3opos_t getPosition() const override final;
 
 	const v3f getVelocity() const override final { return m_velocity; }
 
@@ -194,7 +193,7 @@ public:
 
 	scene::ISceneNode *getSceneNode() const override;
 
-	scene::IAnimatedMeshSceneNode *getAnimatedMeshSceneNode() const override;
+	scene::AnimatedMeshSceneNode *getAnimatedMeshSceneNode() const override;
 
 	// m_matrixnode controls the position and rotation of the child node
 	// for all scene nodes, as a workaround for an Irrlicht problem with
@@ -270,7 +269,7 @@ public:
 	/* Get light position(s).
 	 * returns number of positions written into pos[], which must have space
 	 * for at least 3 vectors. */
-	u16 getLightPosition(v3s16 *pos);
+	u16 getLightPosition(v3pos_t *pos);
 
 	void updateNametag();
 

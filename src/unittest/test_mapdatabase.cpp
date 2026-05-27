@@ -167,8 +167,8 @@ void TestMapDatabase::testLoad()
 	UASSERT(dest == test_data);
 
 	// failed load
-	v3s16 pp[] = {{1, 2, 4}, {0, 0, 0}, {-1, -2, -3}};
-	for (v3s16 p : pp) {
+	v3bpos_t pp[] = {{1, 2, 4}, {0, 0, 0}, {-1, -2, -3}};
+	for (const auto &p : pp) {
 		dest = "not empty";
 		db->loadBlock(p, &dest);
 		UASSERT(dest.empty());
@@ -178,11 +178,11 @@ void TestMapDatabase::testLoad()
 void TestMapDatabase::testList(int expect)
 {
 	auto *db = provider->get();
-	std::vector<v3s16> dest;
+	std::vector<v3bpos_t> dest;
 	db->listAllLoadableBlocks(dest);
 	UASSERTEQ(size_t, dest.size(), expect);
 	if (expect == 1)
-		UASSERT(dest.front() == v3s16(1, 2, 3));
+		UASSERT(dest.front() == v3bpos_t(1, 2, 3));
 }
 
 void TestMapDatabase::testRemove()
@@ -213,14 +213,14 @@ void TestMapDatabase::testPositionEncoding()
 	UASSERTEQ(s64, db->getBlockAsInteger({-2048, -2048, -2048}), -0x800800800)
 	UASSERTEQ(s64, db->getBlockAsInteger({-123, 456, -789}), -0x314e3807b)
 
-	UASSERT(db->getIntegerAsBlock(0) == v3s16(0, 0, 0))
-	UASSERT(db->getIntegerAsBlock(1) == v3s16(1, 0, 0))
-	UASSERT(db->getIntegerAsBlock(0x1000) == v3s16(0, 1, 0))
-	UASSERT(db->getIntegerAsBlock(0x1000000) == v3s16(0, 0, 1))
-	UASSERT(db->getIntegerAsBlock(-1) == v3s16(-1, 0, 0))
-	UASSERT(db->getIntegerAsBlock(-0x1000) == v3s16(0, -1, 0))
-	UASSERT(db->getIntegerAsBlock(-0x1000000) == v3s16(0, 0, -1))
-	UASSERT(db->getIntegerAsBlock(0x7FF7FF7FF) == v3s16(2047, 2047, 2047))
-	UASSERT(db->getIntegerAsBlock(-0x800800800) == v3s16(-2048, -2048, -2048))
-	UASSERT(db->getIntegerAsBlock(-0x314e3807b) == v3s16(-123, 456, -789))
+	UASSERT(db->getIntegerAsBlock(0) == v3bpos_t(0, 0, 0))
+	UASSERT(db->getIntegerAsBlock(1) == v3bpos_t(1, 0, 0))
+	UASSERT(db->getIntegerAsBlock(0x1000) == v3bpos_t(0, 1, 0))
+	UASSERT(db->getIntegerAsBlock(0x1000000) == v3bpos_t(0, 0, 1))
+	UASSERT(db->getIntegerAsBlock(-1) == v3bpos_t(-1, 0, 0))
+	UASSERT(db->getIntegerAsBlock(-0x1000) == v3bpos_t(0, -1, 0))
+	UASSERT(db->getIntegerAsBlock(-0x1000000) == v3bpos_t(0, 0, -1))
+	UASSERT(db->getIntegerAsBlock(0x7FF7FF7FF) == v3bpos_t(2047, 2047, 2047))
+	UASSERT(db->getIntegerAsBlock(-0x800800800) == v3bpos_t(-2048, -2048, -2048))
+	UASSERT(db->getIntegerAsBlock(-0x314e3807b) == v3bpos_t(-123, 456, -789))
 }

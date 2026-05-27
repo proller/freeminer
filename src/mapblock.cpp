@@ -3,18 +3,18 @@
 // Copyright (C) 2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
 #include "mapblock.h"
+#include "client/node_visuals.h"
 #include "mapnode.h"
 #include "profiler.h"
 #include "servermap.h"
 
 #include <memory>
 #include <sstream>
+#include "irr_v3d.h"
 #include "map.h"
-#include "light.h"
 #include "nodedef.h"
 #include "nodemetadata.h"
 #include "gamedef.h"
-#include "irrlicht_changes/printing.h"
 #include "log.h"
 #include "content_mapnode.h"  // For legacy name-id mapping
 #include "content_nodemeta.h" // For legacy deserialization
@@ -24,6 +24,7 @@
 #include "client/mapblock_mesh.h"
 #endif
 #include "porting.h"
+#include "settings.h"
 #include "util/string.h"
 #include "util/serialize.h"
 #include "util/basic_macros.h"
@@ -129,7 +130,10 @@ void MapBlock::setNode(const v3pos_t &p, const MapNode &n, bool important)
 	data[index] = n;
 
 	modified_light light = modified_light_no;
-	if (f0.light_propagates != f1.light_propagates || f0.solidness != f1.solidness ||
+	if (f0.light_propagates != f1.light_propagates ||
+#if CHECK_CLIENT_BUILD() // TODO use on server
+			f0.visuals->solidness != f1.visuals->solidness ||
+#endif
 			f0.light_source != f1.light_source) /*|| f0.drawtype != f1.drawtype*/
 		light = modified_light_yes;
 	if (important)
@@ -268,7 +272,7 @@ enum
 	MapBlock
 */
 
-MapBlock::MapBlock(v3s16 pos, IGameDef *gamedef):
+MapBlock::MapBlock(v3bpos_t pos, IGameDef *gamedef):
 		m_pos(pos),
 		m_pos_relative(pos * MAP_BLOCKSIZE),
 		m_gamedef(gamedef),
@@ -354,12 +358,12 @@ bool MapBlock::saveStaticObject(u16 id, const StaticObject &obj, u32 reason)
 	return true;
 }
 
-void MapBlock::step(float dtime, const std::function<bool(v3s16, MapNode, NodeTimer)> &on_timer_cb)
+void MapBlock::step(float dtime, const std::function<bool(v3pos_t, MapNode, NodeTimer)> &on_timer_cb)
 {
 	// Run callbacks for elapsed node_timers
 	std::vector<NodeTimer> elapsed_timers = m_node_timers.step(dtime);
 	MapNode n;
-	v3s16 p;
+	v3pos_t p;
 	for (const auto &it : elapsed_timers) {
 		n = getNodeNoEx(it.position);
 		p = it.position + getPosRelative();
@@ -398,23 +402,23 @@ std::string MapBlock::getModifiedReasonString()
 void MapBlock::copyTo(NodeContainer &dst)
 {
 	const auto lock = lock_shared_rec();
-	v3s16 data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
-	VoxelArea data_area(v3s16(0,0,0), data_size - v3s16(1,1,1));
+	v3pos_t data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
+	VoxelArea data_area(v3pos_t(0,0,0), data_size - v3pos_t(1,1,1));
 
 	// Copy from data to VoxelManipulator
-	dst.copyFrom(data, m_is_mono_block, data_area, v3s16(0,0,0),
+	dst.copyFrom(data, m_is_mono_block, data_area, v3pos_t(0,0,0),
 			getPosRelative(), data_size);
 }
 
 void MapBlock::copyFrom(const VoxelManipulator &src)
 {
 	const auto lock = lock_unique_rec();
-	v3s16 data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
-	VoxelArea data_area(v3s16(0,0,0), data_size - v3s16(1,1,1));
+	v3pos_t data_size(MAP_BLOCKSIZE, MAP_BLOCKSIZE, MAP_BLOCKSIZE);
+	VoxelArea data_area(v3pos_t(0,0,0), data_size - v3pos_t(1,1,1));
 
 	expandNodesIfNeeded();
 	// Copy from VoxelManipulator to data
-	src.copyTo(data, data_area, v3s16(0,0,0),
+	src.copyTo(data, data_area, v3pos_t(0,0,0),
 			getPosRelative(), data_size);
 	tryShrinkNodes();
 }
@@ -544,12 +548,6 @@ void MapBlock::correctBlockNodeIds(const NameIdMapping *nimap, MapNode *nodes,
 		IGameDef *gamedef)
 {
 	const NodeDefManager *nodedef = gamedef->ndef();
-	// This means the block contains incorrect ids, and we contain
-	// the information to convert those to names.
-	// nodedef contains information to convert our names to globally
-	// correct ids.
-	std::unordered_set<content_t> unnamed_contents;
-	std::unordered_set<std::string> unallocatable_contents;
 
 	// Used to cache local to global id lookup.
 	IdIdMapping &mapping_cache = IdIdMapping::giveClearedThreadLocalInstance();
@@ -566,33 +564,22 @@ void MapBlock::correctBlockNodeIds(const NameIdMapping *nimap, MapNode *nodes,
 
 		std::string name;
 		if (!nimap->getName(local_id, name)) {
-			unnamed_contents.insert(local_id);
-			continue;
+			throw SerializationError("MapBlock::correctBlockNodeIds(): "
+				"Block contains id " + itos(local_id) + " with no name mapping");
 		}
 
 		content_t global_id;
 		if (!nodedef->getId(name, global_id)) {
 			global_id = gamedef->allocateUnknownNodeId(name);
 			if (global_id == CONTENT_IGNORE) {
-				unallocatable_contents.insert(name);
-				continue;
+				throw SerializationError("MapBlock::correctBlockNodeIds(): "
+					"Could not allocate global id for node name \"" + name + "\"");
 			}
 		}
 		nodes[i].setContent(global_id);
 
 		// Save previous node local_id & global_id result
 		mapping_cache.set(local_id, global_id);
-	}
-
-	for (const content_t c: unnamed_contents) {
-		errorstream << "correctBlockNodeIds(): IGNORING ERROR: "
-				<< "Block contains id " << c
-				<< " with no name mapping" << std::endl;
-	}
-	for (const std::string &node_name: unallocatable_contents) {
-		errorstream << "correctBlockNodeIds(): IGNORING ERROR: "
-				<< "Could not allocate global id for node name \""
-				<< node_name << "\"" << std::endl;
 	}
 }
 
@@ -930,15 +917,14 @@ void MapBlock::deSerializeNetworkSpecific(std::istream &is)
 		int version = readU8(is);
 		//const u8 version = readU8(is);
 		//if (version != 1)
-			//throw SerializationError("unsupported MapBlock version");
+		//throw SerializationError("unsupported MapBlock version");
 		if (version >= 1) {
-			heat = readF1000(is); // deprecated heat
+			heat = readF1000(is);	  // deprecated heat
 			humidity = readF1000(is); // deprecated humidity
 		}
-
-	} catch(SerializationError &e) {
-		warningstream<<"MapBlock::deSerializeNetworkSpecific(): Ignoring an error"
-				<<": "<<e.what()<<std::endl;
+	} catch (SerializationError &e) {
+		warningstream << "MapBlock::deSerializeNetworkSpecific(): Ignoring an error"
+					  << ": " << e.what() << std::endl;
 	}
 }
 
@@ -1181,7 +1167,7 @@ std::string analyze_block(MapBlock *block)
 	const auto lock = block->lock_shared_rec();
 	std::ostringstream desc;
 
-	v3s16 p = block->getPos();
+	v3bpos_t p = block->getPos();
 	char spos[25];
 	porting::mt_snprintf(spos, sizeof(spos), "(%2d,%2d,%2d), ", p.X, p.Y, p.Z);
 	desc<<spos;
@@ -1221,7 +1207,7 @@ std::string analyze_block(MapBlock *block)
 	for(s16 y0=0; y0<MAP_BLOCKSIZE; y0++)
 	for(s16 x0=0; x0<MAP_BLOCKSIZE; x0++)
 	{
-		v3s16 p(x0,y0,z0);
+		v3pos_t p(x0,y0,z0);
 		MapNode n = block->getNodeNoEx(p);
 		content_t c = n.getContent();
 		if(c == CONTENT_IGNORE)

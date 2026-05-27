@@ -54,8 +54,8 @@ inline std::ostream &operator<<(std::ostream &s, const ll &p)
 
 struct MapgenEarthParams : public MapgenV7Params
 {
-	MapgenEarthParams() {};
-	~MapgenEarthParams() {};
+	MapgenEarthParams(){};
+	~MapgenEarthParams(){};
 
 	Json::Value params;
 
@@ -74,8 +74,8 @@ public:
 
 struct maps_holder_t
 {
-    const std::string data_root {porting::path_cache + DIR_DELIM + "earth"};
-	hgts hgt_reader{ data_root };
+	const std::string data_root{porting::path_cache + DIR_DELIM + "earth"};
+	hgts hgt_reader{data_root};
 	using osm_ptr = std::shared_ptr<handler_i>;
 	lru_cache<std::string, osm_ptr, 50> osm_bbox;
 	std::mutex download_lock;
@@ -98,10 +98,11 @@ public:
 	MapgenEarth(MapgenEarthParams *mg_params, EmergeParams *emerge);
 	~MapgenEarth();
 
+	void makeChunk(BlockMakeData *data) override;
 	int generateTerrain() override;
 	void generateBuildings() override;
-	int getSpawnLevelAtPoint(v2pos_t p) override;
-	int getGroundLevelAtPoint(v2pos_t p) override;
+	pos_t getSpawnLevelAtPoint(v2pos_t p) override;
+	pos_t getGroundLevelAtPoint(v2pos_t p) override;
 
 	v3d scale{1, 1, 1};
 	v3d center{0, 0, 0};

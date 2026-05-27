@@ -18,7 +18,7 @@ struct ItemStack;
 
 namespace scene
 {
-	class IAnimatedMeshSceneNode;
+	class AnimatedMeshSceneNode;
 	class ISceneNode;
 	class ISceneManager;
 }
@@ -34,14 +34,14 @@ public:
 
 	virtual void updateLight(u32 day_night_ratio) {}
 
-	virtual bool getCollisionBox(aabb3f *toset) const { return false; }
+	virtual bool getCollisionBox(aabb3o *toset) const { return false; }
 	virtual bool getSelectionBox(aabb3f *toset) const { return false; }
 	virtual bool collideWithObjects() const { return false; }
-	virtual const v3f getPosition() const { return v3f(0.0f); } // in BS-space
+	virtual const v3opos_t getPosition() const { return v3opos_t(0.0f); } // in BS-space
 	virtual const v3f getVelocity() const { return v3f(0.0f); } // in BS-space
 	virtual scene::ISceneNode *getSceneNode() const
 	{ return NULL; }
-	virtual scene::IAnimatedMeshSceneNode *getAnimatedMeshSceneNode() const
+	virtual scene::AnimatedMeshSceneNode *getAnimatedMeshSceneNode() const
 	{ return NULL; }
 	virtual bool isLocalPlayer() const { return false; }
 

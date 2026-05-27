@@ -22,17 +22,17 @@ struct MapgenCarpathianParams : public MapgenParams
 	float valley_width     = 0.25f;
 
 	float cave_width         = 0.09f;
-	s16 large_cave_depth     = -33;
+	pos_t large_cave_depth     = -33;
 	u16 small_cave_num_min   = 0;
 	u16 small_cave_num_max   = 0;
 	u16 large_cave_num_min   = 0;
 	u16 large_cave_num_max   = 2;
 	float large_cave_flooded = 0.5f;
-	s16 cavern_limit         = -256;
-	s16 cavern_taper         = 256;
+	pos_t cavern_limit         = -256;
+	pos_t cavern_taper         = 256;
 	float cavern_threshold   = 0.7f;
-	s16 dungeon_ymin         = -31000;
-	s16 dungeon_ymax         = 31000;
+	pos_t dungeon_ymin         = -MAX_MAP_GENERATION_LIMIT;
+	pos_t dungeon_ymax         = MAX_MAP_GENERATION_LIMIT;
 
 	NoiseParams np_filler_depth;
 	NoiseParams np_height1;
@@ -69,7 +69,7 @@ public:
 	virtual MapgenType getType() const { return MAPGEN_CARPATHIAN; }
 
 	virtual void makeChunk(BlockMakeData *data);
-	int getSpawnLevelAtPoint(v2s16 p);
+	pos_t getSpawnLevelAtPoint(v2pos_t p);
 
 	//freeminer:
 	bool visible(const v3pos_t &p)
@@ -85,18 +85,18 @@ private:
 	float river_depth;
 	float valley_width;
 
-	Noise *noise_height1;
-	Noise *noise_height2;
-	Noise *noise_height3;
-	Noise *noise_height4;
-	Noise *noise_hills_terrain;
-	Noise *noise_ridge_terrain;
-	Noise *noise_step_terrain;
-	Noise *noise_hills;
-	Noise *noise_ridge_mnt;
-	Noise *noise_step_mnt;
+	Noise *noise_height1 = nullptr;
+	Noise *noise_height2 = nullptr;
+	Noise *noise_height3 = nullptr;
+	Noise *noise_height4 = nullptr;
+	Noise *noise_hills_terrain = nullptr;
+	Noise *noise_ridge_terrain = nullptr;
+	Noise *noise_step_terrain = nullptr;
+	Noise *noise_hills = nullptr;
+	Noise *noise_ridge_mnt = nullptr;
+	Noise *noise_step_mnt = nullptr;
 	Noise *noise_rivers = nullptr;
-	Noise *noise_mnt_var;
+	Noise *noise_mnt_var = nullptr;
 
 	s32 grad_wl;
 

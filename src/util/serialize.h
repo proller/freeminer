@@ -9,6 +9,8 @@
 #include "ieee_float.h"
 
 #include "config.h"
+#include "network/networkprotocol.h"
+#include "util/numeric.h"
 #include <cstring> // for memcpy
 #include <cassert>
 #include <iostream>
@@ -39,8 +41,7 @@
 	#define BYTE_ORDER __BYTE_ORDER
 #endif
 
-#include "../msgpack_fix.h"
-#include "msgpack_define_external.h"
+//#include "../msgpack_fix.h"
 
 #define FIXEDPOINT_FACTOR 1000.0f
 
@@ -381,15 +382,104 @@ inline void writeV3F32(u8 *data, v3f p)
 	writeF32(&data[8], p.Z);
 }
 
+inline f64 readF64(const u8 *data)
+{
+	u64 u = readU64(data);
+	f64 f;
+	memcpy(&f, &u, 8);
+	return f;
+}
+
+inline v3d readV3F64(const u8 *data)
+{
+	v3d p;
+	p.X = readF64(&data[0]);
+	p.Y = readF64(&data[8]);
+	p.Z = readF64(&data[16]);
+	return p;
+}
+
+inline void writeF64(u8 *data, double i)
+{
+	u64 u;
+	memcpy(&u, &i, 8);
+	return writeU64(data, u);
+}
+
+inline void writeV3F64(u8 *data, v3d p)
+{
+	writeF64(&data[0], p.X);
+	writeF64(&data[8], p.Y);
+	writeF64(&data[16], p.Z);
+}
+
+inline v3s64 readV3S64(const u8 *data)
+{
+	v3s64 p;
+	p.X = readS64(&data[0]);
+	p.Y = readS64(&data[4]);
+	p.Z = readS64(&data[8]);
+	return p;
+}
+
+inline void writeV3S64(u8 *data, v3s64 p)
+{
+	writeS64(&data[0], p.X);
+	writeS64(&data[4], p.Y);
+	writeS64(&data[8], p.Z);
+}
+
+inline long double readF128(const u8 *data)
+{
+	long double val;
+	memcpy(&val, data, 16);
+	return val;
+}
+
+inline v3f128 readV3F128(const u8 *data)
+{
+	v3f128 p;
+	p.X = readF128(&data[0]);
+	p.Y = readF128(&data[16]);
+	p.Z = readF128(&data[32]);
+	return p;
+}
+
+inline void writeF128(u8 *data, long double i)
+{
+	memcpy(data, &i, 16);
+}
+
+inline void writeV3F128(u8 *data, v3f128 p)
+{
+	writeF128(&data[0], p.X);
+	writeF128(&data[16], p.Y);
+	writeF128(&data[32], p.Z);
+}
+
 ////
 //// Iostream wrapper for data read/write
 ////
+
+inline bool canRead(std::istream &is)
+{
+	return is.peek() != EOF;
+}
+
+// Assuming -O3 on GCC 14.2.0, this function results in 55% less machine code
+// generated for the `is.eof()` branch in `MAKE_STREAM_READ_FXN`.
+static void serialize_throw_eof()
+{
+	throw SerializationError("EOF");
+}
 
 #define MAKE_STREAM_READ_FXN(T, N, S)    \
 	inline T read ## N(std::istream &is) \
 	{                                    \
 		char buf[S] = {0};               \
 		is.read(buf, sizeof(buf));       \
+		if (is.eof())                    \
+			serialize_throw_eof();       \
 		return read ## N((u8 *)buf);     \
 	}
 
@@ -439,6 +529,97 @@ MAKE_STREAM_WRITE_FXN(v2f,   V2F32,    8);
 MAKE_STREAM_WRITE_FXN(v3f,   V3F32,   12);
 MAKE_STREAM_WRITE_FXN(video::SColor, ARGB8, 4);
 
+MAKE_STREAM_READ_FXN(v3s64,   V3S64,  24);
+MAKE_STREAM_READ_FXN(v3d,     V3F64,  24);
+MAKE_STREAM_READ_FXN(v3f128,  V3F128, 48);
+MAKE_STREAM_WRITE_FXN(v3s64,  V3S64,  24);
+MAKE_STREAM_WRITE_FXN(v3d,    V3F64,  24);
+MAKE_STREAM_WRITE_FXN(v3f128, V3F128, 48);
+
+inline pos_t readPOS(std::istream &is, const u16 proto_ver = 0) {
+#if USE_POS32 == 64
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+		return readS64(is);
+	return readS16(is);
+#elif USE_POS32
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+		return readS32(is);
+	return readS16(is);
+#else
+	return readS16(is);
+#endif
+}
+
+inline void writePOS(std::ostream &os, pos_t i, const u16 proto_ver = 0) {
+#if USE_POS32 == 64
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+		return writeS64(os, i);
+	return writeS16(os, i);
+#elif USE_POS32
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+		return writeS32(os, i);
+	return writeS16(os, i);
+#else
+	return writeS16(os, i);
+#endif
+}
+
+inline v3pos_t readV3Pos(std::istream &is, const u16 proto_ver = 0) {
+#if USE_POS32 == 64
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+	    return readV3S64(is);
+    return s16ToPos(readV3S16(is));
+#elif USE_POS32
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+	    return readV3S32(is);
+    return s16ToPos(readV3S16(is));
+#else
+    return readV3S16(is);
+#endif
+}
+
+inline void writeV3Pos(std::ostream &os, v3pos_t p, const u16 proto_ver = 0) {
+#if USE_POS32 == 64
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+        return writeV3S64(os, p);
+    return writeV3S16(os, posToS16(p));
+#elif USE_POS32
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+        return writeV3S32(os, p);
+    return writeV3S16(os, posToS16(p));
+#else
+    return writeV3S16(os, p);
+#endif
+}
+
+inline v3opos_t readV3O(std::istream &is, const u16 proto_ver = 0) {
+#if USE_OPOS64 == 128
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+	    return readV3F128(is);
+    return v3fToOpos(readV3F32(is));
+#elif USE_OPOS64
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+	    return readV3F64(is);
+    return v3fToOpos(readV3F32(is));
+#else
+    return readV3F32(is);
+#endif
+}
+
+inline void writeV3O(std::ostream &os, v3opos_t p, const u16 proto_ver = 0) {
+#if USE_OPOS64 == 128
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+	    return writeV3F128(os, p);
+    return writeV3F32(os, oposToV3f(p));
+#elif USE_OPOS64
+	if (proto_ver >= PROTOCOL_VERSION_32BIT)
+	    return writeV3F64(os, p);
+    return writeV3F32(os, oposToV3f(p));
+#else
+    return writeV3F32(os, p);
+#endif
+}
+
 ////
 //// More serialization stuff
 ////
@@ -470,15 +651,6 @@ std::string serializeJsonString(std::string_view plain);
 
 // Reads a string encoded in JSON format
 std::string deSerializeJsonString(std::istream &is);
-
-MSGPACK_DEFINE_EXTERNAL(v2f, X, Y);
-MSGPACK_DEFINE_EXTERNAL(v3f, X, Y, Z);
-//MSGPACK_DEFINE_EXTERNAL(v2s16, X, Y);
-MSGPACK_DEFINE_EXTERNAL(v2s32, X, Y);
-MSGPACK_DEFINE_EXTERNAL(v3s16, X, Y, Z);
-MSGPACK_DEFINE_EXTERNAL(v3s32, X, Y, Z);
-MSGPACK_DEFINE_EXTERNAL(video::SColor, color);
-MSGPACK_DEFINE_EXTERNAL(aabb3f, MinEdge, MaxEdge);
 
 // If the string contains spaces, quotes or control characters, encodes as JSON.
 // Else returns the string unmodified.

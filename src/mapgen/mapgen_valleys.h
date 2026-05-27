@@ -32,17 +32,17 @@ struct MapgenValleysParams : public MapgenParams {
 	u16 river_size = 5;
 
 	float cave_width = 0.09f;
-	s16 large_cave_depth = -33;
+	pos_t large_cave_depth = -33;
 	u16 small_cave_num_min = 0;
 	u16 small_cave_num_max = 0;
 	u16 large_cave_num_min = 0;
 	u16 large_cave_num_max = 2;
 	float large_cave_flooded = 0.5f;
-	s16 cavern_limit = -256;
-	s16 cavern_taper = 192;
+	pos_t cavern_limit = -256;
+	pos_t cavern_taper = 192;
 	float cavern_threshold = 0.6f;
-	s16 dungeon_ymin = -31000;
-	s16 dungeon_ymax = 63;
+	pos_t dungeon_ymin = -MAX_MAP_GENERATION_LIMIT;
+	pos_t dungeon_ymax = 63;
 
 	NoiseParams np_filler_depth;
 	NoiseParams np_inter_valley_fill;
@@ -76,7 +76,7 @@ public:
 	virtual MapgenType getType() const { return MAPGEN_VALLEYS; }
 
 	virtual void makeChunk(BlockMakeData *data);
-	int getSpawnLevelAtPoint(v2s16 p);
+	pos_t getSpawnLevelAtPoint(v2pos_t p);
 
 	//freeminer:
 	bool visible(const v3pos_t &p) override
@@ -87,19 +87,18 @@ public:
 	}
 
 private:
-
-	BiomeGenOriginal *m_bgen;
+	BiomeGenOriginal *m_bgen = nullptr;
 
 	float altitude_chill;
 	float river_depth_bed;
 	float river_size_factor;
 
-	Noise *noise_inter_valley_fill;
-	Noise *noise_inter_valley_slope;
-	Noise *noise_rivers;
-	Noise *noise_terrain_height;
-	Noise *noise_valley_depth;
-	Noise *noise_valley_profile;
+	Noise *noise_inter_valley_fill = nullptr;
+	Noise *noise_inter_valley_slope = nullptr;
+	Noise *noise_rivers = nullptr;
+	Noise *noise_terrain_height = nullptr;
+	Noise *noise_valley_depth = nullptr;
+	Noise *noise_valley_profile = nullptr;
 
 	virtual int generateTerrain();
 

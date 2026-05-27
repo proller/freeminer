@@ -4,12 +4,11 @@
 // Copyright (C) 2015-2018 paramat
 
 #include "mg_decoration.h"
+#include "irr_v3d.h"
 #include "mg_schematic.h"
 #include "mapgen.h"
 #include "noise.h"
 #include "map.h"
-#include "log.h"
-#include "util/numeric.h"
 #include <algorithm>
 #include <vector>
 #include "mapgen/treegen.h"
@@ -37,7 +36,7 @@ DecorationManager::DecorationManager(IGameDef *gamedef) :
 
 
 void DecorationManager::placeAllDecos(Mapgen *mg, u32 blockseed,
-	v3s16 nmin, v3s16 nmax)
+	v3pos_t nmin, v3pos_t nmax)
 {
 	for (size_t i = 0; i != m_objects.size(); i++) {
 		Decoration *deco = (Decoration *)m_objects[i];
@@ -67,7 +66,7 @@ void Decoration::resolveNodeNames()
 }
 
 
-bool Decoration::canPlaceDecoration(MMVManip *vm, v3s16 p)
+bool Decoration::canPlaceDecoration(MMVManip *vm, v3pos_t p)
 {
 	// Note that `p` refers to the node the decoration will be placed ontop of,
 	// not to the decoration itself.
@@ -82,15 +81,15 @@ bool Decoration::canPlaceDecoration(MMVManip *vm, v3s16 p)
 		return true;
 
 	int nneighs = 0;
-	static const v3s16 dirs[8] = {
-		v3s16( 0, 1,  1),
-		v3s16( 0, 1, -1),
-		v3s16( 1, 1,  0),
-		v3s16(-1, 1,  0),
-		v3s16( 1, 1,  1),
-		v3s16(-1, 1,  1),
-		v3s16(-1, 1, -1),
-		v3s16( 1, 1, -1)
+	static const v3pos_t dirs[8] = {
+		v3pos_t( 0, 1,  1),
+		v3pos_t( 0, 1, -1),
+		v3pos_t( 1, 1,  0),
+		v3pos_t(-1, 1,  0),
+		v3pos_t( 1, 1,  1),
+		v3pos_t(-1, 1,  1),
+		v3pos_t(-1, 1, -1),
+		v3pos_t( 1, 1, -1)
 	};
 
 
@@ -105,7 +104,7 @@ bool Decoration::canPlaceDecoration(MMVManip *vm, v3s16 p)
 	}
 
 	if (check_offset != 0) {
-		const v3s16 dir_offset(0, check_offset,  0);
+		const v3pos_t dir_offset(0, check_offset,  0);
 
 		for (size_t i = 0; i != ARRLEN(dirs); i++) {
 			u32 index = vm->m_area.index(p + dirs[i] + dir_offset);
@@ -124,7 +123,7 @@ bool Decoration::canPlaceDecoration(MMVManip *vm, v3s16 p)
 }
 
 
-void Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
+void Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3pos_t nmin, v3pos_t nmax)
 {
 	// Skip if y ranges do not overlap
 	if (nmax.Y < y_min || y_max < nmin.Y)
@@ -146,8 +145,8 @@ void Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 
 	for (s16 z0 = 0; z0 < carea_size; z0 += sidelen)
 	for (s16 x0 = 0; x0 < carea_size; x0 += sidelen) {
-		v2s16 p2d_min(nmin.X + x0, nmin.Z + z0);
-		v2s16 p2d_max(nmin.X + x0 + sidelen - 1, nmin.Z + z0 + sidelen - 1);
+		v2pos_t p2d_min(nmin.X + x0, nmin.Z + z0);
+		v2pos_t p2d_max(nmin.X + x0 + sidelen - 1, nmin.Z + z0 + sidelen - 1);
 
 		bool cover = false;
 		// Amount of decorations
@@ -172,8 +171,8 @@ void Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 			}
 		}
 
-		s16 x = p2d_min.X - 1;
-		s16 z = p2d_min.Y;
+		pos_t x = p2d_min.X - 1;
+		pos_t z = p2d_min.Y;
 
 		for (u32 i = 0; i < deco_count; i++) {
 			if (!cover) {
@@ -200,12 +199,12 @@ void Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 
 				// Get all floors and ceilings in node column
 				u16 size = (nmax.Y - nmin.Y + 1) / 2;
-				std::vector<s16> floors;
-				std::vector<s16> ceilings;
+				std::vector<pos_t> floors;
+				std::vector<pos_t> ceilings;
 				floors.reserve(size);
 				ceilings.reserve(size);
 
-				mg->getSurfaces(v2s16(x, z), nmin.Y, nmax.Y, floors, ceilings);
+				mg->getSurfaces(v2pos_t(x, z), nmin.Y, nmax.Y, floors, ceilings);
 
 				if (flags & DECO_ALL_FLOORS) {
 					// Floor decorations
@@ -213,7 +212,7 @@ void Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 						if (y < y_min || y > y_max)
 							continue;
 
-						v3s16 pos(x, y, z);
+						v3pos_t pos(x, y, z);
 						if (generate(mg->vm, &ps, pos, false))
 							mg->gennotify.addDecorationEvent(pos, index);
 					}
@@ -221,23 +220,23 @@ void Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 
 				if (flags & DECO_ALL_CEILINGS) {
 					// Ceiling decorations
-					for (const s16 y : ceilings) {
+					for (const pos_t y : ceilings) {
 						if (y < y_min || y > y_max)
 							continue;
 
-						v3s16 pos(x, y, z);
+						v3pos_t pos(x, y, z);
 						if (generate(mg->vm, &ps, pos, true))
 							mg->gennotify.addDecorationEvent(pos, index);
 					}
 				}
 			} else { // Heightmap decorations
-				s16 y = -MAX_MAP_GENERATION_LIMIT;
+				pos_t y = -MAX_MAP_GENERATION_LIMIT;
 				if (flags & DECO_LIQUID_SURFACE)
-					y = mg->findLiquidSurface(v2s16(x, z), nmin.Y, nmax.Y);
+					y = mg->findLiquidSurface(v2pos_t(x, z), nmin.Y, nmax.Y);
 				else if (mg->heightmap)
 					y = mg->heightmap[mapindex];
 				else
-					y = mg->findGroundLevel(v2s16(x, z), nmin.Y, nmax.Y);
+					y = mg->findGroundLevel(v2pos_t(x, z), nmin.Y, nmax.Y);
 
 				if (y < y_min || y > y_max || y < nmin.Y || y > nmax.Y)
 					continue;
@@ -248,7 +247,7 @@ void Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 						continue;
 				}
 
-				v3s16 pos(x, y, z);
+				v3pos_t pos(x, y, z);
 				if (generate(mg->vm, &ps, pos, false))
 					mg->gennotify.addDecorationEvent(pos, index);
 			}
@@ -303,7 +302,7 @@ void DecoSimple::resolveNodeNames()
 }
 
 
-size_t DecoSimple::generate(MMVManip *vm, PcgRandom *pr, v3s16 p, bool ceiling)
+size_t DecoSimple::generate(MMVManip *vm, PcgRandom *pr, v3pos_t p, bool ceiling)
 {
 	// Don't bother if there aren't any decorations to place
 	if (c_decos.empty())
@@ -400,7 +399,7 @@ ObjDef *DecoSchematic::clone() const
 }
 
 
-size_t DecoSchematic::generate(MMVManip *vm, PcgRandom *pr, v3s16 p, bool ceiling)
+size_t DecoSchematic::generate(MMVManip *vm, PcgRandom *pr, v3pos_t p, bool ceiling)
 {
 	// Schematic could have been unloaded but not the decoration
 	// In this case generate() does nothing (but doesn't *fail*)
@@ -463,7 +462,7 @@ ObjDef *DecoLSystem::clone() const
 }
 
 
-size_t DecoLSystem::generate(MMVManip *vm, PcgRandom *pr, v3s16 p, bool ceiling)
+size_t DecoLSystem::generate(MMVManip *vm, PcgRandom *pr, v3pos_t p, bool ceiling)
 {
 	if (!canPlaceDecoration(vm, p))
 		return 0;

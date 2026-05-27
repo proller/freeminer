@@ -6,9 +6,7 @@
 
 #include "irr_v3d.h"
 #include <string>
-#include <iostream>
 #include <list>
-#include "exceptions.h"
 #include "inventory.h"
 
 class Map;
@@ -22,32 +20,36 @@ struct RollbackNode
 	int param2 = 0;
 	std::string meta;
 
-	bool operator == (const RollbackNode &other)
+	bool operator == (const RollbackNode &other) const
 	{
 		return (name == other.name && param1 == other.param1 &&
 				param2 == other.param2 && meta == other.meta);
 	}
-	bool operator != (const RollbackNode &other) { return !(*this == other); }
+	bool operator != (const RollbackNode &other) const
+	{
+		return !(*this == other);
+	}
 
 	RollbackNode() = default;
 
-	RollbackNode(Map *map, v3s16 p, IGameDef *gamedef);
+	RollbackNode(Map *map, v3pos_t p, IGameDef *gamedef);
 };
 
 
 struct RollbackAction
 {
-	enum Type{
+	enum Type : u8 {
 		TYPE_NOTHING,
 		TYPE_SET_NODE,
 		TYPE_MODIFY_INVENTORY_STACK,
-	} type = TYPE_NOTHING;
+	};
 
 	time_t unix_time = 0;
 	std::string actor;
 	bool actor_is_guess = false;
+	Type type = TYPE_NOTHING;
 
-	v3s16 p;
+	v3pos_t p;
 	RollbackNode n_old;
 	RollbackNode n_new;
 
@@ -59,7 +61,7 @@ struct RollbackAction
 
 	RollbackAction() = default;
 
-	void setSetNode(v3s16 p_, const RollbackNode &n_old_,
+	void setSetNode(v3pos_t p_, const RollbackNode &n_old_,
 			const RollbackNode &n_new_)
 	{
 		type = TYPE_SET_NODE;
@@ -86,7 +88,7 @@ struct RollbackAction
 	// Eg. flowing water level changes are not important
 	bool isImportant(IGameDef *gamedef) const;
 
-	bool getPosition(v3s16 *dst) const;
+	bool getPosition(v3pos_t *dst) const;
 
 	bool applyRevert(Map *map, InventoryManager *imgr, IGameDef *gamedef) const;
 };
@@ -99,14 +101,14 @@ public:
 	virtual std::string getActor() = 0;
 	virtual bool isActorGuess() = 0;
 	virtual void setActor(const std::string &actor, bool is_guess) = 0;
-	virtual std::string getSuspect(v3s16 p, float nearness_shortcut,
+	virtual std::string getSuspect(v3pos_t p, float nearness_shortcut,
 	                               float min_nearness) = 0;
 
 	virtual ~IRollbackManager() = default;;
 	virtual void flush() = 0;
 	// Get all actors that did something to position p, but not further than
 	// <seconds> in history
-	virtual std::list<RollbackAction> getNodeActors(v3s16 pos, int range,
+	virtual std::list<RollbackAction> getNodeActors(v3pos_t pos, int range,
 	                time_t seconds, int limit) = 0;
 	// Get actions to revert <seconds> of history made by <actor>
 	virtual std::list<RollbackAction> getRevertActions(const std::string &actor,

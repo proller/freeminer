@@ -14,30 +14,24 @@
 
 #include "irr_v3d.h"
 #include "map.h"
-#include "hud.h"
+#include "hud_element.h" // HudElementStat
 #include "gamedef.h"
-#include "content/mods.h"
-#include "inventorymanager.h"
 #include "content/subgames.h"
 #include "network/peerhandler.h"
-#include "network/connection.h"
-#include "util/numeric.h"
 #include "util/thread.h"
 #include "util/basic_macros.h"
 #include "util/metricsbackend.h"
-#include "serverenvironment.h"
 #include "server/clientiface.h"
 #include "threading/ordered_mutex.h"
-#include "chatmessage.h"
-#include "sound.h"
 #include "translation.h"
-#include "script/common/c_types.h" // LuaError
+#include "sound_spec.h"
 #include <atomic>
 #include <csignal>
 #include <string>
 #include <list>
-#include <map>
 #include <vector>
+#include <unordered_map>
+#include <unordered_set>
 #include <optional>
 #include <string_view>
 #include <shared_mutex>
@@ -58,7 +52,7 @@ class EnvThread;
 class AbmThread;
 class AbmWorldThread;
 class WorldMergeThread;
-
+class MapgenVoxelEarth;
 
 
 class ClientNotFoundException : public BaseException
@@ -72,37 +66,50 @@ public:
 // ==
 
 
-class ChatEvent;
-struct ChatEventChat;
-struct ChatInterface;
-class IWritableItemDefManager;
-class NodeDefManager;
-class IWritableCraftDefManager;
 class BanManager;
+class ChatEvent;
+class EmergeManager;
 class Inventory;
+class IRollbackManager;
+class IWritableCraftDefManager;
+class IWritableItemDefManager;
+class LuaError;
+class MetricsBackend;
 class ModChannelMgr;
-class RemotePlayer;
+class NodeDefManager;
 class Player;
 class PlayerSAO;
-struct PlayerHPChangeReason;
-class IRollbackManager;
-struct RollbackAction;
-class EmergeManager;
-class ServerScripting;
+class RemotePlayer;
 class ServerEnvironment;
-struct SoundSpec;
-struct CloudParams;
-struct SkyboxParams;
-struct SunParams;
-struct MoonParams;
-struct StarParams;
-struct Lighting;
-class ServerThread;
-class ServerModManager;
 class ServerInventoryManager;
+class ServerModManager;
+class ServerScripting;
+class ServerThread;
+class Settings;
+
+struct ChatEventChat;
+struct ChatInterface;
+struct ChatMessage;
+struct CloudParams;
+struct GameParams;
+struct Lighting;
+struct MoonParams;
 struct PackedValue;
 struct ParticleParameters;
 struct ParticleSpawnerParameters;
+struct PlayerHPChangeReason;
+struct RollbackAction;
+struct SkyboxParams;
+struct SoundSpec;
+struct StarParams;
+struct SunParams;
+
+namespace con {
+	class IConnection;
+	class IPeer;
+
+	enum rtt_stat_type : int;
+}
 
 // Anticheat flags
 enum {
@@ -135,8 +142,8 @@ struct MediaInfo
 	// does what it says. used by some cases of dynamic media.
 	bool delete_at_shutdown;
 
-	MediaInfo(std::string_view path_ = "",
-	          std::string_view sha1_digest_ = ""):
+	MediaInfo(std::string_view path_,
+	          std::string_view sha1_digest_):
 		path(path_),
 		sha1_digest(sha1_digest_),
 		no_announce(false),
@@ -390,18 +397,15 @@ public:
 	StepSettings getStepSettings() { return m_step_settings.load(); }
 
 	void setAsyncFatalError(const std::string &error);
-	inline void setAsyncFatalError(const LuaError &e)
-	{
-		setAsyncFatalError(std::string("Lua: ") + e.what());
-	}
+	void setAsyncFatalError(const LuaError &e);
 
 	// Not thread-safe.
 	void addShutdownError(const ModError &e);
 
 	bool showFormspec(const char *name, const std::string &formspec, const std::string &formname);
-	Map & getMap() { return m_env->getMap(); }
+	Map &getMap();
 	ServerEnvironment & getEnv() { return *m_env; }
-	v3f findSpawnPos(const std::string &player_name);
+	v3opos_t findSpawnPos(const std::string &player_name);
 
 	u32 hudAdd(RemotePlayer *player, HudElement *element);
 	bool hudRemove(RemotePlayer *player, u32 id);
@@ -453,9 +457,9 @@ public:
 	void HandlePlayerHPChange(PlayerSAO *sao, const PlayerHPChangeReason &reason);
 	void SendPlayerHP(PlayerSAO *sao, bool effect);
 	void SendPlayerBreath(PlayerSAO *sao);
-	void SendInventory(RemotePlayer *player, bool incremental);
+	void SendInventory(RemotePlayer *player, bool incremental, bool skip_wield_anim = false);
 	void SendMovePlayer(PlayerSAO *sao);
-	void SendMovePlayerRel(session_t peer_id, const v3f &added_pos);
+	void SendMovePlayerRel(session_t peer_id, const v3opos_t &added_pos);
 	void SendPlayerSpeed(session_t peer_id, const v3f &added_vel);
 	void SendPlayerFov(session_t peer_id);
 	void SendCamera(session_t peer_id, Player *player);
@@ -472,9 +476,10 @@ public:
 	ModChannel *getModChannel(const std::string &channel) override;
 
 	// Send block to specific player only
-	bool SendBlock(session_t peer_id, const v3s16 &blockpos);
+	bool SendBlock(session_t peer_id, const v3bpos_t &blockpos);
 
 	// Get or load translations for a language
+	// Note: don't store returned pointer.
 	Translations *getTranslationLanguage(const std::string &lang_code);
 
 	// Returns all media files the server knows about
@@ -514,7 +519,7 @@ public:
 		EnvAutoLock(Server *server): m_lock(server->m_env_mutex) {}
 
 	private:
-		std::lock_guard<ordered_mutex> m_lock;
+		std::lock_guard<std::mutex> m_lock;
 */
 	};
 
@@ -560,12 +565,12 @@ private:
 
 	// The standard library does not implement std::hash for pairs so we have this:
 	struct SBCHash {
-		size_t operator() (const std::pair<v3s16, u16> &p) const {
-			return std::hash<v3s16>()(p.first) ^ p.second;
+		size_t operator() (const std::pair<v3bpos_t, u16> &p) const {
+			return std::hash<v3bpos_t>()(p.first) ^ p.second;
 		}
 	};
 
-	typedef std::unordered_map<std::pair<v3s16, u16>, std::string, SBCHash> SerializedBlockCache;
+	typedef std::unordered_map<std::pair<v3bpos_t, u16>, std::string, SBCHash> SerializedBlockCache;
 
 	void init();
 
@@ -612,15 +617,15 @@ private:
 		far_d_nodes are ignored and their peer_ids are added to far_players
 	*/
 	// Envlock and conlock should be locked when calling these
-	void sendRemoveNode(v3s16 p, std::unordered_set<u16> *far_players = nullptr,
+	void sendRemoveNode(v3pos_t p, std::unordered_set<u16> *far_players = nullptr,
 			float far_d_nodes = 100);
-	void sendAddNode(v3s16 p, MapNode n,
+	void sendAddNode(v3pos_t p, MapNode n,
 			std::unordered_set<u16> *far_players = nullptr,
 			float far_d_nodes = 100, bool remove_metadata = true);
-	void sendNodeChangePkt(NetworkPacket &pkt, v3s16 block_pos,
-			v3f p, float far_d_nodes, std::unordered_set<u16> *far_players);
+	void sendNodeChangePkt(u16 command, const MapNode& n, v3pos_t p_int,
+			float far_d_nodes, std::unordered_set<u16> *far_players, bool remove_metadata = true);
 
-	void sendMetadataChanged(const std::unordered_set<v3s16> &positions,
+	void sendMetadataChanged(const std::unordered_set<v3pos_t> &positions,
 			float far_d_nodes = 100);
 
 	// Environment and Connection must be locked when called
@@ -706,7 +711,7 @@ private:
 	*/
 
 	// Environment mutex (envlock)
-	ordered_mutex m_env_mutex;
+	std::mutex m_env_mutex;
 
 	// World directory
 public:
@@ -765,6 +770,9 @@ public:
 	// Craft definition manager
 	IWritableCraftDefManager *m_craftdef;
 
+	// NOTE: Cannot use forward declaration of 'Translations'. Whereas most
+	// modern compilers support incomplete types here, it's not in the C++ spec.
+	// key = lang_code
 	std::unordered_map<std::string, Translations> server_translations;
 
 	ModIPCStore m_ipcstore;
@@ -842,7 +850,8 @@ public:
 
 
 	// freeminer:
-private:
+friend MapgenVoxelEarth;
+	private:
 	int save(float dtime, float dedicated_server_step = 0.1, bool breakable = false);
 
 	//fmtodo: remove:
@@ -879,7 +888,7 @@ public:
 	void handleCommand_Drawcontrol(NetworkPacket *pkt);
 	void handleCommand_GetBlocks(NetworkPacket *pkt);
 	void handleCommand_InitFm(NetworkPacket *pkt);
-	ServerMap::far_dbases_t far_dbases;
+	Map::far_dbases_t far_dbases;
 	uint32_t SendFarBlocks(float dtime);
 
 	Stat stat;
@@ -931,7 +940,7 @@ public:
 */
 
 // fm:
-MapDatabase *GetFarDatabase(MapDatabase *dbase, ServerMap::far_dbases_t &far_dbases,
+MapDatabase *GetFarDatabase(MapDatabase *dbase, Map::far_dbases_t &far_dbases,
 		const std::string &savedir, block_step_t step);
 MapBlockPtr loadBlockNoStore(Map *smap, MapDatabase *dbase, const v3bpos_t &pos);
 // ==

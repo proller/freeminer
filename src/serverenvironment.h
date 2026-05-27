@@ -5,18 +5,17 @@
 #pragma once
 
 #include "server/fm_key_value_cached.h"
-//#include "server/abmhandler.h"
 #include "threading/concurrent_set.h"
 
+#include <memory> // std::unique_ptr
 #include <set>
-#include <utility>
+#include <unordered_map>
+#include <utility> // std::function
+#include <vector>
 
-#include "activeobject.h"
 #include "environment.h"
-#include "servermap.h"
 #include "util/guid.h"
-#include "map.h"
-#include "settings.h"
+#include "map.h" // MapEventReceiver
 #include "server/activeobjectmgr.h"
 #include "server/blockmodifier.h"
 #include "util/numeric.h"
@@ -26,16 +25,23 @@
 #include <mutex>
 #include "util/metricsbackend.h"
 
-struct GameParams;
-class RemotePlayer;
-class PlayerDatabase;
 class AuthDatabase;
+class ActiveObject;
+class MetricsBackend;
+class PlayerDatabase;
 class PlayerSAO;
-class ServerEnvironment;
-struct StaticObject;
-class ServerActiveObject;
+class RemotePlayer;
 class Server;
+class ServerActiveObject;
+class ServerEnvironment;
 class ServerScripting;
+class Settings;
+struct ActiveObjectMessage;
+struct GameParams;
+struct StaticObject;
+
+class ServerMap;
+
 enum AccessDeniedCode : u8;
 typedef u16 session_t;
 
@@ -49,11 +55,11 @@ public:
 	void update(std::vector<PlayerSAO*> &active_players,
 		s16 active_block_range,
 		s16 active_object_range,
-		std::set<v3s16> &blocks_removed,
-		std::set<v3s16> &blocks_added,
-		std::set<v3s16> &extra_blocks_added);
+		std::set<v3bpos_t> &blocks_removed,
+		std::set<v3bpos_t> &blocks_added,
+		std::set<v3bpos_t> &extra_blocks_added);
 
-	bool contains(v3s16 p) const {
+	bool contains(v3bpos_t p) const {
 		return (m_list.find(p) != m_list.end());
 	}
 
@@ -66,7 +72,7 @@ public:
 	}
 
 	/// @return true if block was newly added
-	bool add(v3s16 p) {
+	bool add(v3bpos_t p) {
 		if (m_list.insert(p).second) {
 			m_abm_list.insert(p);
 			return true;
@@ -74,26 +80,26 @@ public:
 		return false;
 	}
 
-	void remove(v3s16 p) {
+	void remove(v3bpos_t p) {
 		m_list.erase(p);
 		m_abm_list.erase(p);
 	}
 
 	// list of all active blocks
-	//std::set<v3s16> m_list;
+	//std::set<v3pos_t> m_list;
 	maybe_concurrent_set<v3pos_t> m_list;
 	// list of blocks for ABM processing
 	// subset of `m_list` that does not contain view cone affected blocks
-	std::set<v3s16> m_abm_list;
+	std::set<v3bpos_t> m_abm_list;
 	// list of blocks that are always active, not modified by this class
-	std::set<v3s16> m_forceloaded_list;
+	std::set<v3bpos_t> m_forceloaded_list;
 };
 
 /*
 	ServerEnvironment::m_on_mapblocks_changed_receiver
 */
 struct OnMapblocksChangedReceiver : public MapEventReceiver {
-	std::unordered_set<v3s16> modified_blocks;
+	std::unordered_set<v3bpos_t> modified_blocks;
 	bool receiving = false;
 
 	void onMapEditEvent(const MapEditEvent &event) override;
@@ -204,7 +210,7 @@ public:
 	bool getActiveObjectMessage(ActiveObjectMessage *dest);
 
 	virtual void getSelectedActiveObjects(
-		const core::line3d<f32> &shootline_on_map,
+		const core::line3d<opos_t> &shootline_on_map,
 		std::vector<PointedThing> &objects,
 		const std::optional<Pointabilities> &pointabilities
 	);
@@ -231,25 +237,25 @@ public:
 	// Script-aware node setters
 	bool setNode(v3pos_t p, const MapNode &n, s16 fast = 0, bool important = false);
 	bool removeNode(v3pos_t p, s16 fast = 0, bool important = false);
-	bool swapNode(v3s16 p, const MapNode &n, s16 fast = 0);
+	bool swapNode(v3pos_t p, const MapNode &n, s16 fast = 0);
 
 	// Find the daylight value at pos with a Depth First Search
-	u8 findSunlight(v3s16 pos) const;
+	u8 findSunlight(v3pos_t pos) const;
 
-	void updateObjectPos(u16 id, v3f pos)
+	void updateObjectPos(u16 id, v3opos_t pos)
 	{
 		return m_ao_manager.updateObjectPos(id, pos);
 	}
 
 	// Find all active objects inside a radius around a point
-	void getObjectsInsideRadius(std::vector<ServerActiveObjectPtr> &objects, const v3f &pos, float radius,
+	void getObjectsInsideRadius(std::vector<ServerActiveObjectPtr> &objects, const v3opos_t &pos, float radius,
 			const std::function<bool(const ServerActiveObjectPtr &obj)> &include_obj_cb)
 	{
 		return m_ao_manager.getObjectsInsideRadius(pos, radius, objects, include_obj_cb);
 	}
 
 	// Find all active objects inside a box
-	void getObjectsInArea(std::vector<ServerActiveObjectPtr> &objects, const aabb3f &box,
+	void getObjectsInArea(std::vector<ServerActiveObjectPtr> &objects, const aabb3o &box,
 			const std::function<bool(const ServerActiveObjectPtr &obj)> &include_obj_cb)
 	{
 		return m_ao_manager.getObjectsInArea(box, objects, include_obj_cb);
@@ -269,7 +275,8 @@ public:
 	void reportMaxLagEstimate(float f) { m_max_lag_estimate = f; }
 	float getMaxLagEstimate() const { return m_max_lag_estimate; }
 
-	std::set<v3s16>* getForceloadedBlocks() { return &m_active_blocks.m_forceloaded_list; }
+	std::set<v3bpos_t>* getForceloadedBlocks() { return &m_active_blocks.m_forceloaded_list; }
+	const std::set<v3bpos_t> &getActiveBlocks() const { return m_active_blocks.m_list; }
 
 	// Sorted by how ready a mapblock is
 	enum BlockStatus {
@@ -278,12 +285,12 @@ public:
 		BS_LOADED,
 		BS_ACTIVE // always highest value
 	};
-	BlockStatus getBlockStatus(v3s16 blockpos);
+	BlockStatus getBlockStatus(v3bpos_t blockpos);
 
 	// Sets the static object status all the active objects in the specified block
 	// This is only really needed for deleting blocks from the map
-	void setStaticForActiveObjectsInBlock(v3s16 blockpos,
-		bool static_exists, v3s16 static_block=v3s16(0,0,0));
+	void setStaticForActiveObjectsInBlock(v3bpos_t blockpos,
+		bool static_exists, v3bpos_t static_block=v3bpos_t(0,0,0));
 
 	RemotePlayer *getPlayer(const session_t peer_id);
 	RemotePlayer *getPlayer(const std::string &name, bool match_invalid_peer = false);
@@ -431,7 +438,7 @@ public:
 	*/
 	void deleteStaticFromBlock(
 			ServerActiveObject *obj, u16 id, u32 mod_reason, bool no_emerge);
-	bool saveStaticToBlock(v3s16 blockpos, u16 store_id,
+	bool saveStaticToBlock(v3bpos_t blockpos, u16 store_id,
 			ServerActiveObject *obj, const StaticObject &s_obj, u32 mod_reason);
 
 	void processActiveObjectRemove(ServerActiveObjectPtr obj);
@@ -443,9 +450,9 @@ public:
 	// The map
 	std::unique_ptr<ServerMap> m_map;
 	// Lua state
-	ServerScripting* m_script;
+	ServerScripting *m_script = nullptr;
 	// Server definition
-	Server *m_server;
+	Server *m_server = nullptr;
 	// Active Object Manager
 	server::ActiveObjectMgr m_ao_manager;
 	// on_mapblocks_changed map event receiver
@@ -466,6 +473,8 @@ private:
 	IntervalLimiter m_active_blocks_nodemetadata_interval;
 	// Whether the variables below have been read from file yet
 	bool m_meta_loaded = false;
+	// Are we shutting down?
+	bool m_shutting_down = false;
 	// Time from the beginning of the game in seconds.
 	// Incremented in step().
 	std::atomic_uint32_t m_game_time {0};
@@ -512,6 +521,6 @@ private:
 	MetricGaugePtr m_active_block_gauge;
 	MetricGaugePtr m_active_object_gauge;
 
-	std::unique_ptr<ServerActiveObject> createSAO(ActiveObjectType type, v3f pos,
+	std::unique_ptr<ServerActiveObject> createSAO(ActiveObjectType type, v3opos_t pos,
 			const std::string &data);
 };

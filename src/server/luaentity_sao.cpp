@@ -3,6 +3,7 @@
 // Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 // Copyright (C) 2013-2020 Minetest core developers & community
 
+#include "irr_v3d.h"
 #include "log_types.h"
 #include "luaentity_sao.h"
 #include "collision.h"
@@ -13,8 +14,9 @@
 #include "scripting_server.h"
 #include "server.h"
 #include "serverenvironment.h"
+#include "util/serialize.h"
 
-LuaEntitySAO::LuaEntitySAO(ServerEnvironment *env, v3f pos, const std::string &data)
+LuaEntitySAO::LuaEntitySAO(ServerEnvironment *env, v3opos_t pos, const std::string &data)
 	: UnitSAO(env, pos)
 {
 	std::string name;
@@ -25,7 +27,8 @@ LuaEntitySAO::LuaEntitySAO(ServerEnvironment *env, v3f pos, const std::string &d
 
 	while (!data.empty()) { // breakable, run for one iteration
 		std::istringstream is(data, std::ios::binary);
-		// 'version' does not allow to incrementally extend the parameter list thus
+		// Servers < 5.0.0-dev (PROTOCOL_VERSION < 37) had improper compatibility code,
+		// only handling exactly 'version=0' and 'version=1'. See commit 67049eba. Thus,
 		// we need another variable to build on top of 'version=1'. Ugly hack but works™
 		u8 version2 = 0;
 		u8 version = readU8(is);
@@ -41,7 +44,7 @@ LuaEntitySAO::LuaEntitySAO(ServerEnvironment *env, v3f pos, const std::string &d
 		// yaw must be yaw to be backwards-compatible
 		rotation.Y = readF1000(is);
 
-		if (is.good()) // EOF for old formats
+		if (canRead(is))
 			version2 = readU8(is);
 
 		if (version2 < 1) // PROTOCOL_VERSION < 37
@@ -78,7 +81,7 @@ LuaEntitySAO::LuaEntitySAO(ServerEnvironment *env, v3f pos, const std::string &d
 	setRotation(rotation);
 }
 
-LuaEntitySAO::LuaEntitySAO(ServerEnvironment *env, v3f pos, const std::string &name,
+LuaEntitySAO::LuaEntitySAO(ServerEnvironment *env, v3opos_t pos, const std::string &name,
 		const std::string &state) :
 		UnitSAO(env, pos),
 		m_init_name(name), m_init_state(state),
@@ -175,13 +178,13 @@ void LuaEntitySAO::step(float dtime, bool send_recommended)
 			aabb3f box = m_prop.collisionbox;
 			box.MinEdge *= BS;
 			box.MaxEdge *= BS;
-			v3f p_pos = getBasePosition();
+			auto p_pos = getBasePosition();
 			v3f p_velocity = m_velocity;
 			v3f p_acceleration = m_acceleration;
 			moveresult = collisionMoveSimple(m_env, m_env->getGameDef(),
 					box, m_prop.stepheight, dtime,
 					&p_pos, &p_velocity, p_acceleration,
-					this, m_prop.collideWithObjects);
+					this, m_prop.collideWithObjects, m_prop.step_up_mode);
 			moveresult_p = &moveresult;
 
 			// Apply results
@@ -189,7 +192,7 @@ void LuaEntitySAO::step(float dtime, bool send_recommended)
 			m_velocity = p_velocity;
 			m_acceleration = p_acceleration;
 		} else {
-			addPos((m_velocity + m_acceleration * 0.5f * dtime) * dtime);
+			addPos(v3fToOpos(m_velocity + m_acceleration * 0.5f * dtime) * dtime);
 			m_velocity += dtime * m_acceleration;
 		}
 
@@ -263,7 +266,7 @@ std::string LuaEntitySAO::getClientInitializationData(u16 protocol_version)
 	os << serializeString16(m_init_name); // name
 	writeU8(os, 0); // is_player
 	writeU16(os, getId()); //id
-	writeV3F32(os, getBasePosition());
+	writeV3O(os, getBasePosition(), protocol_version);
 	writeV3F32(os, getRotation());
 	writeU16(os, m_hp);
 
@@ -339,7 +342,7 @@ void LuaEntitySAO::getStaticData(std::string *result) const
 }
 
 u32 LuaEntitySAO::punch(v3f dir,
-		const ToolCapabilities *toolcap,
+		const ToolCapabilities &toolcap,
 		ServerActiveObject *puncher,
 		float time_from_last_punch,
 		u16 initial_wear)
@@ -395,7 +398,7 @@ void LuaEntitySAO::rightClick(ServerActiveObject *clicker)
 	m_env->getScriptIface()->luaentity_Rightclick(m_id, clicker);
 }
 
-void LuaEntitySAO::setPos(const v3f &pos)
+void LuaEntitySAO::setPos(const v3opos_t &pos)
 {
 	if(isAttached())
 		return;
@@ -403,7 +406,7 @@ void LuaEntitySAO::setPos(const v3f &pos)
 	sendPosition(false, true);
 }
 
-void LuaEntitySAO::moveTo(v3f pos, bool continuous)
+void LuaEntitySAO::moveTo(v3opos_t pos, bool continuous)
 {
 	if(isAttached())
 		return;
@@ -561,9 +564,9 @@ void LuaEntitySAO::sendPosition(bool do_interpolate, bool is_movement_end)
 		m_rotation,
 		do_interpolate,
 		is_movement_end,
-		update_interval
+		update_interval		
 	);
-	std::optional<v3f> skip;
+	std::optional<v3opos_t> skip;
 	if (!is_movement_end)
 		skip = getBasePosition();
 
@@ -571,13 +574,13 @@ void LuaEntitySAO::sendPosition(bool do_interpolate, bool is_movement_end)
 	m_messages_out.emplace(getId(), false, str, skip);
 }
 
-bool LuaEntitySAO::getCollisionBox(aabb3f *toset) const
+bool LuaEntitySAO::getCollisionBox(aabb3o *toset) const
 {
 	if (m_prop.physical)
 	{
 		//update collision box
-		toset->MinEdge = m_prop.collisionbox.MinEdge * BS;
-		toset->MaxEdge = m_prop.collisionbox.MaxEdge * BS;
+		toset->MinEdge = v3fToOpos(m_prop.collisionbox.MinEdge * BS);
+		toset->MaxEdge = v3fToOpos(m_prop.collisionbox.MaxEdge * BS);
 
 		const auto bpos = getBasePosition();
 		toset->MinEdge += bpos;

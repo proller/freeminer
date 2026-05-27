@@ -5,14 +5,12 @@
 #pragma once
 
 #include "irrlichttypes.h"
-#include "inventory.h"
+#include "inventory.h" // ItemStack
+#include "util/basic_macros.h"
 #include "util/numeric.h"
-#include "client/localplayer.h"
-#include <ICameraSceneNode.h>
-#include <ISceneNode.h>
 #include <plane3d.h>
 #include <array>
-#include <list>
+#include <vector>
 #include <optional>
 
 class LocalPlayer;
@@ -20,6 +18,14 @@ struct MapDrawControl;
 class Client;
 class RenderingEngine;
 class WieldMeshSceneNode;
+
+enum CameraMode : int;
+
+namespace scene {
+	class ICameraSceneNode;
+	class ISceneManager;
+	class ISceneNode;
+};
 
 struct Nametag
 {
@@ -69,16 +75,13 @@ public:
 
 	// Get the camera position (in absolute scene coordinates).
 	// This has view bobbing applied.
-	inline v3f getPosition() const
+	inline v3opos_t getPosition() const
 	{
 		return m_camera_position;
 	}
 
 	// Returns the absolute position of the head SceneNode in the world
-	inline v3f getHeadPosition() const
-	{
-		return m_headnode->getAbsolutePosition();
-	}
+	v3opos_t getHeadPosition() const;
 
 	// Get the camera direction (in absolute camera coordinates).
 	// This has view bobbing applied.
@@ -88,7 +91,7 @@ public:
 	}
 
 	// Get the camera offset
-	inline v3s16 getOffset() const
+	inline v3pos_t getOffset() const
 	{
 		return m_camera_offset;
 	}
@@ -117,9 +120,9 @@ public:
 	auto getFrustumCuller() const
 	{
 		return [planes = getFrustumCullPlanes(),
-				camera_offset = intToFloat(m_camera_offset, BS)
-				](v3f position, f32 radius) {
-			v3f pos_camspace = position - camera_offset;
+				camera_offset = intToFloat(m_camera_offset, (opos_t)BS)
+				](v3opos_t position, f32 radius) {
+			v3f pos_camspace = oposToV3f(position - camera_offset);
 			for (auto &plane : planes) {
 				if (plane.getDistanceTo(pos_camspace) > radius)
 					return true;
@@ -148,7 +151,7 @@ public:
 	void setDigging(s32 button);
 
 	// Replace the wielded item mesh
-	void wield(const ItemStack &item);
+	void wield(const ItemStack &item, bool animate = true);
 
 	// Draw the wielded tool.
 	// This has to happen *after* the main scene is drawn.
@@ -156,15 +159,7 @@ public:
 	void drawWieldedTool(core::matrix4* translation=NULL);
 
 	// Toggle the current camera mode
-	void toggleCameraMode()
-	{
-		if (m_camera_mode == CAMERA_MODE_FIRST)
-			m_camera_mode = CAMERA_MODE_THIRD;
-		else if (m_camera_mode == CAMERA_MODE_THIRD)
-			m_camera_mode = CAMERA_MODE_THIRD_FRONT;
-		else
-			m_camera_mode = CAMERA_MODE_FIRST;
-	}
+	void toggleCameraMode();
 
 	// Set the current camera mode
 	inline void setCameraMode(CameraMode mode)
@@ -191,6 +186,8 @@ private:
 	// This helper just exists to decrease the header's number of includes.
 	std::array<core::plane3d<f32>, 4> getFrustumCullPlanes() const;
 
+	void updateWieldedTool();
+
 	// Nodes
 	scene::ISceneNode *m_playernode = nullptr;
 	scene::ISceneNode *m_headnode = nullptr;
@@ -208,11 +205,11 @@ private:
 	f32 m_cache_fov;
 
 	// Absolute camera position
-	v3f m_camera_position;
+	v3opos_t m_camera_position;
 	// Absolute camera direction
 	v3f m_camera_direction;
 	// Camera offset
-	v3s16 m_camera_offset;
+	v3pos_t m_camera_offset;
 
 	bool m_stepheight_smooth_active = false;
 
@@ -255,7 +252,7 @@ private:
 	f32 m_wield_change_timer = 0.125f;
 	ItemStack m_wield_item_next;
 
-	CameraMode m_camera_mode = CAMERA_MODE_FIRST;
+	CameraMode m_camera_mode;
 
 
 // fm:
@@ -268,7 +265,7 @@ private:
 	f32 m_cache_view_bobbing_amount;
 	bool m_arm_inertia;
 
-	std::list<Nametag *> m_nametags;
+	std::vector<Nametag*> m_nametags;
 	bool m_show_nametag_backgrounds;
 
 	// Last known light color of the player

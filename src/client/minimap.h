@@ -12,7 +12,8 @@
 #include "rect.h"
 #include "CMeshBuffer.h"
 
-#include "../hud.h"
+#include "constants.h"
+#include "hud_element.h"
 #include "mapnode.h"
 #include "util/thread.h"
 #include <map>
@@ -55,10 +56,11 @@ struct MinimapModeDef {
 struct MinimapMarker {
 	MinimapMarker(scene::ISceneNode *parent_node):
 		parent_node(parent_node)
-	{
-	}
+	{}
+
 	scene::ISceneNode *parent_node;
 };
+
 struct MinimapPixel {
 	//! The topmost node that the minimap displays.
 	MapNode n;
@@ -67,15 +69,15 @@ struct MinimapPixel {
 };
 
 struct MinimapMapblock {
-	void getMinimapNodes(NodeContainer *vmanip, const NodeDefManager *nodedef, const v3s16 &pos);
+	void getMinimapNodes(NodeContainer *vmanip, const NodeDefManager *nodedef, const v3pos_t &pos);
 
 	MinimapPixel data[MAP_BLOCKSIZE * MAP_BLOCKSIZE];
 };
 
 struct MinimapData {
 	MinimapModeDef mode;
-	v3s16 pos;
-	v3s16 old_pos;
+	v3pos_t pos;
+	v3pos_t old_pos;
 	MinimapPixel minimap_scan[MINIMAP_MAX_SX * MINIMAP_MAX_SY];
 	std::atomic_bool map_invalidated;
 	bool minimap_shape_round;
@@ -92,7 +94,7 @@ struct MinimapData {
 };
 
 struct QueuedMinimapUpdate {
-	v3s16 pos;
+	v3bpos_t pos;
 	MinimapMapblock *data = nullptr;
 };
 
@@ -101,9 +103,9 @@ public:
 	MinimapUpdateThread() : UpdateThread("Minimap") { next_update = 0; }
 	virtual ~MinimapUpdateThread();
 
-	void getMap(v3s16 pos, s16 size, s16 height);
-	void enqueueBlock(v3s16 pos, MinimapMapblock *data);
-	bool pushBlockUpdate(v3s16 pos, MinimapMapblock *data);
+	void getMap(v3pos_t pos, s16 size, pos_t height);
+	void enqueueBlock(v3bpos_t pos, MinimapMapblock *data);
+	bool pushBlockUpdate(v3bpos_t pos, MinimapMapblock *data);
 	bool popBlockUpdate(QueuedMinimapUpdate *update);
 
 	MinimapData *data = nullptr;
@@ -117,7 +119,7 @@ private:
 	std::deque<QueuedMinimapUpdate> m_update_queue;
 	unordered_map_v3pos<MinimapMapblock *> m_blocks_cache;
 	//simple: unordered_map_v2pos<std::vector<MinimapMapblock*>> getmap_cache
-	unordered_map_v2pos<std::map<pos_t, MinimapMapblock*>> getmap_cache;
+	unordered_map_v2pos<std::map<bpos_t, MinimapMapblock*>> getmap_cache;
 };
 
 class Minimap {
@@ -125,12 +127,12 @@ public:
 	Minimap(Client *client);
 	~Minimap();
 
-	void addBlock(v3s16 pos, MinimapMapblock *data);
+	void addBlock(v3bpos_t pos, MinimapMapblock *data);
 
 	v3f getYawVec();
 
-	void setPos(v3s16 pos);
-	v3s16 getPos() const { return data->pos; }
+	void setPos(v3pos_t pos);
+	v3pos_t getPos() const { return data->pos; }
 	void setAngle(f32 angle);
 	f32 getAngle() const { return m_angle; }
 	void toggleMinimapShape();
@@ -164,23 +166,22 @@ public:
 	void updateActiveMarkers();
 	void drawMinimap(core::rect<s32> rect);
 
-	video::IVideoDriver *driver;
-	Client* client;
+	video::IVideoDriver *driver = nullptr;
+	Client *client = nullptr;
 	std::unique_ptr<MinimapData> data;
 
 private:
-	ITextureSource *m_tsrc;
-	IShaderSource *m_shdrsrc;
-	const NodeDefManager *m_ndef;
+	ITextureSource *m_tsrc = nullptr;
+	IShaderSource *m_shdrsrc = nullptr;
+	const NodeDefManager *m_ndef = nullptr;
 	std::unique_ptr<MinimapUpdateThread> m_minimap_update_thread;
 	irr_ptr<scene::SMeshBuffer> m_meshbuffer;
 	std::vector<MinimapModeDef> m_modes;
 	size_t m_current_mode_index;
 	u16 m_surface_mode_scan_height;
 	f32 m_angle;
-/*
-	std::mutex m_mutex;
-*/
-	std::list<std::unique_ptr<MinimapMarker>> m_markers;
-	std::list<v2f> m_active_markers;
+
+	//std::mutex m_mutex;
+	std::vector<std::unique_ptr<MinimapMarker>> m_markers;
+	std::vector<v2f> m_active_markers;
 };

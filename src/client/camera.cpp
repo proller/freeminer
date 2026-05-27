@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
+#include "itemdef.h"
+
 #include "camera.h"
-#include "debug.h"
 #include "client.h"
-#include "config.h"
-#include "map.h"
 #include "clientmap.h"     // MapDrawControl
+#include "irr_v3d.h"
+#include "localplayer.h"
 #include "player.h"
 #include <cmath>
 #include "client/renderingengine.h"
@@ -23,9 +24,12 @@
 #include "fontengine.h"
 #include "script/scripting_client.h"
 #include "gettext.h"
-#include <SViewFrustum.h>
+
+#include <ICameraSceneNode.h>
 #include <IGUIFont.h>
+#include <ISceneNode.h>
 #include <IVideoDriver.h>
+#include <SViewFrustum.h>
 
 static constexpr f32 CAMERA_OFFSET_STEP = 1000;
 
@@ -42,6 +46,7 @@ static const char *setting_names[] = {
 Camera::Camera(MapDrawControl &draw_control, Client *client, RenderingEngine *rendering_engine):
 	m_draw_control(draw_control),
 	m_client(client),
+	m_camera_mode(CAMERA_MODE_FIRST),
 	m_player_light_color(0xFFFFFFFF)
 {
 	auto smgr = rendering_engine->get_scene_manager();
@@ -99,6 +104,11 @@ Camera::~Camera()
 	m_wieldmgr->drop();
 }
 
+v3opos_t Camera::getHeadPosition() const
+{
+	return v3fToOpos(m_headnode->getAbsolutePosition());
+}
+
 void Camera::notifyFovChange()
 {
 	LocalPlayer *player = m_client->getEnv().getLocalPlayer();
@@ -140,9 +150,7 @@ void Camera::step(f32 dtime)
 	m_wield_change_timer = MYMIN(m_wield_change_timer + dtime, 0.125);
 
 	if (m_wield_change_timer >= 0 && was_under_zero) {
-		m_wieldnode->setItem(m_wield_item_next, m_client);
-		m_wieldnode->setLightColorAndAnimation(m_player_light_color,
-				m_client->getAnimationTime());
+		updateWieldedTool();
 	}
 
 	if (m_view_bobbing_state != 0)
@@ -299,10 +307,10 @@ void Camera::addArmInertia(f32 player_yaw)
 
 void Camera::updateOffset()
 {
-	v3f cp = m_camera_position / BS;
+	auto cp = m_camera_position / BS;
 
 	// Update offset if too far away from the center of the map
-	m_camera_offset = v3s16(
+	m_camera_offset = v3pos_t(
 		floorf(cp.X / CAMERA_OFFSET_STEP) * CAMERA_OFFSET_STEP,
 		floorf(cp.Y / CAMERA_OFFSET_STEP) * CAMERA_OFFSET_STEP,
 		floorf(cp.Z / CAMERA_OFFSET_STEP) * CAMERA_OFFSET_STEP
@@ -316,7 +324,7 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 	// Get player position
 	// Smooth the movement when walking up stairs
 	v3f old_player_position = m_playernode->getPosition();
-	v3f player_position = player->getPosition();
+	auto player_position = player->getPosition();
 
 	f32 yaw = player->getYaw();
 	f32 pitch = player->getPitch();
@@ -344,7 +352,7 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 	}
 
 	// Set player node transformation
-	m_playernode->setPosition(player_position);
+	m_playernode->setPosition(oposToV3f(player_position));
 	m_playernode->setRotation(v3f(0, -1 * yaw, 0));
 	m_playernode->updateAbsolutePosition();
 
@@ -356,6 +364,7 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 		v3f eye_offset = player->getEyeOffset();
 		switch(m_camera_mode) {
 		case CAMERA_MODE_ANY:
+		case CameraMode_END:
 			assert(false);
 			break;
 		case CAMERA_MODE_FIRST:
@@ -404,7 +413,9 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 	}
 
 	// Compute absolute camera position and target
-	m_headnode->getAbsoluteTransformation().transformVect(m_camera_position, rel_cam_pos);
+	auto tmp = oposToV3f(m_camera_position); // TODO use offset?
+	m_headnode->getAbsoluteTransformation().transformVect(tmp, rel_cam_pos);
+	m_camera_position = v3fToOpos(tmp);
 	m_camera_direction = m_headnode->getAbsoluteTransformation()
 			.rotateAndScaleVect(rel_cam_target - rel_cam_pos);
 
@@ -414,7 +425,7 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 	// Reposition the camera for third person view
 	if (m_camera_mode > CAMERA_MODE_FIRST)
 	{
-		v3f my_cp = m_camera_position;
+		auto my_cp = m_camera_position;
 
 		if (m_camera_mode == CAMERA_MODE_THIRD_FRONT)
 			m_camera_direction *= -1;
@@ -454,12 +465,12 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 	}
 
 	// Set camera node transformation
-	m_cameranode->setPosition(m_camera_position - intToFloat(m_camera_offset, BS));
+	m_cameranode->setPosition(oposToV3f(m_camera_position - intToFloat(m_camera_offset, BS)));
 	m_cameranode->setUpVector(abs_cam_up);
 	m_cameranode->updateAbsolutePosition();
 	// *100 helps in large map coordinates
-	m_cameranode->setTarget(m_camera_position - intToFloat(m_camera_offset, BS)
-		+ 100 * m_camera_direction);
+	m_cameranode->setTarget(oposToV3f(m_camera_position - intToFloat(m_camera_offset, BS)
+		+ 100 * v3fToOpos(m_camera_direction)));
 
 	/*
 	 * Apply server-sent FOV, instantaneous or smooth transition.
@@ -612,15 +623,27 @@ void Camera::updateViewingRange()
 
 void Camera::setDigging(s32 button)
 {
-	if (m_digging_button == -1)
+	// If placing, do not desynchronize the animation and placement sound.
+	if (button == 1) {
 		m_digging_button = button;
+		m_digging_anim = 0.0f;
+	} else if (m_digging_button == -1) {
+		// Any other action.
+		m_digging_button = button;
+	}
 }
 
-void Camera::wield(const ItemStack &item)
+void Camera::wield(const ItemStack &item, bool animate)
 {
 	if (item.name != m_wield_item_next.name ||
 			item.metadata != m_wield_item_next.metadata) {
 		m_wield_item_next = item;
+
+		if (!animate) {
+			updateWieldedTool();
+			return;
+		}
+
 		if (m_wield_change_timer > 0)
 			m_wield_change_timer = -m_wield_change_timer;
 		else if (m_wield_change_timer == 0)
@@ -672,6 +695,16 @@ void Camera::drawWieldedTool(core::matrix4* translation)
 	m_wieldmgr->drawAll();
 }
 
+void Camera::toggleCameraMode()
+{
+	if (m_camera_mode == CAMERA_MODE_FIRST)
+		m_camera_mode = CAMERA_MODE_THIRD;
+	else if (m_camera_mode == CAMERA_MODE_THIRD)
+		m_camera_mode = CAMERA_MODE_THIRD_FRONT;
+	else
+		m_camera_mode = CAMERA_MODE_FIRST;
+}
+
 void Camera::drawNametags()
 {
 	core::matrix4 trans = m_cameranode->getProjectionMatrix();
@@ -682,8 +715,11 @@ void Camera::drawNametags()
 	const u32 default_font_size = 16;
 	// ...by multiplying this in.
 	const f32 font_size_mult = g_fontengine->getFontSize(FM_Unspecified) / (float)default_font_size;
+
 	// Minimum distance until z-scaled nametags actually become smaller
-	const f32 minimum_d = 1.0f * BS;
+	const f32 minimum_d = 3.0f * BS;
+	// Smoothing constant: larger = slower size falloff with distance
+	const f32 smoothing_k = 4.0f * BS;
 
 	video::IVideoDriver *driver = RenderingEngine::get_video_driver();
 	v2u32 screensize = driver->getScreenSize();
@@ -701,11 +737,12 @@ void Camera::drawNametags()
 		if (nametag->scale_z) {
 			// Higher default since nametag should be reasonably visible
 			// even at distance.
-			u32 base_size = nametag->textsize.value_or(default_font_size * 4);
+			u32 base_size = nametag->textsize.value_or(default_font_size * 3.2f);
 			f32 adjusted_d = std::max(transformed_pos[3] - minimum_d, 0.0f);
-			f32 adjusted_zDiv = adjusted_d == 0.0f ? 1.0f : (1.0f / adjusted_d);
+			// Normalized for base_size * BS
+			f32 scale = (smoothing_k / (adjusted_d + smoothing_k)) / BS;
 			font_size = myround(font_size_mult *
-				rangelim(base_size * BS * adjusted_zDiv, 0, base_size));
+				rangelim(base_size * BS * scale, 0, base_size));
 		} else {
 			font_size = myround(font_size_mult * nametag->textsize.value_or(default_font_size));
 		}
@@ -775,4 +812,10 @@ std::array<core::plane3d<f32>, 4> Camera::getFrustumCullPlanes() const
 		frustum_planes[SViewFrustum::VF_BOTTOM_PLANE],
 		frustum_planes[SViewFrustum::VF_TOP_PLANE],
 	};
+}
+
+void Camera::updateWieldedTool()
+{
+	m_wieldnode->setItem(m_wield_item_next, m_client);
+	m_wieldnode->setLightColorAndAnimation(m_player_light_color, m_client->getAnimationTime());
 }

@@ -145,7 +145,7 @@ bool ActiveObjectMgr::registerObject(std::shared_ptr<ServerActiveObject> obj)
 		return false;
 	}
 
-	const v3f pos = obj->getBasePosition();
+	const auto pos = obj->getBasePosition();
 	if (objectpos_over_limit(pos)) {
 		warningstream << "Server::ActiveObjectMgr::addActiveObjectRaw(): "
 				<< "object position (" << pos.X << "," << pos.Y << "," << pos.Z
@@ -200,7 +200,7 @@ void ActiveObjectMgr::invalidateActiveObjectObserverCaches()
 	}
 }
 
-void ActiveObjectMgr::updateObjectPos(u16 id, v3f pos)
+void ActiveObjectMgr::updateObjectPos(u16 id, v3opos_t pos)
 {
 	// HACK defensively only update if we already know the object,
 	// otherwise we're still waiting to be inserted into the index
@@ -217,8 +217,8 @@ void ActiveObjectMgr::getObjectsInsideRadius(v3f pos, float radius,
 		std::function<bool(const ServerActiveObjectPtr &obj)> include_obj_cb)
 {
 	float r_squared = radius * radius;
-	m_spatial_index.rangeQuery((pos - v3f(radius)).toArray(), (pos + v3f(radius)).toArray(), [&](auto objPos, u16 id) {
-		if (v3f(objPos).getDistanceFromSQ(pos) > r_squared)
+	m_spatial_index.rangeQuery((pos - v3opos_t(radius)).toArray(), (pos + v3opos_t(radius)).toArray(), [&](auto objPos, u16 id) {
+		if (v3opos_t(objPos).getDistanceFromSQ(pos) > r_squared)
 			return;
 
 		auto obj = m_active_objects.get(id);
@@ -229,7 +229,7 @@ void ActiveObjectMgr::getObjectsInsideRadius(v3f pos, float radius,
 	});
 }
 
-void ActiveObjectMgr::getObjectsInArea(const aabb3f &box,
+void ActiveObjectMgr::getObjectsInArea(const aabb3o &box,
 		std::vector<ServerActiveObjectPtr> &result,
 		std::function<bool(const ServerActiveObjectPtr &obj)> include_obj_cb)
 {
@@ -281,7 +281,7 @@ void ActiveObjectMgr::getObjectsInArea(const aabb3o &box,
 }
 
 void ActiveObjectMgr::getAddedActiveObjectsAroundPos(
-		v3f player_pos, const std::string &player_name,
+		v3opos_t player_pos, const std::string &player_name,
 		f32 radius, f32 player_radius,
 		const std::set<u16> &current_objects,
 		std::vector<u16> &added_objects)

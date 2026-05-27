@@ -4,6 +4,7 @@
 
 #include "settings.h"
 #include "convert_json.h"
+#include "irr_v3d.h"
 #include "irrlichttypes_bloated.h"
 #include "exceptions.h"
 #include "threading/mutex_auto_lock.h"
@@ -15,10 +16,10 @@
 #include <sstream>
 #include "debug.h"
 #include "log.h"
-#include "util/serialize.h"
 #include "filesys.h"
 #include "noise.h"
 #include <cctype>
+#include <set>
 #include <algorithm>
 
 Settings *g_settings = nullptr;
@@ -855,6 +856,18 @@ bool Settings::getV3FNoEx(const std::string &name, std::optional<v3f> &val) cons
 	}
 }
 
+#if USE_OPOS64
+bool Settings::getV3FNoEx(const std::string &name, std::optional<v3opos_t> &val) const
+{
+	try {
+		// TODO: Read all float settings via double
+		val = v3fToOpos(*getV3F(name));
+		return true;
+	} catch (SettingNotFoundException &e) {
+		return false;
+	}
+}
+#endif
 
 bool Settings::getFlagStrNoEx(const std::string &name, u32 &val,
 	const FlagDesc *flagdesc) const
@@ -1328,6 +1341,20 @@ bool Settings::getBoolNoEx(const std::string &name, bool &val) const
 		val = getBool(name);
 		return true;
 	} catch (const SettingNotFoundException &e) {
+		return false;
+	}
+}
+s64 Settings::getS64(const std::string &name) const
+{
+	return stol(get(name));
+}
+
+bool Settings::getS64NoEx(const std::string &name, s64 &val) const
+{
+	try {
+		val = getS64(name);
+		return true;
+	} catch (SettingNotFoundException &e) {
 		return false;
 	}
 }

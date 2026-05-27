@@ -8,7 +8,6 @@
 #include "inventory.h"
 #include "log.h"
 #include "debug.h"
-#include "serialization.h"
 #include "util/serialize.h"
 #include "util/string.h"
 #include "constants.h" // MAP_BLOCKSIZE
@@ -151,7 +150,7 @@ void content_nodemeta_deserialize_legacy(std::istream &is,
 	{
 		u16 p16 = readU16(is);
 
-		v3s16 p(0,0,0);
+		v3pos_t p(0,0,0);
 		p.Z += p16 / MAP_BLOCKSIZE / MAP_BLOCKSIZE;
 		p16 -= p.Z * MAP_BLOCKSIZE * MAP_BLOCKSIZE;
 		p.Y += p16 / MAP_BLOCKSIZE;
