@@ -50,6 +50,9 @@ endif()
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   set(DEFAULT_ENABLE_LTO FALSE)
 endif()
+if((CMAKE_CXX_COMPILER_ID STREQUAL "GNU"))
+	set(DEFAULT_ENABLE_LTO FALSE)
+endif()
 #### LTO testing list ####
 # - Linux: seems to work always
 # - win32/msvc: works

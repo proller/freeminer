@@ -1119,7 +1119,7 @@ void Game::run()
 
 				if (far_blocks_send_timer <= 0.0f) {
 					client->sendGetBlocks();
-					far_blocks_send_timer = 2;
+					far_blocks_send_timer = 0.2;
 				}
 			}
 
@@ -4468,17 +4468,17 @@ void Game::updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
 
 	thread_local static const auto farmesh_range = g_settings->getS32("farmesh");
 	if (client->farmesh) {
-		thread_local static uint8_t processed{};
+		auto &complete = client->farmesh->game_update_complete;
 		thread_local static u64 next_run_time{};
-		if (processed || porting::getTimeMs() > next_run_time) {
-			next_run_time = porting::getTimeMs() + 300;
+		if (!complete || porting::getTimeMs() > next_run_time) {
+			next_run_time = porting::getTimeMs() + 3000;
 			client->farmesh_async.step([&, farmesh_range = farmesh_range,
-									   //yaw = player->getYaw(),
-									   //pitch = player->getPitch(),
-									   camera_pos = camera->getPosition(),
-									   camera_offset = camera->getOffset(),
-									   speed = player->getSpeed().getLength()]() {
-				processed = client->farmesh->update(camera_pos,
+											   //yaw = player->getYaw(),
+											   //pitch = player->getPitch(),
+											   camera_pos = camera->getPosition(),
+											   camera_offset = camera->getOffset(),
+											   speed = player->getSpeed().getLength()]() {
+				complete = client->farmesh->update(camera_pos,
 						//camera->getDirection(), camera->getFovMax(), camera->getCameraMode(), pitch, yaw,
 						camera_offset,
 						//sky->getBrightness(),

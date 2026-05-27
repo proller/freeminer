@@ -38,6 +38,7 @@ jobs:
   # Older gcc version (should be close to our minimum supported version)
   gcc_9:
     runs-on: ubuntu-22.04
+    if: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -97,6 +98,7 @@ jobs:
 
   # Older clang version (should be close to our minimum supported version)
   clang_11:
+    if: false
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4

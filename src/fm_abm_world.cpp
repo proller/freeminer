@@ -159,7 +159,10 @@ void *AbmWorldThread::run()
 				pos_opt.reset();
 				// Random better
 				for (size_t dirs = 0; dirs < 6; ++dirs, ++pos_dir) {
-					const auto pos_new = pos_old + g_6dirs[pos_dir % sizeof(g_6dirs)];
+					#pragma clang diagnostic push
+					#pragma clang diagnostic ignored "-Wuninitialized"
+					const auto pos_new = pos_old + g_6dirs[pos_dir % (sizeof(g_6dirs)/sizeof(g_6dirs[0]))];
+					#pragma clang diagnostic pop
 					//DUMP(dirs, pos_new, pos_dir);
 					if (contains(pos_new)) {
 						//DUMP("ok", dirs, pos_opt, "->", pos_new);
@@ -207,7 +210,7 @@ void *AbmWorldThread::run()
 					if (block) {
 						return block;
 					}
-					block.reset(m_server->getEnv().getServerMap().emergeBlock(pos));
+					block = m_server->getEnv().getServerMap().emergeBlockPtr(pos);
 					if (!block) {
 						return nullptr;
 					}

@@ -41,6 +41,7 @@
 #include "gui/mainmenumanager.h"
 #endif
 
+#include "fm_util.h"
 #if USE_ENET
 // todo: move to connection
 #include <enet/enet.h>
@@ -226,6 +227,11 @@ int main(int argc, char *argv[])
 
 	if (!init_common(cmd_args, argc, argv))
 		return 1;
+
+	PIDFileHandler pid_handler(cmd_args);
+	if (cmd_args.exists("pid") && !pid_handler.isCreated()) {
+        return 1;
+	}
 
 	// parse settings from cmdline. must be after loading settings. maybe better to move
 	for (int i = 1; i < argc; i++) {
@@ -414,6 +420,8 @@ static void set_allowed_options(OptionList *allowed_options)
 		_("Migrate from current auth backend to another" SERVER_ONLY))));
 	allowed_options->insert(std::make_pair("migrate-mod-storage", ValueSpec(VALUETYPE_STRING,
 		_("Migrate from current mod storage backend to another" SERVER_ONLY))));
+	allowed_options->insert(std::make_pair("pid", ValueSpec(VALUETYPE_STRING,
+			_("Set PID file path"))));
 	allowed_options->insert(std::make_pair("terminal", ValueSpec(VALUETYPE_FLAG,
 			_("Enable ncurses interactive terminal" SERVER_ONLY))));
 	allowed_options->insert(std::make_pair("recompress", ValueSpec(VALUETYPE_FLAG,

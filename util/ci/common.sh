@@ -18,7 +18,7 @@ install_linux_deps() {
 	)
 
 	pkgs+=(
-		ccache ninja-build libleveldb-dev libsnappy-dev libboost-system-dev libmsgpack-dev
+		ccache ninja-build libleveldb-dev libsnappy-dev libboost-system-dev libmsgpack-dev libpng-dev
 	)
 
 	sudo apt-get update

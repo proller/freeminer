@@ -950,7 +950,7 @@ void Hud::drawBlockBounds()
 			for (const auto &[blockPos, block] : far_blocks) {
 				if (!block)
 					continue;
-				if (block->far_iteration < client_map.far_iteration_use)
+				if (block->far_iteration < client_map.far_iteration_draw)
 					continue;
 				/*					
 				const auto mesh_step_ = getFarStep(
@@ -961,11 +961,11 @@ void Hud::drawBlockBounds()
 										.m_far_blocks_last_cam_pos),
 						blockPos);
 */
-				const auto &mesh_step = block->far_step;
+				const auto &mesh_step = block->far_step_draw;
 				int g = 0;
 
 				if (!farmesh::inFarGrid(client_map.getControl(),
-							getNodeBlockPos(client_map.far_blocks_last_cam_pos), blockPos,
+							getNodeBlockPos(client_map.far_cam_pos_draw), blockPos,
 							mesh_step, is_each_mode)) {
 					// DUMP("Not in grid", blockPos,  block->far_step, mesh_step, block->getTimestamp(), client->getEnv() .getClientMap() .m_far_blocks_last_cam_pos);
 					if (is_each_mode)
@@ -976,6 +976,7 @@ void Hud::drawBlockBounds()
 				int fscale = 1;
 				int lod_step = 0;
 				int far_step = 0;
+				int r = 0;
 				int b = 0;
 				const auto &mesh = block->getFarMesh(mesh_step);
 				if (!mesh || !mesh->getMesh() || !mesh->getMesh()->getMeshBufferCount()) {
@@ -987,6 +988,7 @@ void Hud::drawBlockBounds()
 					lod_step = mesh->lod_step;
 					far_step = mesh->far_step;
 					//box = mesh->getMesh(0)->getBoundingBox();
+					if (mesh->isEmpty()) { r+=50;}
 				}
 				if (is_each_mode) {
 					fscale = 1 << mesh_step;
@@ -1001,7 +1003,7 @@ void Hud::drawBlockBounds()
 									offset + halfNode - 1)};
 				}
 				driver->draw3DBox(
-						box.value(), video::SColor(200 + b, 255 - lod_step * 10 + b,
+						box.value(), video::SColor(200 + b, 255 - r + lod_step * 10,
 											 255 - g - far_step * 10, fscale * 20));
 			}
 		}
@@ -1020,7 +1022,7 @@ void Hud::drawBlockBounds()
 										   offset - halfNode + 1),
 						oposToV3f(intToFloat(((blockPos)*MAP_BLOCKSIZE) +
 													 (MAP_BLOCKSIZE << mesh_step) -
-													 (1 << mesh_step), // - 1
+													 (mesh_step), // - 1
 										  BS) -
 								  offset + halfNode - 1));
 				driver->draw3DBox(box, video::SColor(200 + b, 255 - lod_step * 10 + b,

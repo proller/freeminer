@@ -152,10 +152,13 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("cloud_height", "300"); // "120"
 	settings->setDefault("enable_zoom_cinematic", "true");
 	settings->setDefault("wanted_fps", slow ? "25" : "30");
-	settings->setDefault("lodmesh", slow ? "4" : "5");
-	settings->setDefault("farmesh", slow ? "3000" : std::to_string(FARMESH_LIMIT*2));
-	settings->setDefault("farmesh_quality", slow ? "1" : "2"); //depends on client_mesh_chunk
-	settings->setDefault("farmesh_stable", "0");
+	settings->setDefault("lodmesh", slow ? "3" : "5");
+	settings->setDefault("farmesh", slow ? "5000" : std::to_string(FARMESH_LIMIT / 2));
+	const auto mesh_chunk_and_farmesh_quality = "2"; //slow ? "2" : "4";
+	settings->setDefault("client_mesh_chunk", mesh_chunk_and_farmesh_quality);
+	settings->setDefault("farmesh_quality",
+			mesh_chunk_and_farmesh_quality); //depends on client_mesh_chunk
+	settings->setDefault("farmesh_stable", "20");
 	settings->setDefault("farmesh_server", "1");
 	settings->setDefault("farmesh_all_changed", slow ? "1000" : "10000");
 	settings->setDefault("farlights", "1");
@@ -180,8 +183,6 @@ void fm_set_default_settings(Settings *settings) {
 			settings->setDefault(name, "true");
 		}
 	}
-	//settings->setDefault("client_mesh_chunk", std::to_string(std::max<int>(1, Thread::getNumberOfProcessors() / 4)));
-	settings->setDefault("client_mesh_chunk", "1");
 
 	if (slow || android) {
 		settings->setDefault("translucent_liquids", "false");
@@ -193,6 +194,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("liquid_send", android ? "3.0" : "1.0");
 	settings->setDefault("liquid_relax", android ? "1" : "2");
 	settings->setDefault("liquid_fast_flood", "-200");
+	settings->setDefault("liquid_pressure", "false");
 	
 	// Weather
 	settings->setDefault("weather", threads ? "true" : "false");
@@ -393,7 +395,7 @@ void fm_set_default_settings(Settings *settings) {
 
 #ifdef __EMSCRIPTEN__
 	settings->setDefault("viewing_range", "100");
-	settings->setDefault("client_mesh_chunk", "4");
+	//settings->setDefault("client_mesh_chunk", "4");
 #endif
 
 

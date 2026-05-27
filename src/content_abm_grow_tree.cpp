@@ -27,8 +27,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "server.h"
 #include "serverenvironment.h"
 
-constexpr auto grow_debug = false;
-constexpr auto grow_debug_fast_default = 0;
+constexpr auto grow_debug = 1; //false;
+constexpr auto grow_debug_fast_default = 1;
 //constexpr auto grow_debug_no_die = false;
 
 // Trees use param2 for rotation, level1 is free
@@ -87,6 +87,8 @@ struct GrowParams
 	int tree_grow_heat_min = 7;
 	int tree_grow_heat_max = 40;
 	int tree_grow_light_max = 12;		   // grow more leaves around before grow tree up
+	int tree_grow_up_light_min = 8;		   // minimum light level to consider growing up
+	int tree_grow_up_chance = 3;		   // chance to grow up when conditions are met
 	int tree_get_water_from_humidity = 70; // rain start
 	int tree_get_water_max_from_humidity = 30; // max level to get from air
 	int tree_grow_bottom = 1;
@@ -124,6 +126,10 @@ struct GrowParams
 			tree_grow_heat_max = cf.groups.at("tree_grow_heat_max");
 		if (cf.groups.contains("tree_grow_light_max"))
 			tree_grow_light_max = cf.groups.at("tree_grow_light_max");
+		if (cf.groups.contains("tree_grow_up_light_min"))
+			tree_grow_up_light_min = cf.groups.at("tree_grow_up_light_min");
+		if (cf.groups.contains("tree_grow_up_chance"))
+			tree_grow_up_chance = cf.groups.at("tree_grow_up_chance");
 		if (cf.groups.contains("tree_grow_bottom"))
 			tree_grow_bottom = cf.groups.at("tree_grow_bottom");
 		if (cf.groups.contains("tree_grow_chance"))
@@ -237,7 +243,7 @@ public:
 	{
 		ServerMap *map = &env->getServerMap();
 		const auto *ndef = env->getGameDef()->ndef();
-		float heat = map->updateBlockHeat(env, pos);
+		const auto heat = map->updateBlockHeat(env, pos);
 
 		// dont grow to sides if can grow up
 		bool top_is_not_tree{false};
@@ -271,12 +277,54 @@ public:
 			v3pos_t pos{};
 		};
 
+		const auto next_grow_node_idx_by_facedir = [&](const auto &facedir) -> int {
+			// Upward directions
+			if ((facedir >= 0 && facedir <= 3) || (facedir >= 20 && facedir <= 23))
+				return D_TOP;
+			// Front direction (facedir 7)
+			if (facedir == 7)
+				return D_FRONT;
+			// Back direction (facedir 9)
+			if (facedir == 9)
+				return D_BACK;
+			// Left direction (facedir 12)
+			if (facedir == 12)
+				return D_LEFT;
+			// Right direction (facedir 18)
+			if (facedir == 18)
+				return D_RIGHT;
+			// Bottom directions (facedir 16-19)
+			if (facedir >= 16 && facedir <= 19)
+				return D_BOTTOM;
+			// Default fallback (no valid direction)
+			return D_SELF;
+		};
+
+		const auto direction_to_facedir = [](const auto &direction) -> int {
+			switch (direction) {
+			case D_TOP:
+				return 0; // Upward direction
+			case D_BOTTOM:
+				return 16; // Downward direction
+			case D_FRONT:
+				return 7; // Front direction
+			case D_BACK:
+				return 9; // Back direction
+			case D_LEFT:
+				return 12; // Left direction
+			case D_RIGHT:
+				return 18; // Right direction
+			default:
+				return 0; // Default to upward
+			}
+		};
+
 		Neighbor nbh[7]{};
 		{
-			size_t i = 0;
+			size_t look_direction = 0;
 			for (const auto &dir : leaves_look_dirs) {
-				auto &nb = nbh[i];
-				const bool is_self = i == D_SELF;
+				auto &nb = nbh[look_direction];
+				const bool is_self = look_direction == D_SELF;
 				nb.pos = pos + dir;
 
 				nb.node = is_self ? n : map->getNodeTry(nb.pos);
@@ -289,10 +337,10 @@ public:
 
 				nb.cf = (ContentFeatures *)&ndef->get(nb.content);
 				nb.light = getLight(ndef, nb.node);
-				nb.top = i == D_TOP;
-				nb.bottom = i == D_BOTTOM;
+				nb.top = look_direction == D_TOP;
+				nb.bottom = look_direction == D_BOTTOM;
 				nb.side = !nb.bottom && !nb.top;
-				nb.self = i == D_SELF;
+				nb.self = look_direction == D_SELF;
 				nb.is_tree = is_self || nbh[D_SELF].content == nb.content;
 
 				if (!nb.is_tree) {
@@ -349,23 +397,23 @@ public:
 							((self_facedir >= 20) && (self_facedir <= 23));
 				} else if (nb.top || nb.bottom) {
 					nb.allow_grow_by_rotation = nbh[D_SELF].allow_grow_by_rotation;
-				} else if (i == D_FRONT || i == D_BACK) {
+				} else if (look_direction == D_FRONT || look_direction == D_BACK) {
 					// Can self grow this sides?
 					nb.allow_grow_by_rotation = self_facedir == 7 || self_facedir == 9;
-				} else if (i == D_LEFT || i == D_RIGHT) {
+				} else if (look_direction == D_LEFT || look_direction == D_RIGHT) {
 					nb.allow_grow_by_rotation = self_facedir == 18 || self_facedir == 12;
 				}
 
 				// if (grow_debug) DUMP(i, nb.allow_grow_by_rotation, nb.facedir, self_facedir);
-				++i;
+				++look_direction;
 			}
 		}
+		auto &self = nbh[D_SELF];
+		const auto &params = type_params.at(self.content);
+		const auto &content = self.content;
 
-		const auto &params = type_params.at(nbh[D_SELF].content);
-		const auto &content = nbh[D_SELF].content;
-
-		const auto &self_allow_grow_by_rotation = nbh[D_SELF].allow_grow_by_rotation;
-		int16_t &self_water_level = nbh[D_SELF].water_level;
+		const auto &self_allow_grow_by_rotation = self.allow_grow_by_rotation;
+		int16_t &self_water_level = self.water_level;
 
 		const auto self_water_level_orig = self_water_level;
 
@@ -402,8 +450,9 @@ public:
 			}
 		}
 
-		for (int i = D_SELF + 1; i <= D_BOTTOM; ++i) {
-			auto &nb = nbh[i];
+		for (int look_direction = D_SELF + 1; look_direction <= D_BOTTOM;
+				++look_direction) {
+			auto &nb = nbh[look_direction];
 			const bool allow_grow_by_light =
 					(!nb.top || (nb.light <= params.tree_grow_light_max &&
 										myrand_range(0, LIGHT_SUN - nb.light) <= 3));
@@ -516,8 +565,38 @@ public:
 
 				//if (grow_debug) DUMP("tr->tr", i, nb.pos.Y, nb.top, nb.bottom, nb.content, content, self_water_level, self_water_level_orig, nb.light);
 
-				auto node =
-						nbh[D_SELF].node; //{content, 1, nbh[D_SELF].node.getParam2()};
+				auto node = self.node; //{content, 1, nbh[D_SELF].node.getParam2()};
+				{
+					// Check if light is enough and current grow direction is horizontal - rotate and grow up
+					const auto &self_facedir = self.facedir;
+					// Check if current tree is growing horizontally (sides: 4-5, 6-9, 12-19)
+					// Vertical directions are typically 0-3 and 20-23
+					// bool is_currently_horizontal =
+					// 		(self_facedir >= 4 && self_facedir <= 19) ||
+					// 		(self_facedir == 12 || self_facedir == 18);
+
+					// Rotate upward only if the node in the current growth direction has more light than the side node
+					if (//self.side && 
+						nb.light > self.light // params.tree_grow_up_light_min
+							// && is_currently_horizontal
+							//&& !myrand_range(0, params.tree_grow_up_chance)
+					) {
+						// Determine the next neighbor index based on the current facedir
+
+						const int next_idx = next_grow_node_idx_by_facedir(self_facedir);
+						if (look_direction == next_idx) {
+							uint8_t next_light = 0;
+							if (next_idx >= 0 && next_idx < 7) {
+								next_light = nbh[next_idx].light;
+							}
+
+							if (next_light < nbh[D_TOP].light) {
+								// Current growth is horizontal (side), sufficient light, next node in growth direction is brighter, and random chance passes
+								node.setParam2(0); // Set rotation to upward
+							}
+						}
+					}
+				}
 				set_tree_water_level(node, 1, params.tree_water_param2);
 				map->setNode(nb.pos, node);
 
@@ -528,7 +607,7 @@ public:
 				break;
 			}
 
-			auto water_pump = [&]() {
+			const auto water_pump = [&]() {
 				if (!(((!nb.top || nb.is_other_tree) && !nb.bottom && nb.is_tree &&
 							  !around_all_is_tree) ||
 							nb.is_my_leaves)) {
@@ -582,6 +661,7 @@ public:
 				map->setNode(nb.pos, nb.node);
 				return true;
 			};
+
 			if (water_pump()) {
 				break;
 			}
@@ -593,7 +673,7 @@ public:
 
 			//DUMP(allow_grow_leaves, leaves_c, heat , params.leaves_grow_heat_min, params.leaves_grow_heat_max, n_water_level, light_dir);
 
-			auto leaves_grow = [&]() {
+			const auto leaves_grow = [&]() {
 				if (!nb.allow_grow_by_rotation) {
 					// if (grow_debug) DUMP(nb.allow_grow_by_rotation, nb.top, nb.bottom, (int)nb.facedir);
 					return false;
@@ -830,7 +910,7 @@ public:
 			}
 		}
 	}
-	std::vector<std::string> tc {"group:grow_leaves"};
+	std::vector<std::string> tc{"group:grow_leaves"};
 	virtual const std::vector<std::string> &getTriggerContents() const override
 	{
 		return tc;

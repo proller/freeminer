@@ -1,6 +1,7 @@
 #include "fm_far_container.h"
 #include "client.h"
 #include "client/clientmap.h"
+#include "constants.h"
 #include "database/database.h"
 #include "fm_far_calc.h"
 #include "irr_v3d.h"
@@ -19,11 +20,11 @@ thread_local MapBlockPtr block_cache{};
 thread_local std::pair<block_step_t, v3bpos_t> block_cache_p;
 }
 
-const MapNode &FarContainer::getNodeRefUnsafe(const v3pos_t &pos)
+std::pair<const MapNode, bool> FarContainer::getNodeRefAndVisible(const v3pos_t &pos)
 {
 	const auto block_pos = getNodeBlockPos(pos);
 	auto &client_map = m_client->getEnv().getClientMap();
-	const auto player_block_pos = getNodeBlockPos(client_map.far_blocks_last_cam_pos);
+	const auto player_block_pos = getNodeBlockPos(client_map.far_cam_pos_mesh);
 	const auto &control = client_map.getControl();
 
 	const auto tree_result =
@@ -90,23 +91,28 @@ const MapNode &FarContainer::getNodeRefUnsafe(const v3pos_t &pos)
 			block_cache_p = step_block_pos;
 			block_cache = block;
 
-			const v3pos_t relpos = pos - bpos_aligned * MAP_BLOCKSIZE;
-
+			const v3pos_t relpos{pos - bpos_aligned * MAP_BLOCKSIZE};
 			const auto &relpos_shift = step;
-			const auto relpos_shifted =
-					v3pos_t{static_cast<pos_t>(relpos.X >> relpos_shift),
-							static_cast<pos_t>(relpos.Y >> relpos_shift),
-							static_cast<pos_t>(relpos.Z >> relpos_shift)};
-			const auto &n = block->getNodeNoLock(relpos_shifted);
-			if (n.getContent() != CONTENT_IGNORE) {
-				return n;
+			const v3pos_t relpos_shifted{static_cast<pos_t>(std::min(MAP_BLOCKSIZE - 1,
+												 relpos.X >> relpos_shift)),
+					static_cast<pos_t>(
+							std::min(MAP_BLOCKSIZE - 1, relpos.Y >> relpos_shift)),
+					static_cast<pos_t>(
+							std::min(MAP_BLOCKSIZE - 1, relpos.Z >> relpos_shift))};
+			{
+				const auto n = block->getNodeNoLock(relpos_shifted);
+				if (n.getContent() != CONTENT_IGNORE) {
+					// Dangerous, returning ref to not locked block
+					return {n, false};
+				}
 			}
 		}
 	}
 
 	if (const auto &v = m_mg->visible_content(pos, use_weather); v.getContent()) {
-		return v;
+		const auto visible = m_mg->surface_2d() && v.getContent() != CONTENT_AIR;
+		return {v, visible};
 	}
 
-	return m_mg->visible_transparent;
+	return {m_mg->visible_transparent, false};
 };

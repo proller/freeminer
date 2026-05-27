@@ -853,8 +853,8 @@ private:
 	void SendActiveObjectMessages(
 			session_t peer_id, const ActiveObjectMessages &datas, bool reliable = true);
 public:
-	void SendBlockFm(session_t peer_id, MapBlockPtr block, u8 ver, u16 net_proto_version,
-			SerializedBlockCache *cache = nullptr);
+	void SendBlockFm(session_t peer_id, MapBlockPtr block, u8 ver, u16 net_proto_version, SerializedBlockCache *cache = nullptr);
+	void SendBlocksFm(session_t peer_id, std::vector<MapBlockPtr> blocks, u8 ver, u16 net_proto_version, SerializedBlockCache *cache = nullptr);
 private:
 
 	float m_liquid_send_timer{};

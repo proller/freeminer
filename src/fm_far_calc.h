@@ -77,9 +77,11 @@ v3bpos_t playerBlockAlign(
 		const MapDrawControl &draw_control, const v3bpos_t &player_block_pos);
 
 void runFarAll(const v3bpos_t &player_block_pos, uint8_t cell_size_pow, int farmesh,
-		uint8_t farmesh_quality_pow, pos_t two_d, bool cell_each,
+		uint8_t farmesh_quality_pow, pos_t two_d, bool cell_each, block_step_t max_step,
 		const std::function<bool(const v3bpos_t &, const bpos_t &, const block_step_t &)>
 				&func);
 
 block_step_t rangeToStep(const int range);
+block_step_t settingToStep(const int range);
+
 }

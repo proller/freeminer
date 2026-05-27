@@ -428,21 +428,22 @@ set(FMcommon_SRCS ${FMcommon_SRCS}
     circuit_element_virtual.cpp
     circuit_element.cpp
     circuit.cpp
+    content_abm_grow_tree.cpp
+    content_abm.cpp
     fm_abm_world.cpp
+    fm_abm.cpp
     fm_bitset.cpp
+    fm_clientiface.cpp
+    fm_far_calc.cpp
     fm_liquid.cpp
     fm_map.cpp
     fm_server.cpp
+    fm_serverenvironment.cpp
+    fm_util.cpp
     fm_world_merge.cpp
-    fm_far_calc.cpp
     key_value_storage.cpp
     log_types.cpp
     stat.cpp
-    content_abm_grow_tree.cpp
-    content_abm.cpp
-    fm_abm.cpp
-    fm_clientiface.cpp
-    fm_serverenvironment.cpp
 )
 
 list(APPEND FREEMINER_COMMON_LIBRARIES

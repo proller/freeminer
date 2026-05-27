@@ -30,12 +30,20 @@ class NodeContainer
 {
 public:
 	//	virtual const MapNode &getNodeRefUnsafeCheckFlags(const v3pos_t &p) = 0;
-	virtual const MapNode &getNodeRefUnsafe(const v3pos_t &p) = 0;
-	virtual MapNode getNodeNoExNoEmerge(const v3pos_t &p) { return getNodeRefUnsafe(p); };
-	virtual MapNode getNodeNoEx(const v3pos_t &p) { return getNodeRefUnsafe(p); };
-	virtual const MapNode &getNodeRefUnsafeCheckFlags(const v3pos_t &p)
+	virtual const MapNode getNodeRefUnsafe(const v3pos_t &p) = 0;
+	virtual std::pair<const MapNode, bool> getNodeRefAndVisible(const v3pos_t &p)
 	{
-		return getNodeRefUnsafe(p);
+		return {getNodeRefUnsafe(p), false};
+	};
+
+	virtual MapNode getNodeNoExNoEmerge(const v3pos_t &p)
+	{
+		return getNodeRefAndVisible(p).first;
+	};
+	virtual MapNode getNodeNoEx(const v3pos_t &p) { return getNodeRefAndVisible(p).first; };
+	virtual const MapNode getNodeRefUnsafeCheckFlags(const v3pos_t &p)
+	{
+		return getNodeRefAndVisible(p).first;
 	};
 	virtual void setNode(const v3pos_t &p, const MapNode &n, bool important = false) {};
 	virtual void clear() {}

@@ -20,7 +20,7 @@ struct MapDrawControl
 	// freeminer:
 	int32_t farmesh{30000};
 	uint8_t farmesh_quality{};
-	bool farmesh_stable{};
+	uint16_t farmesh_stable{};
 	pos_t farmesh_all_changed{};
 	int32_t lodmesh{4};
 	int cell_size{1};
@@ -40,6 +40,8 @@ struct MapDrawControl
 	bool enable_fog = g_settings->getBool("enable_fog");
 
 	void fm_init();
+	void registerSettingsCallbacks();
+	void onSettingChanged(const std::string &name);
 	MapDrawControl() { fm_init(); }
 	// == 
 

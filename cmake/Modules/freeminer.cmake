@@ -93,6 +93,20 @@ else()
     set(ENABLE_THREADS 0)
 endif()
 
+check_cxx_source_runs("
+#include <atomic>
+#include <memory>
+int main(int argc, char *argv[]) {
+   std::atomic<std::shared_ptr<int>> test;
+   auto ptr = std::make_shared<int>(42);
+   test.store(ptr);
+   auto loaded = test.load();
+   return 0;
+}
+"    USE_ATOMIC_SHARED_PTR)
+
+
+
 option(MINETEST_PROTO "Use minetest protocol (Slow and buggy)" 1)
 if(MINETEST_PROTO)
     set(MINETEST_TRANSPORT 1 CACHE BOOL "")

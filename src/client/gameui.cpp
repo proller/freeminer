@@ -124,10 +124,11 @@ void GameUI::update(const RunStats &stats, Client *client, MapDrawControl *draw_
 ;
 
 		if (draw_control->lodmesh)
-			os << ", lod = " << draw_control->lodmesh;
+			os << ",lod:" << draw_control->lodmesh;
 		if (draw_control->farmesh)
-			os << ", farmesh = " << draw_control->farmesh << ":"
+			os << ",far:" << draw_control->farmesh << ":"
 			   << (int)draw_control->farmesh_quality;
+		os << ",fog:" << client->fog_range;
 
 #if MINETEST_TRANSPORT
 		os 

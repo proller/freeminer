@@ -183,6 +183,7 @@ Client::Client(
 	m_mesh_grid = { g_settings->getU16("client_mesh_chunk") };
 	control.cell_size = m_mesh_grid.cell_size;
 	control.cell_size_pow =	farmesh::rangeToStep(control.cell_size);
+    // fm:
 	control.farmesh_quality = g_settings->getU16("farmesh_quality");
 	control.farmesh_quality_pow = farmesh::rangeToStep(control.farmesh_quality);
 	control.farmesh_stable = g_settings->getBool("farmesh_stable");
@@ -366,6 +367,8 @@ void Client::Stop()
 		m_localdb.reset();
 	}
 
+	if(farmesh)
+		farmesh->stop();
 	// TODO: correct order:
 	mesh_thread_pool.wait_until_empty();
 	farmesh_async.wait();

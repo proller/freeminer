@@ -6,6 +6,8 @@
 
 #include "config.h"
 
+#include "threading/atomic.h"
+
 #include <atomic>
 #include <cstdint>
 #include <unordered_map>
@@ -494,15 +496,32 @@ public:
 
 protected:
 	friend class ClientMap;
-	std::array<MapBlock::mesh_type, LODMESH_STEP_MAX + 1> m_lod_mesh;
-	std::array<MapBlock::mesh_type, FARMESH_STEP_MAX + 1> m_far_mesh;
+#if USE_ATOMIC_SHARED_PTR
+	using atomic_shared_ptr = std::atomic<MapBlock::mesh_type>;
+#else	
+	using atomic_shared_ptr = atomic_fake<MapBlock::mesh_type>;
+#endif
+	std::array<atomic_shared_ptr, LODMESH_STEP_MAX + 1> m_lod_mesh;
+	std::array<atomic_shared_ptr, FARMESH_STEP_MAX + 1> m_far_mesh;
 	MapBlock::mesh_type delete_mesh;
 
 public:
+	block_step_t far_step_draw{};
 #endif
 
 	block_step_t far_step{};
 	uint32_t far_make_mesh_timestamp{static_cast<uint32_t>(-1)};
+	enum class far_status_e
+	{
+		none = 0,
+		s1_created,
+		s2_requested,
+		s3_recieved,
+		s4_mesh_enqueued,
+		s5_mesh_start,
+		s6_mesh_complete,
+	};
+	far_status_e far_status{};
 	std::atomic_uint32_t far_iteration{};
 	std::atomic_bool creating_far_mesh{};
 	std::atomic_short heat{};
