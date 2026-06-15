@@ -202,8 +202,14 @@ public:
 				wieldLight = (f32)((ItemGroupList)m_client->idef()
 												->get(playeritem.name)
 												.groups)["wield_light"];
+			f32 wieldLightBrightness = rangelim(
+					decode_light_f(wieldLight / (f32)LIGHT_SUN) * 0.7, // 1.04f,
+					0.0f, 1.0f);
 			services->setPixelShaderConstant(
 					services->getPixelShaderConstantID("wieldLight"), &wieldLight, 1);
+			services->setPixelShaderConstant(
+					services->getPixelShaderConstantID("wieldLightBrightness"),
+					&wieldLightBrightness, 1);
 		}
 	   }
 
@@ -218,7 +224,7 @@ public:
 
 		auto camera_position = oposToV3f(m_client->getCamera()->getPosition());
 		m_camera_position_pixel.set(camera_position, services);
-		m_camera_position_pixel.set(camera_position, services);
+		m_camera_position_vertex.set(camera_position, services);
 
 		m_texel_size0_vertex.set(m_texel_size0, services);
 		m_texel_size0_pixel.set(m_texel_size0, services);

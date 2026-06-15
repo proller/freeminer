@@ -17,6 +17,7 @@
 #include <chrono>
 #include <mutex>
 #include <thread>
+#include <EMaterialTypes.h>
 
 #if USE_CLIENT_MCP
 // WebSocket includes
@@ -142,6 +143,7 @@ private:
 	//fm:
 	bool is_simple_singleplayer_game {};
 	float m_timelapse_timer {-1};
+	video::E_MATERIAL_TYPE m_far_light_material = video::EMT_SOLID;
 
 #if USE_CLIENT_MCP
 	// MCP Player Control
@@ -216,6 +218,8 @@ void startMCPWebSocketServer(int port = 3001);
     async_step_runner updateDrawList_async;
     async_step_runner update_shadows_async;
     async_step_runner farmesh_async;
+
+	video::E_MATERIAL_TYPE getFarLightMaterial() const { return m_far_light_material; }
 
 	// ==
 
