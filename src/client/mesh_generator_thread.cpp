@@ -141,7 +141,6 @@ bool MeshUpdateQueue::addBlock(Map *map, v3bpos_t p, bool ack_block_to_server,
 			q->crack_pos = m_client->getCrackPos();
 			q->urgent |= urgent;
 			q->retrieveBlocks(map, mesh_grid.cell_size);
-			//q->lod = block->lod;
 			return true;
 		}
 	}
@@ -157,7 +156,6 @@ bool MeshUpdateQueue::addBlock(Map *map, v3bpos_t p, bool ack_block_to_server,
 	q->crack_pos = m_client->getCrackPos();
 	q->urgent = urgent;
 	q->retrieveBlocks(map, mesh_grid.cell_size);
-	//q->lod = block->lod;
 
 	/*
 		Air blocks won't suddenly become visible due to a neighbor update, so
@@ -293,7 +291,8 @@ void MeshUpdateWorkerThread::doUpdate()
 		ScopeProfiler sp(g_profiler, "Client: Mesh making (sum)");
 
 		// This generates the mesh:
-		const auto mesh_new = std::make_shared<MapBlockMesh>(m_client, q->data, q->lod, m_solid_shader_id);
+		const auto mesh_new = std::make_shared<MapBlockMesh>(
+				m_client, q->data, q->data->lod_step, m_solid_shader_id);
 
 		MeshUpdateResult r;
 		r.p = q->p;

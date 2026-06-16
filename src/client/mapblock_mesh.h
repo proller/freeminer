@@ -310,8 +310,6 @@ public:
 	const u8 m_lod;
 
 private:
-	u32 m_solid_shader_id;
-
 	typedef std::pair<u8 /* layer index */, u32 /* buffer index */> MeshIndex;
 
 	irr_ptr<scene::IMesh> m_mesh[MAX_TILE_LAYERS];

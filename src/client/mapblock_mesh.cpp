@@ -7,7 +7,6 @@
 #include "EPrimitiveTypes.h"
 #include "client.h"
 #include "client/clientmap.h"
-#include "debug/dump.h"
 #include "mapblock.h"
 #include "node_visuals.h"
 #include "porting.h"
@@ -662,7 +661,6 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data, const u8 lod, con
 	last_used{static_cast<u32>(client->m_uptime)},
 
 	m_lod(lod),
-	m_solid_shader_id(solid_shader_id),
 
 	m_tsrc(client->getTextureSource()),
 	m_shdrsrc(client->getShaderSource()),
@@ -707,13 +705,10 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data, const u8 lod, con
 
 	{
 		// Generate everything
-DUMP(lod, is_lod_enabled, far_step, lod_step, fscale);
-		#if 0
 		if (lod == 0 || !is_lod_enabled)
 			MapblockMeshGenerator(data, &collector).generate();
 		else
-#endif
-		LodMeshGenerator(data, &collector, is_textureless, solid_shader_id).generate(lod);
+			LodMeshGenerator(data, &collector, is_textureless, solid_shader_id).generate(lod);
 	}
 
 	/*

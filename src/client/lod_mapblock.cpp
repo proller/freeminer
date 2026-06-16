@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
-#include <cmath>
 #include "lod_mapblock.h"
-#include "debug/dump.h"
 #include "irr_v3d.h"
 #include "util/basic_macros.h"
 #include "util/numeric.h"
@@ -109,20 +107,6 @@ void LodMeshGenerator::drawMeshNode()
 void LodMeshGenerator::drawSolidNode()
 {
 	aabb3f box(v3f(-0.5 * BS), v3f(-0.5 * BS));
-
-if (0)
-	{
-		auto &data = m_data;
-		if (data->fscale > 1) {
-			// TODO: maybe possibe make simpler?/
-			box.MinEdge += v3f(HBS, 0, HBS);
-			box.MinEdge *= v3f(data->fscale, data->fscale, data->fscale);
-			box.MinEdge += v3f(-HBS, -HBS * (data->fscale) + HBS + BS, -HBS);
-			box.MaxEdge += v3f(HBS, 0, HBS);
-			box.MaxEdge *= v3f(data->fscale, data->fscale, data->fscale);
-			box.MaxEdge += v3f(-HBS, -HBS * (data->fscale) + HBS + BS, -HBS);
-		}
-	}
 
 	box.MinEdge += oposToV3f(intToFloat(v3pos_t(
 		m_cur_node.surface_p.X + 1 - m_node_width,
@@ -258,7 +242,9 @@ void LodMeshGenerator::drawNode()
 	case NDT_NODEBOX:
 	case NDT_NORMAL:
 		drawSolidNode();
-	default:;
+		break;
+	default:
+		break;
 	}
 }
 
@@ -280,54 +266,24 @@ void LodMeshGenerator::generate(const u8 lod)
 	ZoneScoped;
 	ScopeProfiler sp(g_profiler, "Client: Mesh Making LOD", SPT_AVG);
 
-	// cap LODs to 7, since there is no use for such large LODs
-	m_node_width = 1 << std::min(lod - 1, 6);
-
-	// letting an lod node be larger than this results in too many holes in the mesh due to content_ignore
-	if (m_node_width > 2 * std::log2(m_data->m_side_length))
-		m_node_width = 2 * std::log2(m_data->m_side_length);
-
-	//m_node_width = m_data->fscale; // + 1;
-m_node_width = m_data->fscale - 1;
-m_node_width = 1;
-	//DUMP(m_node_width);
-
-	// reduce LOD size until it actually divides the mesh width,
-	// in case mesh width is not a power of two or if the LOD size previously got capped
-	while (m_data->m_side_length % m_node_width != 0) m_node_width--;
-
-	//DUMP(m_data->m_side_length, m_node_width);
-	m_node_width = m_data->fscale; // + 1;
+	m_node_width = m_data->fscale;
 
 	const auto &data = m_data;
 	auto &cur_node = m_cur_node;
 	auto &blockpos_nodes = m_blockpos_nodes;
-	const auto lstep = 1 << data->lod_step;
-	const auto fstep = 1 << data->far_step;
-	DUMP(m_data->m_side_length, m_node_width, data->lod_step, data->far_step);
-	for (cur_node.pf.Z = cur_node.pr.Z = 0; cur_node.pr.Z < data->side_length_data;
-			cur_node.pr.Z += lstep, cur_node.pf.Z += fstep)
-		for (cur_node.pf.X = cur_node.pr.X = 0; cur_node.pr.X < data->side_length_data; cur_node.pr.X += lstep, cur_node.pf.X += fstep) {
-            uint16_t prev_visibles = 0;
-            uint16_t prev_invisibles = 0;
-			for (cur_node.pf.Y = cur_node.pr.Y = 0; cur_node.pr.Y < data->side_length_data; cur_node.pr.Y += lstep, cur_node.pf.Y += fstep) {
-				cur_node.p = (data->far_step ? cur_node.pf : cur_node.pr);
-				const auto [n, visible] =
-						data->m_vmanip.getNodeRefAndVisible(blockpos_nodes + cur_node.p);
-
-				cur_node.n = n;
-
-/*
-	for (m_cur_node.p.Z = m_node_width - 1; m_cur_node.p.Z < m_data->m_side_length; m_cur_node.p.Z += m_node_width)
-	for (m_cur_node.p.Y = m_node_width - 1; m_cur_node.p.Y < m_data->m_side_length; m_cur_node.p.Y += m_node_width)
-	for (m_cur_node.p.X = m_node_width - 1; m_cur_node.p.X < m_data->m_side_length; m_cur_node.p.X += m_node_width) {
-*/
-	    //if (!m_data->m_vmanip.m_area.contains(m_cur_node.p + m_blockpos_nodes))
-		//	continue;
-		m_cur_node.surface_p = seekDownwards(m_cur_node.p);
-		//m_cur_node.n = m_data->m_vmanip.getNodeRefUnsafeCheckFlags(m_blockpos_nodes + m_cur_node.surface_p);
-		m_cur_node.f = &m_nodedef->get(m_cur_node.n);
-		drawNode();
+	const pos_t cell_count = data->side_length_data >> data->lod_step;
+	for (pos_t z = 0; z < cell_count; ++z) {
+		cur_node.p.Z = z * m_node_width + (m_node_width - 1);
+		for (pos_t x = 0; x < cell_count; ++x) {
+			cur_node.p.X = x * m_node_width + (m_node_width - 1);
+			for (pos_t y = 0; y < cell_count; ++y) {
+				cur_node.p.Y = y * m_node_width + (m_node_width - 1);
+				cur_node.n = data->m_vmanip.getNodeRefAndVisible(
+						blockpos_nodes + cur_node.p).first;
+				cur_node.surface_p = seekDownwards(cur_node.p);
+				cur_node.f = &m_nodedef->get(cur_node.n);
+				drawNode();
+			}
+		}
 	}
-  }
 }
