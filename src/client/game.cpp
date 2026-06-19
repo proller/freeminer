@@ -4229,6 +4229,7 @@ void Game::updateFrame(f32 dtime,
 	/*
 		Update clouds
 	*/
+	if (!runData.headless_optimize)
 	updateClouds(dtime);
 
 	thread_local static const auto farmesh_range = g_settings->getS32("farmesh");
@@ -4381,6 +4382,14 @@ void Game::updateFrame(f32 dtime,
 
 void Game::updateClouds(float dtime)
 {
+    // fm:
+	thread_local static const auto volumetric_fog = g_settings->getBool("volumetric_fog");
+	if (volumetric_fog) {
+		this->clouds->setVisible(false);
+		return;
+	}
+	// ===
+
 	if (this->sky->getCloudsVisible()) {
 		this->clouds->setVisible(true);
 		this->clouds->step(dtime);
