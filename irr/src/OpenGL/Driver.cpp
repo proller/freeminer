@@ -587,14 +587,14 @@ void COpenGL3DriverBase::drawBuffers(const scene::IVertexBuffer *vb,
 	SHWBufferLink_opengl *hw_weights = nullptr;
 	if (wb) {
 		hw_weights = static_cast<SHWBufferLink_opengl *>(getBufferLink(wb));
-		updateHardwareBuffer(hw_weights);
-		assert(hw_weights->Vbo.exists());
+		if (!updateHardwareBuffer(hw_weights) || !hw_weights->Vbo.exists())
+			hw_weights = nullptr;
 	}
 
 	auto *hwvert = static_cast<SHWBufferLink_opengl *>(getBufferLink(vb));
 	auto *hwidx = static_cast<SHWBufferLink_opengl *>(getBufferLink(ib));
-	updateHardwareBuffer(hwvert);
-	updateHardwareBuffer(hwidx);
+	const bool use_hwvert = hwvert && updateHardwareBuffer(hwvert) && hwvert->Vbo.exists();
+	const bool use_hwidx = hwidx && updateHardwareBuffer(hwidx) && hwidx->Vbo.exists();
 
 	if (hw_weights) {
 		// Bind the weight & joint ID VBOs
@@ -610,15 +610,13 @@ void COpenGL3DriverBase::drawBuffers(const scene::IVertexBuffer *vb,
 	}
 
 	const void *vertices = vb->getData();
-	if (hwvert) {
-		assert(hwvert->Vbo.exists());
+	if (use_hwvert) {
 		GL.BindBuffer(GL_ARRAY_BUFFER, hwvert->Vbo.getName());
 		vertices = nullptr;
 	}
 
 	const void *indexList = ib->getData();
-	if (hwidx) {
-		assert(hwidx->Vbo.exists());
+	if (use_hwidx) {
 		GL.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, hwidx->Vbo.getName());
 		indexList = nullptr;
 	}
@@ -631,9 +629,9 @@ void COpenGL3DriverBase::drawBuffers(const scene::IVertexBuffer *vb,
 		GL.VertexAttrib4f(EVA_WEIGHTS, 0.0f, 0.0f, 0.0f, 0.0f);
 		GL.DisableVertexAttribArray(EVA_JOINT_IDS);
 	}
-	if (hwvert)
+	if (use_hwvert)
 		GL.BindBuffer(GL_ARRAY_BUFFER, 0);
-	if (hwidx)
+	if (use_hwidx)
 		GL.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 }
 
