@@ -10,7 +10,9 @@
 #include "network/networkexceptions.h"
 #include "settings.h"
 
+#ifdef __EMSCRIPTEN__
 #include <mainloop.h>
+#endif
 
 #ifdef _WIN32
 #include <windows.h>
