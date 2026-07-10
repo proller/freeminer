@@ -500,10 +500,11 @@ public:
 		return tc;
 	}
 	const std::vector<std::string> nothing;
+	const std::vector<std::string> rn{"air"};
 	virtual const std::vector<std::string> &getRequiredNeighbors(
 			uint8_t activate) const override
 	{
-		return nothing;
+		return rn;
 	}
 	virtual const std::vector<std::string> &getWithoutNeighbors() const override
 	{
@@ -511,7 +512,7 @@ public:
 	};
 
 	virtual float getTriggerInterval() override { return 10; }
-	virtual u32 getTriggerChance() override { return 4; }
+	virtual u32 getTriggerChance() override { return 1; }
 	bool getSimpleCatchUp() override { return true; }
 	virtual pos_t getMinY() override { return -MAX_MAP_GENERATION_LIMIT; };
 	virtual pos_t getMaxY() override { return MAX_MAP_GENERATION_LIMIT; };
