@@ -2206,8 +2206,7 @@ void Client::addUpdateMeshTask(v3bpos_t p, bool ack_to_server, bool urgent, int 
 			&m_env.getMap(), p, ack_to_server, urgent, false, step);
 }
 
-void Client::addUpdateMeshTaskWithEdge(
-		v3bpos_t blockpos, bool ack_to_server, bool urgent, int step)
+void Client::addUpdateMeshTaskWithEdge(v3bpos_t blockpos, bool ack_to_server, bool urgent, int step)
 {
 	m_mesh_update_manager->updateBlock(
 			&m_env.getMap(), blockpos, ack_to_server, urgent, true, step);
