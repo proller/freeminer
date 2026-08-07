@@ -5,7 +5,6 @@
 #include <cmath>
 #include <log.h>
 #include "irr_v3d.h"
-#include "irrlichttypes.h"
 #include "porting.h"
 #include "profiler.h"
 #include "activeobjectmgr.h"
@@ -26,7 +25,7 @@ ActiveObjectMgr::~ActiveObjectMgr()
 void ActiveObjectMgr::step(
 		float dtime, const std::function<void(const ClientActiveObjectPtr&)> &f)
 {
-	step(dtime, f, porting::getTimeMs() + 10);
+	step(dtime, f, 0);
 }
 
 void ActiveObjectMgr::step(float dtime,
