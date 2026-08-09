@@ -1314,9 +1314,8 @@ void Game::connectToServer_after_dns(const GameStartData *start_data, std::funct
 		fallback_address = Address();
 	}
 
-#if 0
 #if USE_MULTI
-	if (simple_singleplayer_mode) {
+	if (simple_singleplayer_mode || start_data.local_server) {
 		u16 port = 0;
 #if USE_SCTP
 		if (!g_settings->getU16NoEx("port_sctp", port)) {
@@ -1339,7 +1338,6 @@ void Game::connectToServer_after_dns(const GameStartData *start_data, std::funct
 		if (port)
 			connect_address.setPort(port);
 	}
-#endif
 #endif
 
 	fallback_address.setPort(connect_address.getPort());
@@ -2402,6 +2400,35 @@ void Game::toggleMinimap(bool shift_pressed)
 
 void Game::toggleFog()
 {
+	// fm:
+	{
+		const bool fog_enabled = g_settings->getBool("enable_fog");
+		const bool allowed = sky->getFogDistance() < 0 || client->checkPrivilege("debug");
+
+		if (fog_enabled && draw_control->enable_volumetric_fog) {
+			g_settings->setBool("enable_fog", false);
+			draw_control->enable_fog = false;
+			if (!allowed)
+				m_game_ui->showTranslatedStatusText("Fog enabled by game or mod");
+			else
+				m_game_ui->showTranslatedStatusText("Fog disabled");
+		} else if (!fog_enabled) {
+			g_settings->setBool("enable_fog", true);
+			draw_control->enable_fog = allowed;
+			draw_control->enable_volumetric_fog = false;
+			m_game_ui->showTranslatedStatusText("Volumetric fog disabled");
+		} else {
+			draw_control->enable_fog = allowed;
+			draw_control->enable_volumetric_fog = true;
+			if (!allowed)
+				m_game_ui->showTranslatedStatusText("Fog enabled by game or mod");
+			else
+				m_game_ui->showTranslatedStatusText("Fog enabled");
+		}
+		return;
+	}
+	// ===
+
 	bool flag = !g_settings->getBool("enable_fog");
 	g_settings->setBool("enable_fog", flag);
 	bool allowed = sky->getFogDistance() < 0 || client->checkPrivilege("debug");
@@ -4397,8 +4424,8 @@ void Game::updateFrame(f32 dtime,
 void Game::updateClouds(float dtime)
 {
     // fm:
-	thread_local static const auto volumetric_fog = g_settings->getBool("volumetric_fog");
-	if (volumetric_fog) {
+	if (draw_control->enable_volumetric_fog &&
+			g_settings->getPos("volumetric_fog") > 0) {
 		this->clouds->setVisible(false);
 		return;
 	}
@@ -4496,7 +4523,9 @@ void Game::drawScene(ProfilerGraph *graph, RunStats *stats)
 	*/
 	if (this->fogEnabled()) {
 		const bool volumetric_fog_active =
-				this->draw_control->farmesh && g_settings->getPos("volumetric_fog") > 0;
+				this->draw_control->farmesh &&
+				this->draw_control->enable_volumetric_fog &&
+				g_settings->getPos("volumetric_fog") > 0;
 		const float fog_start = volumetric_fog_active
 				? std::max(this->sky->getFogStart(), 0.55f)
 				: this->sky->getFogStart();
