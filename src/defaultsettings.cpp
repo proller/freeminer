@@ -167,7 +167,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("farmesh_stable", "20");
 	settings->setDefault("farmesh_server", "1");
 	settings->setDefault("farmesh_all_changed", slow ? "1000" : android ? "3000" : "10000");
-	settings->setDefault("volumetric_fog", (android || slow) ? "1000" : farmesh);
+	settings->setDefault("volumetric_fog", (android || slow) ? "0" : farmesh);
 	settings->setDefault("farlights", farmesh);
 
 	settings->setDefault("headless_optimize", "false");
@@ -243,6 +243,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("vertical_spawn_range", "50"); // "16"
 	settings->setDefault("cache_block_before_spawn", "true");
 	settings->setDefault("abm_random", (android || win) ? "false" : "true");
+	settings->setDefault("abm_max_catch_up_runs", "10");
 	settings->setDefault("active_block_range", android ? "1" : threads ? "4" : "2");
 	settings->setDefault("abm_neighbors_range_max", (threads && !win32 && !android) ? "16" : "1");
 	settings->setDefault("enable_force_load", "true");
@@ -308,8 +309,7 @@ void fm_set_default_settings(Settings *settings) {
 	settings->setDefault("mainmenu_last_selected_world", "1");
 
 	settings->setDefault("enable_mcp", "false");
-	settings->setDefault("mcp_ws_port", "3001");
-	settings->setDefault("mcp_stdio_command", "");
+	settings->setDefault("mcp_port", "3001");
 
 #ifdef __ANDROID__
 	settings->setDefault("TMPFolder", porting::path_user + "/tmp/");

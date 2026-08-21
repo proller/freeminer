@@ -184,18 +184,13 @@ touchscreen () bool true
 
 
 
-#    Enables the local MCP WebSocket control server for external agents.
+#    Enables the local MCP Streamable HTTP server for external agents.
 #    This exposes player control tools on localhost and should only be enabled
 #    for trusted local automation.
 enable_mcp (Enable MCP agent control) bool false
 
-#    Local TCP port used by the MCP WebSocket control server.
-mcp_ws_port (MCP WebSocket port) int 3001 1 65535
-
-#    Optional command for a stdio MCP helper process. Leave empty to use only
-#    the built-in WebSocket tool server.
-mcp_stdio_command (MCP stdio helper command) string
-
+#    Local TCP port used by the standard MCP Streamable HTTP endpoint.
+mcp_port (MCP Streamable HTTP port) int 3001 1 65535
 
 [*Server] [server]
 # Lan udp announce
@@ -239,6 +234,9 @@ more_threads () bool true
 
 # Process abms for blocks out of active area, one block per step. Can take 100-200ms per block
 abm_random () bool false
+
+# Maximum ABM callbacks per trigger when catching up after a long inactive period
+abm_max_catch_up_runs () int 10 1 100
 
 # Default privs in creative mode
 default_privs_creative () string interact, shout, fly, fast
