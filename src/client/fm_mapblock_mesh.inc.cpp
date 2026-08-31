@@ -15,6 +15,7 @@ struct FmFarFace
 	TileSpec tile;
 	u16 lights[4]{};
 	v3pos_t pos;
+	pos_t render_offset_y{};
 	u8 emissive_light{};
 };
 
@@ -30,6 +31,7 @@ static bool canMergeFmFarFaces(const FmFarFace &first, const FmFarFace &second)
 			first.tile.rotation != TileRotation::None ||
 			second.tile.rotation != first.tile.rotation ||
 			second.tile.world_aligned != first.tile.world_aligned ||
+			second.render_offset_y != first.render_offset_y ||
 			second.emissive_light != first.emissive_light ||
 			!std::equal(std::begin(first.lights), std::end(first.lights),
 					std::begin(second.lights)))

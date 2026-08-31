@@ -78,6 +78,23 @@ pos_t get_surface_height_cached(
 }
 }
 
+pos_t FarContainer::getNodeRenderYOffset(const v3pos_t &pos, pos_t cell_size)
+{
+	if (!m_mg || !m_mg->surface_2d() || m_surface_depth < 0 || cell_size <= 1)
+		return 0;
+
+	const auto surface_y = get_surface_height_cached(this, m_mg, v2pos_t(pos.X, pos.Z));
+	// Visual water stays aligned to water_level. Only the synthesized terrain
+	// cell underneath dry air needs to be moved to the exact calculated height.
+	if (pos.Y > surface_y && m_mg->visible_water_level(pos))
+		return 0;
+
+	const auto height_above_surface = pos.Y - surface_y;
+	return height_above_surface >= 0 && height_above_surface < cell_size
+				   ? -height_above_surface
+				   : 0;
+}
+
 std::pair<const MapNode, bool> FarContainer::getNodeRefAndVisible(const v3pos_t &pos)
 {
 	const auto block_pos = getNodeBlockPos(pos);
