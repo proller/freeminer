@@ -55,6 +55,7 @@ public:
 	int16_t world_merge_load_all{}; // -1 : auto;  0 : disable;   1 : force
 	uint32_t farlights{0};
 	bool partial{};
+	bool require_lighting_complete{};
 	uint32_t lazy_up{};
 	const NodeDefManager *const ndef{};
 	Map *const smap{};
@@ -75,6 +76,7 @@ public:
 	{
 		size_t lights_count{};
 		size_t lights_used{};
+		bool deferred{};
 	};
 
 	one_block_stat_t merge_one_block(MapDatabase *dbase, MapDatabase *dbase_up,

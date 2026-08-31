@@ -854,6 +854,7 @@ void *WorldMergeThread::run()
 	}
 	merger.world_merge_load_all = 0;
 	merger.partial = true;
+	merger.require_lighting_complete = true;
 
 	// Minimum blocks changed for periodic merge
 	uint64_t world_merge_min = 100;
@@ -879,6 +880,7 @@ void *WorldMergeThread::run()
 		merger.stop_func = {};
 		merger.throttle_func = {};
 		merger.world_merge_throttle = 0;
+		merger.require_lighting_complete = false;
 
 		if (!m_server->getEnv().getServerMap().changed_blocks_for_merge.empty()) {
 			actionstream
