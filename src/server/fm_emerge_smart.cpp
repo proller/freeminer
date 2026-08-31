@@ -2,12 +2,12 @@
 // Reliable, bounded mapgen chunk generation for large regions.
 
 /*
-freeminer.conf examples for one /emerge_radius job:
+freeminer.conf examples for one /emerge_smart job:
 
 # 10 mapgen threads
 server_async_threads = 1
 num_emerge_threads = 10
-emerge_radius_in_flight = 10
+emerge_smart_in_flight = 10
 emergequeue_limit_total = 1000
 emergequeue_limit_diskonly = 1000
 emergequeue_limit_generate = 1000
@@ -15,7 +15,7 @@ emergequeue_limit_generate = 1000
 # 100 mapgen threads (requires a thread-safe mapgen and approximately 100 GB RAM)
 server_async_threads = 1
 num_emerge_threads = 100
-emerge_radius_in_flight = 100
+emerge_smart_in_flight = 100
 emergequeue_limit_total = 1000
 emergequeue_limit_diskonly = 1000
 emergequeue_limit_generate = 1000
@@ -205,7 +205,7 @@ public:
 		int64_t radius_value = -1;
 		int in_flight_value = 0;
 		if (!parse_params(params, radius_value, in_flight_value)) {
-			message = "Usage: /emerge_radius radius [in_flight]";
+			message = "Usage: /emerge_smart radius [in_flight]";
 			return false;
 		}
 
@@ -223,7 +223,7 @@ public:
 
 		if (in_flight_value == 0) {
 			s16 configured = GENERATE_DEFAULT_IN_FLIGHT;
-			g_settings->getS16NoEx("emerge_radius_in_flight", configured);
+			g_settings->getS16NoEx("emerge_smart_in_flight", configured);
 			in_flight_value = configured;
 		}
 		in_flight_value =
@@ -255,11 +255,11 @@ public:
 
 		auto job = std::make_shared<GenerateJob>();
 		s32 task_timeout = GENERATE_DEFAULT_TASK_TIMEOUT_SECONDS;
-		g_settings->getS32NoEx("emerge_radius_task_timeout", task_timeout);
+		g_settings->getS32NoEx("emerge_smart_task_timeout", task_timeout);
 		task_timeout = std::clamp(task_timeout, GENERATE_MIN_TASK_TIMEOUT_SECONDS,
 				GENERATE_MAX_TASK_TIMEOUT_SECONDS);
 		u32 max_cancel_retries = GENERATE_DEFAULT_MAX_CANCEL_RETRIES;
-		g_settings->getU32NoEx("emerge_radius_max_cancel_retries", max_cancel_retries);
+		g_settings->getU32NoEx("emerge_smart_max_cancel_retries", max_cancel_retries);
 		max_cancel_retries = std::min(max_cancel_retries, GENERATE_MAX_CANCEL_RETRIES);
 
 		job->player_name = player_name;
@@ -829,7 +829,7 @@ bool FmEmergeGenerate::start(
 namespace
 {
 
-int l_emerge_radius(lua_State *L)
+int l_emerge_smart(lua_State *L)
 {
 	const std::string player_name = luaL_checkstring(L, 1);
 	const std::string params = luaL_checkstring(L, 2);
@@ -847,5 +847,5 @@ int l_emerge_radius(lua_State *L)
 
 void fm_register_emerge_smart_api(lua_State *L, int top)
 {
-	ModApiBase::registerFunction(L, "emerge_radius", l_emerge_radius, top);
+	ModApiBase::registerFunction(L, "emerge_smart", l_emerge_smart, top);
 }
