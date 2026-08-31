@@ -49,6 +49,7 @@ public:
 	std::function<bool(void)> stop_func;
 	std::function<bool(void)> throttle_func;
 	std::function<uint32_t(void)> get_time_func;
+	std::function<void(const MapBlockPtr &, block_step_t)> far_block_ready_func;
 
 	uint32_t world_merge_throttle{};
 	uint32_t world_merge_max_clients{};

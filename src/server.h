@@ -44,6 +44,7 @@ class AbmThread;
 class AbmWorldThread;
 class Circuit;
 class EnvThread;
+class LightingThread;
 class LiquidThread;
 class MapgenVoxelEarth;
 class MapThread;
@@ -870,8 +871,8 @@ public:
 			u16 net_proto_version, SerializedBlockCache *cache = nullptr);
 
 private:
-	float m_liquid_send_timer{};
-	float m_liquid_send_interval{1};
+	float m_lighting_update_timer{};
+	float m_lighting_update_interval{1};
 	IntervalLimiter m_weather_update_interval;
 
 public:
@@ -894,14 +895,21 @@ public:
 	void handleCommand_GetBlocks(NetworkPacket *pkt);
 	void handleCommand_InitFm(NetworkPacket *pkt);
 	Map::far_dbases_t far_dbases;
+	void QueueFarBlockReady(const MapBlockPtr &block, block_step_t step);
 	uint32_t SendFarBlocks(float dtime);
 
+private:
+	std::mutex m_far_blocks_ready_mutex;
+	RemoteClient::far_blocks_ready_t m_far_blocks_ready{FARMESH_STEP_MAX};
+
+public:
 	Stat stat;
 
 	std::unique_ptr<MapThread> m_map_thread;
 	std::unique_ptr<SendBlocksThread> m_sendblocks_thead;
 	std::unique_ptr<SendFarBlocksThread> m_sendfarblocks_thead;
 	std::unique_ptr<LiquidThread> m_liquid;
+	std::unique_ptr<LightingThread> m_lighting_thread;
 	std::unique_ptr<EnvThread> m_env_thread;
 	std::unique_ptr<AbmThread> m_abm_thread;
 	std::unique_ptr<AbmWorldThread> m_abm_world_thread;
