@@ -457,7 +457,11 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 
 	if (not_empty_nodes) {
 		block_up->setGenerated(true);
-		ServerMap::saveBlock(block_up.get(), dbase_up, m_map_compression_level);
+		if (ServerMap::saveBlock(block_up.get(), dbase_up, m_map_compression_level) &&
+				far_block_ready_func) {
+			block_up->far_step = step + 1;
+			far_block_ready_func(block_up, step + 1);
+		}
 	} else {
 		dbase_up->deleteBlock(bpos_aligned);
 	}

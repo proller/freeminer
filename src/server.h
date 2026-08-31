@@ -894,8 +894,14 @@ public:
 	void handleCommand_GetBlocks(NetworkPacket *pkt);
 	void handleCommand_InitFm(NetworkPacket *pkt);
 	Map::far_dbases_t far_dbases;
+	void QueueFarBlockReady(const MapBlockPtr &block, block_step_t step);
 	uint32_t SendFarBlocks(float dtime);
 
+private:
+	std::mutex m_far_blocks_ready_mutex;
+	RemoteClient::far_blocks_ready_t m_far_blocks_ready{FARMESH_STEP_MAX};
+
+public:
 	Stat stat;
 
 	std::unique_ptr<MapThread> m_map_thread;

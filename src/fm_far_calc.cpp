@@ -360,16 +360,27 @@ child_t tree_params_to_child(const tree_params_t &tree_params,
 std::optional<tree_result_t> getFarParams(const MapDrawControl &draw_control,
 		const v3bpos_t &player_block_pos, const v3bpos_t &blockpos, bool cell_each)
 {
+	return getFarParams(player_block_pos, draw_control.cell_size_pow,
+			draw_control.farmesh, draw_control.farmesh_quality_pow, blockpos, cell_each);
+}
+
+std::optional<tree_result_t> getFarParams(const v3bpos_t &player_block_pos,
+		uint8_t cell_size_pow, int farmesh, uint8_t farmesh_quality_pow,
+		const v3bpos_t &blockpos, bool cell_each)
+{
+	if (farmesh <= 0)
+		return {};
+
 	const auto blockpos_aligned_cell =
-			cell_each ? blockpos : align_shift(blockpos, draw_control.cell_size_pow);
-	const tree_params_t tree_params{.tree_pow{farmesh_to_tree_pow(draw_control.farmesh)}};
+			cell_each ? blockpos : align_shift(blockpos, cell_size_pow);
+	const tree_params_t tree_params{.tree_pow{farmesh_to_tree_pow(farmesh)}};
 	const auto start = tree_params_to_child(tree_params, player_block_pos);
 	const auto res =
 			find({.player_pos{player_block_pos.X, player_block_pos.Y, player_block_pos.Z},
 						 .block_pos{blockpos_aligned_cell.X, blockpos_aligned_cell.Y,
 								 blockpos_aligned_cell.Z},
-						 .cell_size_pow{draw_control.cell_size_pow},
-						 .farmesh_quality_pow{draw_control.farmesh_quality_pow},
+						 .cell_size_pow{cell_size_pow},
+						 .farmesh_quality_pow{farmesh_quality_pow},
 						 .cell_size_each{cell_each}},
 					start);
 	return res;
