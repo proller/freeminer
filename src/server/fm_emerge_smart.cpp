@@ -76,7 +76,7 @@ constexpr size_t EMERGE_ACTION_COUNT = static_cast<size_t>(EMERGE_GENERATED) + 1
 struct GenerateTask
 {
 	v3bpos_t blockpos;
-	std::vector<v3bpos_t> changed_blocks;
+	unordered_set_v3bpos changed_blocks;
 	u64 cancel_retries = 0;
 	u64 queue_retries = 0;
 	unsigned error_retries = 0;
@@ -542,9 +542,20 @@ private:
 	{
 		ServerMap &map = m_server->getEnv().getServerMap();
 		for (const v3bpos_t &blockpos : task->changed_blocks) {
-			map.lighting_modified_add(task->blockpos);
-			//map.changed_blocks_for_merge.emplace(blockpos);
+			map.lighting_modified_add(blockpos);
+			map.changed_blocks_for_merge.emplace(blockpos);
 		}
+	}
+
+	void remember_changed_chunk(const std::shared_ptr<GenerateJob> &job,
+			const std::shared_ptr<GenerateTask> &task, const v3bpos_t &blockpos)
+	{
+		const v3bpos_t chunk_min = containing_chunk(blockpos, job->chunk_size);
+		for (bpos_t x = 0; x < job->chunk_size.X; x++)
+		for (bpos_t y = 0; y < job->chunk_size.Y; y++)
+		for (bpos_t z = 0; z < job->chunk_size.Z; z++)
+			task->changed_blocks.emplace(
+					chunk_min.X + x, chunk_min.Y + y, chunk_min.Z + z);
 	}
 
 	void process_completion(const GenerateCompletion &completion, TimePoint now)
@@ -568,9 +579,8 @@ private:
 			changed = task->cancel_retries > 0 ||
 					(changed_timestamp != 0 && changed_timestamp >= job->changed_since);
 		}
-		if (changed && std::find(task->changed_blocks.begin(), task->changed_blocks.end(),
-					completion.blockpos) == task->changed_blocks.end())
-			task->changed_blocks.push_back(completion.blockpos);
+		if (changed)
+			remember_changed_chunk(job, task, completion.blockpos);
 
 		if (completion.action == EMERGE_CANCELLED) {
 			task->cancel_retries++;

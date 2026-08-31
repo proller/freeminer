@@ -406,21 +406,9 @@ Server::~Server()
 
 	// Stop server step from happening
 	if (m_thread) {
-
-		if (m_env) m_env->getServerMap().save(MOD_STATE_WRITE_AT_UNLOAD); // save before merge thread exit
-
 		stop();
 		// (Do not delete yet. Accessed by setAsyncFatalError().)
 	}
-
-	// Stop all emerge activity and finish off mapgen callbacks. Do this before
-	// shutdown callbacks since there may be state that is finalized in a
-	// callback.
-	// Note: The emerge manager is not deleted yet because further code can
-	//       still interact with map loading.
-	shutdownAsyncTasks();
-	if (m_emerge)
-		m_emerge->stopThreads();
 
 	if (m_env) {
 		EnvAutoLock envlock(this);
@@ -810,10 +798,12 @@ void Server::stop()
 {
 	infostream<<"Server: Stopping and waiting for threads"<<std::endl;
 
-	if (m_env) m_env->getServerMap().save(MOD_STATE_WRITE_AT_UNLOAD);
-
-	// Stop threads (set run=false first so both start stopping)
+	// Stop the main server and generation producers before draining map work.
 	m_thread->stop();
+	m_thread->wait();
+	shutdownAsyncTasks();
+	if (m_emerge)
+		m_emerge->stopThreads();
 
 	if (m_liquid)
 		m_liquid->stop();
@@ -827,14 +817,8 @@ void Server::stop()
 		m_abm_thread->stop();
 	if(m_abm_world_thread)
 		m_abm_world_thread->stop();
-	if(m_world_merge_thread)
-		m_world_merge_thread->stop();
 	if(m_env_thread)
 		m_env_thread->stop();
-
-
-	m_thread->wait();
-
 
 	if (m_liquid)
 		m_liquid->join();
@@ -848,10 +832,20 @@ void Server::stop()
 		m_abm_thread->join();
 	if(m_abm_world_thread)
 		m_abm_world_thread->join();
-	if(m_world_merge_thread)
-		m_world_merge_thread->join();
 	if(m_env_thread)
 		m_env_thread->join();
+
+	if (m_env) {
+		auto &map = m_env->getServerMap();
+		map.drainLightingQueue();
+		map.save(MOD_STATE_WRITE_AT_UNLOAD);
+	}
+
+	// WorldMergeThread performs an unthrottled final merge after stop is requested.
+	if(m_world_merge_thread) {
+		m_world_merge_thread->stop();
+		m_world_merge_thread->join();
+	}
 
 	infostream<<"Server: Threads stopped"<<std::endl;
 }

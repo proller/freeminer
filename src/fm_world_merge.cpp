@@ -194,6 +194,7 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 	size_t wind_count = 0;
 	uint64_t heat_last_update = 0;
 	uint32_t humidity_last_update = 0;
+	one_block_stat_t one_step_stat;
 	using light_points_t = std::unordered_map<v3pos_t, MapBlock::light_t>;
 	std::unordered_map<v3bpos_t, light_points_t> generated_light_points;
 	{
@@ -215,6 +216,11 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 						if (!nblock || !nblock->isGenerated()) {
 							continue;
 						}
+					}
+					if (require_lighting_complete && !step &&
+							nblock->getLightingComplete() != 0xffff) {
+						one_step_stat.deferred = true;
+						return one_step_stat;
 					}
 					if (const auto ts = nblock->getActualTimestamp(); ts > timestamp)
 						timestamp = ts;
@@ -353,14 +359,18 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 						const auto source_pos = sample_dirs[*selected];
 						for (const auto &side_dir : side_dirs) {
 							const auto side_pos = source_pos + side_dir;
-							for (size_t side_index = 0; side_index < samples.size(); ++side_index) {
+							for (size_t side_index = 0; side_index < samples.size();
+									++side_index) {
 								if (sample_dirs[side_index] != side_pos)
 									continue;
 
-								const auto side_content = samples[side_index].getContent();
+								const auto side_content =
+										samples[side_index].getContent();
 								const auto &side_features = ndef->get(side_content);
-								const auto &side_lf = ndef->getLightingFlags(side_content);
-								if (side_content == CONTENT_AIR || side_features.isLiquid() ||
+								const auto &side_lf =
+										ndef->getLightingFlags(side_content);
+								if (side_content == CONTENT_AIR ||
+										side_features.isLiquid() ||
 										side_lf.light_propagates) {
 									has_transparent_side = true;
 								}
@@ -370,10 +380,12 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 								break;
 						}
 						if (source_lf.light_source && has_transparent_side) {
-							const auto plpos = block->getPosRelative() + lpos + source_pos;
+							const auto plpos =
+									block->getPosRelative() + lpos + source_pos;
 							generated_light_points[bbpos].try_emplace(plpos,
 									MapBlock::makeLightPoint(source_lf.light_source,
-											get_light_source_color(ndef->get(n.getContent()))));
+											get_light_source_color(
+													ndef->get(n.getContent()))));
 						}
 					}
 
@@ -395,7 +407,6 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 				}
 	}
 	// TODO: skip full air;
-	one_block_stat_t one_step_stat;
 	block_up->m_light_points.clear();
 	if (farlights) {
 		constexpr auto some_magick_thinner_const = 2; // more -> less far ligts
@@ -505,11 +516,16 @@ bool WorldMerger::merge_one_step(
 				   << '\n';
 	};
 
+	std::unordered_set<v3bpos_t> blocks_seen;
+	std::unordered_set<v3bpos_t> blocks_deferred;
 	std::unordered_set<v3bpos_t> blocks_processed;
 
 	cur_n = 0;
 	for (const auto &bpos : blocks_todo) {
 		if (stop()) {
+			if (require_lighting_complete)
+				for (const auto &pending : blocks_todo)
+					smap->changed_blocks_for_merge.emplace(pending);
 			return true;
 		}
 
@@ -519,17 +535,26 @@ bool WorldMerger::merge_one_step(
 
 		v3bpos_t bpos_aligned((bpos.X >> shift) << shift, (bpos.Y >> shift) << shift,
 				(bpos.Z >> shift) << shift);
-		if (blocks_processed.contains(bpos_aligned)) {
+		if (blocks_seen.contains(bpos_aligned)) {
+			if (require_lighting_complete && !step &&
+					blocks_deferred.contains(bpos_aligned))
+				smap->changed_blocks_for_merge.emplace(bpos);
 			continue;
 		}
-		blocks_processed.emplace(bpos_aligned);
-
-		++processed;
-		g_profiler->add("Server: World merge blocks", 1);
+		blocks_seen.emplace(bpos_aligned);
 
 		try {
 			const auto stat_block =
 					merge_one_block(dbase_current, dbase_up, bpos_aligned, step);
+			if (stat_block.deferred) {
+				blocks_deferred.emplace(bpos_aligned);
+				if (require_lighting_complete && !step)
+					smap->changed_blocks_for_merge.emplace(bpos);
+				continue;
+			}
+			blocks_processed.emplace(bpos_aligned);
+			++processed;
+			g_profiler->add("Server: World merge blocks", 1);
 			stat_step.lights_count += stat_block.lights_count;
 			stat_step.lights_used += stat_block.lights_used;
 
@@ -548,9 +573,17 @@ bool WorldMerger::merge_one_step(
 
 #if !EXCEPTION_DEBUG
 		} catch (const std::exception &e) {
+			if (require_lighting_complete && !step) {
+				blocks_deferred.emplace(bpos_aligned);
+				smap->changed_blocks_for_merge.emplace(bpos);
+			}
 			errorstream << "world merge" << ": exception: " << e.what() << "\n"
 						<< stacktrace() << '\n';
 		} catch (...) {
+			if (require_lighting_complete && !step) {
+				blocks_deferred.emplace(bpos_aligned);
+				smap->changed_blocks_for_merge.emplace(bpos);
+			}
 			errorstream << "world merge" << ": Unknown unhandled exception at "
 						<< __PRETTY_FUNCTION__ << ":" << __LINE__ << '\n'
 						<< stacktrace() << '\n';
