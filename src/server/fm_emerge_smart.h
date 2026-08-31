@@ -1,5 +1,5 @@
 // Freeminer
-// Native mapblock scheduler for /emerge_radius.
+// Native mapblock scheduler for /emerge_smart.
 
 #pragma once
 
