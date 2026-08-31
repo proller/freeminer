@@ -32,6 +32,9 @@ public:
 	void testRunFarAllVerification();
 	void testRunFarAllCoverage();
 	void testRunFarAll2DCoverage();
+	// fm: Verify that flat enumeration covers the canonical 3-D surface grid.
+	void testRunFarAll2DSurfaceCoverage();
+	// ===
 	void testRunFarAllCellEachConsistency();
 	void testRunFarAllStops();
 };
@@ -53,6 +56,9 @@ void TestFmFarCalc::runTests(IGameDef *gamedef)
 	TEST(testRunFarAllVerification);
 	TEST(testRunFarAllCoverage);
 	TEST(testRunFarAll2DCoverage);
+	// fm: Regression coverage for the flat-grid to surface-grid remap.
+	TEST(testRunFarAll2DSurfaceCoverage);
+	// ===
 	TEST(testRunFarAllCellEachConsistency);
 	TEST(testRunFarAllStops);
 }
@@ -529,6 +535,90 @@ void TestFmFarCalc::testRunFarAll2DCoverage()
 		}
 	}
 }
+
+// fm: A flat traversal is remapped to terrain Y by go_flat(). Every canonical
+// surface cell in its X/Z footprint must be reached by at least one emitted cell.
+void TestFmFarCalc::testRunFarAll2DSurfaceCoverage()
+{
+	const uint8_t cell_size_pow = 0;
+	const uint8_t quality_pow = 0;
+	const int farmesh = 64;
+	const v3bpos_t player_pos(-65, -65, -65);
+	const bpos_t surface_y = -64;
+	const block_step_t max_step = farmesh::settingToStep(farmesh);
+
+	struct Cell
+	{
+		v3bpos_t pos;
+		bpos_t size;
+		block_step_t step;
+	};
+
+	MapDrawControl draw_control;
+	draw_control.farmesh = farmesh;
+	draw_control.cell_size_pow = cell_size_pow;
+	draw_control.cell_size = 1 << cell_size_pow;
+	draw_control.farmesh_quality_pow = quality_pow;
+
+	std::vector<Cell> reached;
+	bpos_t min_x = std::numeric_limits<bpos_t>::max();
+	bpos_t min_z = std::numeric_limits<bpos_t>::max();
+	bpos_t max_x = std::numeric_limits<bpos_t>::min();
+	bpos_t max_z = std::numeric_limits<bpos_t>::min();
+	const auto add_reached = [&](const farmesh::tree_result_t &cell) {
+		const auto exists =
+				std::find_if(reached.begin(), reached.end(), [&](const Cell &other) {
+					return other.pos == cell.pos && other.size == cell.size &&
+						   other.step == cell.step;
+				});
+		if (exists == reached.end())
+			reached.push_back({cell.pos, cell.size, cell.step});
+	};
+
+	farmesh::runFarAll(player_pos, cell_size_pow, farmesh, quality_pow, 1, false,
+			max_step,
+			[&](const v3bpos_t &pos, const bpos_t &size, const block_step_t &step) {
+				const bpos_t span = size << cell_size_pow;
+				min_x = std::min(min_x, pos.X);
+				min_z = std::min(min_z, pos.Z);
+				max_x = std::max(max_x, static_cast<bpos_t>(pos.X + span));
+				max_z = std::max(max_z, static_cast<bpos_t>(pos.Z + span));
+
+				const bpos_t y_offset = 1 << step;
+				for (const bpos_t y :
+						{surface_y, static_cast<bpos_t>(surface_y + y_offset),
+								static_cast<bpos_t>(surface_y - y_offset)}) {
+					const auto lookup = farmesh::getFarParams(
+							draw_control, player_pos, v3bpos_t(pos.X, y, pos.Z), false);
+					UASSERT(lookup.has_value());
+					if (lookup->step)
+						add_reached(*lookup);
+				}
+				return false;
+			});
+
+	UASSERT(!reached.empty());
+	const bpos_t base = 1 << cell_size_pow;
+	size_t expected = 0;
+	for (bpos_t z = min_z; z < max_z; z += base)
+		for (bpos_t x = min_x; x < max_x; x += base) {
+			const auto lookup = farmesh::getFarParams(
+					draw_control, player_pos, v3bpos_t(x, surface_y, z), false);
+			UASSERT(lookup.has_value());
+			if (!lookup->step)
+				continue;
+
+			++expected;
+			const auto found =
+					std::find_if(reached.begin(), reached.end(), [&](const Cell &cell) {
+						return cell.pos == lookup->pos && cell.size == lookup->size &&
+							   cell.step == lookup->step;
+					});
+			UASSERT(found != reached.end());
+		}
+	UASSERT(expected > 0);
+}
+// ===
 
 void TestFmFarCalc::testRunFarAllCellEachConsistency()
 {

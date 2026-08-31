@@ -221,8 +221,10 @@ bool contains(const child_t &child, const v3tpos_t &pos)
 		   pos.Z >= child.pos.Z && pos.Z < child.pos.Z + child.size;
 }
 
+// fm: A 2-D surface traversal must be at least as fine as a later 3-D lookup.
 bool is_tree_cell(const child_t &child, const v3tpos_t &player_pos,
-		block_step_t cell_size_pow, block_step_t farmesh_quality_pow)
+		block_step_t cell_size_pow, block_step_t farmesh_quality_pow,
+		const bool two_d = false)
 {
 	if (child.size <= (1 << cell_size_pow))
 		return true;
@@ -230,7 +232,7 @@ bool is_tree_cell(const child_t &child, const v3tpos_t &player_pos,
 	const tpos_t child_size = child.size >> 1;
 	const tpos_t distance = std::max({
 			std::abs(player_pos.X - (child.pos.X + child_size)),
-			std::abs(player_pos.Y - (child.pos.Y + child_size)),
+			two_d ? tpos_t{} : std::abs(player_pos.Y - (child.pos.Y + child_size)),
 			std::abs(player_pos.Z - (child.pos.Z + child_size)),
 	});
 	const auto quality_shift =
@@ -238,6 +240,7 @@ bool is_tree_cell(const child_t &child, const v3tpos_t &player_pos,
 	const tpos_t next_child_size = child.size << quality_shift;
 	return distance >= next_child_size;
 }
+// ===
 
 std::array<child_t, 8> split(const child_t &child)
 {
@@ -462,9 +465,11 @@ bool emit_tree_cell(const each_param_t &param, const child_t &mesh_child)
 
 bool each(const each_param_t &param, const child_t &child)
 {
-	if (is_tree_cell(
-				child, param.player_pos, param.cell_size_pow, param.farmesh_quality_pow))
+	// fm: Ignore vertical distance while building a conservative surface grid.
+	if (is_tree_cell(child, param.player_pos, param.cell_size_pow,
+				param.farmesh_quality_pow, param.two_d))
 		return emit_tree_cell(param, child);
+	// ===
 
 	const auto children = split(child);
 	const size_t child_count = param.two_d ? 4 : children.size();
