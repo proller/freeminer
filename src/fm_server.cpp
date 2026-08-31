@@ -250,7 +250,7 @@ void *LiquidThread::run()
 {
 	BEGIN_DEBUG_EXCEPTION_HANDLER
 
-	unsigned int max_cycle_ms = 1000;
+	unsigned int max_cycle_ms = 10000;
 	while (!stopRequested()) {
 		try {
 			const auto time_start = porting::getTimeMs();
@@ -281,6 +281,19 @@ void *LiquidThread::run()
 	}
 	END_DEBUG_EXCEPTION_HANDLER
 	return nullptr;
+}
+
+LightingThread::LightingThread(Server *server) : ServerThreadBase{server, "Lighting", 4}
+{
+}
+
+size_t LightingThread::step(float)
+{
+	m_server->getEnv().getMap().getBlockCacheFlush();
+	int loopcount{};
+	const auto updated =
+			m_server->getEnv().getServerMap().updateLightingQueue(10000, loopcount);
+	return updated != 0 || loopcount != 0;
 }
 
 EnvThread::EnvThread(Server *server) : thread_vector{"Env", 20}, m_server{server}
@@ -431,18 +444,19 @@ int Server::AsyncRunMapStep(float dtime, float dedicated_server_step, bool async
 		Set the modified blocks unsent for all the clients
 	*/
 
-	m_liquid_send_timer += dtime;
-	if (m_liquid_send_timer >= m_liquid_send_interval) {
+	if (!m_lighting_thread)
+		m_lighting_update_timer += dtime;
+	if (!m_lighting_thread && m_lighting_update_timer >= m_lighting_update_interval) {
 		// TimeTaker timer_step("Server step: updateLighting");
-		m_liquid_send_timer -= m_liquid_send_interval;
-		if (m_liquid_send_timer > m_liquid_send_interval * 2)
-			m_liquid_send_timer = 0;
+		m_lighting_update_timer -= m_lighting_update_interval;
+		if (m_lighting_update_timer > m_lighting_update_interval * 2)
+			m_lighting_update_timer = 0;
 
 		// concurrent_map<v3POS, MapBlock*> modified_blocks; //not used
 		// if (m_env->getMap().updateLighting(m_env->getMap().lighting_modified_blocks,
 		// modified_blocks, max_cycle_ms)) {
 		if (m_env->getServerMap().updateLightingQueue(max_cycle_ms, ret)) {
-			m_liquid_send_timer = m_liquid_send_interval;
+			m_lighting_update_timer = m_lighting_update_interval;
 			goto no_send;
 		}
 	}

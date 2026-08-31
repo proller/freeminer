@@ -44,6 +44,7 @@ class AbmThread;
 class AbmWorldThread;
 class Circuit;
 class EnvThread;
+class LightingThread;
 class LiquidThread;
 class MapgenVoxelEarth;
 class MapThread;
@@ -870,8 +871,8 @@ public:
 			u16 net_proto_version, SerializedBlockCache *cache = nullptr);
 
 private:
-	float m_liquid_send_timer{};
-	float m_liquid_send_interval{1};
+	float m_lighting_update_timer{};
+	float m_lighting_update_interval{1};
 	IntervalLimiter m_weather_update_interval;
 
 public:
@@ -908,6 +909,7 @@ public:
 	std::unique_ptr<SendBlocksThread> m_sendblocks_thead;
 	std::unique_ptr<SendFarBlocksThread> m_sendfarblocks_thead;
 	std::unique_ptr<LiquidThread> m_liquid;
+	std::unique_ptr<LightingThread> m_lighting_thread;
 	std::unique_ptr<EnvThread> m_env_thread;
 	std::unique_ptr<AbmThread> m_abm_thread;
 	std::unique_ptr<AbmWorldThread> m_abm_world_thread;
