@@ -51,6 +51,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "servermap.h"
 #include "debug/stacktrace.h"
 #include "serverenvironment.h"
+#include "threading/ThreadPool.h"
 #include "util/timetaker.h"
 
 ServerThreadBase::ServerThreadBase(Server *server, const std::string &name,
@@ -904,4 +905,37 @@ void Server::SetBlocksNotSent()
 			client->SetBlocksNotSent(/*block*/);
 	}
 #endif
+}
+
+std::future<void> Server::enqueueAsyncTask(std::function<void()> task)
+{
+	std::lock_guard<std::mutex> lock(m_async_pool_mutex);
+	if (m_async_pool_stopping.load())
+		throw std::runtime_error("server async task pool is stopping");
+
+	if (!m_async_pool) {
+		s16 threads = 2;
+		g_settings->getS16NoEx("server_async_threads", threads);
+		threads = std::clamp<s16>(threads, 1, 32);
+		m_async_pool = std::make_unique<progschj::ThreadPool>(threads);
+		actionstream << "Server async task pool started with " << threads << " thread(s)."
+					 << std::endl;
+	}
+
+	return m_async_pool->enqueue_block(std::move(task));
+}
+
+void Server::shutdownAsyncTasks()
+{
+	std::unique_ptr<progschj::ThreadPool> pool;
+	{
+		std::lock_guard<std::mutex> lock(m_async_pool_mutex);
+		m_async_pool_stopping.store(true);
+		pool = std::move(m_async_pool);
+	}
+
+	if (pool) {
+		pool.reset();
+		actionstream << "Server async task pool stopped." << std::endl;
+	}
 }

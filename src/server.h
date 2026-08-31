@@ -4,14 +4,6 @@
 
 #pragma once
 
-//  fm:
-#include "stat.h"
-#include "network/fm_lan.h"
-#include <unordered_set>
-#include "network/fm_networkprotocol.h"
-//== 
-
-
 #include "irr_v3d.h"
 #include "map.h"
 #include "hud_element.h" // HudElementStat
@@ -39,20 +31,26 @@
 
 
 //fm:
-#include "stat.h"
 #include "network/fm_lan.h"
+#include "network/fm_lan.h"
+#include "network/fm_networkprotocol.h"
+#include "stat.h"
+#include "stat.h"
+#include <functional>
+#include <future>
 #include <unordered_set>
+#include <unordered_set>
+class AbmThread;
+class AbmWorldThread;
 class Circuit;
-class Stat;
+class EnvThread;
+class LiquidThread;
+class MapgenVoxelEarth;
 class MapThread;
 class SendBlocksThread;
 class SendFarBlocksThread;
-class LiquidThread;
-class EnvThread;
-class AbmThread;
-class AbmWorldThread;
+class Stat;
 class WorldMergeThread;
-class MapgenVoxelEarth;
 
 
 class ClientNotFoundException : public BaseException
@@ -62,6 +60,11 @@ public:
 		BaseException(s)
 	{}
 };
+
+namespace progschj
+{
+class ThreadPool;
+}
 
 // ==
 
@@ -846,12 +849,10 @@ public:
 	float m_mod_storage_save_timer = 10.0f;
 
 
-
-
-
 	// freeminer:
-friend MapgenVoxelEarth;
-	private:
+	friend MapgenVoxelEarth;
+
+private:
 	int save(float dtime, float dedicated_server_step = 0.1, bool breakable = false);
 
 	//fmtodo: remove:
@@ -861,11 +862,14 @@ friend MapgenVoxelEarth;
 	void SendFreeminerInit(session_t peer_id, u16 protocol_version);
 	void SendActiveObjectMessages(
 			session_t peer_id, const ActiveObjectMessages &datas, bool reliable = true);
-public:
-	void SendBlockFm(session_t peer_id, MapBlockPtr block, u8 ver, u16 net_proto_version, SerializedBlockCache *cache = nullptr);
-	void SendBlocksFm(session_t peer_id, std::vector<MapBlockPtr> blocks, u8 ver, u16 net_proto_version, SerializedBlockCache *cache = nullptr);
-private:
 
+public:
+	void SendBlockFm(session_t peer_id, MapBlockPtr block, u8 ver, u16 net_proto_version,
+			SerializedBlockCache *cache = nullptr);
+	void SendBlocksFm(session_t peer_id, std::vector<MapBlockPtr> blocks, u8 ver,
+			u16 net_proto_version, SerializedBlockCache *cache = nullptr);
+
+private:
 	float m_liquid_send_timer{};
 	float m_liquid_send_interval{1};
 	IntervalLimiter m_weather_update_interval;
@@ -902,8 +906,20 @@ public:
 	std::unique_ptr<AbmThread> m_abm_thread;
 	std::unique_ptr<AbmWorldThread> m_abm_world_thread;
 	std::unique_ptr<WorldMergeThread> m_world_merge_thread;
-	// ==
 
+private:
+	void shutdownAsyncTasks();
+
+	// Generic pool for core server tasks. It is created on the first submitted
+	// task and stopped before the environment is destroyed.
+	std::mutex m_async_pool_mutex;
+	std::unique_ptr<progschj::ThreadPool> m_async_pool;
+	std::atomic_bool m_async_pool_stopping{false};
+
+public:
+	std::future<void> enqueueAsyncTask(std::function<void()> task);
+	bool asyncTasksStopping() const { return m_async_pool_stopping.load(); }
+	// ==
 
 
 	// CSM restrictions byteflag

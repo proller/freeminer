@@ -1764,7 +1764,7 @@ void ServerMap::lighting_modified_add(const v3bpos_t &pos, int range)
 {
 	MutexAutoLock lock(m_lighting_modified_mutex);
 	if (m_lighting_modified_blocks.contains(pos)) {
-		auto old_range = m_lighting_modified_blocks[pos];
+		const auto old_range = m_lighting_modified_blocks[pos];
 		if (old_range <= range)
 			return;
 		m_lighting_modified_blocks_range[old_range].erase(pos);
@@ -1791,7 +1791,7 @@ unsigned int ServerMap::updateLightingQueue(unsigned int max_cycle_ms, int &loop
 			blocks = r->second;
 			// infostream <<" go light range="<< r->first << " size="<<blocks.size()<< " ranges="<<m_lighting_modified_blocks_range.size()<<" total blk"<<m_lighting_modified_blocks.size()<< std::endl;
 			m_lighting_modified_blocks_range.erase(r);
-			for (auto &i : blocks)
+			for (const auto &i : blocks)
 				m_lighting_modified_blocks.erase(i.first);
 		}
 		ret += updateLighting(blocks, processed, max_cycle_ms);
@@ -1811,8 +1811,8 @@ unsigned int ServerMap::updateLightingQueue(unsigned int max_cycle_ms, int &loop
 
 	{
 		MutexAutoLock lock(m_lighting_modified_mutex);
-		for (auto &i : processed) {
-			if (m_lighting_modified_blocks.count(i.first)) {
+		for (const auto &i : processed) {
+			if (m_lighting_modified_blocks.contains(i.first)) {
 				m_lighting_modified_blocks_range[m_lighting_modified_blocks[i.first]]
 						.erase(i.first);
 				m_lighting_modified_blocks.erase(i.first);

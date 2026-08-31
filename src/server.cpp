@@ -81,12 +81,13 @@
 #include "network/clientopcodes.h"
 #endif
 #include "content_abm.h"
+#include "fm_server.h"
+#include "msgpack_fix.h"
 #include "network/fm_connection.h"
+#include "threading/ThreadPool.h"
 #include "tool.h"
 #include <iomanip>
-#include "msgpack_fix.h"
 #include <sys/types.h>
-#include "fm_server.h"
 #if !MINETEST_PROTO
 #include "network/fm_serverpacketsender.cpp"
 #endif
@@ -417,6 +418,7 @@ Server::~Server()
 	// callback.
 	// Note: The emerge manager is not deleted yet because further code can
 	//       still interact with map loading.
+	shutdownAsyncTasks();
 	if (m_emerge)
 		m_emerge->stopThreads();
 
