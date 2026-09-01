@@ -120,7 +120,7 @@ static bool within_lazy_window(uint64_t source_time, uint64_t target_time, uint3
 }
 
 std::optional<size_t> world_merge::selectFarNodeIndex(
-		const std::array<MapNode, 8> &samples)
+		const std::array<MapNode, 8> &samples, const std::array<bool, 8> *exposed)
 {
 	constexpr size_t main_sample = 3;
 	size_t valid_count = 0;
@@ -142,18 +142,39 @@ std::optional<size_t> world_merge::selectFarNodeIndex(
 	// remains closed. Sparse solids no longer survive merely because they happen
 	// to contain the grid-aligned sample.
 	const bool select_solid = solid_count * 2 >= valid_count;
+	// Occupancy remains volume-based, but material can come from the exposed
+	// upper layer. This keeps grass, snow, roads, and similar surface covers from
+	// being outvoted by the dirt or stone directly underneath them.
+	constexpr std::array<uint8_t, 8> sample_y{{1, 0, 0, 0, 1, 1, 0, 1}};
+	int selected_exposed_y = -1;
+	if (select_solid && exposed) {
+		for (size_t i = 0; i < samples.size(); ++i) {
+			const auto content = samples[i].getContent();
+			if ((*exposed)[i] && content != CONTENT_IGNORE &&
+					content != CONTENT_UNKNOWN && content != CONTENT_AIR) {
+				selected_exposed_y =
+						std::max(selected_exposed_y, static_cast<int>(sample_y[i]));
+			}
+		}
+	}
 	std::optional<size_t> best_index;
 	size_t best_count = 0;
 
 	for (size_t i = 0; i < samples.size(); ++i) {
 		const auto content = samples[i].getContent();
 		if (content == CONTENT_IGNORE || content == CONTENT_UNKNOWN ||
-				(content != CONTENT_AIR) != select_solid)
+				(content != CONTENT_AIR) != select_solid ||
+				(selected_exposed_y >= 0 &&
+						(!(*exposed)[i] || sample_y[i] != selected_exposed_y)))
 			continue;
 
 		size_t count = 0;
-		for (const auto &candidate : samples) {
-			if (candidate.getContent() == content)
+		for (size_t candidate_index = 0; candidate_index < samples.size();
+				++candidate_index) {
+			if (samples[candidate_index].getContent() == content &&
+					(selected_exposed_y < 0 ||
+							((*exposed)[candidate_index] &&
+									sample_y[candidate_index] == selected_exposed_y)))
 				++count;
 		}
 		// Preserve the grid-aligned surface material when it has support from
@@ -338,6 +359,24 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 					const v3pos_t lpos((x << step_pow) % MAP_BLOCKSIZE,
 							(y << step_pow) % MAP_BLOCKSIZE,
 							(z << step_pow) % MAP_BLOCKSIZE);
+					// Resolve samples through the loaded 2x2x2 source-block group so
+					// surface exposure is correct at a source mapblock boundary as well.
+					const auto get_source_node = [&blocks, &bbpos](v3pos_t sample_pos) {
+						const v3bpos_t sample_bbpos{
+								static_cast<bpos_t>(
+										bbpos.X + sample_pos.X / MAP_BLOCKSIZE),
+								static_cast<bpos_t>(
+										bbpos.Y + sample_pos.Y / MAP_BLOCKSIZE),
+								static_cast<bpos_t>(
+										bbpos.Z + sample_pos.Z / MAP_BLOCKSIZE)};
+						const auto sample_block_it = blocks.find(sample_bbpos);
+						if (sample_block_it == blocks.end() || !sample_block_it->second)
+							return MapNode(CONTENT_IGNORE);
+						sample_pos.X %= MAP_BLOCKSIZE;
+						sample_pos.Y %= MAP_BLOCKSIZE;
+						sample_pos.Z %= MAP_BLOCKSIZE;
+						return sample_block_it->second->getNodeNoLock(sample_pos);
+					};
 			// TODO: tune block selector
 
 #if 0
@@ -348,6 +387,8 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 					// votes used to preserve sparse underground fragments.
 					std::array<MapNode, 8> samples;
 					samples.fill(MapNode(CONTENT_IGNORE));
+					// Mark solids whose node immediately above propagates light.
+					std::array<bool, 8> exposed{};
 					uint8_t max_light_night = 0;
 					const std::array<v3pos_t, 8> sample_dirs{{
 							{0, 1, 0},
@@ -373,12 +414,27 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 							++sample_index) {
 						const auto &dir = sample_dirs[sample_index];
 						const auto p = lpos + dir;
-						const auto &n = block->getNodeNoLock(p);
+						const auto n = get_source_node(p);
 						const auto c = n.getContent();
 						if (c == CONTENT_IGNORE || c == CONTENT_UNKNOWN) {
 							continue;
 						}
 						samples[sample_index] = n;
+						// Prefer visible upper material without changing the solid/air
+						// occupancy decision for the coarse cell.
+						if (c != CONTENT_AIR) {
+							const auto above = get_source_node(p + v3pos_t(0, 1, 0));
+							const auto above_content = above.getContent();
+							if (above_content != CONTENT_IGNORE &&
+									above_content != CONTENT_UNKNOWN) {
+								const auto &above_features = ndef->get(above_content);
+								const auto &above_lighting =
+										ndef->getLightingFlags(above_content);
+								exposed[sample_index] = above_content == CONTENT_AIR ||
+														above_features.isLiquid() ||
+														above_lighting.light_propagates;
+							}
+						}
 
 						const auto &lf = ndef->getLightingFlags(c);
 						if (const auto light_night = n.getLightRaw(LIGHTBANK_NIGHT, lf);
@@ -434,7 +490,8 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 						}
 					}
 
-					const auto selected = world_merge::selectFarNodeIndex(samples);
+					const auto selected =
+							world_merge::selectFarNodeIndex(samples, &exposed);
 					if (!selected)
 						continue;
 					auto n = samples[*selected];
