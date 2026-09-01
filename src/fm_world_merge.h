@@ -40,7 +40,10 @@ namespace world_merge
 // Select the representative sample for a 2x2x2 far node. Occupancy is decided
 // independently from material so a preferred solid sample cannot outweigh an
 // otherwise empty cell.
-std::optional<size_t> selectFarNodeIndex(const std::array<MapNode, 8> &samples);
+// When exposure data is available, an upper node bordering transparent
+// space represents the visible surface material of an otherwise solid cell.
+std::optional<size_t> selectFarNodeIndex(const std::array<MapNode, 8> &samples,
+		const std::array<bool, 8> *exposed = nullptr);
 }
 
 class WorldMerger
