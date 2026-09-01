@@ -259,6 +259,10 @@ void *LiquidThread::run()
 			const auto processed = m_server->getEnv().getServerMap().transformLiquids(
 					modified_blocks, &m_server->getEnv(), m_server, max_cycle_ms);
 			const auto time_spend = porting::getTimeMs() - time_start;
+			thread_local static size_t rare{};
+			if (!(rare++ % 1000))
+				infostream << m_name << ": processed=" << processed
+						   << " time=" << time_spend << "ms" << std::endl;
 
 			thread_local const auto static liquid_step =
 					g_settings->getBool("liquid_step");
@@ -289,10 +293,15 @@ LightingThread::LightingThread(Server *server) : ServerThreadBase{server, "Light
 
 size_t LightingThread::step(float)
 {
+	const auto time_start = porting::getTimeMs();
 	m_server->getEnv().getMap().getBlockCacheFlush();
 	int loopcount{};
 	const auto updated =
 			m_server->getEnv().getServerMap().updateLightingQueue(10000, loopcount);
+	thread_local static size_t rare{};
+	if (!(rare++ % 1000))
+		infostream << m_name << ": updated=" << updated << " loops=" << loopcount
+				   << " time=" << porting::getTimeMs() - time_start << "ms" << std::endl;
 	return updated != 0 || loopcount != 0;
 }
 
@@ -345,7 +354,13 @@ void *AbmThread::run()
 			auto ctime = porting::getTimeMs();
 			auto dtimems = ctime - time;
 			time = ctime;
-			m_server->getEnv().analyzeBlocks(dtimems / 1000.0f, max_cycle_ms);
+			const auto processed =
+					m_server->getEnv().analyzeBlocks(dtimems / 1000.0f, max_cycle_ms);
+			thread_local static size_t rare{};
+			if (!(rare++ % 1000))
+				infostream << m_name << ": processed=" << processed
+						   << " time=" << porting::getTimeMs() - ctime << "ms"
+						   << std::endl;
 			std::this_thread::sleep_for(
 					std::chrono::milliseconds(dtimems > 1000 ? 100 : 1000 - dtimems));
 #if !EXCEPTION_DEBUG
