@@ -377,7 +377,7 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 						sample_pos.Z %= MAP_BLOCKSIZE;
 						return sample_block_it->second->getNodeNoLock(sample_pos);
 					};
-			// TODO: tune block selector
+					// TODO: tune block selector
 
 #if 0
 // Simple grid aligned
@@ -514,7 +514,8 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 				}
 	}
 	// TODO: skip full air;
-	block_up->m_light_points.clear();
+	// This block is not published yet; build its new light-point snapshot in place.
+	block_up->m_light_points = std::make_shared<MapBlock::light_points_t>();
 	if (farlights) {
 		constexpr auto some_magick_thinner_const = 2; // more -> less far ligts
 		constexpr auto min_no_skip_lights =
@@ -524,13 +525,18 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 				continue;
 			}
 			const light_points_t *light_points = nullptr;
+			std::shared_ptr<MapBlock::light_points_t> source_light_points;
 			if (!step) {
 				const auto lights_it = generated_light_points.find(bpos);
 				if (lights_it == generated_light_points.end())
 					continue;
 				light_points = &lights_it->second;
 			} else {
-				light_points = &block->m_light_points;
+				{
+					const auto lock = block->lock_shared_rec();
+					source_light_points = block->m_light_points;
+				}
+				light_points = source_light_points.get();
 			}
 			if (!light_points || light_points->empty())
 				continue;
@@ -542,7 +548,8 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 			const auto size = light_points->size();
 			if (!size)
 				continue;
-			block_up->m_light_points.reserve(block_up->m_light_points.size() + size / 2);
+			block_up->m_light_points->reserve(
+					block_up->m_light_points->size() + size / 2);
 			const auto coef = std::log2(size);
 			const auto keep_first =
 					min_no_skip_lights * (static_cast<size_t>(step) + 1) * 3;
@@ -557,7 +564,7 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 					continue;
 				}
 				++one_step_stat.lights_used;
-				block_up->m_light_points.emplace(lp);
+				block_up->m_light_points->emplace(lp);
 			}
 		}
 	}
