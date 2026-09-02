@@ -606,7 +606,9 @@ public:
 				255, (light >> 16) & 0xff, (light >> 8) & 0xff, light & 0xff);
 	}
 
-	std::unordered_map<v3pos_t, light_t> m_light_points;
+	// Keep far-light iterations alive when a received block replaces its data.
+	using light_points_t = std::unordered_map<v3pos_t, light_t>;
+	std::shared_ptr<light_points_t> m_light_points = std::make_shared<light_points_t>();
 
 	u32 getActualTimestamp()
 	{

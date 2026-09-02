@@ -799,7 +799,13 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data):
 							const auto &block = storage.get(bpos).block;
 							if (!block)
 								continue;
-							if (block->m_light_points.empty())
+							// Retain the current container while another thread may replace it.
+							std::shared_ptr<MapBlock::light_points_t> light_points;
+							{
+								const auto lock = block->lock_shared_rec();
+								light_points = block->m_light_points;
+							}
+							if (!light_points || light_points->empty())
 								continue;
 							if (!buffer) {
 								buffer = new scene::SMeshBuffer();
@@ -811,7 +817,7 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data):
 								buffer->Material.BackfaceCulling = false;
 								buffer->Material.FogEnable = true;
 							}
-							for (const auto &lp : block->m_light_points) {
+							for (const auto &lp : *light_points) {
 								if (index_i >= 16000)
 									break;
 								const auto level =
