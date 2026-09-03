@@ -239,10 +239,10 @@ public:
 		}
 
 		const pos_t radius = static_cast<pos_t>(radius_value);
-		const u64 horizontal_chunk_nodes = static_cast<u64>(
-				std::min(chunk_size.X, chunk_size.Z)) * MAP_BLOCKSIZE;
+		const u64 horizontal_chunk_nodes =
+				static_cast<u64>(std::min(chunk_size.X, chunk_size.Z)) * MAP_BLOCKSIZE;
 		const u64 max_ring = (static_cast<u64>(radius) + horizontal_chunk_nodes - 1) /
-				horizontal_chunk_nodes;
+							 horizontal_chunk_nodes;
 		if (max_ring > (std::numeric_limits<u64>::max() - 1) / 2) {
 			message = "Radius produces too many mapgen chunk rings.";
 			return false;
@@ -283,11 +283,11 @@ public:
 		}
 
 		std::ostringstream response;
-		response << "Started generation of " << job->total
-				 << " mapgen chunk columns (" << chunk_size.X * MAP_BLOCKSIZE << "x"
-				 << chunk_size.Y * MAP_BLOCKSIZE << "x"
-				 << chunk_size.Z * MAP_BLOCKSIZE << " nodes per generated chunk), center first, "
-				 << job->in_flight_limit << " columns in flight.";
+		response << "Started generation of " << job->total << " mapgen chunk columns ("
+				 << chunk_size.X * MAP_BLOCKSIZE << "x" << chunk_size.Y * MAP_BLOCKSIZE
+				 << "x" << chunk_size.Z * MAP_BLOCKSIZE
+				 << " nodes per generated chunk), center first, " << job->in_flight_limit
+				 << " columns in flight.";
 		message = response.str();
 		m_start_log = "[earth] " + message + " Player=" + player_name +
 					  ", center_block=" + blockpos_string(job->center_block) +
@@ -329,8 +329,7 @@ private:
 		auto job = context->job.lock();
 		if (!state || !job || job->cancelled.load(std::memory_order_acquire))
 			return;
-		state->post_completion(
-				{std::move(job), context->task, blockpos, action});
+		state->post_completion({std::move(job), context->task, blockpos, action});
 	}
 
 	void post_completion(GenerateCompletion completion)
@@ -552,10 +551,10 @@ private:
 	{
 		const v3bpos_t chunk_min = containing_chunk(blockpos, job->chunk_size);
 		for (bpos_t x = 0; x < job->chunk_size.X; x++)
-		for (bpos_t y = 0; y < job->chunk_size.Y; y++)
-		for (bpos_t z = 0; z < job->chunk_size.Z; z++)
-			task->changed_blocks.emplace(
-					chunk_min.X + x, chunk_min.Y + y, chunk_min.Z + z);
+			for (bpos_t y = 0; y < job->chunk_size.Y; y++)
+				for (bpos_t z = 0; z < job->chunk_size.Z; z++)
+					task->changed_blocks.emplace(
+							chunk_min.X + x, chunk_min.Y + y, chunk_min.Z + z);
 	}
 
 	void process_completion(const GenerateCompletion &completion, TimePoint now)
@@ -570,17 +569,6 @@ private:
 		const auto action_index = static_cast<size_t>(completion.action);
 		if (action_index < job->actions.size())
 			job->actions[action_index]++;
-		bool changed = completion.action == EMERGE_GENERATED;
-		if (completion.action == EMERGE_FROM_MEMORY) {
-			MapBlockPtr block = m_server->getEnv().getServerMap().getBlock(
-					completion.blockpos, false, true);
-			const u32 changed_timestamp = block ?
-					block->m_changed_timestamp.load(std::memory_order_relaxed) : 0;
-			changed = task->cancel_retries > 0 ||
-					(changed_timestamp != 0 && changed_timestamp >= job->changed_since);
-		}
-		if (changed)
-			remember_changed_chunk(job, task, completion.blockpos);
 
 		if (completion.action == EMERGE_CANCELLED) {
 			task->cancel_retries++;
@@ -615,13 +603,30 @@ private:
 			return;
 		}
 
+		bool changed = completion.action == EMERGE_GENERATED;
+		if (completion.action == EMERGE_FROM_MEMORY ||
+				completion.action == EMERGE_FROM_DISK) {
+			MapBlockPtr block = m_server->getEnv().getServerMap().getBlock(
+					completion.blockpos, false, true);
+			const u32 changed_timestamp =
+					block ? block->m_changed_timestamp.load(std::memory_order_relaxed)
+						  : 0;
+			changed = task->cancel_retries > 0 ||
+					  (changed_timestamp != 0 && changed_timestamp >= job->changed_since);
+		}
+
+		// bool changed = completion.action >= EMERGE_FROM_MEMORY;
+
+		if (changed)
+			remember_changed_chunk(job, task, completion.blockpos);
+
 		task->cancel_retries = 0;
 		task->queue_retries = 0;
 		task->error_retries = 0;
 
 		const v3bpos_t chunk_min = containing_chunk(completion.blockpos, job->chunk_size);
-		const int64_t top_y_wide = static_cast<int64_t>(chunk_min.Y) +
-				job->chunk_size.Y - 1;
+		const int64_t top_y_wide =
+				static_cast<int64_t>(chunk_min.Y) + job->chunk_size.Y - 1;
 		if (top_y_wide > std::numeric_limits<bpos_t>::max()) {
 			fail_task(job, task, "vertical mapgen chunk coordinate overflow");
 			return;
@@ -632,17 +637,17 @@ private:
 		v3bpos_t missing_block;
 		ServerMap &map = m_server->getEnv().getServerMap();
 		for (bpos_t x = 0; x < job->chunk_size.X && top_is_available; x++)
-		for (bpos_t z = 0; z < job->chunk_size.Z; z++) {
-			const v3bpos_t blockpos(chunk_min.X + x, top_y, chunk_min.Z + z);
-			MapBlockPtr block = map.getBlock(blockpos, false, true);
-			if (!block || !block->isGenerated()) {
-				top_is_available = false;
-				missing_block = blockpos;
-				break;
+			for (bpos_t z = 0; z < job->chunk_size.Z; z++) {
+				const v3bpos_t blockpos(chunk_min.X + x, top_y, chunk_min.Z + z);
+				MapBlockPtr block = map.getBlock(blockpos, false, true);
+				if (!block || !block->isGenerated()) {
+					top_is_available = false;
+					missing_block = blockpos;
+					break;
+				}
+				if (!block->isAir())
+					top_is_air = false;
 			}
-			if (!block->isAir())
-				top_is_air = false;
-		}
 
 		if (!top_is_available) {
 			task->blockpos = missing_block;
@@ -659,8 +664,7 @@ private:
 			return;
 		}
 
-		const int64_t next_y_wide = static_cast<int64_t>(chunk_min.Y) +
-				job->chunk_size.Y;
+		const int64_t next_y_wide = static_cast<int64_t>(chunk_min.Y) + job->chunk_size.Y;
 		if (next_y_wide > std::numeric_limits<bpos_t>::max()) {
 			fail_task(job, task, "vertical mapgen chunk coordinate overflow");
 			return;
@@ -678,9 +682,9 @@ private:
 
 		const auto offset = onion_position(job->ring, job->next_ring_index++);
 		const int64_t block_x = static_cast<int64_t>(job->center_chunk.X) +
-				offset.first * job->chunk_size.X;
+								offset.first * job->chunk_size.X;
 		const int64_t block_z = static_cast<int64_t>(job->center_chunk.Z) +
-				offset.second * job->chunk_size.Z;
+								offset.second * job->chunk_size.Z;
 		if (block_x < std::numeric_limits<bpos_t>::min() ||
 				block_x > std::numeric_limits<bpos_t>::max() ||
 				block_z < std::numeric_limits<bpos_t>::min() ||
@@ -780,10 +784,9 @@ private:
 			const auto waiting = std::chrono::duration_cast<std::chrono::seconds>(
 					now - task->requested_at)
 										 .count();
-			warningstream << "[earth] Region mapgen chunk still emerging after " << waiting
-						  << "s: " << blockpos_string(task->blockpos)
-						  << ", ring=" << task->ring
-						  << std::endl;
+			warningstream << "[earth] Region mapgen chunk still emerging after "
+						  << waiting << "s: " << blockpos_string(task->blockpos)
+						  << ", ring=" << task->ring << std::endl;
 		}
 	}
 
