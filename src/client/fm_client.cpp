@@ -66,8 +66,7 @@ void Client::updateMeshTimestampWithEdge(const v3bpos_t &blockpos)
 		// the grid origin. Make dependency changes visible to that holder too.
 		const auto mesh_pos = mesh_grid.getMeshPos(pos);
 		if (mesh_pos != pos) {
-			if (auto *mesh_block =
-						m_env.getMap().getBlockNoCreateNoEx(mesh_pos))
+			if (auto *mesh_block = m_env.getMap().getBlockNoCreateNoEx(mesh_pos))
 				mesh_block->updateMeshRevision(revision);
 		}
 	}
@@ -333,20 +332,11 @@ void Client::processSingleBlockData(MsgpackPacketSafe &packet)
 
 		content_t content_only{CONTENT_IGNORE};
 		packet.convert_safe(TOCLIENT_BLOCKDATA_CONTENT_ONLY, content_only);
-		/*
-		if (content_only != CONTENT_IGNORE) {
-			block->data[0].param0 = content_only;
-			packet.convert_safe(
-					TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM1, block->data[0].param1);
-			packet.convert_safe(
-					TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM2, block->data[0].param2);
-		}
-*/
-		if (content_only == CONTENT_IGNORE) {
-			//block->m_is_mono_block = false;
-			try {
-				block->deSerialize(istr, m_server_ser_ver, false);
-			} catch (const std::exception &ex) {
+		bool use_content_only = false;
+		try {
+			use_content_only = !block->deSerialize(istr, m_server_ser_ver, false);
+		} catch (const std::exception &ex) {
+			if (content_only == CONTENT_IGNORE) {
 				errorstream << "fm block deSerialize fail " << bpos << " "
 							<< block->far_step << " : " << ex.what() << " : "
 							<< packet.size() << " v=" << (short)m_server_ser_ver << "\n";
@@ -356,10 +346,18 @@ void Client::processSingleBlockData(MsgpackPacketSafe &packet)
 #endif
 				return;
 			}
-		} else {
-			//block->m_is_mono_block = true;
-			//block->fill(block->data[0]);
-			block->fill(content_only);
+			use_content_only = true;
+		}
+		if (use_content_only) {
+			if (content_only == CONTENT_IGNORE)
+				return;
+			u8 param1 = 0;
+			u8 param2 = 0;
+			packet.convert_safe(TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM1, param1);
+			packet.convert_safe(TOCLIENT_BLOCKDATA_CONTENT_ONLY_PARAM2, param2);
+			block->fill(MapNode(content_only, param1, param2));
+			block->m_light_points = std::make_shared<MapBlock::light_points_t>();
+			block->setGenerated(true);
 		}
 		weather::heat_t heat = 0; // for convert to atomic
 		packet[TOCLIENT_BLOCKDATA_HEAT].convert(heat);
@@ -535,8 +533,7 @@ void Client::sendDrawControl()
 	MSGPACK_PACKET_INIT((int)TOSERVER_DRAWCONTROL, 4);
 	const auto &client_map = m_env.getClientMap();
 	const auto &draw_control = client_map.getControl();
-	PACK(TOSERVER_DRAWCONTROL_WANTED_RANGE,
-			(int32_t)client_map.getServerWantedRange());
+	PACK(TOSERVER_DRAWCONTROL_WANTED_RANGE, (int32_t)client_map.getServerWantedRange());
 	//PACK(TOSERVER_DRAWCONTROL_RANGE_ALL, draw_control.range_all);
 	PACK(TOSERVER_DRAWCONTROL_FARMESH, draw_control.farmesh);
 	//PACK(TOSERVER_DRAWCONTROL_LODMESH, draw_control.lodmesh);

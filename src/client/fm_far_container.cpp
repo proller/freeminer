@@ -224,8 +224,8 @@ std::pair<const MapNode, bool> FarContainer::getNodeRefAndVisible(const v3pos_t 
 							std::min(MAP_BLOCKSIZE - 1, relpos.Z >> relpos_shift))};
 			{
 				const auto n = block->getNodeNoLock(relpos_shifted);
-				if (n.getContent() != CONTENT_IGNORE) {
-					// Dangerous, returning ref to not locked block
+				const auto content = n.getContent();
+				if (content != CONTENT_IGNORE && content != CONTENT_UNKNOWN)
 					return {n, false};
 				}
 			}

@@ -336,7 +336,7 @@ bool FarMesh::makeFarBlock(
 		for (pos_t x = 0; x < 1 << draw_control.cell_size_pow; ++x) {
 			for (pos_t y = 0; y < 1 << draw_control.cell_size_pow; ++y) {
 				for (pos_t z = 0; z < 1 << draw_control.cell_size_pow; ++z) {
-					client_map.m_far_blocks_ask.emplace(
+							client_map.m_far_blocks_ask.insert_or_assign(
 							blockpos_actual + v3bpos_t{x, y, z} * (1 << step),
 							std::make_pair(step, far_iteration_use));
 				}
@@ -353,8 +353,8 @@ bool FarMesh::makeFarBlock(
 		return enqueueFarMeshForBlock(
 				blockpos_actual, step, block, m_client->m_uptime, low_priority);
 	} else if (m_client->m_uptime >= block->far_make_mesh_timestamp) {
-		block->far_status = MapBlock::far_status_e::
-				s2_requested; // BUG! removeme, status should be always sync with far_make_mesh_timestamp
+		if (block->far_status != MapBlock::far_status_e::s6_mesh_complete)
+			block->far_status = MapBlock::far_status_e::s2_requested;
 		collect_reset_timestamp =
 				std::min(collect_reset_timestamp, block->far_make_mesh_timestamp);
 	} else {
@@ -1007,7 +1007,7 @@ uint8_t FarMesh::update(v3opos_t camera_pos,
 					m_speed > 200 * BS ||
 					m_camera_pos_aligned.getDistanceFrom(camera_pos_aligned_int) > 1000);
 
-	const auto set_new_mesh_pos = [&]() {
+	const auto clear_mesh_work = [&]() {
 		for (auto &stepit : farmesh_make_queue) {
 			stepit.clear();
 		}
@@ -1016,6 +1016,9 @@ uint8_t FarMesh::update(v3opos_t camera_pos,
 		farmesh_make_queue_complete = false;
 		auto &client_map = m_client->getEnv().getClientMap();
 		client_map.m_far_blocks_ask.clear();
+	};
+	const auto set_new_mesh_pos = [&]() {
+		auto &client_map = m_client->getEnv().getClientMap();
 		client_map.far_iteration_mesh = client_map.far_iteration_grid;
 		client_map.far_cam_pos_mesh = client_map.far_cam_pos_grid;
 	};
@@ -1044,6 +1047,7 @@ uint8_t FarMesh::update(v3opos_t camera_pos,
 	if (!far_iteration_pos) {
 		++far_iteration_pos;
 		set_new_cam_pos();
+		clear_mesh_work();
 		set_new_grid_pos();
 		set_new_mesh_pos();
 	}
@@ -1112,6 +1116,7 @@ uint8_t FarMesh::update(v3opos_t camera_pos,
 		if (far_old || (mesh_complete_set && farmesh_make_queue_complete)) {
 			cam_pos_updated = set_new_cam_pos();
 			if (cam_pos_updated) {
+				clear_mesh_work();
 				set_new_grid_pos();
 				set_new_mesh_pos();
 			}
