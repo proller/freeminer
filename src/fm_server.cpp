@@ -919,6 +919,7 @@ void *WorldMergeThread::run()
 			if (world_merge_all) {
 				merger.merge_all();
 			}
+			g_settings->setU64("world_merge_all", 0);
 		}
 	}
 	merger.world_merge_load_all = 0;
