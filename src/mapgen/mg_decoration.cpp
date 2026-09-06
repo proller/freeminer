@@ -137,7 +137,7 @@ void Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3pos_t nmin, v3pos_t nmax
 	}
 
 	// Divide area into parts
-	// If chunksize is changed it may no longer be divisable by sidelen
+	// If chunksize is changed it may no longer be divisible by sidelen
 	if (carea_size % sidelen != 0)
 		sidelen = carea_size;
 
@@ -208,7 +208,7 @@ void Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3pos_t nmin, v3pos_t nmax
 
 				if (flags & DECO_ALL_FLOORS) {
 					// Floor decorations
-					for (const s16 y : floors) {
+					for (const auto y : floors) {
 						if (y < y_min || y > y_max)
 							continue;
 

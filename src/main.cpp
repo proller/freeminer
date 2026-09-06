@@ -337,8 +337,7 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 #endif
 	}
 
-	// LEAK
-	GameStartData &game_params = *(new GameStartData());
+	GameParams game_params;
 #if !CHECK_CLIENT_BUILD()
 	porting::attachOrCreateConsole();
 	game_params.is_dedicated_server = true;
@@ -836,7 +835,9 @@ static bool use_debugger(int argc, char *argv[])
 			continue;
 		new_args.push_back(argv[i]);
 	}
+#if CHECK_CLIENT_BUILD()
 	new_args.push_back("--console");
+#endif
 	new_args.push_back(nullptr);
 
 #ifdef _WIN32

@@ -103,6 +103,7 @@ extern "C" {
 	void preinit_sound(void);
 }
 
+<<<<<<< HEAD
 void preinit_sound(void) {
 #if USE_SOUND
 	g_sound_manager_singleton = createSoundManagerSingleton();
@@ -114,7 +115,13 @@ std::unique_ptr<IWritableShaderSource> /*g_clouds_*/ ssrc;
 //#endif
 
 void ClientLauncher::run(std::function<void(bool)> resolve)
+=======
+bool ClientLauncher::run(const GameParams &game_params, const Settings &cmd_args)
+>>>>>>> origin/wip5.17.0-32
 {
+	GameStartData start_data;
+	static_cast<GameParams &>(start_data) = game_params;
+
 	init_args(start_data, cmd_args);
 
 	try {
@@ -193,8 +200,7 @@ void ClientLauncher::run(std::function<void(bool)> resolve)
 
 	// If an error occurs, this is set to something by menu().
 	// It is then displayed before the menu shows on the next call to menu()
-	error_message = "";
-	reconnect_requested = false;
+	GameErrorData errordata;
 
 	first_loop = true;
 
@@ -240,6 +246,7 @@ void ClientLauncher::run_loop(std::function<void(bool)> resolve) {
 			guiroot = guienv->addStaticText(L"",
 				core::rect<s32>(0, 0, 10000, 10000));
 
+<<<<<<< HEAD
 		launch_game([this, resolve](bool should_run_game) { run_after_launch_game(resolve, should_run_game); });
 #ifdef NDEBUG
 		} catch (BaseException &e) {
@@ -247,12 +254,15 @@ void ClientLauncher::run_loop(std::function<void(bool)> resolve) {
 		}
 #endif
 }
+=======
+			bool should_run_game = launch_game(errordata, start_data, cmd_args);
+>>>>>>> origin/wip5.17.0-32
 
 void ClientLauncher::run_after_launch_game(std::function<void(bool)> resolve, bool should_run_game) {
 
 	// EXTRANEOUS INDENT
 			// Reset the reconnect_requested flag
-			reconnect_requested = false;
+			errordata.reconnect_requested = false;
 
 			// If skip_main_menu, we only want to startup once
 			if (skip_main_menu && !first_loop) {
@@ -286,23 +296,41 @@ void ClientLauncher::run_after_launch_game(std::function<void(bool)> resolve, bo
 				kill,
 				input,
 				m_rendering_engine,
+<<<<<<< HEAD
 				&start_data,
 				error_message,
 				chat_backend,
 				&reconnect_requested,
 				autoexit,
 				[this, resolve]() { after_the_game(resolve); }
+=======
+				start_data,
+				errordata,
+				chat_backend
+				, autoexit
+>>>>>>> origin/wip5.17.0-32
 			)
 			){
 				m_rendering_engine->get_scene_manager()->clear();
 				errorstream << "Reconnecting "<< n << "/" << tries << " ..." << '\n';
 			}
+<<<<<<< HEAD
 }
 
 void ClientLauncher::after_the_game(std::function<void(bool)> resolve) {
 	// EXTRANEOUS INDENT
 					// AFTER TRY
 					m_rendering_engine->get_scene_manager()->clear();
+=======
+#if NDEBUG && !EXCEPTION_DEBUG
+		} catch (std::exception &e) {
+			errordata.message = "Some exception: " + debug_describe_exc(e);
+			errorstream << errordata.message << std::endl;
+		}
+#endif
+
+		m_rendering_engine->get_scene_manager()->clear();
+>>>>>>> origin/wip5.17.0-32
 
 		delete g_touchcontrols;
 		g_touchcontrols = nullptr;
@@ -317,6 +345,7 @@ void ClientLauncher::after_the_game(std::function<void(bool)> resolve) {
 		if (!g_settings_path.empty())
 			g_settings->updateConfigFile(g_settings_path.c_str());
 
+<<<<<<< HEAD
 					// If no main menu, show error and exit
 					if (skip_main_menu) {
 						if (!error_message.empty())
@@ -327,6 +356,15 @@ void ClientLauncher::after_the_game(std::function<void(bool)> resolve) {
 					MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
 					return;
 }
+=======
+		// If no main menu, show error and exit
+		if (skip_main_menu) {
+			if (!errordata.message.empty())
+				retval = false;
+			break;
+		}
+	} // Menu-game loop
+>>>>>>> origin/wip5.17.0-32
 
 void ClientLauncher::run_cleanup(std::function<void(bool)> resolve) {
 	// If profiler was enabled print it one last time
@@ -347,12 +385,14 @@ void ClientLauncher::init_args(GameStartData &start_data, const Settings &cmd_ar
 	start_data.address = g_settings->get("address");
 	if (cmd_args.exists("address")) {
 		// Join a remote server
+		start_data.mode = GameClientData::GM_JOIN;
 		start_data.address = cmd_args.get("address");
 		start_data.world_path.clear();
 		start_data.name = g_settings->get("name");
 	}
 	if (!start_data.world_path.empty()) {
 		// Start a singleplayer instance
+		start_data.mode = GameClientData::GM_SINGLEPLAYER;
 		start_data.address = "";
 	}
 
@@ -361,6 +401,9 @@ void ClientLauncher::init_args(GameStartData &start_data, const Settings &cmd_ar
 
 	// If a world was commanded, select it
 	if (!start_data.world_path.empty()) {
+		if (!start_data.name.empty())
+			start_data.mode = GameClientData::GM_HOST_AND_JOIN;
+
 		auto &spec = start_data.world_spec;
 
 		spec.path = start_data.world_path;
@@ -389,30 +432,6 @@ void ClientLauncher::init_input()
 		input = new RandomInputHandler();
 	else
 		input = new RealInputHandler(receiver);
-
-	if (g_settings->getBool("enable_joysticks"))
-		init_joysticks();
-}
-
-void ClientLauncher::init_joysticks()
-{
-	core::array<SJoystickInfo> infos;
-	std::vector<SJoystickInfo> joystick_infos;
-
-	// Make sure this is called maximum once per
-	// irrlicht device, otherwise it will give you
-	// multiple events for the same joystick.
-	if (!m_rendering_engine->get_raw_device()->activateJoysticks(infos)) {
-		errorstream << "Could not activate joystick support." << std::endl;
-		return;
-	}
-
-	infostream << "Joystick support enabled" << std::endl;
-	joystick_infos.reserve(infos.size());
-	for (u32 i = 0; i < infos.size(); i++) {
-		joystick_infos.push_back(infos[i]);
-	}
-	input->joystick.onJoystickConnect(joystick_infos);
 }
 
 void ClientLauncher::setting_changed_callback(const std::string &name, void *data)
@@ -488,17 +507,20 @@ void ClientLauncher::config_guienv()
 	}
 }
 
+<<<<<<< HEAD
 bool ClientLauncher::launch_game(std::function<void(bool)> resolve)
 /*
 bool ClientLauncher::launch_game(std::string &error_message,
 		bool reconnect_requested, GameStartData &start_data,
+=======
+bool ClientLauncher::launch_game(GameErrorData &errordata, GameStartData &start_data,
+>>>>>>> origin/wip5.17.0-32
 		const Settings &cmd_args)
 */
 {
-	// Prepare and check the start data to launch a game
-	std::string error_message_lua = error_message;
-	error_message.clear();
+	std::string &error_message = errordata.message;
 
+	// Prepare and check the start data to launch a game
 	if (cmd_args.exists("password"))
 		start_data.password = cmd_args.get("password");
 
@@ -518,6 +540,7 @@ bool ClientLauncher::launch_game(std::string &error_message,
 	/*
 	 * Show the GUI menu
 	 */
+<<<<<<< HEAD
 	server_name = "";
 	server_description = "";
 	if (!skip_main_menu) {
@@ -532,6 +555,13 @@ bool ClientLauncher::launch_game(std::string &error_message,
 		menudata.port                            = itos(start_data.socket_port);
 		menudata.script_data.errormessage        = std::move(error_message_lua);
 		menudata.script_data.reconnect_requested = reconnect_requested;
+=======
+	if (!skip_main_menu) {
+		// Initialize menu data
+		MainMenuData menudata(errordata);
+		(GameClientData &)menudata = start_data;
+		menudata.port = itos(start_data.socket_port);
+>>>>>>> origin/wip5.17.0-32
 
 		main_menu([this, resolve]() { after_main_menu(resolve); });
 	} else {
@@ -552,13 +582,18 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 			//return false;
 		   }
 
-		if (!menudata.script_data.errormessage.empty()) {
+		if (!menudata.script_data.message.empty()) {
 			/* The calling function will pass this back into this function upon the
 			 * next iteration (if any) causing it to be displayed by the GUI
 			 */
+<<<<<<< HEAD
 			error_message = menudata.script_data.errormessage;
 			delete menudata_addr; menudata_addr = nullptr;
 			resolve(false); return;
+=======
+			error_message = menudata.script_data.message;
+			return false;
+>>>>>>> origin/wip5.17.0-32
 		}
 
 		int newport = stoi(menudata.port);
@@ -574,6 +609,7 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 			start_data.world_path = start_data.world_spec.path;
 		}
 
+<<<<<<< HEAD
 		start_data.name = menudata.name;
 		start_data.password = menudata.password;
 		start_data.address = std::move(menudata.address);
@@ -588,6 +624,9 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 	} else {
 		start_data.local_server = !start_data.world_path.empty() &&
 			start_data.address.empty() && !start_data.name.empty();
+=======
+		(GameClientData &)start_data = menudata;
+>>>>>>> origin/wip5.17.0-32
 	}
 
 	if (!start_data.isSinglePlayer() && start_data.name.empty()) {
@@ -626,13 +665,20 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 	}
 
 	// For singleplayer and local server
-	if (start_data.address.empty()) {
+	if (start_data.isAnyServer()) {
 		auto &worldspec = start_data.world_spec;
 		if (worldspec.path.empty()) {
+<<<<<<< HEAD
 			error_message = _("No world selected and no address "
 					"provided. Nothing to do.");
 			errorstream << error_message << std::endl;
 			resolve(false); return;
+=======
+			errordata.setError(
+				gettext("No world selected and no address provided. Nothing to do.")
+			);
+			return false;
+>>>>>>> origin/wip5.17.0-32
 		}
 
 		infostream << "Selected world: " << worldspec.name
@@ -660,14 +706,19 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 		}
 
 		if (!start_data.game_spec.isValid()) {
+			std::string msg;
 			if (world_exists) {
-				error_message = gettext("Could not find or load game: ")
-					+ worldspec.gameid;
+				msg = gettext("Could not find or load game: ") + worldspec.gameid;
 			} else {
-				error_message = gettext("World does not exist and no game selected to create one.");
+				msg = gettext("World does not exist and no game selected to create one.");
 			}
+<<<<<<< HEAD
 			errorstream << error_message << std::endl;
 			resolve(false); return;
+=======
+			errordata.setError(msg);
+			return false;
+>>>>>>> origin/wip5.17.0-32
 		}
 	}
 
@@ -733,11 +784,15 @@ void ClientLauncher::main_menu_after_loop(std::function<void()> resolve) {
 	}
 
 	/* show main menu */
+<<<<<<< HEAD
 	new GUIEngine(&input->joystick, guiroot, m_rendering_engine, &g_menumgr, menudata_addr, *kill, [this, resolve]() {
 		main_menu_after_guiengine(resolve);
         });
 	std::cout << "AFTER CONSTRUCTING GUIEngine" << std::endl;
 }
+=======
+	GUIEngine mymenu(guiroot, m_rendering_engine, &g_menumgr, menudata, *kill);
+>>>>>>> origin/wip5.17.0-32
 
 void ClientLauncher::main_menu_after_guiengine(std::function<void()> resolve) {
 	/* leave scene manager in a clean state */

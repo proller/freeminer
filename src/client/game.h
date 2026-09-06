@@ -16,6 +16,7 @@
 class InputHandler;
 class ChatBackend;
 class RenderingEngine;
+struct GameErrorData;
 struct GameStartData;
 
 struct Jitter {
@@ -39,9 +40,17 @@ struct CameraOrientation {
 bool the_game(volatile std::sig_atomic_t *kill,
 		InputHandler *input,
 		RenderingEngine *rendering_engine,
+<<<<<<< HEAD
 		const GameStartData *start_data,
 		std::string &error_message,
 		ChatBackend *chat_backend,
 		bool *reconnect_requested,
 		unsigned int autoexit,
                 std::function<void()> resolve);
+=======
+		const GameStartData &start_data,
+		GameErrorData &errordata,
+		ChatBackend &chat_backend,
+	    unsigned int autoexit
+	);
+>>>>>>> origin/wip5.17.0-32
