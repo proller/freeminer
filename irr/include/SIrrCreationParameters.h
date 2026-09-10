@@ -42,11 +42,7 @@ struct SIrrlichtCreationParameters
 			LoggingLevel(ELL_INFORMATION),
 #endif
 			PrivateData(0),
-#if defined(_IRR_EMSCRIPTEN_PLATFORM_)
-			OGLES2ShaderPath("/minetest/media/Shaders/"),
-#else
 			OGLES2ShaderPath("SHADER_PATH_WAS_NOT_SET"),
-#endif
 			DriverDebug(false)
 	{
 	}

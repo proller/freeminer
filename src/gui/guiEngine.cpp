@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (C) 2013 sapier
 
-#include "mainloop.h"
 #include "guiEngine.h"
 #include "statusTextHelper.h"
 
@@ -117,8 +116,7 @@ GUIEngine::GUIEngine(gui::IGUIElement *parent,
 		RenderingEngine *rendering_engine,
 		IMenuManager *menumgr,
 		MainMenuData *data,
-		volatile std::sig_atomic_t &kill,
-		std::function<void()> resolve) :
+		volatile std::sig_atomic_t &kill) :
 	m_rendering_engine(rendering_engine),
 	m_parent(parent),
 	m_menumanager(menumgr),
@@ -154,14 +152,12 @@ GUIEngine::GUIEngine(gui::IGUIElement *parent,
 	// create topleft header
 	m_toplefttext = L"";
 
-	{
-		core::rect<s32> rect(0, 0, g_fontengine->getTextWidth(m_toplefttext.c_str()),
-			g_fontengine->getTextHeight());
-		rect += v2s32(4, 0);
+	core::rect<s32> rect(0, 0, g_fontengine->getTextWidth(m_toplefttext.c_str()),
+		g_fontengine->getTextHeight());
+	rect += v2s32(4, 0);
 
-		m_irr_toplefttext = gui::StaticText::add(rendering_engine->get_gui_env(),
-				m_toplefttext, rect, false, true, 0, -1);
-	}
+	m_irr_toplefttext = gui::StaticText::add(rendering_engine->get_gui_env(),
+			m_toplefttext, rect, false, true, 0, -1);
 
 	// create formspecsource
 	auto formspecgui = std::make_unique<FormspecFormSource>("");
@@ -220,17 +216,11 @@ GUIEngine::GUIEngine(gui::IGUIElement *parent,
 			return;
 		}
 
+		run();
 	} catch (ModError &e) {
 		errorstream << "Main menu error: " << e.what() << std::endl;
 		m_data->script_data.message = e.what();
 	}
-
-	run([this, resolve]() {
-		m_menu->quitMenu();
-		m_menu.reset();
-		delete this; // should probably be handed at a higher level
-		resolve();
-	});
 }
 
 
@@ -326,48 +316,32 @@ bool GUIEngine::loadMainMenuScript()
 }
 
 /******************************************************************************/
-void GUIEngine::run(std::function<void()> resolve)
+void GUIEngine::run()
 {
 	IrrlichtDevice *device = m_rendering_engine->get_raw_device();
-	driver = device->getVideoDriver();
+	video::IVideoDriver *driver = device->getVideoDriver();
 
-	text_height = g_fontengine->getTextHeight();
+	unsigned int text_height = g_fontengine->getTextHeight();
 
-	initial_screen_size = core::dimension2d<u32>(
+	const core::dimension2d<u32> initial_screen_size(
 			g_settings->getU16("screen_w"),
 			g_settings->getU16("screen_h")
 		);
-	//const bool 
-	initial_window_maximized = !g_settings->getBool("fullscreen") &&
+	const bool initial_window_maximized = !g_settings->getBool("fullscreen") &&
 			g_settings->getBool("window_maximized");
+	auto last_window_info = ClientDynamicInfo::getCurrent();
 
-	last_window_info = ClientDynamicInfo::getCurrent();
+	FpsControl fps_control;
+	f32 dtime = 0.0f;
 
-	dtime = 0.0f;
 	fps_control.reset();
-	framemarker = new FrameMarker("GUIEngine::run()-frame");
-	framemarker->start();
 
-    run_loop(resolve);
-}
+	auto framemarker = FrameMarker("GUIEngine::run()-frame").started();
 
-/*
 	while (m_rendering_engine->run() && !m_startgame && !m_kill) {
-*/
-void GUIEngine::run_loop(std::function<void()> resolve) {
-	IrrlichtDevice *device = m_rendering_engine->get_raw_device();
-	// EXTRANEOUS INDENT
-		bool keep_going = m_rendering_engine->run() && !m_startgame && !m_kill;
-		if (!keep_going) {
-	framemarker->end();
-	m_script->beforeClose();
-	RenderingEngine::autosaveScreensizeAndCo(initial_screen_size, initial_window_maximized);
-			resolve();
-			return;
-		}
-		framemarker->end();
+		framemarker.end();
 		fps_control.limit(device, &dtime);
-		framemarker->start();
+		framemarker.start();
 
 		g_fontengine->handleReload();
 
@@ -430,8 +404,12 @@ void GUIEngine::run_loop(std::function<void()> resolve) {
 #ifdef __ANDROID__
 		m_menu->getAndroidUIInput();
 #endif
+	}
+	framemarker.end();
 
-		MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
+	m_script->beforeClose();
+
+	RenderingEngine::autosaveScreensizeAndCo(initial_screen_size, initial_window_maximized);
 }
 
 /******************************************************************************/

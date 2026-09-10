@@ -11,7 +11,7 @@
 #include "settings.h"
 
 #ifdef __EMSCRIPTEN__
-#include <mainloop.h>
+#include <emsocket.h>
 #endif
 
 #ifdef _WIN32
@@ -33,9 +33,6 @@ typedef int socklen_t;
 typedef int socket_t;
 #endif
 
-#ifdef __EMSCRIPTEN__
-#include <emsocket.h>
-#endif
 
 /*
 	Address
@@ -83,24 +80,6 @@ bool Address::operator==(const Address &other) const
 	}
 
 	return false;
-}
-
-void Address::ResolveAsync(const char *name, Address *fallback, std::function<void(BaseException*)> resolve) {
-        char *nameCopy = name ? strdup(name) : nullptr;
-	MainLoop::RunAsyncThenResume([this, nameCopy, fallback, resolve]() {
-		std::function<void()> ret;
-		try {
-			Resolve(nameCopy, fallback);
-		} catch (BaseException &e) {
-			if (nameCopy) free(nameCopy);
-			BaseException *savedExc = e.copy();
-			ret = [savedExc, resolve]() { resolve(savedExc); };
-			return ret;
-		}
-		if (nameCopy) free(nameCopy);
-		ret = [resolve]() { resolve(nullptr); };
-		return ret;
-	});
 }
 
 void Address::Resolve(const char *name, Address *fallback)

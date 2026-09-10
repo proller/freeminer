@@ -3,14 +3,7 @@
 // Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
 
-#if __EMSCRIPTEN__
 #include <map>
-#include <algorithm>
-
-#include <emscripten/html5.h>
-#endif
-
-#include "mainloop.h"
 #include "irrlichttypes_bloated.h"
 #include "chat_interface.h"
 #include "debug.h"
@@ -39,8 +32,6 @@
 #include "network/socket.h"
 #include "network/networkexceptions.h"
 #include "mapblock.h"
-#include "util/base64.h"
-#include "util/hex.h"
 #if USE_CURSES
 	#include "terminal_chat_console.h"
 #endif
@@ -148,31 +139,17 @@ static FileLogOutput file_log_output;
 
 static OptionList allowed_options;
 
-ClientLauncher *client_launcher;
-
-std::unordered_map<std::string, MediaInfo> warmup_media;
-void do_cache_warmup() {
-	std::cout << "Warming cache" << std::endl;
-	std::string cache_dir = porting::path_cache + DIR_DELIM + "media";
-	fs::CreateAllDirs(cache_dir);
-	for (const auto &kv : warmup_media) {
-		const MediaInfo &info = kv.second;
-		std::string digest = base64_decode(info.sha1_digest);
-		std::string dest = cache_dir + DIR_DELIM + hex_encode(digest.c_str(), 20);
-		fs::CopyFileContents(info.path, dest);
-	}
-}
-
-void main2(int argc, char *argv[], std::function<void(int)> resolve) {
-
+int main2(int argc, char *argv[])
+{
 #if USE_ENET
 	if (enet_initialize() != 0) {
 		std::cerr << "enet failed to initialize\n";
-		resolve(EXIT_FAILURE); return;
+		return EXIT_FAILURE;
 	}
 	atexit(enet_deinitialize);
 #endif
 
+	int retval;
 	debug_set_exception_handler();
 
 	g_logger.registerThread("Main");
@@ -182,7 +159,7 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 
 	int non_test_argc = get_non_test_argc(argc, argv);
 
-	Settings &cmd_args = *(new Settings()); // LEAK
+	Settings cmd_args;
 	get_env_opts(cmd_args);
 	bool cmd_args_ok = get_cmdline_opts(non_test_argc, argv, &cmd_args);
 	if (!cmd_args_ok
@@ -190,7 +167,7 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 			|| cmd_args.exists("nonopt1")) {
 		porting::attachOrCreateConsole();
 		print_help(allowed_options);
-		resolve(cmd_args_ok ? 0 : 1); return;
+		return cmd_args_ok ? 0 : 1;
 	}
 	if (cmd_args.getFlag("console"))
 		porting::attachOrCreateConsole();
@@ -198,17 +175,14 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 	if (cmd_args.getFlag("version")) {
 		porting::attachOrCreateConsole();
 		print_version(std::cout);
-		resolve(0); return;
+		return 0;
 	}
 
-#if !__EMSCRIPTEN__
 	// Debug handler
 	BEGIN_DEBUG_EXCEPTION_HANDLER
-#endif
 
-	if (!setup_log_params(cmd_args)) {
-		resolve(1); return;
-	}
+	if (!setup_log_params(cmd_args))
+		return 1;
 
 	if (cmd_args.getFlag("debugger")) {
 		if (!use_debugger(argc, argv))
@@ -232,14 +206,14 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 	porting::initializePaths();
 
 	if (!create_userdata_path()) {
-		errorstream << "Cannot create user data directory "<< porting::path_user << std::endl;
-		resolve(1); return;
+		errorstream << "Cannot create user data directory"  << porting::path_user << std::endl;
+		return 1;
 	}
 
 	// List gameids if requested
 	if (cmd_args.exists("gameid") && cmd_args.get("gameid") == "list") {
 		list_game_ids();
-		resolve(0); return;
+		return 0;
 	}
 
 	// List worlds, world names, and world paths if requested
@@ -253,18 +227,17 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 		} else {
 			errorstream << "Invalid --worldlist value: "
 				<< cmd_args.get("worldlist") << std::endl;
-			resolve(1); return;
+			return 1;
 		}
-		resolve(0); return;
+		return 0;
 	}
 
-	if (!init_common(cmd_args, argc, argv)) {
-		resolve(1); return;
-	}
+	if (!init_common(cmd_args, argc, argv))
+		return 1;
 
 	PIDFileHandler pid_handler(cmd_args);
 	if (cmd_args.exists("pid") && !pid_handler.isCreated()) {
-		resolve(1); return;
+		return 1;
 	}
 
 	// parse settings from cmdline. must be after loading settings. maybe better to move
@@ -293,20 +266,14 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 		porting::attachOrCreateConsole();
 #if BUILD_UNITTESTS
 		if (cmd_args.exists("test-module"))
-		{
-			resolve(run_tests(cmd_args.get("test-module")));
-			return;
-		}
+			return run_tests(cmd_args.get("test-module")) ? 0 : 1;
 		else
-		{
-			resolve(run_tests());
-			return;
-		}
+			return run_tests() ? 0 : 1;
 #else
 		errorstream << "Unittest support is not enabled in this binary. "
 			<< "If you want to enable it, compile project with BUILD_UNITTESTS=1 flag."
 			<< std::endl;
-		resolve(1); return;
+		return 1;
 #endif
 	}
 
@@ -314,13 +281,12 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 	if (cmd_args.getFlag("run-tests")) {
 		porting::attachOrCreateConsole();
 #if BUILD_UNITTESTS
-		resolve(run_catch2_tests(argc - non_test_argc + 1, &argv[non_test_argc - 1]));
-		return;
+		return run_catch2_tests(argc - non_test_argc + 1, &argv[non_test_argc - 1]);
 #else
 		errorstream << "Unittest support is not enabled in this binary. "
 			<< "If you want to enable it, compile project with BUILD_UNITTESTS=1 flag."
 			<< std::endl;
-		resolve(1); return;
+		return 1;
 #endif
 	}
 
@@ -333,7 +299,7 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 		errorstream << "Benchmark support is not enabled in this binary. "
 			<< "If you want to enable it, compile project with BUILD_BENCHMARKS=1 flag."
 			<< std::endl;
-		resolve(1); return;
+		return 1;
 #endif
 	}
 
@@ -348,65 +314,31 @@ void main2(int argc, char *argv[], std::function<void(int)> resolve) {
 	game_params.is_dedicated_server = isServer;
 #endif
 
-	if (!game_configure(&game_params, cmd_args)) {
-		resolve(1); return;
-	}
+	if (!game_configure(&game_params, cmd_args))
+		return 1;
 
 	sanity_check(!game_params.world_path.empty());
 
-	if (game_params.is_dedicated_server) {
-		resolve(run_dedicated_server(game_params, cmd_args) ? 0 : 1);
-		return;
-	}
-
-	if (cmd_args.getFlag("withserver")) {
-		run_dedicated_server(game_params, cmd_args);
-	}
-
-
-#ifdef __EMSCRIPTEN__
-	if (cmd_args.getFlag("warm")) {
-		// Create a dummy server to initialize but then delete.
-		// This lets us grab the media list.
-		Address bind_addr(0, 0, 0, 0, 65535);
-		Server server(game_params.world_path, game_params.game_spec, false, bind_addr, true);
-		warmup_media = server.getMedia();
-		//delete server;
-    }
-#endif		
+	if (game_params.is_dedicated_server)
+		return run_dedicated_server(game_params, cmd_args) ? 0 : 1;
 
 #if CHECK_CLIENT_BUILD()
-	std::cout << "Creating ClientLauncher" << std::endl;
-	client_launcher = new ClientLauncher(game_params, cmd_args);
-	std::cout << "Calling ClientLauncher::run" << std::endl;
-        client_launcher->run([resolve](bool result) {
-		// Update configuration file
-		if (!g_settings_path.empty())
-			g_settings->updateConfigFile(g_settings_path.c_str());
-
-		print_modified_quicktune_values();
-
-		//END_DEBUG_EXCEPTION_HANDLER
-		resolve(result ? 0 : 1);
-	});
+	retval = ClientLauncher().run(game_params, cmd_args) ? 0 : 1;
 #else
-	resolve(0);
+	retval = 0;
 #endif
 
-#if !__EMSCRIPTEN__
-    END_DEBUG_EXCEPTION_HANDLER
-#endif
+	// Update configuration file
+	if (!g_settings_path.empty())
+		g_settings->updateConfigFile(g_settings_path.c_str());
+
+	print_modified_quicktune_values();
+
+	END_DEBUG_EXCEPTION_HANDLER
+
+	return retval;
 }
 
-
-#ifndef __EMSCRIPTEN__
-int main(int argc, char *argv[])
-{
-		int ret = 0;
-		main2(argc, argv, [&](int r) { ret = r; });
-		return ret;
-}
-#endif
 
 /*****************************************************************************
  * Startup / Init
@@ -539,10 +471,6 @@ static void set_allowed_options(OptionList *allowed_options)
 			_("Enable random user input (for testing)"))));
 	allowed_options->insert(std::make_pair("server", ValueSpec(VALUETYPE_FLAG,
 			_("Behave as dedicated server"))));
-	allowed_options->insert(std::make_pair("withserver", ValueSpec(VALUETYPE_FLAG,
-			_("Run server in addition to client"))));
-	allowed_options->insert(std::make_pair("warm", ValueSpec(VALUETYPE_FLAG,
-			_("Warm cache for specific game"))));
 	allowed_options->insert(std::make_pair("name", ValueSpec(VALUETYPE_STRING,
 			_("Set player name"))));
 	allowed_options->insert(std::make_pair("password", ValueSpec(VALUETYPE_STRING,
@@ -1302,27 +1230,6 @@ static bool determine_subgame(GameParams *game_params)
 /*****************************************************************************
  * Dedicated server
  *****************************************************************************/
-static bool run_dedicated_server_run(Server *server);
-
-class StepThread : public Thread
-{
-public:
-
-        StepThread(Server *server):
-                Thread("Step"),
-                m_server(server)
-        {}
-
-        virtual void *run() {
-		run_dedicated_server_run(m_server);
-		return nullptr;
-	}
-
-private:
-        Server *m_server;
-};
-
-
 static bool run_dedicated_server(const GameParams &game_params, const Settings &cmd_args)
 {
 	verbosestream << _("Using world path") << " ["
@@ -1424,44 +1331,25 @@ static bool run_dedicated_server(const GameParams &game_params, const Settings &
 			<< "compiled without ncurses. Ignoring." << std::endl;
 	} {
 #endif
-		Server *server = new Server(game_params.world_path, game_params.game_spec, false,
-			bind_addr, true);
-
-		int autoexit_ = 0;
-		cmd_args.getS32NoEx("autoexit", autoexit_);
-		server->m_autoexit = autoexit_;
-
-		if (cmd_args.getFlag("withserver")) {
-			// Launch in separate thread and return right away
-			auto stepThread = new StepThread(server);
-			stepThread->start();
-			return true;
-		}
-		return run_dedicated_server_run(server);
-	}
-	return true;
-}
-
-static bool run_dedicated_server_run(Server *server) {
-	// Indented to minimize diff
 		try {
 			// Create server
-			server->start();
+			Server server(game_params.world_path, game_params.game_spec, false,
+				bind_addr, true);
+			server.start();
 
 			// Run server
 			volatile auto &kill = *porting::signal_handler_killstatus();
-			dedicated_server_loop(*server, kill);
+			dedicated_server_loop(server, kill);
 
 		} catch (const ModError &e) {
 			errorstream << "ModError: " << e.what() << std::endl;
-			delete server;
 			return false;
 		} catch (const ServerError &e) {
 			errorstream << "ServerError: " << e.what() << std::endl;
-			delete server;
 			return false;
 		}
-	delete server;
+	}
+
 	return true;
 }
 

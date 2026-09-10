@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (C) 2010-2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
-#include <functional>
-#include "mainloop.h"
+// fm:
 #include "../server/serverlist.h"
+// ===
+
 #include "gui/mainmenumanager.h"
 #include "clouds.h"
 #include "gui/touchcontrols.h"
@@ -99,25 +100,8 @@ ClientLauncher::~ClientLauncher()
 #endif
 }
 
-extern "C" {
-	void preinit_sound(void);
-}
 
-<<<<<<< HEAD
-void preinit_sound(void) {
-#if USE_SOUND
-	g_sound_manager_singleton = createSoundManagerSingleton();
-#endif
-}
-
-//#ifdef __EMSCRIPTEN__
-std::unique_ptr<IWritableShaderSource> /*g_clouds_*/ ssrc;
-//#endif
-
-void ClientLauncher::run(std::function<void(bool)> resolve)
-=======
 bool ClientLauncher::run(const GameParams &game_params, const Settings &cmd_args)
->>>>>>> origin/wip5.17.0-32
 {
 	GameStartData start_data;
 	static_cast<GameParams &>(start_data) = game_params;
@@ -129,7 +113,7 @@ bool ClientLauncher::run(const GameParams &game_params, const Settings &cmd_args
 	} catch (BaseException &e) {
 		errorstream << e.what() << std::endl;
 		RenderingEngine::showErrorMessageBox(e.what());
-		resolve(false); return;
+		return false;
 	}
 
 	sanity_check(m_rendering_engine->get_video_driver() != nullptr);
@@ -161,13 +145,13 @@ bool ClientLauncher::run(const GameParams &game_params, const Settings &cmd_args
 	} catch (BaseException &e) {
 		errorstream << e.what() << std::endl;
 		RenderingEngine::showErrorMessageBox(e.what());
-		resolve(false); return;
+		return false;
 	}
 
 	// Create the menu clouds
 	// This is only global so it can be used by RenderingEngine::draw_load_screen().
 	assert(!g_menucloudsmgr && !g_menuclouds);
-	// std::unique_ptr<IWritableShaderSource> ssrc;
+	std::unique_ptr<IWritableShaderSource> ssrc;
 	try {
 		ssrc.reset(createShaderSource());
 		ssrc->addShaderUniformSetterFactory(std::make_unique<FogShaderUniformSetterFactory>());
@@ -180,7 +164,7 @@ bool ClientLauncher::run(const GameParams &game_params, const Settings &cmd_args
 	} catch (BaseException &e) {
 		errorstream << e.what() << std::endl;
 		RenderingEngine::showErrorMessageBox(e.what());
-		resolve(false); return;
+		return false;
 	}
 	g_menuclouds->setHeight(100.0f);
 	g_menuclouds->update(v3f(0, 0, 0), m_rendering_engine->m_menu_clouds_color);
@@ -196,32 +180,22 @@ bool ClientLauncher::run(const GameParams &game_params, const Settings &cmd_args
 		GUI stuff
 	*/
 
-	chat_backend = new ChatBackend();
+	ChatBackend chat_backend;
 
 	// If an error occurs, this is set to something by menu().
 	// It is then displayed before the menu shows on the next call to menu()
 	GameErrorData errordata;
 
-	first_loop = true;
+	bool first_loop = true;
 
 	/*
 		Menu-game loop
 	*/
-	retval = true;
-	kill = porting::signal_handler_killstatus();
+	bool retval         = true;
+	volatile auto *kill = porting::signal_handler_killstatus();
 
-	// HEREHERE
-	MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
-}
-
-void ClientLauncher::run_loop(std::function<void(bool)> resolve) {
-	// EXTRANEOUS INDENT
-		bool keep_running = m_rendering_engine->run() && !*kill && !g_gamecallback->shutdown_requested;
-		if (!keep_running) {
-			run_cleanup(resolve);
-			return;
-		}
-
+	while (m_rendering_engine->run() && !*kill &&
+		!g_gamecallback->shutdown_requested) {
 		// Set the window caption
 		auto driver_name = m_rendering_engine->getVideoDriver()->getName();
 		std::string caption = std::string(PROJECT_NAME_C) +
@@ -232,7 +206,6 @@ void ClientLauncher::run_loop(std::function<void(bool)> resolve) {
 		m_rendering_engine->get_raw_device()->
 			setWindowCaption(utf8_to_wide(caption).c_str());
 
-		// EXTRA INDENT
 #ifdef NDEBUG
 		try {
 #endif
@@ -246,47 +219,25 @@ void ClientLauncher::run_loop(std::function<void(bool)> resolve) {
 			guiroot = guienv->addStaticText(L"",
 				core::rect<s32>(0, 0, 10000, 10000));
 
-<<<<<<< HEAD
-		launch_game([this, resolve](bool should_run_game) { run_after_launch_game(resolve, should_run_game); });
-#ifdef NDEBUG
-		} catch (BaseException &e) {
-			errorstream << e.what() << std::endl;
-		}
-#endif
-}
-=======
 			bool should_run_game = launch_game(errordata, start_data, cmd_args);
->>>>>>> origin/wip5.17.0-32
 
-void ClientLauncher::run_after_launch_game(std::function<void(bool)> resolve, bool should_run_game) {
-
-	// EXTRANEOUS INDENT
 			// Reset the reconnect_requested flag
 			errordata.reconnect_requested = false;
 
 			// If skip_main_menu, we only want to startup once
-			if (skip_main_menu && !first_loop) {
-				run_cleanup(resolve);
-				return;
-			}
-
+			if (skip_main_menu && !first_loop)
+				break;
 			first_loop = false;
 
 			if (!should_run_game) {
-				if (skip_main_menu) {
-					run_cleanup(resolve);
-					return;
-				}
-
-				MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
-				return;
+				if (skip_main_menu)
+					break;
+				continue;
 			}
 
 			// Break out of menu-game loop to shut down cleanly
-			if (!m_rendering_engine->run() || *kill) {
-				run_cleanup(resolve);
-				return;
-			}
+			if (!m_rendering_engine->run() || *kill)
+				break;
 
 			int tries = start_data.isSinglePlayer() ? 1 : g_settings->getU16("reconnects");
 			int n = 0;
@@ -296,32 +247,15 @@ void ClientLauncher::run_after_launch_game(std::function<void(bool)> resolve, bo
 				kill,
 				input,
 				m_rendering_engine,
-<<<<<<< HEAD
-				&start_data,
-				error_message,
-				chat_backend,
-				&reconnect_requested,
-				autoexit,
-				[this, resolve]() { after_the_game(resolve); }
-=======
 				start_data,
 				errordata,
 				chat_backend
 				, autoexit
->>>>>>> origin/wip5.17.0-32
 			)
 			){
 				m_rendering_engine->get_scene_manager()->clear();
 				errorstream << "Reconnecting "<< n << "/" << tries << " ..." << '\n';
 			}
-<<<<<<< HEAD
-}
-
-void ClientLauncher::after_the_game(std::function<void(bool)> resolve) {
-	// EXTRANEOUS INDENT
-					// AFTER TRY
-					m_rendering_engine->get_scene_manager()->clear();
-=======
 #if NDEBUG && !EXCEPTION_DEBUG
 		} catch (std::exception &e) {
 			errordata.message = "Some exception: " + debug_describe_exc(e);
@@ -330,7 +264,6 @@ void ClientLauncher::after_the_game(std::function<void(bool)> resolve) {
 #endif
 
 		m_rendering_engine->get_scene_manager()->clear();
->>>>>>> origin/wip5.17.0-32
 
 		delete g_touchcontrols;
 		g_touchcontrols = nullptr;
@@ -345,18 +278,6 @@ void ClientLauncher::after_the_game(std::function<void(bool)> resolve) {
 		if (!g_settings_path.empty())
 			g_settings->updateConfigFile(g_settings_path.c_str());
 
-<<<<<<< HEAD
-					// If no main menu, show error and exit
-					if (skip_main_menu) {
-						if (!error_message.empty())
-							retval = false;
-						run_cleanup(resolve);
-						return;
-					}
-					MainLoop::NextFrame([this, resolve]() { run_loop(resolve); });
-					return;
-}
-=======
 		// If no main menu, show error and exit
 		if (skip_main_menu) {
 			if (!errordata.message.empty())
@@ -364,9 +285,7 @@ void ClientLauncher::after_the_game(std::function<void(bool)> resolve) {
 			break;
 		}
 	} // Menu-game loop
->>>>>>> origin/wip5.17.0-32
 
-void ClientLauncher::run_cleanup(std::function<void(bool)> resolve) {
 	// If profiler was enabled print it one last time
 	if (g_settings->getFloat("profiler_print_interval") > 0) {
 		infostream << "Profiler:" << std::endl;
@@ -374,8 +293,7 @@ void ClientLauncher::run_cleanup(std::function<void(bool)> resolve) {
 		g_profiler->clear();
 	}
 
-	resolve(retval);
-	return;
+	return retval;
 }
 
 void ClientLauncher::init_args(GameStartData &start_data, const Settings &cmd_args)
@@ -507,16 +425,8 @@ void ClientLauncher::config_guienv()
 	}
 }
 
-<<<<<<< HEAD
-bool ClientLauncher::launch_game(std::function<void(bool)> resolve)
-/*
-bool ClientLauncher::launch_game(std::string &error_message,
-		bool reconnect_requested, GameStartData &start_data,
-=======
 bool ClientLauncher::launch_game(GameErrorData &errordata, GameStartData &start_data,
->>>>>>> origin/wip5.17.0-32
 		const Settings &cmd_args)
-*/
 {
 	std::string &error_message = errordata.message;
 
@@ -533,67 +443,31 @@ bool ClientLauncher::launch_game(GameErrorData &errordata, GameStartData &start_
 					"failed to open: ")
 					+ cmd_args.get("password-file");
 			errorstream << error_message << std::endl;
-			resolve(false); return false;
+			return false;
 		}
 	}
 
 	/*
 	 * Show the GUI menu
 	 */
-<<<<<<< HEAD
-	server_name = "";
-	server_description = "";
-	if (!skip_main_menu) {
-		// Initialize menu data
-		// TODO: Re-use existing structs (GameStartData)
-
-		menudata_addr = new MainMenuData();
-		MainMenuData &menudata = *menudata_addr;
-		menudata.address                         = start_data.address;
-		menudata.name                            = start_data.name;
-		menudata.password                        = start_data.password;
-		menudata.port                            = itos(start_data.socket_port);
-		menudata.script_data.errormessage        = std::move(error_message_lua);
-		menudata.script_data.reconnect_requested = reconnect_requested;
-=======
 	if (!skip_main_menu) {
 		// Initialize menu data
 		MainMenuData menudata(errordata);
 		(GameClientData &)menudata = start_data;
 		menudata.port = itos(start_data.socket_port);
->>>>>>> origin/wip5.17.0-32
 
-		main_menu([this, resolve]() { after_main_menu(resolve); });
-	} else {
-		after_main_menu(resolve);
-	}
-	return true;
-}
-
-void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
-	if (!skip_main_menu) {
-		MainMenuData &menudata = *menudata_addr;
+		main_menu(&menudata);
 
 		// Skip further loading if there was an exit signal.
 		if (!m_rendering_engine->run() || *porting::signal_handler_killstatus())
-	       {
-		    delete menudata_addr; menudata_addr = nullptr;
-			resolve(false); return;
-			//return false;
-		   }
+			return false;
 
 		if (!menudata.script_data.message.empty()) {
 			/* The calling function will pass this back into this function upon the
 			 * next iteration (if any) causing it to be displayed by the GUI
 			 */
-<<<<<<< HEAD
-			error_message = menudata.script_data.errormessage;
-			delete menudata_addr; menudata_addr = nullptr;
-			resolve(false); return;
-=======
 			error_message = menudata.script_data.message;
 			return false;
->>>>>>> origin/wip5.17.0-32
 		}
 
 		int newport = stoi(menudata.port);
@@ -609,32 +483,19 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 			start_data.world_path = start_data.world_spec.path;
 		}
 
-<<<<<<< HEAD
-		start_data.name = menudata.name;
-		start_data.password = menudata.password;
-		start_data.address = std::move(menudata.address);
-		start_data.allow_login_or_register = menudata.allow_login_or_register;
-		server_name = menudata.servername;
-		server_description = menudata.serverdescription;
-
-		start_data.local_server = !menudata.simple_singleplayer_mode &&
-			start_data.address.empty();
-		delete menudata_addr;
-		menudata_addr = nullptr;
-	} else {
-		start_data.local_server = !start_data.world_path.empty() &&
-			start_data.address.empty() && !start_data.name.empty();
-=======
 		(GameClientData &)start_data = menudata;
->>>>>>> origin/wip5.17.0-32
 	}
 
 	if (!start_data.isSinglePlayer() && start_data.name.empty()) {
 		error_message = gettext("Please choose a name!");
 		errorstream << error_message << std::endl;
-		error_message.clear();
+/*
+		return false;
+*/
 
 		// fm:
+		error_message.clear();
+
 		auto num_add = 0;
 #if __EMSCRIPTEN__
 		num_add = 1000000;
@@ -661,24 +522,17 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 		error_message = gettext("Player name too long.");
 		start_data.name.resize(PLAYERNAME_SIZE);
 		g_settings->set("name", start_data.name);
-		resolve(false); return;
+		return false;
 	}
 
 	// For singleplayer and local server
 	if (start_data.isAnyServer()) {
 		auto &worldspec = start_data.world_spec;
 		if (worldspec.path.empty()) {
-<<<<<<< HEAD
-			error_message = _("No world selected and no address "
-					"provided. Nothing to do.");
-			errorstream << error_message << std::endl;
-			resolve(false); return;
-=======
 			errordata.setError(
 				gettext("No world selected and no address provided. Nothing to do.")
 			);
 			return false;
->>>>>>> origin/wip5.17.0-32
 		}
 
 		infostream << "Selected world: " << worldspec.name
@@ -712,70 +566,46 @@ void ClientLauncher::after_main_menu(std::function<void(bool)> resolve) {
 			} else {
 				msg = gettext("World does not exist and no game selected to create one.");
 			}
-<<<<<<< HEAD
-			errorstream << error_message << std::endl;
-			resolve(false); return;
-=======
 			errordata.setError(msg);
 			return false;
->>>>>>> origin/wip5.17.0-32
 		}
 	}
 
-	resolve(true); return;
+	return true;
 }
 
-void ClientLauncher::main_menu(std::function<void()> resolve)
+void ClientLauncher::main_menu(MainMenuData *menudata)
 {
 	ServerList::lan_get();
-
-	kill   = porting::signal_handler_killstatus();
+	volatile auto       *kill   = porting::signal_handler_killstatus();
+	video::IVideoDriver *driver = m_rendering_engine->get_video_driver();
+	auto                *device = m_rendering_engine->get_raw_device();
 
 	// Wait until app is in foreground because of #15883
 	infostream << "Waiting for app to be in foreground" << std::endl;
-	main_menu_wait_loop(resolve);
-}
-
-void ClientLauncher::main_menu_wait_loop(std::function<void()> resolve)
-{
-	auto device = m_rendering_engine->get_raw_device();
-	bool keep_going = m_rendering_engine->run() && !*kill;
-	if (keep_going && !device->isWindowVisible()) {
-		MainLoop::NextFrame([this, resolve]() { main_menu_wait_loop(resolve); });
-		return;
+	while (m_rendering_engine->run() && !*kill) {
+		if (device->isWindowVisible())
+			break;
+		sleep_ms(25);
 	}
-
 	infostream << "Waited for app to be in foreground" << std::endl;
 
 	infostream << "Waiting for other menus" << std::endl;
-	framemarker = new FrameMarker("ClientLauncher::main_menu()-wait-frame");
-	main_menu_loop(resolve);
-}
-
-void ClientLauncher::main_menu_loop(std::function<void()> resolve) {
-	// EXTRANEOUS INDENT
-		bool keep_going = m_rendering_engine->run() && !*kill;
-		if (!keep_going || !isMenuActive()) {
-			main_menu_after_loop(resolve);
-			return;
-		}
-		framemarker->start();
-		video::IVideoDriver *driver = m_rendering_engine->get_video_driver();
+	auto framemarker = FrameMarker("ClientLauncher::main_menu()-wait-frame").started();
+	while (m_rendering_engine->run() && !*kill) {
+		if (!isMenuActive())
+			break;
 		driver->beginScene(true, true, video::SColor(255, 128, 128, 128));
 		m_rendering_engine->get_gui_env()->drawAll();
 		driver->endScene();
-		framemarker->end();
+		framemarker.end();
 		// On some computers framerate doesn't seem to be automatically limited
-		//sleep_ms(25);
-     	MainLoop::NextFrame([this, resolve]() { main_menu_loop(resolve); });
-}
-
-void ClientLauncher::main_menu_after_loop(std::function<void()> resolve) {
-	delete framemarker;
-	framemarker = nullptr;
+		sleep_ms(25);
+		framemarker.start();
+	}
+	framemarker.end();
 	infostream << "Waited for other menus" << std::endl;
 
-	auto device = m_rendering_engine->get_raw_device();
 	// Make sure normal mouse cursor is restored
 	auto *cur_control = device->getCursorControl();
 	if (cur_control) {
@@ -784,17 +614,8 @@ void ClientLauncher::main_menu_after_loop(std::function<void()> resolve) {
 	}
 
 	/* show main menu */
-<<<<<<< HEAD
-	new GUIEngine(&input->joystick, guiroot, m_rendering_engine, &g_menumgr, menudata_addr, *kill, [this, resolve]() {
-		main_menu_after_guiengine(resolve);
-        });
-	std::cout << "AFTER CONSTRUCTING GUIEngine" << std::endl;
-}
-=======
 	GUIEngine mymenu(guiroot, m_rendering_engine, &g_menumgr, menudata, *kill);
->>>>>>> origin/wip5.17.0-32
 
-void ClientLauncher::main_menu_after_guiengine(std::function<void()> resolve) {
 	/* leave scene manager in a clean state */
 	m_rendering_engine->get_scene_manager()->clear();
 
@@ -809,7 +630,6 @@ void ClientLauncher::main_menu_after_guiengine(std::function<void()> resolve) {
 	 */
 	if (!g_settings_path.empty())
 		g_settings->updateConfigFile(g_settings_path.c_str());
-	resolve();
 }
 
 //freeminer:

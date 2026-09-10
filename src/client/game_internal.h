@@ -40,13 +40,7 @@ class ProfilerGraph;
 class EventManager;
 class GUIChatConsole;
 class QuicktuneShortcutter;
-<<<<<<< HEAD
-class BaseException;
-class FrameMarker;
-class LambdaThread;
-=======
 struct GameErrorData;
->>>>>>> origin/wip5.17.0-32
 
 const static float object_hit_delay = 0.2;
 
@@ -136,23 +130,11 @@ public:
 	bool startup(volatile std::sig_atomic_t *kill,
 			InputHandler *input,
 			RenderingEngine *rendering_engine,
-<<<<<<< HEAD
-			const GameStartData *game_params,
-			std::string &error_message,
-			bool *reconnect,
-			ChatBackend *chat_backend,
-			std::function<void(bool, BaseException *)> resolve);
-	void startup_do_init(const GameStartData *start_data,
-			std::function<void(bool, BaseException *)> resolve);
-=======
 			const GameStartData &game_params,
 			GameErrorData &errordata,
 			ChatBackend *chat_backend);
->>>>>>> origin/wip5.17.0-32
 
-	void run(std::function<void(BaseException *)> resolve);
-	void run_loop(std::function<void(BaseException *)> resolve);
-	void after_loop(std::function<void(BaseException *)> resolve);
+	void run();
 	void shutdown();
 
 	Client *getClient() { return client; }
@@ -163,55 +145,30 @@ public:
 protected:
 
 	// Basic initialisation
-	void init(const std::string &map_dir, const std::string &address,
-			u16 port, const SubgameSpec &gamespec,
-			std::function<void(bool, BaseException *)> resolve);
+	bool init(const std::string &map_dir, const std::string &address,
+			u16 port, const SubgameSpec &gamespec);
 	bool initSound();
 	bool createServer(const std::string &map_dir,
-			const SubgameSpec &gamespec, u16 port,
-			std::function<void(bool, BaseException *)> resolve);
-	void createServer_loop(std::function<void(bool, BaseException *)> resolve);
-	std::unique_ptr<LambdaThread> createServer_start_thread;
-	bool createServer_success;
+			const SubgameSpec &gamespec, u16 port);
 	void copyServerClientCache();
 
 	// Client creation
-	void createClient(const GameStartData *start_data,
-			std::function<void(bool, BaseException *)> resolve);
-	void createClient_after_connect(std::function<void(bool, BaseException *)> resolve);
-	void createClient_after_get(std::function<void(bool, BaseException *)> resolve);
+	bool createClient(const GameStartData &start_data);
 	bool initGui();
 
 	// Client connection
-	Address connect_address;
-	Address fallback_address;
-	bool did_fallback = false;
-	bool local_server_mode = false;
-	void connectToServer(const GameStartData *start_data,
-			std::function<void(bool, BaseException *)> resolve);
-	void connectToServer_after_dns(const GameStartData *start_data,
-			std::function<void(bool, BaseException *)> resolve);
-	void connectToServer_loop(const GameStartData *start_data,
-			std::function<void(bool, BaseException *)> resolve);
-
-	bool could_connect = false;
-	bool connect_aborted = false;
-	FpsControl fps_control;
-	f32 wait_time = 0;
-	FrameMarker *framemarker = nullptr;
-
-	void getServerContent(std::function<void(bool, BaseException *)> resolve);
-	void getServerContent_loop(std::function<void(bool, BaseException *)> resolve);
+	bool connectToServer(const GameStartData &start_data,
+            bool *connect_ok, bool *aborted);
+	bool getServerContent(bool *aborted);
 
 	// Main loop
-
 	void updateInteractTimers(f32 dtime);
 	bool checkConnection();
 	void processQueues();
-	void updateProfilers(const FpsControl &draw_times, f32 dtime);
+	void updateProfilers(const RunStats &stats, const FpsControl &draw_times, f32 dtime);
 	void updateDebugState();
-	void updateStats(const FpsControl &draw_times, f32 dtime);
-	void updateProfilerGraphs();
+	void updateStats(RunStats *stats, const FpsControl &draw_times, f32 dtime);
+	void updateProfilerGraphs(ProfilerGraph *graph);
 
 	// Input related
 	void processUserInput(f32 dtime);
@@ -277,7 +234,8 @@ protected:
 			const ItemStack &hand_item, const v3opos_t &player_position, bool show_debug);
 	void handleDigging(const PointedThing &pointed, const v3pos_t &nodepos,
 			const ItemStack &selected_item, const ItemStack &hand_item, f32 dtime);
-	void updateFrame(f32 dtime, const CameraOrientation &cam);
+	void updateFrame(ProfilerGraph *graph, RunStats *stats, f32 dtime,
+			const CameraOrientation &cam);
 	void updateClouds(float dtime);
 	void updateShadows();
 	void drawScene(ProfilerGraph *graph, RunStats *stats);

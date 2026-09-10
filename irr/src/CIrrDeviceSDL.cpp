@@ -9,6 +9,7 @@
 #include "IEventReceiver.h"
 #include "IGUIElement.h"
 #include "IGUIEnvironment.h"
+#include "ISceneManager.h"
 #include "IImageLoader.h"
 #include "IFileSystem.h"
 #include "IVideoDriver.h"
@@ -27,9 +28,11 @@
 #include <SDL_messagebox.h>
 #endif
 
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cassert>
+#include <cmath>
 
 #ifdef _IRR_EMSCRIPTEN_PLATFORM_
 #include <emscripten.h>
@@ -112,29 +115,20 @@ static int SDLDeviceInstances = 0;
 
 extern "C" {
 	EMSCRIPTEN_KEEPALIVE
-	EM_BOOL irrlicht_want_pointerlock(void);
-
-	EMSCRIPTEN_KEEPALIVE
 	void irrlicht_resize(int width, int height);
 
+	// Generate a synthetic paste event (Ctrl+V) directly to Luanti.
+	// Whatever irrlicht_set_clipboard() set last will be pasted.
 	EMSCRIPTEN_KEEPALIVE
-	void irrlicht_force_pointerlock(void);
-
-	void emloop_reenter_blessed(void);
+	void irrlicht_paste(void);
 }
 
-static bool want_pointerlock = false;
 static int canvas_width = 0;
 static int canvas_height = 0;
 static bool canvas_updated = false;
 
-EM_BOOL irrlicht_want_pointerlock(void) {
-	return want_pointerlock ? 1 : 0;
-}
-
-void irrlicht_force_pointerlock(void) {
-	want_pointerlock = true;
-}
+// Set by the browser thread, consumed by the thread running the device.
+static std::atomic<bool> paste_requested{false};
 
 void irrlicht_resize(int width, int height) {
 	if (canvas_width != width || canvas_height != height) {
@@ -142,6 +136,10 @@ void irrlicht_resize(int width, int height) {
 		canvas_height = height;
 		canvas_updated = true;
 	}
+}
+
+void irrlicht_paste(void) {
+	paste_requested = true;
 }
 
 #ifdef _IRR_EMSCRIPTEN_PLATFORM_
@@ -428,35 +426,6 @@ void CIrrDeviceSDL::resetReceiveTextInputEvents()
 	}
 }
 
-#ifdef __EMSCRIPTEN__
-Uint32 SDL_NOOP_EVENT;
-
-static int SDLCALL emloop_event_filter(void *userdata, SDL_Event * event) {
-	switch (event->type) {
-	case SDL_MOUSEBUTTONDOWN:
-	case SDL_MOUSEBUTTONUP:
-	case SDL_KEYDOWN:
-	case SDL_KEYUP:
-		// Ignore F11, so that it is handled by the browser.
-		if ((event->type == SDL_KEYDOWN || event->type == SDL_KEYUP) &&
-		    (event->key.keysym.sym == SDLK_F11 || event->key.keysym.scancode == SDLK_F11)) {
-			return 0;
-		}
-		// Push the event manually and re-enter the main loop so that it is processed immediately.
-		if (SDL_PeepEvents(event, 1, SDL_ADDEVENT, 0, 0) <= 0) {
-			return -1;
-		}
-		emloop_reenter_blessed();
-		// Unfortunately, can't return 0 here, or else preventDefault() won't be called in the js event handler.
-		// But returning 1, the event is going to be pushed again. Modify the event to make it a no-op.
-		event->type = SDL_NOOP_EVENT;
-		return 1;
-	}
-	// Handle all other events normally.
-	return 1;
-}
-#endif
-
 //! constructor
 CIrrDeviceSDL::CIrrDeviceSDL(const SIrrlichtCreationParameters &param) :
 		CIrrDeviceStub(param),
@@ -542,13 +511,6 @@ CIrrDeviceSDL::CIrrDeviceSDL(const SIrrlichtCreationParameters &param) :
 			os::Printer::log("Unable to initialize SDL", SDL_GetError(), ELL_ERROR);
 			Close = true;
 		}
-
-#if __EMSCRIPTEN__		
-		// This is an SDL hook to filter events, but we need to abuse it to make
-		// SDL events (keyboard/mouse) trigger re-entry for immediate processing.
-		SDL_NOOP_EVENT = SDL_RegisterEvents(1);
-		SDL_SetEventFilter(emloop_event_filter, NULL);
-#endif
 	}
 
 	// create keymap
@@ -576,7 +538,7 @@ CIrrDeviceSDL::CIrrDeviceSDL(const SIrrlichtCreationParameters &param) :
 	}
 
 	// create cursor control
-	CursorControl = new CCursorControl(this, &want_pointerlock);
+	CursorControl = new CCursorControl(this);
 
 	// create driver
 	createDriver();
@@ -594,6 +556,22 @@ CIrrDeviceSDL::~CIrrDeviceSDL()
 	for (const auto &p: gamepads)
 		SDL_CloseGamepad(p.second);
 #endif
+	// These hold GL objects that are released from their destructors, so they
+	// must go away while the context is still current. (Deleting GL objects
+	// without a context is a no-op on desktop drivers, but throws in WebGL.)
+	if (GUIEnvironment) {
+		GUIEnvironment->drop();
+		GUIEnvironment = nullptr;
+	}
+	if (SceneManager) {
+		SceneManager->drop();
+		SceneManager = nullptr;
+	}
+	if (VideoDriver) {
+		VideoDriver->drop();
+		VideoDriver = nullptr;
+	}
+
 	if (Window && Context) {
 		SDL_GL_MakeCurrent(Window, NULL);
 		SDL_GL_DestroyContext(Context);
@@ -635,44 +613,6 @@ void CIrrDeviceSDL::logAttributes()
 	os::Printer::log(sdl_attr.c_str());
 }
 
-#ifdef __EMSCRIPTEN__
-// The default SDL_CreateWindowAndRenderer does not allow setting
-// renderer flags. The VSYNC flag is needed to not break
-// requestAnimationFrame for the main loop on Emscripten.
-static int
-SDL_CreateWindowAndRendererFixed(int width, int height, Uint32 window_flags,
-				SDL_Window **window, SDL_Renderer **renderer)
-{
-	*window = SDL_CreateWindow(NULL, SDL_WINDOWPOS_UNDEFINED,
-					SDL_WINDOWPOS_UNDEFINED,
-					width, height, window_flags);
-	if (!*window) {
-		*renderer = NULL;
-		return -1;
-	}
-
-	// TODO(paradust):
-	//
-	// SDL_RENDERER_PRESENTVSYNC is equivalent to:
-	//
-	//   emscripten_set_main_loop_timing(1, 1);  // use requestAnimationFrame instead of setTimeout
-	//
-	// which is the recommended setting for rendering performance.
-	//
-	// However, major performance issues occur in other threads (especially the server thread)
-	// when this is enabled. It appears something is being done in other threads that
-	// requires periodic messaging to the main thread. If the main thread is too busy, other
-	// threads stall. This dependency should be found and removed, so that vsync can
-	// be enabled.
-	//
-	*renderer = SDL_CreateRenderer(*window, -1, 0); //SDL_RENDERER_PRESENTVSYNC);
-	if (!*renderer) {
-		return -1;
-	}
-	return 0;
-}
-#endif
-
 bool CIrrDeviceSDL::createWindow()
 {
 	if (Close)
@@ -690,6 +630,7 @@ bool CIrrDeviceSDL::createWindow()
 			return true;
 		}
 	}
+
 	while (CreationParams.AntiAlias > 0) {
 		CreationParams.AntiAlias--;
 		if (createWindowWithContext()) {
@@ -770,45 +711,18 @@ bool CIrrDeviceSDL::createWindowWithContext()
 	SDL_GL_ResetAttributes();
 
 #ifdef _IRR_EMSCRIPTEN_PLATFORM_
+	// The canvas is the window here. Size it as asked, or adopt the size it has.
 	if (Width != 0 || Height != 0) {
 		printf("SETTING CANVAS SIZE: WIDTH=%d, HEIGHT=%d\n", Width, Height);
-		emscripten_set_canvas_size(Width, Height);
+		emscripten_set_canvas_element_size("#canvas", Width, Height);
 	} else {
-		int w, h, fs;
-		emscripten_get_canvas_size(&w, &h, &fs);
+		int w, h;
+		emscripten_get_canvas_element_size("#canvas", &w, &h);
 		Width = w;
 		Height = h;
 	}
+#endif
 
-	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, CreationParams.WithAlphaChannel ? 8 : 0);
-
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, CreationParams.ZBufferBits);
-	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, CreationParams.Stencilbuffer ? 8 : 0);
-	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, CreationParams.Doublebuffer ? 1 : 0);
-
-	if (CreationParams.AntiAlias > 1) {
-		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, CreationParams.AntiAlias);
-	} else {
-		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
-		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
-	}
-
-	SDL_CreateWindowAndRendererFixed(Width, Height, SDL_Flags, &Window, &Renderer); // 0,0 will use the canvas size
-
-	logAttributes();
-
-	// "#canvas" is for the opengl context
-	emscripten_set_mousedown_callback("#canvas", (void *)this, true, MouseUpDownCallback);
-	emscripten_set_mouseup_callback("#canvas", (void *)this, true, MouseUpDownCallback);
-	emscripten_set_mouseenter_callback("#canvas", (void *)this, false, MouseEnterCallback);
-	emscripten_set_mouseleave_callback("#canvas", (void *)this, false, MouseLeaveCallback);
-
-	return true;
-#else // !_IRR_EMSCRIPTEN_PLATFORM_
 	switch (CreationParams.DriverType) {
 	case video::EDT_OPENGL:
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
@@ -874,6 +788,18 @@ bool CIrrDeviceSDL::createWindowWithContext()
 		return false;
 	}
 
+#ifdef _IRR_EMSCRIPTEN_PLATFORM_
+	logAttributes();
+
+	// "#canvas" is for the opengl context
+	emscripten_set_mousedown_callback("#canvas", (void *)this, true, MouseUpDownCallback);
+	emscripten_set_mouseup_callback("#canvas", (void *)this, true, MouseUpDownCallback);
+	emscripten_set_mouseenter_callback("#canvas", (void *)this, false, MouseEnterCallback);
+	emscripten_set_mouseleave_callback("#canvas", (void *)this, false, MouseLeaveCallback);
+
+    // The canvas was sized in pixels above, so there is nothing to convert,
+	// and a browser window cannot be moved or resized from here anyway.
+#else
 #ifdef _IRR_USE_SDL3_
 	if (CreationParams.Fullscreen)
 		SDL_SetWindowFullscreen(Window, true);
@@ -890,9 +816,9 @@ bool CIrrDeviceSDL::createWindowWithContext()
 		SDL_SetWindowPosition(Window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 		updateSizeAndScale();
 	}
+#endif // _IRR_EMSCRIPTEN_PLATFORM_
 
 	return true;
-#endif // !_IRR_EMSCRIPTEN_PLATFORM_
 }
 
 //! create the driver
@@ -947,15 +873,34 @@ bool CIrrDeviceSDL::run()
 	memset(&irrevent, 0, sizeof(SEvent));
 	SDL_Event SDL_event;
 
-	// TODO(paradust):
-	//
-	// SDL/emscripten doesn't generate SDL_WINDOWEVENT_RESIZED or SDL_WINDOWEVENT_SIZE_CHANGED
-	// events when the canvas is resized externally (using the js api). It isn't clear why.
-	// This would match the behavior of other platforms. Until fixed, trigger the update manually.
-	if (canvas_updated && (Width != canvas_width || Height != canvas_height)) {
-		SDL_SetWindowSize(Window, canvas_width, canvas_height);
+	if (canvas_updated) {
 		canvas_updated = false;
+#ifdef _IRR_EMSCRIPTEN_PLATFORM_
+		double dpr = emscripten_get_device_pixel_ratio();
+		SDL_SetWindowSize(Window, std::lround(canvas_width / dpr), std::lround(canvas_height / dpr));
+		emscripten_set_canvas_element_size("#canvas", canvas_width, canvas_height);
+#endif
 	}
+
+	// Generate a synthetic paste event (Ctrl+V) when requested by the page.
+	// If the console or formspec field is focused, it will paste the contents
+	// of the clipboard into it.
+	if (paste_requested.exchange(false)) {
+		irrevent.EventType = EET_KEY_INPUT_EVENT;
+		irrevent.KeyInput.Key = KEY_KEY_V;
+		irrevent.KeyInput.Char = L'v';
+		irrevent.KeyInput.SystemKeyCode = SDL_SCANCODE_V;
+		irrevent.KeyInput.Shift = false;
+		irrevent.KeyInput.Control = true;
+
+		irrevent.KeyInput.PressedDown = true;
+		postEventFromUser(irrevent);
+		irrevent.KeyInput.PressedDown = false;
+		postEventFromUser(irrevent);
+
+		irrevent = {};
+	}
+
 	auto get_touch_id_x_y = [this, &irrevent, &SDL_event]() {
 		irrevent.TouchInput.ID = SDL_FINGER_ID(SDL_event);
 		irrevent.TouchInput.X = static_cast<s32>(SDL_event.tfinger.x * Width);

@@ -723,7 +723,7 @@ void set_default_settings()
 	settings->setDefault("minimap_double_scan_height", "true");
 
 	// Effects
-	settings->setDefault("enable_post_processing", "false");
+	settings->setDefault("enable_post_processing", "true");
 	settings->setDefault("post_processing_texture_bits", "10");
 	settings->setDefault("directional_colored_fog", "true");
 	settings->setDefault("inventory_items_animations", "false");
@@ -848,13 +848,8 @@ void set_default_settings()
 #endif
 
 	// Network
-#ifdef __EMSCRIPTEN__
-	settings->setDefault("enable_ipv6", "false");// TODO(paradust): Fix
-	settings->setDefault("ipv6_server", "false");
-#else
 	settings->setDefault("enable_ipv6", "true");
 	settings->setDefault("ipv6_server", "true");
-#endif
 	settings->setDefault("max_packets_per_iteration", "1024");
 	settings->setDefault("port", "30000");
 	settings->setDefault("strict_protocol_version_checking", "false");

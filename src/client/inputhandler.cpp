@@ -276,46 +276,18 @@ bool MyEventReceiver::OnEvent(const SEvent &event)
 		return g_menumgr.preprocessEvent(event);
 	}
 
+	if (event.EventType == EET_MOUSE_INPUT_EVENT && event.MouseInput.Event == EMIE_MOUSE_MOVED) {
+		relX += event.MouseInput.XRel;
+		relY += event.MouseInput.YRel;
+	}
+
 	// Remember whether each key is down or up
 	if (g_touchcontrols && event.EventType == EET_TOUCH_INPUT_EVENT) {
 		// In case of touchcontrols, we have to handle different events
 		g_touchcontrols->translateEvent(event);
 		return true;
-<<<<<<< HEAD
-	} else if (event.EventType == EET_JOYSTICK_INPUT_EVENT) {
-		// joystick may be nullptr if game is launched with '--random-input' parameter
-		return joystick && joystick->handleEvent(event.JoystickEvent);
-	} else if (event.EventType == EET_MOUSE_INPUT_EVENT) {
-		// Handle mouse events
-		switch (event.MouseInput.Event) {
-#if __EMSCRIPTEN__
-		case EMIE_MOUSE_MOVED:
-			relX += event.MouseInput.XRel;
-			relY += event.MouseInput.YRel;
-			break;
-#endif
-		case EMIE_LMOUSE_PRESSED_DOWN:
-		case EMIE_MMOUSE_PRESSED_DOWN:
-		case EMIE_RMOUSE_PRESSED_DOWN:
-		case EMIE_XMOUSE_PRESSED_DOWN:
-			setKeyDown(KeyPress(event.MouseInput), true);
-			break;
-		case EMIE_LMOUSE_LEFT_UP:
-		case EMIE_MMOUSE_LEFT_UP:
-		case EMIE_RMOUSE_LEFT_UP:
-		case EMIE_XMOUSE_LEFT_UP:
-			setKeyDown(KeyPress(event.MouseInput), false);
-			break;
-		case EMIE_MOUSE_WHEEL:
-			mouse_wheel += event.MouseInput.Wheel;
-			break;
-		default:
-			break;
-		}
-=======
 	} else if (event.EventType == EET_MOUSE_INPUT_EVENT && event.MouseInput.Event == EMIE_MOUSE_WHEEL) {
 		mouse_wheel += event.MouseInput.Wheel;
->>>>>>> origin/wip5.17.0-32
 	} else if (event.EventType == EET_USER_EVENT && event.UserEvent.type == EUET_GAME_KEY) {
 		KeyPress keyCode(static_cast<GameKeyType>(event.UserEvent.UserData1));
 		setKeyDown(keyCode, InputHandler::intToAnalog(event.UserEvent.UserData2));

@@ -45,8 +45,10 @@ public:
 	struct SHWBufferLink_opengl : public SHWBufferLink
 	{
 		SHWBufferLink_opengl(const scene::HWBuffer *buf) : SHWBufferLink(buf),
-				Vbo(buf->getBufferType() == scene::HWBuffer::Type::INDEX ?
-						OGLBufferObject::TARGET_IBO : OGLBufferObject::TARGET_VBO) {}
+		Vbo(buf->getBufferType() == scene::HWBuffer::Type::INDEX ?
+			OGLBufferObject::TARGET_IBO :
+			OGLBufferObject::TARGET_VBO)
+		{}
 
 		OGLBufferObject Vbo;
 	};
@@ -307,8 +309,13 @@ protected:
 	void beginDraw(const VertexType &vertexType, uintptr_t verticesBase, int vertexCount);
 	void endDraw(const VertexType &vertexType);
 
-	GLuint tempVBO = 0;
-	GLuint tempIBO = 0;
+	std::vector<OGLBufferObject> tempVBO;
+	size_t tempVBOIndex;
+	bool tempVBOBound;
+
+	std::vector<OGLBufferObject> tempIBO;
+	size_t tempIBOIndex;
+	bool tempIBOBound;
 
 	COpenGL3CacheHandler *CacheHandler;
 	core::stringc Name;

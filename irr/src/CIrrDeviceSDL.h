@@ -28,6 +28,13 @@
 #include <memory>
 #include <unordered_map>
 
+extern "C" {
+#ifdef __EMSCRIPTEN__
+        EMSCRIPTEN_KEEPALIVE
+#endif
+		void emloop_set_pointerlock(int want);
+}
+
 #ifndef _IRR_USE_SDL3_
 	// Backward compatibility for SDL2
 	#define SDL_Gamepad SDL_GameController
@@ -129,8 +136,8 @@ public:
 	class CCursorControl : public gui::ICursorControl
 	{
 	public:
-		CCursorControl(CIrrDeviceSDL *dev, bool* want_pointerlock) :
-				Device(dev), IsVisible(true), WantPointerLock(want_pointerlock)
+		CCursorControl(CIrrDeviceSDL *dev) :
+				Device(dev), IsVisible(true)
 		{
 			initCursors();
 		}
@@ -139,11 +146,14 @@ public:
 		void setVisible(bool visible) override
 		{
 			IsVisible = visible;
+
 #ifdef _IRR_EMSCRIPTEN_PLATFORM_
 			// The main loop takes care of reconciling the browser state
 			// and the desired state below.
-			*WantPointerLock = !visible;
-#elif _IRR_USE_SDL3_
+			emloop_set_pointerlock(visible ? 0 : 1);
+#else
+
+#ifdef _IRR_USE_SDL3_
 			if (visible)
 				SDL_ShowCursor();
 			else
@@ -151,6 +161,9 @@ public:
 #else
 			SDL_ShowCursor(visible ? SDL_ENABLE : SDL_DISABLE);
 #endif
+
+#endif // _IRR_EMSCRIPTEN_PLATFORM_
+
 		}
 
 		//! Returns if the cursor is currently visible.
@@ -180,6 +193,7 @@ public:
 		//! Sets the new position of the cursor.
 		void setPosition(s32 x, s32 y) override
 		{
+#if 0
 #ifndef __ANDROID__
 			// On Android, this somehow results in a camera jump when enabling
 			// relative mouse mode and it isn't supported anyway.
@@ -187,6 +201,8 @@ public:
 					static_cast<int>(x / Device->ScaleX),
 					static_cast<int>(y / Device->ScaleY));
 #endif
+#endif // 0
+
 #ifdef _IRR_USE_SDL3_
 			if (SDL_GetWindowRelativeMouseMode(Device->Window)) {
 #else
@@ -221,6 +237,7 @@ public:
 
 		virtual void setRelativeMode(bool relative) override
 		{
+#if 0
 #ifdef _IRR_USE_SDL3_
 			if (relative != (bool)SDL_GetWindowRelativeMouseMode(Device->Window)) {
 				SDL_SetWindowRelativeMouseMode(Device->Window, relative);
@@ -231,6 +248,7 @@ public:
 				SDL_SetRelativeMouseMode(relative ? SDL_TRUE : SDL_FALSE);
 			}
 #endif
+#endif // 0
 		}
 
 		void setActiveIcon(gui::ECURSOR_ICON iconId) override
@@ -276,7 +294,6 @@ public:
 		CIrrDeviceSDL *Device;
 		core::position2d<s32> CursorPos;
 		bool IsVisible;
-		bool *WantPointerLock; // external flag consumed by javascript
 
 		struct CursorDeleter
 		{
@@ -327,7 +344,6 @@ private:
 
 	void logAttributes();
 	SDL_GLContext Context;
-	SDL_Renderer *Renderer;
 	SDL_Window *Window;
 #if defined(_IRR_COMPILE_WITH_JOYSTICK_EVENTS_)
 	std::map<SDL_JoystickID, SDL_Gamepad*> gamepads;
