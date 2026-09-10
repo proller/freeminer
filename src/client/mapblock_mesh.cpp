@@ -359,6 +359,10 @@ void getNodeTileN(MapNode mn, const v3pos_t &p, u8 tileindex, MeshMakeData *data
 	const NodeDefManager *ndef = data->m_nodedef;
 	const ContentFeatures &f = ndef->get(mn);
 	tile = f.visuals->tiles[tileindex];
+	// fm: Select opaque far textures before applying node color and face rotation.
+	if (data->far_step > 0 && f.visuals->fm_far_tiles)
+		tile.layers[0] = f.visuals->fm_far_tiles[tileindex];
+	// ===
 	bool has_crack = p == data->m_crack_pos_relative;
 	for (TileLayer &layer : tile.layers) {
 		if (layer.empty())
@@ -723,6 +727,7 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data):
 
       	    //if (step <= data->m_client->m_env.getClientMap().getControl().farmesh || !data->m_client->m_env.getClientMap().getControl().farmesh) {
 			// Generate animation data
+           if(far_step <= 0)
 			if (p.layer.material_flags & MATERIAL_FLAG_ANIMATION && !p.layer.frames->empty()) {
 				// Add to MapBlockMesh in order to animate these tiles
 				m_animation_info.emplace(std::make_pair(layer, i), AnimationInfo(p.layer));
@@ -743,6 +748,7 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data):
 			}
 
 			// Handle crack
+           if (far_step <= 0)
 			if (p.layer.material_flags & MATERIAL_FLAG_CRACK) {
 				auto *t = m_tsrc->getTextureForMesh("crack_anylength.png");
 				material.setTexture(TEXTURE_LAYER_CRACK, t);
@@ -798,7 +804,13 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data):
 							const auto &block = storage.get(bpos).block;
 							if (!block)
 								continue;
-							if (block->m_light_points.empty())
+							// Retain the current container while another thread may replace it.
+							std::shared_ptr<MapBlock::light_points_t> light_points;
+							{
+								const auto lock = block->lock_shared_rec();
+								light_points = block->m_light_points;
+							}
+							if (!light_points || light_points->empty())
 								continue;
 							if (!buffer) {
 								buffer = new scene::SMeshBuffer();
@@ -810,7 +822,7 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data):
 								buffer->Material.BackfaceCulling = false;
 								buffer->Material.FogEnable = true;
 							}
-							for (const auto &lp : block->m_light_points) {
+							for (const auto &lp : *light_points) {
 								if (index_i >= 16000)
 									break;
 								const auto level =
@@ -858,7 +870,7 @@ MapBlockMesh::MapBlockMesh(Client *client, MeshMakeData *data):
 		}
 	}
 
-	if (data->lod_step <= 0)
+	if (data->far_step <= 0 && data->lod_step <= 0)
 	m_bsp_tree.buildTree(&m_transparent_triangles, data->m_side_length);
 
 	// Check if animation is required for this mesh

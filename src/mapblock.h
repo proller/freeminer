@@ -4,18 +4,12 @@
 
 #pragma once
 
-#include "config.h"
-
 #include "fm_weather.h"
-#include "threading/atomic.h"
-
-#include <atomic>
-#include <cstdint>
-#include <unordered_map>
-#include <vector>
+#include "threading/lock.h"
 #include "fm_nodecontainer.h"
+
+#include <vector>
 #include "irr_v3d.h"
-#include "irrlichttypes.h"
 #include "mapnode.h"
 #include "exceptions.h"
 #include "constants.h"
@@ -24,6 +18,10 @@
 #include "nodetimer.h"
 #include "modifiedstate.h"
 #include "util/numeric.h" // getContainerPos
+
+#if !USE_ATOMIC_SHARED_PTR
+#include "threading/atomic.h"
+#endif
 
 class Circuit;
 class ServerEnvironment;
@@ -41,7 +39,6 @@ class TestMapBlock;
 // fm:
 static MapNode ignoreNode{CONTENT_IGNORE};
 constexpr auto LODMESH_STEP_MAX {8}; // 4+1
-constexpr auto FARMESH_STEP_MAX {16};
 
 
 struct abm_trigger_one {
@@ -494,36 +491,11 @@ public:
 	const MapBlock::mesh_type getFarMesh(block_step_t step);
 	void setFarMesh(const MapBlock::mesh_type &rmesh, block_step_t step);
 
-	mesh_revision_t getMeshRevision() const
-	{
-		return m_mesh_revision.load(std::memory_order_acquire);
-	}
+	mesh_revision_t getMeshRevision() const;
 
-	void updateMeshRevision(mesh_revision_t revision)
-	{
-		auto current = m_mesh_revision.load(std::memory_order_relaxed);
-		while (current < revision &&
-				!m_mesh_revision.compare_exchange_weak(current, revision,
-						std::memory_order_release, std::memory_order_relaxed)) {
-		}
-	}
+	void updateMeshRevision(mesh_revision_t revision);
 
-	bool tryMarkMeshRequested(block_step_t step, mesh_revision_t revision)
-	{
-		assert(step <= LODMESH_STEP_MAX);
-		assert(revision < (uint64_t{1} << 56));
-
-		const uint64_t request = (revision << 8) | step;
-		auto current = m_mesh_requested.load(std::memory_order_relaxed);
-		for (;;) {
-			const auto current_revision = current >> 8;
-			if (current_revision > revision || current == request)
-				return false;
-			if (m_mesh_requested.compare_exchange_weak(current, request,
-						std::memory_order_acq_rel, std::memory_order_relaxed))
-				return true;
-		}
-	}
+	bool tryMarkMeshRequested(block_step_t step, mesh_revision_t revision);
 
 	std::mutex far_mutex;
 
@@ -545,7 +517,8 @@ public:
 #endif
 
 	block_step_t far_step{};
-	uint32_t far_make_mesh_timestamp{static_cast<uint32_t>(-1)};
+	// Mesh scheduling and received-data invalidation run on different threads.
+	std::atomic_uint32_t far_make_mesh_timestamp{static_cast<uint32_t>(-1)};
 	enum class far_status_e
 	{
 		none = 0,
@@ -556,7 +529,8 @@ public:
 		s5_mesh_start,
 		s6_mesh_complete,
 	};
-	far_status_e far_status{};
+	// Publish mesh state between the scanner, receiver and mesh workers.
+	std::atomic<far_status_e> far_status{};
 	std::atomic_uint32_t far_iteration{};
 	std::atomic_bool creating_far_mesh{};
 	std::atomic_short heat{};
@@ -578,47 +552,17 @@ public:
 	bool hasAbmTriggers();
 	uint32_t m_abm_timestamp{};
 	using light_t = uint32_t;
-	static light_t makeLightPoint(u8 level, video::SColor color)
-	{
-		if (level > LIGHT_MAX)
-			level = LIGHT_MAX;
+	static light_t makeLightPoint(u8 level, video::SColor color);
 
-		return (static_cast<light_t>(level) << 24) |
-			   (static_cast<light_t>(color.getRed()) << 16) |
-			   (static_cast<light_t>(color.getGreen()) << 8) |
-			   static_cast<light_t>(color.getBlue());
-	}
+	static u8 getLightPointLevel(light_t light);
 
-	static u8 getLightPointLevel(light_t light)
-	{
-		if (light <= LIGHT_SUN)
-			return static_cast<u8>(light);
+	static video::SColor getLightPointColor(light_t light);
 
-		const auto level = static_cast<u8>((light >> 24) & 0xff);
-		return level > LIGHT_MAX ? LIGHT_MAX : level;
-	}
+	// Keep far-light iterations alive when a received block replaces its data.
+	using light_points_t = std::unordered_map<v3pos_t, light_t>;
+	std::shared_ptr<light_points_t> m_light_points = std::make_shared<light_points_t>();
 
-	static video::SColor getLightPointColor(light_t light)
-	{
-		if (light <= LIGHT_SUN)
-			return video::SColor(255, 255, 255, 255);
-
-		return video::SColor(
-				255, (light >> 16) & 0xff, (light >> 8) & 0xff, light & 0xff);
-	}
-
-	std::unordered_map<v3pos_t, light_t> m_light_points;
-
-	u32 getActualTimestamp()
-	{
-		u32 block_timestamp = 0;
-		if (m_changed_timestamp && m_changed_timestamp != BLOCK_TIMESTAMP_UNDEFINED) {
-			block_timestamp = m_changed_timestamp;
-		} else if (m_disk_timestamp && m_disk_timestamp != BLOCK_TIMESTAMP_UNDEFINED) {
-			block_timestamp = m_disk_timestamp;
-		}
-		return block_timestamp;
-	}
+	u32 getActualTimestamp();
 
 	// Set to content type of a node if the block consists solely of nodes of one type, otherwise set to CONTENT_IGNORE
 	//std::atomic<content_t> content_only{CONTENT_IGNORE};
@@ -863,9 +807,4 @@ inline v3pos_t getBlockPosRelative(const v3bpos_t &p)
 std::string analyze_block(MapBlock *block);
 
 using MapBlockPtr = std::shared_ptr<MapBlock>;
-// using MapBlockPtr = MapBlock *;
 
-inline std::string analyze_block(const MapBlockPtr &block)
-{
-	return analyze_block(block.get());
-};

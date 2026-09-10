@@ -27,13 +27,14 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 
 #include "earth/hgt.h"
+#include "irrlichttypes.h"
 #include "mapgen/mapgen_v7.h"
 #include "porting.h"
 #include "filesys.h"
-#include "threading/concurrent_map.h"
 #include "threading/concurrent_vector.h"
 #include "util/lrucache.hpp"
 
@@ -75,16 +76,48 @@ public:
 	virtual void apply(MapgenEarth *) = 0;
 };
 
+struct EarthHorizontalKey
+{
+	pos_t min_x = 0;
+	pos_t min_z = 0;
+	pos_t max_x = 0;
+	pos_t max_z = 0;
+	bool operator==(const EarthHorizontalKey &) const = default;
+};
+
+struct EarthHorizontalKeyHash
+{
+	std::size_t operator()(const EarthHorizontalKey &key) const noexcept
+	{
+		std::size_t seed = std::hash<pos_t>{}(key.min_x);
+		seed ^= std::hash<pos_t>{}(key.min_z) + 0x9e3779b9U + (seed << 6) + (seed >> 2);
+		seed ^= std::hash<pos_t>{}(key.max_x) + 0x9e3779b9U + (seed << 6) + (seed >> 2);
+		seed ^= std::hash<pos_t>{}(key.max_z) + 0x9e3779b9U + (seed << 6) + (seed >> 2);
+		return seed;
+	}
+};
+
+struct EarthVerticalBounds
+{
+	pos_t terrain_max_y = 0;
+	bool terrain_cached = false;
+	std::optional<pos_t> authored_max_y;
+};
+
 struct maps_holder_t
 {
 	const std::string data_root{porting::path_cache + DIR_DELIM + "earth"};
 	hgts hgt_reader{data_root};
 	using osm_ptr = std::shared_ptr<handler_i>;
-	lru_cache<std::string, osm_ptr, 50> osm_bbox;
+	// Parsed dense-city extracts are large; keep only the active neighbourhood.
+	lru_cache<std::string, osm_ptr, 8> osm_bbox;
 	std::mutex download_lock;
 	std::mutex osm_bbox_lock;
 	std::mutex osm_http_lock;
 	std::mutex osm_extract_lock;
+	std::mutex vertical_bounds_lock;
+	std::unordered_map<EarthHorizontalKey, EarthVerticalBounds, EarthHorizontalKeyHash>
+			vertical_bounds;
 	std::unique_ptr<PngImage> heat_image;
 	std::unique_ptr<PngImage> tavg_image;
 	std::array<std::unique_ptr<PngImage>, 12> tavg_month_images;
@@ -105,8 +138,8 @@ class MapgenEarth : public MapgenV7
 public:
 	BlockMakeData *active_block_data = nullptr;
 	bool queueGeneratedSign(const v3pos_t &pos, const std::string &text);
-	bool queueGeneratedDecal(const v3pos_t &pos, std::string texture, int map_id, s8 facing,
-			s8 rotation, bool glow);
+	bool queueGeneratedDecal(const v3pos_t &pos, std::string texture, int map_id,
+			s8 facing, s8 rotation, bool glow);
 	struct TileWriteKey
 	{
 		pos_t x = 0, y = 0, z = 0;
@@ -144,21 +177,32 @@ public:
 	int generateTerrain() override;
 	void generateBuildings() override;
 	pos_t getSpawnLevelAtPoint(v2pos_t p) override;
-	pos_t getGroundLevelAtPoint(v2pos_t p) override;
+	//pos_t getGroundLevelAtPoint(v2pos_t p) override;
+	pos_t getGroundLevelAtPointStep(const v2pos_t &p, block_step_t step) override;
+
 	bool calcBlockWind(const v3pos_t &p, uint64_t seed, float timeofday, float totaltime,
 			bool use_weather, weather::wind_t *wind) override;
 
 	v3d scale{1, 1, 1};
 	v3d center{0, 0, 0};
 	bool no_layers = false;
+	bool earth_layers = false;
 
 	MapNode n_air, n_water, n_stone;
 
 	MapNode layers_get(float value, float max);
-	bool visible(const v3pos_t &p, std::optional<pos_t> surface_y) override;
-	MapNode visible_content(const v3pos_t &p, bool use_weather) override;
+	MapNode earth_layer_get(pos_t x, pos_t y, pos_t z, pos_t surface_y, float heat);
+	bool visible(
+			const v3pos_t &p, std::optional<pos_t> surface_y, block_step_t step) override;
+	MapNode visible_content(
+			const v3pos_t &p, bool use_weather, block_step_t step) override;
 
-	pos_t get_height(pos_t x, pos_t z);
+	pos_t get_height(pos_t x, pos_t z, block_step_t step);
+	EarthHorizontalKey horizontalKey() const;
+	pos_t cachedOrComputeTerrainMaxY();
+	std::optional<pos_t> cachedAuthoredMaxY() const;
+	void cacheAuthoredMaxY(pos_t max_y);
+	void fillChunkWithAir();
 	ll pos_to_ll(pos_t x, pos_t z);
 	ll pos_to_ll(const v3pos_t &p);
 	v2pos_t ll_to_pos(const ll &l);
@@ -177,4 +221,6 @@ public:
 		std::atomic_int fill{};
 		void clean() { set = miss = level = check = fill = 0; }
 	} stat;
+
+	static constexpr auto MAX_BUILDING_HEIGHT = 1100;
 };

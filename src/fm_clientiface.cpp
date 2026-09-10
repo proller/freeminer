@@ -28,6 +28,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "mapblock.h"
 #include "profiler.h"
 #include "remoteplayer.h"
+#include "server/luaentity_sao.h"
 #include "server/player_sao.h"
 #include "serverenvironment.h"
 #include "server.h"
@@ -38,6 +39,103 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "util/directiontables.h"
 #include "util/numeric.h"
 #include "util/unordered_map_hash.h"
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
+struct BlockSendPrediction
+{
+	// Blocks intersecting the movement line, starting at the player's block.
+	std::vector<v3bpos_t> path;
+	pos_t max_distance = 0;
+
+	std::vector<v3bpos_t> getLayer(pos_t layer) const;
+};
+
+BlockSendPrediction predictBlockSendCorridor(
+		const v3opos_t &playerpos, const v3opos_t &velocity, pos_t max_distance);
+
+std::vector<v3bpos_t> BlockSendPrediction::getLayer(pos_t layer) const
+{
+	if (layer == 0)
+		return path;
+	std::vector<v3bpos_t> result;
+	std::unordered_set<v3bpos_t, v3bposHash> visited;
+	const auto neighbors = FacePositionCache::getFacePositions(layer);
+	for (const auto &center : path) {
+		for (const auto &neighbor : neighbors) {
+			const auto p = center + neighbor;
+			if (radius_box(p, v3bpos_t()) > unsigned(max_distance) ||
+					!visited.insert(p).second)
+				continue;
+			// Overlapping shells must not reintroduce a block from a closer layer,
+			// even when the caller resumes scanning after skipping earlier layers.
+			if (std::any_of(path.begin(), path.end(), [&](const v3bpos_t &q) {
+					return radius_box(p, q) < unsigned(layer);
+				}))
+				continue;
+			result.push_back(p);
+		}
+	}
+	return result;
+}
+
+BlockSendPrediction predictBlockSendCorridor(
+		const v3opos_t &playerpos, const v3f &velocity, pos_t max_distance)
+{
+	BlockSendPrediction result;
+	result.max_distance = std::max<pos_t>(0, max_distance);
+	result.path.emplace_back(0, 0, 0);
+	if (max_distance <= 0)
+		return result;
+
+	constexpr opos_t block_size = MAP_BLOCKSIZE * BS;
+	const auto center = getNodeBlockPos(floatToInt(playerpos, BS));
+	const auto speed = velocity.getLength();
+	if (!(speed > 0) || !std::isfinite(speed))
+		return result;
+	// Two seconds for emergence, transfer and mesh preparation, with bounded work.
+	const auto distance =
+			std::min<opos_t>({speed * 2 / block_size, 15, opos_t(max_distance)});
+	const v3f movement = velocity / speed * (block_size * distance);
+	const auto end =
+			getNodeBlockPos(floatToInt(playerpos + v3fToOpos(movement), BS)) - center;
+
+	// Traverse block boundaries in time order. Work relative to the current block
+	// to retain precision at large world coordinates. Node centers lie on integers,
+	// so the lower face of a block is half a node below its first node's center.
+	const auto local = playerpos - intToFloat(center * MAP_BLOCKSIZE, BS);
+	v3opos_t next;
+	v3opos_t increment;
+	v3bpos_t step;
+	for (unsigned axis = 0; axis < 3; ++axis) {
+		if (movement[axis] == 0) {
+			next[axis] = increment[axis] = std::numeric_limits<opos_t>::infinity();
+			continue;
+		}
+		step[axis] = movement[axis] > 0 ? 1 : -1;
+		const opos_t boundary = step[axis] > 0 ? block_size - BS / 2 : -BS / 2;
+		next[axis] = (boundary - local[axis]) / movement[axis];
+		increment[axis] = block_size / std::abs(movement[axis]);
+	}
+	v3bpos_t offset;
+	while (offset != end) {
+		unsigned axis = 0;
+		opos_t earliest = std::numeric_limits<opos_t>::infinity();
+		for (unsigned i = 0; i < 3; ++i) {
+			if (offset[i] != end[i] && next[i] < earliest) {
+				axis = i;
+				earliest = next[i];
+			}
+		}
+		offset[axis] += step[axis];
+		next[axis] += increment[axis];
+		if (radius_box(offset, v3bpos_t()) <= unsigned(max_distance))
+			result.path.push_back(offset);
+	}
+	return result;
+}
 
 int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 		float dtime, std::vector<PrioritySortedBlockTransfer> &dest, double m_uptime,
@@ -84,14 +182,26 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 	auto playerpos = sao->getBasePosition();
 
 	v3f playerspeed = player->getSpeed();
-	if (playerspeed.getLength() > 120.0 * BS) // cheater or bug, ignore him
-		return 0;
-	v3f playerspeeddir(0, 0, 0);
-	if (playerspeed.getLength() > 1.0 * BS)
-		playerspeeddir = playerspeed / playerspeed.getLength();
-	// Predict to next block
+	ServerActiveObject *movement_source = sao;
+	while (movement_source->getParent())
+		movement_source = movement_source->getParent();
+	if (auto *entity = dynamic_cast<LuaEntitySAO *>(movement_source))
+		playerspeed = entity->getVelocity();
+	const auto reported_speed = playerspeed.getLength();
+	if (!std::isfinite(reported_speed))
+		playerspeed = v3f();
+	else if (reported_speed > 120.0 * BS)
+		playerspeed *= (120.0 * BS / reported_speed);
+	const auto speed = playerspeed.getLength();
+	const auto speed_in_blocks = speed / (MAP_BLOCKSIZE * BS);
+	const bool predict_movement = speed_in_blocks > 0.8;
+	v3f playerspeeddir;
+	if (speed > 1.0 * BS)
+		playerspeeddir = playerspeed / speed;
+	// Keep fast-movement scans centered on the player; prefetch follows below.
 	v3opos_t playerpos_predicted =
-			playerpos + v3fToOpos(playerspeeddir) * MAP_BLOCKSIZE * BS;
+			predict_movement ? playerpos
+							 : playerpos + v3fToOpos(playerspeeddir) * MAP_BLOCKSIZE * BS;
 
 	v3pos_t center_nodepos = floatToInt(playerpos_predicted, BS);
 
@@ -110,8 +220,10 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 		Get the starting value of the block finder radius.
 	*/
 
-	if (m_last_center != center) {
+	if (m_last_center != center ||
+			m_last_direction.getDistanceFrom(playerspeeddir) > 0.4) {
 		m_last_center = center;
+		m_last_direction = playerspeeddir;
 		m_nearest_unsent_reset_timer = 999;
 		m_nothing_to_send_pause_timer = -1;
 	}
@@ -135,7 +247,7 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 		// infostream<<"Resetting m_nearest_unsent_d for "<<peer_id<<std::endl;
 	}
 
-	if (m_nothing_to_send_pause_timer >= 0) {
+	if (m_nothing_to_send_pause_timer >= 0 && !predict_movement) {
 		return 0;
 	}
 
@@ -216,9 +328,10 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 	// std::endl;
 
 	s16 d_max = full_d_max;
-	thread_local static const s16 d_max_gen_s =
+	thread_local static const pos_t d_max_gen_s =
 			g_settings->getS16("max_block_generate_distance");
-	s16 d_max_gen = MYMIN(d_max_gen_s, wanted_range);
+	const pos_t d_max_gen =
+			wanted_range > 0 ? std::min<pos_t>(d_max_gen_s, wanted_range) : d_max_gen_s;
 
 	// Don't loop very much at a time
 	s16 max_d_increment_at_time = 10;
@@ -234,7 +347,9 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 	s32 nearest_sent_d = -1;
 	// bool queue_is_full = false;
 
-	const f32 speed_in_blocks = (playerspeed / (MAP_BLOCKSIZE * BS)).getLength();
+	BlockSendPrediction prediction;
+	if (predict_movement)
+		prediction = predictBlockSendCorridor(playerpos, playerspeed, full_d_max);
 
 	int num_blocks_air = 0;
 	int blocks_occlusion_culled = 0;
@@ -267,46 +382,19 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 		}
         */
 
-		bool can_skip = d > 1;
-		// Fast fall/move optimize. speed_in_blocks now limited to 6.4
-		if (speed_in_blocks > 0.8 && d <= 2) {
-			can_skip = false;
-			if (d == 0) {
-				for (s16 addn = 0; addn < (speed_in_blocks + 1) * 2; ++addn)
-					list.push_back(floatToInt(playerspeeddir * addn, 1));
-			} else if (d == 1) {
-				for (s16 addn = 0; addn < (speed_in_blocks + 1) * 1.5; ++addn) {
-					list.push_back(floatToInt(playerspeeddir * addn, 1) +
-								   v3pos_t(0, 0, 1)); // back
-					list.push_back(floatToInt(playerspeeddir * addn, 1) +
-								   v3pos_t(-1, 0, 0)); // left
-					list.push_back(floatToInt(playerspeeddir * addn, 1) +
-								   v3pos_t(1, 0, 0)); // right
-					list.push_back(floatToInt(playerspeeddir * addn, 1) +
-								   v3pos_t(0, 0, -1)); // front
-				}
-			} else if (d == 2) {
-				for (s16 addn = 0; addn < (speed_in_blocks + 1) * 1.5; ++addn) {
-					list.push_back(floatToInt(playerspeeddir * addn, 1) +
-								   v3pos_t(-1, 0, 1)); // back left
-					list.push_back(floatToInt(playerspeeddir * addn, 1) +
-								   v3pos_t(1, 0, 1)); // left right
-					list.push_back(floatToInt(playerspeeddir * addn, 1) +
-								   v3pos_t(-1, 0, -1)); // right left
-					list.push_back(floatToInt(playerspeeddir * addn, 1) +
-								   v3pos_t(1, 0, -1)); // front right
-				}
-			}
-		} else {
-			/*
-				Get the border/face dot coordinates of a "d-radiused"
-				box
-			*/
+		const bool can_skip = d > 1;
+		if (predict_movement)
+			list = prediction.getLayer(d);
+		else
 			list = FacePositionCache::getFacePositions(d);
-		}
 
 		for (auto li = list.begin(); li != list.end(); ++li) {
+			// A layer around the path can be longer than an ordinary shell.
+			if (predict_movement && porting::getTimeMs() > end_ms)
+				goto queue_full_break;
 			const auto p = *li + center;
+			const pos_t block_distance =
+					predict_movement ? radius_box(*li, v3bpos_t()) : d;
 
 			/*
 				Send throttling
@@ -337,7 +425,7 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 			}
 
 			// If this is true, inexistent block will be made from scratch
-			bool generate = d <= d_max_gen;
+			bool generate = block_distance <= d_max_gen;
 
 			// infostream<<"d="<<d<<std::endl;
 
@@ -420,8 +508,8 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 					for (const auto &dir : g_6dirs) {
 						if (const auto block_near = env->getMap().getBlock(p + dir)) {
 							const auto lock = block_near->lock_shared_rec();
-							if (block_near->m_is_mono_block &&
-									block_near->data[0].param0 != CONTENT_AIR) {
+
+							if (!block_near->isAir()) {
 								++not_air;
 								break;
 							}
@@ -438,16 +526,22 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 					continue;
 				}
 
-				// Reset usage timer, this block will be of use in the future.
-				block->resetUsageTimer();
+				if (!block->isGenerated()) {
+					// DUMP(p, block->isGenerated());
+					continue;
+				}
 
-				const auto complete = block->getLightingComplete();
-				if (!complete) {
-					env->getServerMap().lighting_modified_add(p, d);
+				if (!block->getLightingComplete()) {
+					if (!block->isAir()) {
+						env->getServerMap().lighting_modified_add(p, d);
+					}
 					if (block_sent && can_skip) {
 						continue;
 					}
 				}
+
+				// Reset usage timer, this block will be of use in the future.
+				block->resetUsageTimer();
 
 				// if (block->lighting_broken > 0 && (block_sent || can_skip))
 				//	continue;
@@ -459,11 +553,6 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 									block_is_invalid = true;
 								}
 				*/
-
-				if (block->isGenerated() == false) {
-					// DUMP(p, block->isGenerated());
-					continue;
-				}
 
 				/*
 					If block is not close, don't send it unless it is near
@@ -527,7 +616,12 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 				Add block to send queue
 			*/
 
-			PrioritySortedBlockTransfer q((float)d, p, peer_id);
+			// Preserve line-first, then layer-by-layer order in the global send queue.
+			const float priority =
+					predict_movement
+							? float(d) + float(li - list.begin()) / (list.size() + 1)
+							: float(d);
+			PrioritySortedBlockTransfer q(priority, p, peer_id);
 
 			dest.push_back(q);
 
@@ -536,6 +630,10 @@ int RemoteClient::GetNextBlocksFm(ServerEnvironment *env, EmergeManager *emerge,
 			else
 				num_blocks_selected += 1;
 		}
+
+		// Finish emerging the movement line before spending work on its surroundings.
+		if (predict_movement && d == 0 && nearest_emerged_d == 0)
+			goto queue_full_break;
 
 		if (porting::getTimeMs() > end_ms) {
 			break;
@@ -565,7 +663,9 @@ queue_full_break:
 
 		// If nothing was found for sending and nothing was queued for
 		// emerging, continue next time browsing from here
-		if (nearest_emerged_d != -1 && nearest_emerged_d > nearest_emergefull_d) {
+		if (nearest_emerged_d != -1 &&
+				(nearest_emergefull_d == -1 ||
+						nearest_emerged_d <= nearest_emergefull_d)) {
 			new_nearest_unsent_d = nearest_emerged_d;
 		} else if (nearest_emergefull_d != -1) {
 			new_nearest_unsent_d = nearest_emergefull_d;
@@ -589,154 +689,172 @@ queue_full_break:
 	return num_blocks_selected - num_blocks_sending;
 }
 
-uint32_t RemoteClient::SendFarBlocks(const int32_t uptime)
+uint32_t RemoteClient::SendFarBlocks(
+		const int32_t uptime, const far_blocks_ready_t &new_far_blocks)
 {
-
 	TimeTaker time("Server: Send far [ms]");
 
-	const static thread_local auto client_unload_unused_data_timeout =
-			g_settings->getFloat("client_unload_unused_data_timeout");
+	const static thread_local int32_t retry_interval = static_cast<int32_t>(
+			std::max(1.0f, g_settings->getFloat("client_unload_unused_data_timeout")));
+	std::multimap<int32_t, MapBlockPtr> ordered;
 	uint16_t sent_cnt{};
-	TRY_UNIQUE_LOCK(far_blocks_requested_mutex)
+	constexpr uint16_t send_max{100};
+	bool disk_budget_exhausted{};
+	WITH_UNIQUE_LOCK(far_blocks_requested_mutex)
 	{
-		std::multimap<int32_t, MapBlockPtr> ordered;
-		constexpr uint16_t send_max{100};
-		for (auto &far_blocks : far_blocks_requested) {
-			for (auto &[bpos, step_sent] : far_blocks) {
-				auto &[step, sent_ts] = step_sent;
-				if (sent_ts < 0 ||
-						(sent_ts &&
-								sent_ts + client_unload_unused_data_timeout > uptime)) {
-					continue;
-				}
-				if (step >= FARMESH_STEP_MAX - 1) {
-					sent_ts = -1;
-					continue;
-				}
-				const auto dbase = GetFarDatabase(m_env->m_map->m_db.dbase,
-						m_env->m_server->far_dbases, m_env->m_map->m_savedir, step);
-				if (!dbase) {
-					sent_ts = -1;
-					continue;
-				}
-				const auto block = loadBlockNoStore(m_env->m_map.get(), dbase, bpos);
-				if (!block) {
-					sent_ts = uptime + client_unload_unused_data_timeout * 3;
-					continue;
-				}
+		const auto queue_block = [&ordered, &sent_cnt](
+										 const MapBlockPtr &block, block_step_t step) {
+			block->far_step = step;
+			// Reverse traversal below sends the smallest far step first.
+			ordered.emplace(-static_cast<int32_t>(step), block);
+			++sent_cnt;
+		};
 
-				g_profiler->add("Server: Far blocks sent", 1);
+		thread_local static const pos_t setting_farmesh_all_changed =
+				g_settings->getU32("farmesh_all_changed");
+		const auto farmesh_range = farmesh.load();
+		const auto client_changed_range = farmesh_all_changed.load();
+		const auto quality = farmesh_quality.load();
+		const bool send_changed = farmesh_range && have_farmesh_quality.load() &&
+								  client_changed_range && setting_farmesh_all_changed;
+		const auto changed_range =
+				send_changed ? std::min(setting_farmesh_all_changed, client_changed_range)
+							 : 0;
+		const auto quality_pow = farmesh::rangeToStep(quality);
+		const auto cell_size_pow = farmesh::rangeToStep(1); // FMTODO from remoteclient
 
-				block->far_step = step;
-				sent_ts = uptime ?: 1;
-				ordered.emplace(sent_ts - step, block);
-
-				if (++sent_cnt > send_max) {
-					break;
+		bool checked_player_block_pos{};
+		bool have_player_block_pos{};
+		v3bpos_t player_block_pos;
+		const auto changed_block_wanted = [&](const v3bpos_t &bpos, block_step_t step) {
+			if (!send_changed)
+				return false;
+			if (!checked_player_block_pos) {
+				auto *player = m_env->getPlayer(peer_id);
+				auto *sao = player ? player->getPlayerSAO() : nullptr;
+				if (sao) {
+					player_block_pos =
+							floatToInt(sao->getBasePosition(), BS * MAP_BLOCKSIZE);
+					have_player_block_pos = true;
 				}
+				checked_player_block_pos = true;
+			}
+			if (!have_player_block_pos)
+				return false;
+
+			// TODO: use block center, consistently with the old full-grid scan.
+			const auto bdist = radius_box(player_block_pos, bpos);
+			const auto bdist_nodes = static_cast<uint64_t>(bdist) << MAP_BLOCKP;
+			if (bdist_nodes > static_cast<uint64_t>(changed_range))
+				return false;
+
+			const auto params = farmesh::getFarParams(player_block_pos, cell_size_pow,
+					farmesh_range, quality_pow, bpos, true);
+			return params && params->pos == bpos && params->step == step;
+		};
+
+		// A merge notification carries the already-built block, so requested blocks
+		// avoid a database retry and changed blocks avoid a full far-grid scan.
+		for (block_step_t step = 0; step < new_far_blocks.size(); ++step) {
+			for (const auto &[bpos, block] : new_far_blocks[step]) {
+				if (!block)
+					continue;
+
+				auto requested = far_blocks_requested[step].find(bpos);
+				if (requested != far_blocks_requested[step].end()) {
+					far_blocks_requested[step].erase(requested);
+				} else if (!changed_block_wanted(bpos, step)) {
+					continue;
+				}
+				far_blocks_ready[step].insert_or_assign(bpos, block);
 			}
 		}
 
-		// TODO: why not have?
-		if (farmesh && have_farmesh_quality && farmesh_all_changed && ordered.empty()) {
-			auto *player = m_env->getPlayer(peer_id);
-			if (!player)
-				return 0;
-
-			const auto *sao = player->getPlayerSAO();
-			if (!sao)
-				return 0;
-
-			const auto playerpos = sao->getBasePosition();
-
-			const auto player_block_pos = floatToInt(playerpos, BS * MAP_BLOCKSIZE);
-
-			const auto cell_size = 1; // FMTODO from remoteclient
-			const auto cell_size_pow = farmesh::rangeToStep(cell_size);
-			thread_local static const pos_t setting_farmesh_all_changed =
-					g_settings->getU32("farmesh_all_changed");
-			const auto &use_farmesh_all_changed =
-					std::min(setting_farmesh_all_changed, farmesh_all_changed);
-			farmesh::runFarAll(player_block_pos, cell_size_pow, farmesh,
-					farmesh::rangeToStep(farmesh_quality), false, true, 0,
-					[this, &ordered, &player_block_pos, &use_farmesh_all_changed , &sent_cnt](
-							const v3bpos_t &bpos, const bpos_t &size,
-							const block_step_t &step) -> bool {
-						if (!size) {
-							return false;
-						}
-
-						// TODO: use block center
-						const auto bdist = radius_box(player_block_pos, bpos);
-						if (bdist << MAP_BLOCKP > use_farmesh_all_changed) {
-							return false;
-						}
-
-						if (far_blocks_requested.size() >= step) {
-							if (far_blocks_requested[step].contains(bpos)) {
-								return false;
-							}
-						}
-
-						if (far_blocks_sent.size() < step) {
-							far_blocks_sent.resize(step);
-						}
-
-						auto &[_, sent_ts] = far_blocks_sent[step][bpos];
-						if (sent_ts < 0) {
-							return false;
-						}
-
-						const auto dbase = GetFarDatabase(m_env->m_map->m_db.dbase,
-								m_env->m_server->far_dbases, m_env->m_map->m_savedir,
-								step);
-						if (!dbase) {
-							sent_ts = -1;
-							return false;
-						}
-						const auto block =
-								loadBlockNoStore(m_env->m_map.get(), dbase, bpos);
-						if (!block) {
-							sent_ts = -1;
-							return false;
-						}
-
-						block->far_step = step;
-						//sent_ts = 0;
-						sent_ts = -1; //TODO
-						ordered.emplace(sent_ts - step, block);
-
-						if (++sent_cnt > send_max) {
-							return true;
-						}
-
-						return false;
-					});
-		}
-
-		// First with larger iteration and smaller step
-		std::vector<MapBlockPtr> blocks;
-		const auto send = [&]() {
-			if (!blocks.empty()) {
-				m_env->m_server->SendBlocksFm(
-						peer_id, blocks, serialization_version, net_proto_version);
+		const auto queue_ready = [&](uint16_t limit) {
+			for (block_step_t step = 0;
+					step < far_blocks_ready.size() && sent_cnt < limit; ++step) {
+				auto &ready = far_blocks_ready[step];
+				for (auto it = ready.begin(); it != ready.end() && sent_cnt < limit;) {
+					// A repeated request may arrive while a ready block is queued.
+					far_blocks_requested[step].erase(it->first);
+					queue_block(it->second, step);
+					it = ready.erase(it);
+				}
 			}
 		};
-		for (auto it = ordered.rbegin(); it != ordered.rend(); ++it) {
-			//	for (const auto &[key, block] : std::views::reverse(ordered)) {
-			if (net_proto_version_fm < 3) {
-				m_env->m_server->SendBlockFm(
-						peer_id, it->second, serialization_version, net_proto_version);
-			} else {
-				blocks.emplace_back(it->second);
-				if (blocks.size() >= 100) {
-					send();
-					blocks.clear();
+		// Reserve half the batch for disk requests, then reuse any spare capacity.
+		queue_ready(send_max / 2);
+		const auto disk_deadline = porting::getTimeMs() + 10;
+
+		// Ordinary requests stay lazy. A database miss gets one infrequent safety
+		// retry; a merge notification above makes it immediately ready.
+		for (block_step_t step = 0; step < far_blocks_requested.size() &&
+									sent_cnt < send_max && !disk_budget_exhausted;
+				++step) {
+			auto &requested = far_blocks_requested[step];
+			MapDatabase *dbase{};
+			bool checked_database{};
+			for (auto it = requested.begin();
+					it != requested.end() && sent_cnt < send_max;) {
+				if (far_blocks_ready[step].contains(it->first)) {
+					it = requested.erase(it);
+					continue;
 				}
+				if (it->second.retry_after > uptime) {
+					++it;
+					continue;
+				}
+
+				if (porting::getTimeMs() >= disk_deadline) {
+					disk_budget_exhausted = true;
+					break;
+				}
+
+				if (!checked_database) {
+					dbase = GetFarDatabase(m_env->m_map->m_db.dbase,
+							m_env->m_server->far_dbases, m_env->m_map->m_savedir, step);
+					checked_database = true;
+				}
+				const auto block =
+						dbase ? loadBlockNoStore(m_env->m_map.get(), dbase, it->first)
+							  : nullptr;
+				if (!block) {
+					it->second.retry_after = uptime + retry_interval;
+					++it;
+					continue;
+				}
+
+				queue_block(block, step);
+				it = requested.erase(it);
 			}
 		}
-		send();
+		queue_ready(send_max);
 	}
+
+	if (ordered.empty())
+		// Continue unfinished lookups promptly even if this slice only found misses.
+		return disk_budget_exhausted ? 1 : 0;
+
+	g_profiler->add("Server: Far blocks sent", sent_cnt);
+	std::vector<MapBlockPtr> blocks;
+	const auto send = [&]() {
+		if (!blocks.empty())
+			m_env->m_server->SendBlocksFm(
+					peer_id, blocks, serialization_version, net_proto_version);
+	};
+	for (auto it = ordered.rbegin(); it != ordered.rend(); ++it) {
+		if (net_proto_version_fm < 3) {
+			m_env->m_server->SendBlockFm(
+					peer_id, it->second, serialization_version, net_proto_version);
+		} else {
+			blocks.emplace_back(it->second);
+			if (blocks.size() >= send_max) {
+				send();
+				blocks.clear();
+			}
+		}
+	}
+	send();
 
 	return sent_cnt;
 }

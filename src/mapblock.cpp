@@ -3,14 +3,9 @@
 // Copyright (C) 2013 celeron55, Perttu Ahola <celeron55@gmail.com>
 
 #include "mapblock.h"
-#include "client/node_visuals.h"
-#include "mapnode.h"
-#include "profiler.h"
-#include "servermap.h"
 
 #include <memory>
 #include <sstream>
-#include "irr_v3d.h"
 #include "map.h"
 #include "nodedef.h"
 #include "nodemetadata.h"
@@ -19,7 +14,6 @@
 #include "content_mapnode.h"  // For legacy name-id mapping
 #include "content_nodemeta.h" // For legacy deserialization
 #include "serialization.h"
-#include "util/msgpack_serialize.h"
 #if CHECK_CLIENT_BUILD()
 #include "client/mapblock_mesh.h"
 #endif
@@ -29,7 +23,14 @@
 #include "util/serialize.h"
 #include "util/basic_macros.h"
 
-#include "circuit.h"
+// fm:
+
+constexpr auto MAPBLOCK_DATA{0};
+enum
+{
+	MAPBLOCK_LIGHT_POINTS
+};
+// ===
 
 // Like a std::unordered_map<content_t, content_t>, but faster.
 //
@@ -102,176 +103,6 @@ static const char *modified_reason_strings[] = {
 	"unknown",
 };
 
-// fm:
-MapNode MapBlock::getNodeNoEx(v3pos_t p)
-{
-#ifndef NDEBUG
-	ScopeProfiler sp(g_profiler, "Map: getNodeNoEx");
-#endif
-	const auto lock = lock_shared_rec();
-	return getNodeNoLock(p);
-}
-
-void MapBlock::setNode(const v3pos_t &p, const MapNode &n, bool important)
-{
-#ifndef NDEBUG
-	g_profiler->add("Map: setNode", 1);
-#endif
-
-	auto nodedef = m_gamedef->ndef();
-	auto index = p.Z * zstride + p.Y * ystride + p.X;
-	const auto &f1 = nodedef->get(n.getContent());
-
-	const auto lock = lock_unique_rec();
-	expandNodesIfNeeded();
-
-	const auto &f0 = nodedef->get(data[index].getContent());
-
-	data[index] = n;
-
-	modified_light light = modified_light_no;
-	if (f0.light_propagates != f1.light_propagates ||
-#if CHECK_CLIENT_BUILD() // TODO use on server
-			f0.visuals->solidness != f1.visuals->solidness ||
-#endif
-			f0.light_source != f1.light_source) /*|| f0.drawtype != f1.drawtype*/
-		light = modified_light_yes;
-	if (important)
-		raiseModified(MOD_STATE_WRITE_NEEDED, light, important);
-}
-
-void MapBlock::raiseModified(u32 mod, modified_light light, bool important)
-{
-	static const thread_local auto save_changed_block =
-			g_settings->getBool("save_changed_block");
-
-		if(mod >= MOD_STATE_WRITE_NEEDED /*&& m_timestamp != BLOCK_TIMESTAMP_UNDEFINED*/) {
-			m_changed_timestamp = (unsigned int) ServerMap::time_life;
-		}
-
-	if (mod > m_modified) {
-		if (save_changed_block ||
-				important || m_disk_timestamp != BLOCK_TIMESTAMP_UNDEFINED )
-			m_modified = mod;
-		if (m_modified >= MOD_STATE_WRITE_AT_UNLOAD)
-			m_disk_timestamp.store(m_timestamp);
-	}
-	if (light == modified_light_yes) {
-		setLightingComplete(0);
-	}
-}
-
-void MapBlock::pushElementsToCircuit(Circuit *circuit)
-{
-}
-
-bool MapBlock::analyzeContent()
-{
-	/*
-    // TODO: really need here?
-
-	const auto lock = try_lock_shared_rec();
-	if (!lock->owns_lock())
-		return false;
-	content_only = data[0].param0;
-	content_only_param1 = data[0].param1;
-	content_only_param2 = data[0].param2;
-	if (m_is_mono_block)
-		return true;
-	for (int i = 1; i < MAP_BLOCKSIZE * MAP_BLOCKSIZE * MAP_BLOCKSIZE; ++i) {
-		if (data[i].param0 != content_only || data[i].param1 != content_only_param1 ||
-				data[i].param2 != content_only_param2) {
-			content_only = CONTENT_IGNORE;
-			break;
-		}
-	}
-	return true;
-	*/
-	return true;
-}	
-
-const MapBlock::mesh_type empty_mesh;
-#if CHECK_CLIENT_BUILD()
-const MapBlock::mesh_type MapBlock::getLodMesh(block_step_t step, bool allow_other)
-{
-	auto m = m_lod_mesh[step].load();
-	if (m || !allow_other)
-		return m;
-
-	for (int inc = 1; inc < 4; ++inc) {
-		if (step + inc < m_lod_mesh.size()) {
-			if (auto mn = m_lod_mesh[step + inc].load()) {
-				return mn;
-			}
-		}
-		if (step - inc >= 0) {
-			if (auto mp = m_lod_mesh[step - inc].load()) {
-				return mp;
-			}
-		}
-	}
-	return empty_mesh;
-}
-
-const MapBlock::mesh_type MapBlock::getFarMesh(block_step_t step)
-{
-	return m_far_mesh[step];
-}
-
-void MapBlock::setLodMesh(const MapBlock::mesh_type &rmesh)
-{
-	const auto step = rmesh->lod_step;
-	delete_mesh = m_lod_mesh[step].exchange(rmesh);
-}
-
-void MapBlock::clearLodMesh(block_step_t step)
-{
-	delete_mesh = m_lod_mesh[step].exchange(nullptr);
-}
-
-void MapBlock::setFarMesh(const MapBlock::mesh_type &rmesh, block_step_t step)
-{
-	delete_mesh = m_far_mesh[step].exchange(rmesh);
-}
-
-#endif
-
-void MapBlock::incrementUsageTimer(float dtime)
-{
-	std::lock_guard<std::mutex> lock(m_usage_timer_mutex);
-	m_usage_timer += dtime * usage_timer_multiplier;
-}
-
-void MapBlock::setNodeNoLock(v3pos_t p, MapNode n, bool important)
-{
-	expandNodesIfNeeded();
-	data[p.Z * zstride + p.Y * ystride + p.X] = n;
-	raiseModified(MOD_STATE_WRITE_NEEDED, MOD_REASON_SET_NODE, important);
-}
-
-MapNode &MapBlock::getNodeRef(const v3pos_t &p)
-{
-	const auto lock = try_lock_shared_rec();
-	if (!lock->owns_lock())
-		return ignoreNode;
-	return getNodeNoLock(p);
-}
-
-MapNode MapBlock::getNodeTry(const v3pos_t &p)
-{
-	const auto lock = try_lock_shared_rec();
-	if (!lock->owns_lock())
-		return ignoreNode;
-	return getNodeNoLock(p);
-}
-
-constexpr auto MAPBLOCK_DATA{0};
-enum
-{
-	MAPBLOCK_LIGHT_POINTS
-};
-
-// ==
 
 /*
 	MapBlock
@@ -612,12 +443,13 @@ void MapBlock::serialize(std::ostream &os_compressed, u8 version, bool disk, int
 		infostream<<" serialize not generated block"<<std::endl;
 	}
 
-// freeminer
-	if(!m_light_points.empty()) {
+    // fm:
+	const auto lock = lock_shared_rec();
+	const auto light_points = m_light_points;
+	if (light_points && !light_points->empty()) {
 		flags |= (1 << 7);
 	}
-	const auto lock = lock_shared_rec();
-// =========
+	// ===
 
 	writeU8(os, flags);
 	if (version >= 27) {
@@ -701,13 +533,13 @@ void MapBlock::serialize(std::ostream &os_compressed, u8 version, bool disk, int
 		}
 	}
 
-	// freeminer
+	// fm:
 	if (flags & (1 << 7)) {
 		MSGPACK_PACKET_INIT((int)MAPBLOCK_DATA, 1);
-		PACK(MAPBLOCK_LIGHT_POINTS, m_light_points);
+		PACK(MAPBLOCK_LIGHT_POINTS, *light_points);
 		os_raw << serializeString32(std::string_view{buffer.data(), buffer.size()});
 	}
-	// =========
+	// ===
 
 	if (version >= 29) {
 		// now compress the whole thing
@@ -890,18 +722,22 @@ bool MapBlock::deSerialize(std::istream &in_compressed, u8 version, bool disk)
 		analyzeContent();
 	}
 
+    // fm:
 	if (flags & (1 << 7)) {
-		size_t size = 0;
+		// size_t size = 0;
 		std::string data = deSerializeString32(is);
-		size = data.size();
+		// size = data.size();
 		if (!data.empty()) {
 			msgpack::unpacked msg;
 			msgpack::unpack(msg, data.data(), data.size());
 			auto packet = msg.get().as<MsgpackPacket>();
 			const auto it = packet.find(MAPBLOCK_LIGHT_POINTS);
-			if (it != packet.end()) {
-				try {
-					it->second.convert(m_light_points);
+				if (it != packet.end()) {
+					try {
+						// Publish complete light data at once, preserving active readers.
+						auto light_points = std::make_shared<light_points_t>();
+						it->second.convert(*light_points);
+						m_light_points = std::move(light_points);
 				} catch (const std::exception &ex) {
 					verbosestream << "MapBlock::deSerialize freeminer: pos=" << getPos()
 								  << " size=" << data.size()
@@ -911,6 +747,7 @@ bool MapBlock::deSerialize(std::istream &in_compressed, u8 version, bool disk)
 			}
 		}
 	}
+    // ===
 
 	TRACESTREAM(<<"MapBlock::deSerialize "<<getPos()
 			<<": Done."<<std::endl);

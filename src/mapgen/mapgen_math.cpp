@@ -19,6 +19,7 @@ You should have received a copy of the GNU General Public License
 along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "irrlichttypes.h"
 #include "servermap.h"
 
 #include <cmath>
@@ -330,7 +331,8 @@ MapgenMath::MapgenMath(MapgenMathParams *params_, EmergeParams *emerge) :
 					 .asBool(); //params["invert"].empty()?1:params["invert"].asBool();
 	invert_yz = params.get("invert_yz", 1).asBool();
 	invert_xy = params.get("invert_xy", 0).asBool();
-	size = params.get("size", (MAX_MAP_GENERATION_LIMIT - 1000)).asDouble(); // = max_r
+	size = params.get("size", static_cast<double>(MAX_MAP_GENERATION_LIMIT - 1000))
+				   .asDouble(); // = max_r
 	if (params.get("center", Json::Value()).isObject())
 		center = v3f(params["center"]["x"].asDouble(), params["center"]["y"].asDouble(),
 				params["center"]["z"].asDouble()); //v3f(5, -size - 5, 5);
@@ -345,7 +347,9 @@ MapgenMath::MapgenMath(MapgenMathParams *params_, EmergeParams *emerge) :
 	if (params["generator"].asString() == "mengersponge") {
 		internal = 1;
 		func = &mengersponge;
-		size = params.get("size", (MAX_MAP_GENERATION_LIMIT - 1000) / 2).asDouble();
+		size = params.get("size",
+							 static_cast<double>((MAX_MAP_GENERATION_LIMIT - 1000) / 2))
+					   .asDouble();
 		//scale = params.get("scale", 1.0 / size).asDouble();
 		iterations = params.get("N", 13).asInt();
 		//if(!center.getLength()) center = v3f(-size, -size, -size);
@@ -655,13 +659,13 @@ std::pair<bool, double> MapgenMath::calc_point(pos_t x, pos_t y, pos_t z)
 	return {(!invert && d > 0) || (invert && d == 0), d};
 }
 
-bool MapgenMath::visible(const v3pos_t &p, std::optional<pos_t> surface_y)
+bool MapgenMath::visible(const v3pos_t &p, std::optional<pos_t> surface_y, block_step_t step)
 {
 	const bool have = calc_point(p.X, p.Y, p.Z).first;
 	return have;
 }
 
-MapNode MapgenMath::visible_content(const v3pos_t &p, bool use_weather)
+MapNode MapgenMath::visible_content(const v3pos_t &p, bool use_weather, block_step_t step)
 {
 	const auto valid = [](const MapNode &node) {
 		const content_t content = node.getContent();
@@ -674,7 +678,7 @@ MapNode MapgenMath::visible_content(const v3pos_t &p, bool use_weather)
 
 	const bool have = calc_point(p.X, p.Y, p.Z).first;
 	if (have && p.Y > water_level)
-		return Mapgen::visible_content(p, use_weather);
+		return Mapgen::visible_content(p, use_weather, step);
 
 	const float timeofday = env ? env->getTimeOfDayF() : 0.0f;
 	const float totaltime = env ? env->getGameTime() * env->m_time_of_day_speed : 0.0f;

@@ -25,9 +25,9 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
-#include <exception>
 #include <memory>
 #include <mutex>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -38,16 +38,13 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "constants.h"
 #include "emerge.h"
 #include "mapgen/earth/png_holder.h"
-#include "mapgen/earth/rgb_temp.h"
 #include "mapgen/mg_decoration.h"
 #include "mapgen/mg_ore.h"
 #include "server.h"
-#include "filesys.h"
 #include "irr_v2d.h"
 #include "irr_v3d.h"
 #include "irrlichttypes.h"
 #include "log_types.h"
-#include "log.h"
 #include "map.h"
 #include "mapblock.h"
 #include "mapgen_earth.h"
@@ -62,6 +59,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "voxel.h"
 #include "voxelalgorithms.h"
 #if USE_OSMIUM
+#include "mapgen/earth/rgb_temp.h"
 #include "earth/osmium-inl.h"
 #include <osmium/area/assembler.hpp>
 #include <osmium/area/multipolygon_manager.hpp>
@@ -246,6 +244,21 @@ PngImage *earth_select_weather_image(std::unique_ptr<PngImage> &annual_image,
 void MapgenEarthParams::setDefaultSettings(Settings *settings)
 {
 	settings->setDefault("mgearth_spflags", flagdesc_mapgen_v7, 0);
+	settings->setDefault("mg_params", R"({
+		"layer_default_thickness": 1,
+		"layer_thickness_multiplier": 1,
+		"layers": [
+			{"name": "default:clay", "thickness": 2, "y_min": -512, "y_max": 128},
+			{"name": "default:sandstone", "thickness": 4, "y_min": -1024, "y_max": 160},
+			{"name": "default:desert_sandstone", "thickness": 3, "y_min": -1024, "y_max": 192},
+			{"name": "default:gravel", "thickness": 2, "y_min": -2048, "y_max": 256},
+			{"name": "default:stone", "thickness": 24},
+			{"name": "default:desert_stone", "thickness": 8, "y_min": -4096},
+			{"name": "default:silver_sandstone", "thickness": 3, "y_min": -3072, "y_max": 512},
+			{"name": "default:stone", "thickness": 18},
+			{"name": "default:obsidian", "thickness": 20, "y_max": -2048}
+		]
+	})");
 }
 
 void MapgenEarthParams::readParams(const Settings *settings)
@@ -334,6 +347,8 @@ MapgenEarth::MapgenEarth(MapgenEarthParams *params_, EmergeParams *emerge) :
 	if (params.get("scale", Json::Value()).isObject())
 		scale = {params["scale"]["x"].asDouble(), params["scale"]["y"].asDouble(),
 				params["scale"]["z"].asDouble()};
+
+	earth_layers = params.get("earth_layers", 0).asBool();
 
 	/* todomake test
 	static bool shown = 0;
@@ -615,12 +630,121 @@ MapNode MapgenEarth::layers_get(float value, float max)
 	return layers_node[layer_index];
 }
 
-bool MapgenEarth::visible(const v3pos_t &p, std::optional<pos_t> surface_y)
+MapNode MapgenEarth::earth_layer_get(
+		pos_t x, pos_t y, pos_t z, pos_t surface_y, float heat)
 {
-	return p.Y <= surface_y.value_or(get_height(p.X, p.Z));
+	if (!earth_layers) {
+		return layers_get(0, 1);
+	}
+
+	if (layers_node_size <= 1)
+		return n_stone;
+
+	const auto depth = surface_y - y;
+	const bool oceanic = surface_y < water_level - 8;
+	const bool lowland = surface_y < water_level + 12;
+	const bool mountain = surface_y > water_level + 120;
+	const double terrain_lift = std::clamp((surface_y - water_level) / 180.0, 0.0, 1.8);
+	const bool exposed_bedrock = mountain || terrain_lift > 0.35;
+	const bool cold = heat < 0;
+
+	if (depth <= 1 && !exposed_bedrock)
+		return layers_node.front();
+
+	const double sx = static_cast<double>(x);
+	const double sz = static_cast<double>(z);
+	const double seed_phase = static_cast<double>(seed & 0xfffff) * 0.00001;
+
+	const double fold_angle =
+			seed_phase * 0.73 + std::sin((sx + sz) * 0.00008 + seed_phase) * 0.7;
+	const double ca = std::cos(fold_angle);
+	const double sa = std::sin(fold_angle);
+	const double along = sx * ca + sz * sa;
+	const double across = -sx * sa + sz * ca;
+
+	const double fold_noise = std::sin(along * 0.00055 + seed_phase) * 0.55 +
+							  std::sin(along * 0.00017 - seed_phase * 1.7) * 0.45;
+	const double fold_width = 36.0 + (0.5 + 0.5 * fold_noise) * 124.0;
+	const double fold_amplitude = (8.0 + terrain_lift * 48.0) * (oceanic ? 0.55 : 1.0);
+	constexpr double pi = 3.14159265358979323846;
+	const double chevron =
+			std::asin(std::sin(across / fold_width + fold_noise * 1.5)) * (2.0 / pi);
+	const double fold_arch = chevron * fold_amplitude;
+
+	const double layer_thickness = 4.0 + (0.5 + 0.5 * fold_noise) * 10.0;
+	const double plane_dip = 0.003 + terrain_lift * 0.018;
+	const double regional_dip =
+			along * 0.003 + across * plane_dip + fold_noise * (7.0 + terrain_lift * 10.0);
+	const double shear_width = 18.0 + (1.0 - std::min(1.0, terrain_lift)) * 42.0;
+	const double shear = std::asin(std::sin((across + along * 0.35) / shear_width +
+											seed_phase * 2.4)) *
+						 (2.0 / pi);
+	const double shear_offset = shear * terrain_lift * 18.0;
+
+	double stratigraphic_depth =
+			static_cast<double>(depth) + regional_dip + fold_arch + shear_offset;
+
+	if (depth < 4) {
+		stratigraphic_depth *= oceanic ? 0.15 : (exposed_bedrock ? 0.85 : 0.25);
+	} else if (depth < 24) {
+		stratigraphic_depth *= oceanic ? 0.35 : (exposed_bedrock ? 0.85 : 0.55);
+	}
+
+	if (lowland)
+		stratigraphic_depth -= 6.0;
+	if (oceanic && depth > 24)
+		stratigraphic_depth += 10.0;
+	if (mountain)
+		stratigraphic_depth += std::min(28.0, (surface_y - water_level) * 0.10);
+	if (cold && depth < 12)
+		stratigraphic_depth -= 4.0;
+
+	const int layer_count = static_cast<int>(layers_node_size);
+	int folded_index =
+			static_cast<int>(std::floor(stratigraphic_depth / layer_thickness));
+	folded_index %= layer_count;
+	if (folded_index < 0)
+		folded_index += layer_count;
+
+	const double hardening =
+			std::clamp(std::log1p(static_cast<double>(depth)) / 18.0 +
+							   (oceanic ? 0.08 : 0.0) + (mountain ? 0.08 : 0.0),
+					0.0, 0.70);
+	const int layer_index =
+			std::clamp(static_cast<int>(std::llround(folded_index * (1.0 - hardening) +
+													 (layer_count - 1) * hardening)),
+					0, layer_count - 1);
+	return layers_node[layer_index];
 }
 
-MapNode MapgenEarth::visible_content(const v3pos_t &p, bool use_weather)
+namespace farmesh
+{
+// Display-only sea coverage. Never use this to choose generated world nodes.
+inline std::optional<pos_t> farWaterSampleY(
+		pos_t y, pos_t terrain_y, pos_t sea_y, block_step_t step)
+{
+	if (!step || step >= FARMESH_STEP_MAX || terrain_y > sea_y || y < terrain_y)
+		return {};
+
+	// Far cells extend downward from their sampled Y. Keep the cell containing
+	// the sea surface even when its sample lies above sea level. Include terrain
+	// rounded to sea level by coarse elevation data, giving water priority over
+	// its climate-derived ground material in the distant preview.
+	const s64 cell_size = s64{1} << step;
+	if (static_cast<s64>(y) - sea_y >= cell_size)
+		return {};
+	return std::min(y, sea_y);
+}
+}
+
+bool MapgenEarth::visible(
+		const v3pos_t &p, std::optional<pos_t> surface_y, block_step_t step)
+{
+	return p.Y <= surface_y.value_or(get_height(p.X, p.Z, step));
+}
+
+MapNode MapgenEarth::visible_content(
+		const v3pos_t &p, bool use_weather, block_step_t step)
 {
 	const auto valid = [](content_t content) {
 		return content != CONTENT_IGNORE && content != CONTENT_UNKNOWN &&
@@ -630,9 +754,13 @@ MapNode MapgenEarth::visible_content(const v3pos_t &p, bool use_weather)
 		return valid(node.getContent()) ? node : fallback;
 	};
 
-	const auto surface_y = get_height(p.X, p.Z);
-	const auto solid = visible(p, surface_y);
-	const auto water = visible_water_level(p);
+	const auto surface_y = get_height(p.X, p.Z, step);
+	// Far water owns the coarse sea-surface cell, including rounded zero
+	// elevation. This affects visibility only; get_height/generateTerrain keep
+	// their original elevations and world materials.
+	const auto far_water_y = farmesh::farWaterSampleY(p.Y, surface_y, water_level, step);
+	const auto solid = !far_water_y && visible(p, surface_y, step);
+	const auto water = far_water_y.has_value() || visible_water_level(p);
 	if (!solid && !water) {
 		return visible_transparent;
 	}
@@ -643,19 +771,22 @@ MapNode MapgenEarth::visible_content(const v3pos_t &p, bool use_weather)
 	const v3pos_t climate_p(p.X, solid ? surface_y : water_level, p.Z);
 	const auto heat = calcBlockHeat(climate_p, seed, timeofday, totaltime, weather);
 
-	if (solid) {
-		if (!use_weather)
-			return visible_surface_green;
+	// This water is a far-visibility model only. It describes the space above
+	// terrain whose elevation is below sea level; generateTerrain() deliberately
+	// does not use it to flood the actual world.
+	if (!solid && water) {
+		// Evaluate ice at the water sample, not above a coarse sea-surface cell.
+		if (heat < 0 && far_water_y.value_or(p.Y) > heat / 3 && valid(c_ice))
+			return MapNode(c_ice, LIGHT_SUN);
+		return node_or(n_water, visible_water);
+	}
 
+	if (solid) {
+		// use_weather selects live/monthly adjustments. Even when it is false,
+		// the annual Earth climate maps still determine the surface material.
 		const auto humidity =
 				calcBlockHumidity(climate_p, seed, timeofday, totaltime, weather);
 		return visible_surface_by_climate(heat, humidity);
-	}
-
-	if (p.Y <= water_level) {
-		if (heat < 0 && p.Y > heat / 3 && valid(c_ice))
-			return MapNode(c_ice, LIGHT_SUN);
-		return node_or(n_water, visible_water);
 	}
 
 	return visible_transparent;
@@ -686,26 +817,93 @@ v2pos_t MapgenEarth::ll_to_pos(const ll &l)
 			(l.lat - center.Z) * (EQUATOR_LEN / 360) / scale.Z);
 }
 
-pos_t MapgenEarth::get_height(pos_t x, pos_t z)
+pos_t MapgenEarth::get_height(pos_t x, pos_t z, block_step_t step)
 {
 	const auto tc = pos_to_ll(x, z);
-	const auto y = maps_holder->hgt_reader.get(tc.lat, tc.lon);
+	const auto y = maps_holder->hgt_reader.get(tc.lat, tc.lon, step);
 	return ceil(y / scale.Y) - center.Y;
+}
+
+EarthHorizontalKey MapgenEarth::horizontalKey() const
+{
+	return {node_min.X, node_min.Z, node_max.X, node_max.Z};
+}
+
+pos_t MapgenEarth::cachedOrComputeTerrainMaxY()
+{
+	const EarthHorizontalKey key = horizontalKey();
+	{
+		std::lock_guard<std::mutex> lock(maps_holder->vertical_bounds_lock);
+		const auto found = maps_holder->vertical_bounds.find(key);
+		if (found != maps_holder->vertical_bounds.end() && found->second.terrain_cached)
+			return found->second.terrain_max_y;
+	}
+
+	pos_t maximum = std::numeric_limits<pos_t>::lowest();
+	for (pos_t z = node_min.Z; z <= node_max.Z; ++z)
+		for (pos_t x = node_min.X; x <= node_max.X; ++x)
+			maximum = std::max(maximum, get_height(x, z, 0));
+
+	std::lock_guard<std::mutex> lock(maps_holder->vertical_bounds_lock);
+	auto &bounds = maps_holder->vertical_bounds[key];
+	if (!bounds.terrain_cached) {
+		bounds.terrain_max_y = maximum;
+		bounds.terrain_cached = true;
+	}
+	const pos_t result = bounds.terrain_max_y;
+	// Keep this acceleration cache bounded independently from the PBF LRU.
+	if (maps_holder->vertical_bounds.size() > 2048)
+		maps_holder->vertical_bounds.erase(maps_holder->vertical_bounds.begin());
+	return result;
+}
+
+std::optional<pos_t> MapgenEarth::cachedAuthoredMaxY() const
+{
+	const EarthHorizontalKey key = horizontalKey();
+	std::lock_guard<std::mutex> lock(maps_holder->vertical_bounds_lock);
+	const auto found = maps_holder->vertical_bounds.find(key);
+	if (found == maps_holder->vertical_bounds.end())
+		return std::nullopt;
+	return found->second.authored_max_y;
+}
+
+void MapgenEarth::cacheAuthoredMaxY(pos_t max_y)
+{
+	const EarthHorizontalKey key = horizontalKey();
+	std::lock_guard<std::mutex> lock(maps_holder->vertical_bounds_lock);
+	auto &cached = maps_holder->vertical_bounds[key].authored_max_y;
+	if (!cached || max_y > *cached)
+		cached = max_y;
+}
+
+void MapgenEarth::fillChunkWithAir()
+{
+	if (!vm)
+		return;
+	const auto extent = vm->m_area.getExtent();
+	for (pos_t z = node_min.Z; z <= node_max.Z; ++z) {
+		for (pos_t x = node_min.X; x <= node_max.X; ++x) {
+			u32 index = vm->m_area.index(x, node_min.Y, z);
+			for (pos_t y = node_min.Y; y <= node_max.Y; ++y) {
+				vm->m_data[index] = n_air;
+				vm->m_area.add_y(extent, index, 1);
+			}
+		}
+	}
 }
 
 pos_t MapgenEarth::getSpawnLevelAtPoint(v2pos_t p)
 {
-	return std::max(2, get_height(p.X, p.Y) + 2);
+	return std::max(2, get_height(p.X, p.Y, 0) + 2);
 }
 
-pos_t MapgenEarth::getGroundLevelAtPoint(v2pos_t p)
+pos_t MapgenEarth::getGroundLevelAtPointStep(const v2pos_t &p, block_step_t step)
 {
-	return get_height(p.X, p.Y); // + MGV6_AVERAGE_MUD_AMOUNT;
+	return get_height(p.X, p.Y, step); // + MGV6_AVERAGE_MUD_AMOUNT;
 }
 
 int MapgenEarth::generateTerrain()
 {
-	const MapNode n_ice(c_ice);
 	u32 index = 0;
 	const auto em = vm->m_area.getExtent();
 
@@ -716,17 +914,17 @@ int MapgenEarth::generateTerrain()
 							? m_emerge->env->getServerMap().updateBlockHeat(m_emerge->env,
 									  v3pos_t(x, node_max.Y, z), nullptr, &heat_cache)
 							: 0;
-			const auto height = get_height(x, z);
+			const auto height = get_height(x, z, 0);
 			u32 i = vm->m_area.index(x, node_min.Y, z);
 			for (pos_t y = node_min.Y; y <= node_max.Y; y++) {
 				bool underground = height >= y;
 				if (underground) {
 					if (!vm->m_data[i]) {
-						vm->m_data[i] = layers_get(0, 1);
+						vm->m_data[i] = earth_layer_get(x, y, z, height, heat);
 					}
-				} else if (y <= water_level) {
-					vm->m_data[i] = (heat < 0 && y > heat / 3) ? n_ice : n_water;
 				} else {
+					// Below-sea-level elevation alone must not flood generated Earth.
+					// Confirmed ESA/OSM water is placed later by Arnis.
 					vm->m_data[i] = n_air;
 				}
 				vm->m_area.add_y(em, i, 1);
@@ -913,14 +1111,16 @@ void MapgenEarth::generateBuildings()
 			}
 		}
 
+		maps_holder_t::osm_ptr hdlr;
 		{
 			auto lock = std::unique_lock{maps_holder->osm_bbox_lock};
-
-			if (const auto &hdlr = maps_holder->osm_bbox.get(bbox)) {
-				lock.unlock();
-				hdlr.value()->apply(this);
-			}
+			if (const auto &cached = maps_holder->osm_bbox.get(bbox))
+				hdlr = cached.value();
 		}
+		// Keep a shared reference while unlocked: another emerge thread may
+		// otherwise evict this LRU entry before apply() returns.
+		if (hdlr)
+			hdlr->apply(this);
 	} catch (const std::exception &ex) {
 		warningstream << node_min << " : " << ex.what() << " file=" << use_file << "\n";
 	}
@@ -1140,6 +1340,54 @@ void MapgenEarth::makeChunk(BlockMakeData *data)
 	full_node_max = (blockpos_max + 2) * MAP_BLOCKSIZE - v3pos_t(1, 1, 1);
 
 	blockseed = getBlockSeed2(full_node_min, seed);
+	const auto finish_generation = [this]() {
+		this->generating = false;
+		this->active_block_data = nullptr;
+	};
+
+	// Once a horizontal extract has established its conservative authored
+	// ceiling, chunks wholly above it are known air and need no Earth/Arnis work.
+	if (const auto authored_max = cachedAuthoredMaxY();
+			authored_max && node_min.Y > *authored_max) {
+		fillChunkWithAir();
+		finish_generation();
+		return;
+	}
+
+	const pos_t terrain_max_y = cachedOrComputeTerrainMaxY();
+	// fm:
+	// Above 1000 metres of terrain clearance, skip even loading authored objects.
+	// Compare in metres so the cutoff also respects the Earth's vertical scale.
+	if ((static_cast<double>(node_min.Y) - terrain_max_y) * scale.Y >
+			MAX_BUILDING_HEIGHT) {
+		fillChunkWithAir();
+		finish_generation();
+		return;
+	}
+	// ===
+
+	// On the first high chunk the authored ceiling may not exist yet. Avoid the
+	// base-terrain Y loop and let generateBuildings parse just enough to compute
+	// that ceiling; hdl::apply rejects the chunk before flood-fill/generation if
+	// it is also above every authored object.
+	if (node_min.Y > terrain_max_y) {
+		fillChunkWithAir();
+		generateBuildings();
+
+		if (const auto authored_max = cachedAuthoredMaxY();
+				authored_max && node_min.Y > *authored_max) {
+			finish_generation();
+			return;
+		}
+
+		// A tall authored object may intersect this otherwise-air chunk.
+		updateLiquid(&data->transforming_liquid, full_node_min, full_node_max);
+		if (flags & MG_LIGHT)
+			calcLighting(node_min - v3pos_t(0, 1, 0), node_max + v3pos_t(0, 1, 0),
+					full_node_min, full_node_max, true);
+		finish_generation();
+		return;
+	}
 
 	//freeminer:
 	layers_prepare(node_min, node_max);
@@ -1209,6 +1457,5 @@ void MapgenEarth::makeChunk(BlockMakeData *data)
 		calcLighting(node_min - v3pos_t(0, 1, 0), node_max + v3pos_t(0, 1, 0),
 				full_node_min, full_node_max, propagate_shadow);
 
-	this->generating = false;
-	this->active_block_data = nullptr;
+	finish_generation();
 }

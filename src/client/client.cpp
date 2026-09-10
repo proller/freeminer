@@ -420,12 +420,15 @@ void Client::Stop()
 	farmesh_async.wait();
 	mesh_thread_pool.wait_until_nothing_in_flight();
 	mesh_thread_pool.wait_until_empty();
+	// fm: Draw-list publication uses FarMesh until its current build finishes.
+	getEnv().getClientMap().update_drawlist_async.wait();
 	farmesh.reset();
 	farmesh_async.wait();
 	mesh_thread_pool.wait_until_empty();
 	merger.reset(); // before m_localdb
     getEnv().getClientMap().update_drawlist_async.wait();
 	mesh_thread_pool.wait_until_empty();
+	// ===
 
 	if (m_mods_loaded)
 		delete m_script;
@@ -778,16 +781,21 @@ void Client::step(float dtime)
 						current_mesh_revision, block->getMeshRevision());
 			}
 
-			// Do not let a result made from an older block snapshot replace a
-			// newer mesh. Normal and urgent queues can complete out of order.
-			if (r.mesh->mesh_revision >= current_mesh_revision) {
+			// fm: Publish progress while blocks are still arriving. Compare with
+			// the installed mesh, not live data that may have changed mid-build.
+			// Normal and urgent workers must never replace a newer installed LOD.
+			const auto old_mesh = block ? block->getLodMesh(r.mesh->lod_step) : nullptr;
+			const bool install_mesh =
+					!old_mesh || r.mesh->mesh_revision >= old_mesh->mesh_revision;
+			if (install_mesh) {
 				if (!block)
 					block = map.createBlankBlock(r.p).get();
-				block->updateMeshRevision(r.mesh->mesh_revision);
-
-				const auto old_mesh = block->getLodMesh(r.mesh->lod_step);
-				if (!old_mesh && !r.mesh->isEmpty())
-					++m_new_meshes;
+				// Preserve dirtiness, including dependencies of a missing origin,
+				// so a provisional result is rebuilt with the latest received data.
+				block->updateMeshRevision(
+						std::max(current_mesh_revision, r.mesh->mesh_revision));
+				if (r.mesh->mesh_revision < current_mesh_revision)
+					g_profiler->add("Client: Provisional near meshes installed", 1);
 
 				// Delete the old mesh
 				if (old_mesh)
@@ -803,10 +811,12 @@ void Client::step(float dtime)
 				if (minimap_mapblocks.empty())
 					do_mapper_update = false;
 
-				if (r.mesh->isEmpty())
-					block->clearLodMesh(r.mesh->lod_step);
-				else
-					block->setLodMesh(r.mesh);
+				// Preserve empty results as completed coverage. A null pointer
+				// must mean unfinished, otherwise the handoff waits forever for air
+				// and fully enclosed chunks whose mesh requests already completed.
+				block->setLodMesh(r.mesh);
+				// Signal after publication so a woken draw-list sees the new mesh.
+				++m_new_meshes;
 
 				if (r.urgent)
 					force_update_shadows = true;
