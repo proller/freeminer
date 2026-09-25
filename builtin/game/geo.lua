@@ -196,11 +196,11 @@ local function smooth_move_player(player, target, max_h, duration)
     smooth_move_active[move_key] = smooth_move_serial
     local move_id = smooth_move_serial
 
-    -- Keep the step interval short enough to look smooth, and divide the
-    -- requested duration evenly so the last step lands exactly on time.
+    -- Follow elapsed time so delayed callbacks do not stretch the trajectory.
     local step_interval = 0.05
     local steps = math.max(1, math.ceil(duration / step_interval))
     local actual_interval = duration / steps
+    local started_at = core.get_us_time()
 
     -- Limit the arc height so long jumps rise visibly without becoming a
     -- near-vertical launch. For straight vertical moves, do not add an arc.
@@ -238,17 +238,25 @@ local function smooth_move_player(player, target, max_h, duration)
         end
     end
 
-    local function move_step(i)
+    local function move_step()
         if smooth_move_active[move_key] ~= move_id then
             return
         end
 
-        if not player:get_pos() then
+        local pos = player:get_pos()
+        if not pos then
             smooth_move_active[move_key] = nil
             return
         end
 
-        if i >= steps then
+        local elapsed = (core.get_us_time() - started_at) / 1000000
+        local velocity = player:get_velocity()
+        if not velocity then
+            smooth_move_active[move_key] = nil
+            return
+        end
+
+        if elapsed >= duration then
             player:set_pos(target)
             set_player_velocity({
                 x = 0,
@@ -259,21 +267,19 @@ local function smooth_move_player(player, target, max_h, duration)
             return
         end
 
-        local t = smooth_progress(i / steps)
-        local next_t = smooth_progress((i + 1) / steps)
+        local t = smooth_progress(math.min(elapsed / duration, 1))
+        local next_t = smooth_progress(math.min((elapsed + actual_interval) / duration, 1))
         local new_pos = path_pos(t)
         local next_pos = path_pos(next_t)
+        local path_velocity = vector.divide(vector.subtract(next_pos, new_pos), actual_interval)
+        -- Correct position along the path and maintain motion between updates.
         player:set_pos(new_pos)
-        set_player_velocity({
-            x = (next_pos.x - new_pos.x) / actual_interval * 0.25,
-            y = (next_pos.y - new_pos.y) / actual_interval * 0.25,
-            z = (next_pos.z - new_pos.z) / actual_interval * 0.25,
-        })
+        set_player_velocity(path_velocity)
 
-        minetest.after(actual_interval, move_step, i + 1)
+        minetest.after(actual_interval, move_step)
     end
 
-    move_step(0)
+    move_step()
 end
 
 local function simple_deepcopy(tbl)
