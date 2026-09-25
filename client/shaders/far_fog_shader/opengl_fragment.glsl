@@ -2,12 +2,12 @@ uniform lowp vec4 fogColor;
 uniform float fogDistance;
 uniform float fogShadingParameter;
 uniform float animationTimer;
+uniform vec3 windDirection;
 
 VARYING_ lowp vec4 varColor;
 VARYING_ mediump vec2 varTexCoord;
 VARYING_ highp vec3 eyeVec;
 VARYING_ highp vec3 fogWorldPos;
-VARYING_ highp vec3 fogWind;
 VARYING_ highp float fogPhase;
 
 float fogHash(vec3 p)
@@ -76,8 +76,8 @@ void main(void)
 	float radial_distance = length(centered_uv);
 
 	float fog_time = animationTimer * 100.0;
-	float wind_speed = min(length(fogWind.xz), 80.0);
-	vec2 wind_dir = wind_speed > 0.001 ? normalize(fogWind.xz) : vec2(1.0, 0.0);
+	float wind_speed = min(length(windDirection.xz), 80.0);
+	vec2 wind_dir = wind_speed > 0.001 ? normalize(windDirection.xz) : vec2(1.0, 0.0);
 	vec2 side_dir = vec2(-wind_dir.y, wind_dir.x);
 	vec3 wind_vec = vec3(wind_dir.x, 0.0, wind_dir.y);
 	vec3 side_vec = vec3(side_dir.x, 0.0, side_dir.y);

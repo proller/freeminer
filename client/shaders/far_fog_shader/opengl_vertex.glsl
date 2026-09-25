@@ -1,18 +1,18 @@
 uniform lowp vec4 materialColor;
 uniform highp mat4 mWorld;
 uniform highp vec3 cameraOffset;
+uniform vec3 windDirection;
 uniform float animationTimer;
 
 VARYING_ lowp vec4 varColor;
 VARYING_ mediump vec2 varTexCoord;
 VARYING_ highp vec3 eyeVec;
 VARYING_ highp vec3 fogWorldPos;
-VARYING_ highp vec3 fogWind;
 VARYING_ highp float fogPhase;
 
 void main(void)
 {
-	vec3 wind = vec3(inVertexNormal.x, 0.0, inVertexNormal.z);
+	vec3 wind = windDirection;
 	float phase = inVertexNormal.y;
 	float speed = min(length(wind.xz), 80.0);
 	vec3 wind_dir = speed > 0.001 ? normalize(wind) : vec3(1.0, 0.0, 0.0);
@@ -32,6 +32,5 @@ void main(void)
 	varTexCoord = inTexCoord0;
 	eyeVec = -(mWorldView * fogVertex).xyz;
 	fogWorldPos = (mWorld * fogVertex).xyz + cameraOffset;
-	fogWind = wind;
 	fogPhase = phase;
 }
