@@ -90,6 +90,8 @@ class GameGlobalShaderUniformSetter : public IShaderUniformSetter
 	CachedPixelShaderSetting<float, 3> m_minimap_yaw{"yawVec"};
 	CachedPixelShaderSetting<float, 3> m_camera_offset_pixel{"cameraOffset"};
 	CachedVertexShaderSetting<float, 3> m_camera_offset_vertex{"cameraOffset"};
+	CachedVertexShaderSetting<float, 3> m_wind_direction_vertex{"windDirection"};
+	CachedPixelShaderSetting<float, 3> m_wind_direction_pixel{"windDirection"};
 	CachedPixelShaderSetting<float, 3> m_camera_position_pixel{"cameraPosition"};
 	CachedVertexShaderSetting<float, 3> m_camera_position_vertex{"cameraPosition"};
 	CachedVertexShaderSetting<float, 2> m_texel_size0_vertex{"texelSize0"};
@@ -223,6 +225,11 @@ public:
 		v3f camera_position = m_client->getCamera()->getPosition();
 		m_camera_position_pixel.set(camera_position, services);
 		m_camera_position_vertex.set(camera_position, services);
+
+		v3f wind = m_client->getEnv().getClientMap().getWind(
+				floatToInt(m_client->getEnv().getLocalPlayer()->getPosition(), BS), true);
+		m_wind_direction_vertex.set(wind, services);
+		m_wind_direction_pixel.set(wind, services);
 
 		m_texel_size0_vertex.set(m_texel_size0, services);
 		m_texel_size0_pixel.set(m_texel_size0, services);
