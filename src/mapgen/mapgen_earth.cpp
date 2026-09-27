@@ -84,6 +84,214 @@ std::unique_ptr<maps_holder_t> MapgenEarth::maps_holder;
 
 namespace
 {
+// The source rasters store signed 16-bit elevations. Keep a finite envelope for
+// empty/solid rejection and the legacy vertical ground query.
+constexpr double earth_min_elevation = -32768;
+constexpr double earth_max_elevation = 32767;
+
+v3opos_t earth_node_position(const v3pos_t &p)
+{
+	return {static_cast<opos_t>(p.X), static_cast<opos_t>(p.Y), static_cast<opos_t>(p.Z)};
+}
+
+pos_t earth_altitude_node(double altitude)
+{
+	return static_cast<pos_t>(
+			std::clamp(std::ceil(altitude), double(std::numeric_limits<pos_t>::lowest()),
+					double(std::numeric_limits<pos_t>::max())));
+}
+}
+
+template <class Projection>
+void MapgenEarth::bindProjection(const fm_earth::Parameters &params)
+{
+	projection.bind<Projection>(params);
+	if constexpr (!std::is_same_v<Projection, fm_earth::Flat>)
+		projected_terrain = &MapgenEarth::generateProjectedTerrain<Projection>;
+	else
+		projected_terrain = nullptr;
+}
+
+void MapgenEarth::configureProjection(const Json::Value &params)
+{
+	fm_earth::Parameters p;
+	p.scale = scale;
+	p.center = center;
+	const auto &config = params["projection"];
+	if (!config.isNull() && !config.isObject() && !config.isString())
+		throw std::invalid_argument("mg_earth.projection must be a name or object");
+	const std::string type =
+			config.isString() ? config.asString() : config.get("type", "flat").asString();
+	if (config.isObject()) {
+		p.radius = config.get("radius", p.radius).asDouble();
+		p.major_radius = config.get("major_radius", p.major_radius).asDouble();
+		if (const auto &origin = config["origin"]; origin.isObject())
+			p.origin = {static_cast<opos_t>(origin.get("x", 0).asDouble()),
+					static_cast<opos_t>(origin.get("y", 0).asDouble()),
+					static_cast<opos_t>(origin.get("z", 0).asDouble())};
+	}
+	for (double value : {scale.X, scale.Y, scale.Z})
+		if (!std::isfinite(value) || value == 0 || (type != "flat" && value < 0))
+			throw std::invalid_argument(
+					"mg_earth.scale components must be finite, nonzero, and positive for curved worlds");
+	for (double value : {center.X, center.Y, center.Z, double(p.origin.X),
+				 double(p.origin.Y), double(p.origin.Z)})
+		if (!std::isfinite(value))
+			throw std::invalid_argument(
+					"mg_earth center and projection origin must be finite");
+	if (!std::isfinite(p.radius) || p.radius <= 0 || !std::isfinite(p.major_radius) ||
+			p.major_radius <= 0)
+		throw std::invalid_argument(
+				"mg_earth projection radii must be finite and positive");
+	if (type != "flat") {
+		const double limit = MAX_MAP_GENERATION_LIMIT;
+		const double extent = p.radius + (type == "torus" ? p.major_radius : 0);
+		const double relief =
+				std::max(std::abs(std::ceil(earth_min_elevation / scale.Y) - center.Y),
+						std::abs(std::ceil(earth_max_elevation / scale.Y) - center.Y));
+		if (!std::isfinite(relief) || relief >= limit || extent >= limit ||
+				std::abs(p.origin.X) + extent >= limit ||
+				std::abs(p.origin.Y) + p.radius >= limit ||
+				std::abs(p.origin.Z) + extent >= limit)
+			throw std::invalid_argument(
+					"mg_earth projection exceeds the coordinate range");
+	}
+	if (type == "flat")
+		bindProjection<fm_earth::Flat>(p);
+	else if (type == "sphere" || type == "spherical")
+		bindProjection<fm_earth::Sphere>(p);
+	else if (type == "inverted_sphere" || type == "inside_sphere")
+		bindProjection<fm_earth::InvertedSphere>(p);
+	else if (type == "cube")
+		bindProjection<fm_earth::Cube>(p);
+	else if (type == "torus") {
+		if (p.major_radius <= p.radius)
+			throw std::invalid_argument("mg_earth torus major_radius must exceed radius");
+		bindProjection<fm_earth::Torus>(p);
+	} else {
+		throw std::invalid_argument("Unknown mg_earth projection: " + type);
+	}
+	if (projection.curved)
+		infostream
+				<< "Earth projection: " << type
+				<< "; OSM buildings and directional liquid flow await curved placement/gravity\n";
+}
+
+fm_earth::Sample MapgenEarth::sampleEarth(const v3pos_t &p) const
+{
+	return projection.sample(earth_node_position(p));
+}
+
+double MapgenEarth::projectedElevation(const fm_earth::Sample &sample, block_step_t step)
+{
+	// HGT takes floats: avoid rounding the north pole to the nonexistent N90
+	// tile. Longitude 180 always belongs to the -180 seam tile.
+	const float lat = std::clamp(
+			static_cast<float>(sample.lat), -90.0f, std::nextafter(90.0f, 0.0f));
+	float lon = static_cast<float>(fm_earth::wrap(sample.lon));
+	if (lon >= 180.0f)
+		lon = -180.0f;
+	const double height = maps_holder->hgt_reader.get(lat, lon, step);
+	return std::ceil(std::clamp(std::isfinite(height) ? height : 0.0, earth_min_elevation,
+							 earth_max_elevation) /
+					 scale.Y) -
+		   center.Y;
+}
+
+v3pos_t MapgenEarth::climatePosition(const v3pos_t &p) const
+{
+	if (!projection.curved)
+		return p;
+	return {p.X, earth_altitude_node(projection.altitude(earth_node_position(p))), p.Z};
+}
+
+bool MapgenEarth::visible_water_level(const v3pos_t &p)
+{
+	if (projection.curved)
+		return projection.altitude(earth_node_position(p)) <= water_level;
+	return MapgenV7::visible_water_level(p);
+}
+
+pos_t MapgenEarth::projectedGroundLevel(const v2pos_t &p, block_step_t step)
+{
+	// Compatibility for callers that still ask for a single Y: find the uppermost
+	// solid voxel in this vertical ray. Holes/outside columns have no ground.
+	const auto ceiling =
+			projection.top(p.X, p.Y, std::ceil(earth_max_elevation / scale.Y) - center.Y);
+	if (!ceiling)
+		return MAX_MAP_GENERATION_LIMIT;
+	const double bottom = 2 * projection.parameters.origin.Y - *ceiling;
+	const pos_t top =
+			earth_altitude_node(std::min(*ceiling, double(MAX_MAP_GENERATION_LIMIT - 1)));
+	const pos_t end =
+			earth_altitude_node(std::max(bottom, double(-MAX_MAP_GENERATION_LIMIT + 1)));
+	for (pos_t y = top; y >= end; --y) {
+		const auto sample = sampleEarth({p.X, y, p.Y});
+		if (sample.altitude <= projectedElevation(sample, step))
+			return y;
+	}
+	return MAX_MAP_GENERATION_LIMIT;
+}
+
+template <class Projection>
+int MapgenEarth::generateProjectedTerrain()
+{
+	const Projection geometry{projection.parameters};
+	const auto extent = vm->m_area.getExtent();
+	const double low = std::ceil(earth_min_elevation / scale.Y) - center.Y;
+	const double high = std::ceil(earth_max_elevation / scale.Y) - center.Y;
+
+	// Layer ranges refer to altitude, not world Y. Distance-to-surface functions
+	// are 1-Lipschitz, so this encloses every altitude in the chunk.
+	const auto start = earth_node_position(node_min), end = earth_node_position(node_max);
+	const double a = geometry.altitude(start);
+	const double diagonal = (end - start).getLength();
+	layers_node.clear();
+	for (const auto &layer : layers) {
+		if (layer.height_max < a - diagonal || layer.height_min > a + diagonal)
+			continue;
+		for (int i = 0; i < layer.thickness; ++i)
+			layers_node.emplace_back(layer.node);
+	}
+	if (layers_node.empty())
+		layers_node.emplace_back(n_stone);
+	layers_node_size = layers_node.size();
+
+	for (pos_t z = node_min.Z; z <= node_max.Z; ++z) {
+		for (pos_t x = node_min.X; x <= node_max.X; ++x) {
+			u32 index = vm->m_area.index(x, node_min.Y, z);
+			for (pos_t y = node_min.Y; y <= node_max.Y; ++y) {
+				const v3pos_t pos{x, y, z};
+				const auto world = earth_node_position(pos);
+				const double altitude = geometry.altitude(world);
+				if (altitude > std::max(high, double(water_level))) {
+					vm->m_data[index] = n_air;
+				} else if (altitude < low) {
+					if (!vm->m_data[index])
+						vm->m_data[index] = n_stone;
+				} else {
+					// Concrete projection: no type checks, virtual calls or projection
+					// function-pointer dispatch inside this voxel loop.
+					const auto sample = geometry.sample(world);
+					const double height = projectedElevation(sample, 0);
+					if (altitude <= height) {
+						if (!vm->m_data[index])
+							vm->m_data[index] =
+									earth_layer_get(x, earth_altitude_node(altitude), z,
+											earth_altitude_node(height), 0);
+					} else {
+						vm->m_data[index] = altitude <= water_level ? n_water : n_air;
+					}
+				}
+				vm->m_area.add_y(extent, index, 1);
+			}
+		}
+	}
+	return 0;
+}
+
+namespace
+{
 constexpr float EARTH_TAVG_MIN_C = -60.0f;
 constexpr float EARTH_TAVG_MAX_C = 60.0f;
 constexpr float EARTH_VAPR_MAX_KPA = 5.0f;
@@ -347,6 +555,8 @@ MapgenEarth::MapgenEarth(MapgenEarthParams *params_, EmergeParams *emerge) :
 	if (params.get("scale", Json::Value()).isObject())
 		scale = {params["scale"]["x"].asDouble(), params["scale"]["y"].asDouble(),
 				params["scale"]["z"].asDouble()};
+
+	configureProjection(params);
 
 	earth_layers = params.get("earth_layers", 0).asBool();
 
@@ -751,6 +961,10 @@ inline std::optional<pos_t> farWaterSampleY(
 bool MapgenEarth::visible(
 		const v3pos_t &p, std::optional<pos_t> surface_y, block_step_t step)
 {
+	if (projection.curved) {
+		const auto sample = sampleEarth(p);
+		return sample.altitude <= projectedElevation(sample, step);
+	}
 	return p.Y <= surface_y.value_or(get_height(p.X, p.Z, step));
 }
 
@@ -765,7 +979,10 @@ MapNode MapgenEarth::visible_content(
 		return valid(node.getContent()) ? node : fallback;
 	};
 
-	const auto surface_y = get_height(p.X, p.Z, step);
+	const auto sample = sampleEarth(p);
+	const double surface_altitude = projection.curved ? projectedElevation(sample, step)
+													  : get_height(p.X, p.Z, step);
+	const auto surface_y = earth_altitude_node(surface_altitude);
 	// Far water owns the coarse sea-surface cell, including rounded zero
 	// elevation. This affects visibility only; get_height/generateTerrain keep
 	// their original elevations and world materials.
@@ -774,7 +991,11 @@ MapNode MapgenEarth::visible_content(
 	//const auto solid = !far_water_y && visible(p, surface_y, step);
 	//const auto water = far_water_y.has_value() || visible_water_level(p);
 
-	const auto solid = visible(p, surface_y, step);
+	// A distant ocean cell can sample below the seabed. Its visible shell is
+	// still water; do not let coarse sampling replace oceans with land.
+	const auto solid = projection.curved ? sample.altitude <= surface_altitude &&
+												   surface_altitude > water_level
+										 : visible(p, surface_y, step);
 	const auto water = visible_water_level(p);
 	if (!solid && !water) {
 		return visible_transparent;
@@ -783,14 +1004,21 @@ MapNode MapgenEarth::visible_content(
 	const float timeofday = env ? env->getTimeOfDayF() : 0.0f;
 	const float totaltime = env ? env->getGameTime() * env->m_time_of_day_speed : 0.0f;
 	const bool weather = use_weather && env && env->m_use_weather;
-	const v3pos_t climate_p(p.X, solid ? surface_y : water_level, p.Z);
+	v3pos_t climate_p(p.X, solid ? surface_y : water_level, p.Z);
+	if (projection.curved) {
+		const auto surface = projection.place(
+				sample.lat, sample.lon, solid ? surface_altitude : water_level);
+		climate_p = {earth_altitude_node(surface.X), earth_altitude_node(surface.Y),
+				earth_altitude_node(surface.Z)};
+	}
 	const auto heat = calcBlockHeat(climate_p, seed, timeofday, totaltime, weather);
 
 	// Match the sea-level water column filled by generateTerrain().
 	if (!solid && water) {
-		// Evaluate ice at the water sample, not above a coarse sea-surface cell.
-		if (heat < 0 && p.Y > heat / 3 && valid(c_ice))
-		//if (heat < 0 && far_water_y.value_or(p.Y) > heat / 3 && valid(c_ice))
+		// Curved preview cells represent the sea surface even when their sample
+		// lies deep below it. Ice selection must use that same surface altitude.
+		const double ice_altitude = projection.curved ? water_level : sample.altitude;
+		if (heat < 0 && ice_altitude > heat / 3 && valid(c_ice))
 			return MapNode(c_ice, LIGHT_SUN);
 		return node_or(n_water, visible_water);
 	}
@@ -810,8 +1038,10 @@ MapNode MapgenEarth::visible_content(
 //constexpr double EQUATOR_LEN = EARTH_RADIUS * 3.14159265358979323846 * 2;
 
 constexpr double EQUATOR_LEN{40075696.0};
-ll MapgenEarth::pos_to_ll(const pos_t x, const pos_t z)
+ll MapgenEarth::pos_to_ll(const pos_t x, const pos_t z) const
 {
+	if (projection.curved)
+		throw std::logic_error("Curved Earth coordinates require pos_to_ll(v3pos_t)");
 	const auto lon = ((ll_t)x * scale.X) / (EQUATOR_LEN / 360.0) + center.X;
 	const auto lat = ((ll_t)z * scale.Z) / (EQUATOR_LEN / 360.0) + center.Z;
 	if (lat < 90 && lat > -90 && lon < 180 && lon > -180) {
@@ -820,19 +1050,37 @@ ll MapgenEarth::pos_to_ll(const pos_t x, const pos_t z)
 		return {89.9999, 0};
 	}
 }
-ll MapgenEarth::pos_to_ll(const v3pos_t &p)
+ll MapgenEarth::pos_to_ll(const v3pos_t &p) const
 {
-	return pos_to_ll(p.X, p.Z);
+	if (!projection.curved)
+		return pos_to_ll(p.X, p.Z);
+	const auto sample = sampleEarth(p);
+	return {sample.lat, sample.lon};
 }
 
-v2pos_t MapgenEarth::ll_to_pos(const ll &l)
+v2pos_t MapgenEarth::ll_to_pos(const ll &l) const
 {
-	return v2pos_t((l.lon - center.X) * (EQUATOR_LEN / 360) / scale.X,
-			(l.lat - center.Z) * (EQUATOR_LEN / 360) / scale.Z);
+	const auto projected = ll_to_pos3(l);
+	return v2pos_t(projected.X, projected.Z);
+}
+
+v3pos_t MapgenEarth::ll_to_pos3(const ll &l, double altitude) const
+{
+	if (projection.curved) {
+		const auto projected = projection.place(l.lat, l.lon, altitude);
+		return v3pos_t(static_cast<pos_t>(std::llround(projected.X)),
+				static_cast<pos_t>(std::llround(projected.Y)),
+				static_cast<pos_t>(std::llround(projected.Z)));
+	}
+	return v3pos_t(static_cast<pos_t>((l.lon - center.X) * (EQUATOR_LEN / 360) / scale.X),
+			static_cast<pos_t>(std::llround(altitude)),
+			static_cast<pos_t>((l.lat - center.Z) * (EQUATOR_LEN / 360) / scale.Z));
 }
 
 pos_t MapgenEarth::get_height(pos_t x, pos_t z, block_step_t step)
 {
+	if (projection.curved)
+		return projectedGroundLevel({x, z}, step);
 	const auto tc = pos_to_ll(x, z);
 	const auto y = maps_holder->hgt_reader.get(tc.lat, tc.lon, step);
 	return ceil(y / scale.Y) - center.Y;
@@ -908,6 +1156,13 @@ void MapgenEarth::fillChunkWithAir()
 
 pos_t MapgenEarth::getSpawnLevelAtPoint(v2pos_t p)
 {
+	if (projection.curved) {
+		const auto y = projectedGroundLevel(p, 0);
+		if (y >= MAX_MAP_GENERATION_LIMIT - 2 ||
+				visible_water_level({p.X, static_cast<pos_t>(y + 1), p.Y}))
+			return MAX_MAP_GENERATION_LIMIT;
+		return y + 2;
+	}
 	return std::max(2, get_height(p.X, p.Y, 0) + 2);
 }
 
@@ -924,6 +1179,8 @@ pos_t MapgenEarth::getGroundLevelAtPointStep(const v2pos_t &p, block_step_t step
 
 int MapgenEarth::generateTerrain()
 {
+	if (projected_terrain)
+		return (this->*projected_terrain)();
 	u32 index = 0;
 	const auto em = vm->m_area.getExtent();
 
@@ -1008,6 +1265,11 @@ auto make_bbox(const auto &tc, auto div)
 
 void MapgenEarth::generateBuildings()
 {
+	// Arnis currently assumes a flat X/Z ground plane. Disable the complete
+	// authored-building pipeline for curved projections until local gravity and
+	// tangent-frame placement are implemented.
+	if (projection.curved)
+		return;
 #if USE_OSMIUM
 	TimeTaker timer("earth buildings", {}, PRECISION_MILLI);
 	std::string use_file;
@@ -1016,8 +1278,25 @@ void MapgenEarth::generateBuildings()
 		//#define FILE_INCLUDED 1
 		//#include "earth/osmium-inl.h"
 		constexpr auto extra = MAP_BLOCKSIZE * 2;
-		const auto coord_min = pos_to_ll(node_min.X - extra, node_min.Z - extra);
-		const auto coord_max = pos_to_ll(node_max.X + extra, node_max.Z + extra);
+		auto coord_min = pos_to_ll({static_cast<pos_t>(node_min.X - extra),
+				static_cast<pos_t>(node_min.Y - extra),
+				static_cast<pos_t>(node_min.Z - extra)});
+		auto coord_max = pos_to_ll({static_cast<pos_t>(node_max.X + extra),
+				static_cast<pos_t>(node_max.Y + extra),
+				static_cast<pos_t>(node_max.Z + extra)});
+		if (projection.curved) {
+			const auto regions = projection.coverage(
+					earth_node_position(node_min - v3pos_t(extra, extra, extra)),
+					earth_node_position(node_max + v3pos_t(extra, extra, extra)));
+			coord_min = {90, 180};
+			coord_max = {-90, -180};
+			for (const auto &region : regions) {
+				coord_min.lat = std::min(coord_min.lat, region.min_lat);
+				coord_min.lon = std::min(coord_min.lon, region.min_lon);
+				coord_max.lat = std::max(coord_max.lat, region.max_lat);
+				coord_max.lon = std::max(coord_max.lon, region.max_lon);
+			}
+		}
 		static const auto folder = maps_holder->data_root;
 		const auto lat_dec = lat_start(coord_min.lat);
 		const auto lon_dec = lon_start(coord_min.lon);
@@ -1189,8 +1468,8 @@ weather::heat_t MapgenEarth::calcBlockHeat(const v3pos_t &p, uint64_t seed,
 			const auto pixel = earth_sample_image(*tavg_image, pos_to_ll(p));
 			if (pixel && pixel->getAlpha()) {
 				float heat = earth_pixel_to_tavg_celsius(*pixel);
-				heat = earth_apply_heat_adjustments(
-						heat, p, m_emerge->biomemgr, timeofday, use_weather);
+				heat = earth_apply_heat_adjustments(heat, climatePosition(p),
+						m_emerge->biomemgr, timeofday, use_weather);
 				return static_cast<weather::heat_t>(
 						std::lround(std::clamp(heat, -32768.0f, 32767.0f)));
 			}
@@ -1210,13 +1489,14 @@ weather::heat_t MapgenEarth::calcBlockHeat(const v3pos_t &p, uint64_t seed,
 			float heat =
 					rgbToCelsiusJet(pixel->getRed(), pixel->getGreen(), pixel->getBlue());
 			heat = earth_apply_heat_adjustments(
-					heat, p, m_emerge->biomemgr, timeofday, use_weather);
+					heat, climatePosition(p), m_emerge->biomemgr, timeofday, use_weather);
 			return static_cast<weather::heat_t>(
 					std::lround(std::clamp(heat, -32768.0f, 32767.0f)));
 		}
 	}
 #endif
-	return m_emerge->biomemgr->calcBlockHeat(p, seed, timeofday, totaltime, use_weather);
+	return m_emerge->biomemgr->calcBlockHeat(
+			climatePosition(p), seed, timeofday, totaltime, use_weather);
 }
 
 weather::humidity_t MapgenEarth::calcBlockHumidity(const v3pos_t &p, uint64_t seed,
@@ -1257,10 +1537,14 @@ weather::humidity_t MapgenEarth::calcBlockHumidity(const v3pos_t &p, uint64_t se
 			const auto pixel = earth_sample_image(*cloud_image, pos_to_ll(p));
 			if (pixel && pixel->getAlpha()) {
 				const float cloud_percent = earth_pixel_to_cloud_percent(*pixel);
-				const pos_t surface_y = getGroundLevelAtPointStep({p.X, p.Z}, 16);
+				const pos_t surface_y =
+						projection.curved ? earth_altitude_node(projectedElevation(
+													sampleEarth(p), 16))
+										  : getGroundLevelAtPointStep({p.X, p.Z}, 16);
 				if (!have_humidity) {
-					humidity = static_cast<float>(m_emerge->biomemgr->calcBlockHumidity(
-							p, seed, timeofday, totaltime, use_weather, surface_y));
+					humidity = static_cast<float>(
+							m_emerge->biomemgr->calcBlockHumidity(climatePosition(p),
+									seed, timeofday, totaltime, use_weather, surface_y));
 					have_humidity = true;
 				}
 
@@ -1270,7 +1554,8 @@ weather::humidity_t MapgenEarth::calcBlockHumidity(const v3pos_t &p, uint64_t se
 				const float height_scale = std::max(64.0f,
 						std::abs(static_cast<float>(
 								biomemgr ? biomemgr->weather_humidity_height : -250)));
-				const float height_above_surface = static_cast<float>(p.Y - surface_y);
+				const float height_above_surface =
+						static_cast<float>(climatePosition(p).Y - surface_y);
 				const float cloud_base = cloud_y - std::max(90.0f, height_scale * 0.35f);
 				const float cloud_core_top =
 						cloud_y + std::max(80.0f, height_scale * 0.45f);
@@ -1298,8 +1583,11 @@ weather::humidity_t MapgenEarth::calcBlockHumidity(const v3pos_t &p, uint64_t se
 		}
 	}
 
-	return m_emerge->biomemgr->calcBlockHumidity(p, seed, timeofday, totaltime,
-			use_weather, getGroundLevelAtPointStep({p.X, p.Z}, 16));
+	return m_emerge->biomemgr->calcBlockHumidity(climatePosition(p), seed, timeofday,
+			totaltime, use_weather,
+			projection.curved
+					? earth_altitude_node(projectedElevation(sampleEarth(p), 16))
+					: getGroundLevelAtPointStep({p.X, p.Z}, 16));
 }
 
 bool MapgenEarth::calcBlockWind(const v3pos_t &p, uint64_t seed, float timeofday,
@@ -1365,6 +1653,21 @@ void MapgenEarth::makeChunk(BlockMakeData *data)
 		this->generating = false;
 		this->active_block_data = nullptr;
 	};
+
+	if (projection.curved) {
+		// Curved chunks have no single Y heightmap or horizontal authored ceiling.
+		generateTerrain();
+		// Experimental: keep Arnis' global-axis placement until local placement
+		// is complete, but actually run it for curved worlds as well.
+		generateBuildings();
+		if (flags & MG_LIGHT)
+			calcLighting(node_min - v3pos_t(0, 1, 0), node_max + v3pos_t(0, 1, 0),
+					full_node_min, full_node_max, true);
+		// Liquid flow still assumes -Y gravity. Keep projected seas as source
+		// nodes until the liquid solver gains local gravity too.
+		finish_generation();
+		return;
+	}
 
 	// Once a horizontal extract has established its conservative authored
 	// ceiling, chunks wholly above it are known air and need no Earth/Arnis work.

@@ -6,6 +6,7 @@ uniform vec3 sunPosition;
 
 // The cameraOffset is the current center of the visible world.
 uniform highp vec3 cameraOffset;
+uniform vec3 windDirection;
 uniform float animationTimer;
 
 VARYING_ vec3 vNormal;
@@ -171,25 +172,8 @@ void main(void)
 
 	vec4 pos = inVertexPosition;
 #if MATERIAL_WAVING_LIQUID && ENABLE_WAVING_WATER
+
 /*
-	// Keep the animated surface continuous. Scrolling value noise makes
-	// individual vertices move like a sawtooth when crossing lattice cells.
-	vec3 wavePos = (mWorld * pos).xyz;
-	wavePos += mod(cameraOffset, vec3(
-		WATER_WAVE_LENGTH * 24.0,
-		1.0,
-		WATER_WAVE_LENGTH * 30.0));
-	const float tau = 6.28318530718;
-	float waveTime = animationTimer * WATER_WAVE_SPEED * 10.0;
-	float wave =
-		0.50 * sin(tau * (wavePos.x / (WATER_WAVE_LENGTH * 8.0) +
-			wavePos.z / (WATER_WAVE_LENGTH * 5.0) + waveTime)) +
-		0.30 * sin(tau * (wavePos.x / (WATER_WAVE_LENGTH * 12.0) -
-			wavePos.z / (WATER_WAVE_LENGTH * 6.0) + waveTime * 0.68)) +
-		0.20 * sin(tau * ((wavePos.x + wavePos.z) /
-			(WATER_WAVE_LENGTH * 3.0) + waveTime * 1.31));
-	pos.y += (wave - 1.0) * WATER_WAVE_HEIGHT * 2.5;
-*/
 	// Generate waves with Perlin-type noise.
 	// The constants are calibrated such that they roughly
 	// correspond to the old sine waves.
@@ -200,6 +184,34 @@ void main(void)
 	wavePos.z /= WATER_WAVE_LENGTH * 2.0;
 	wavePos.z += animationTimer * WATER_WAVE_SPEED * 10.0;
 	pos.y += (snoise(wavePos) - 1.0) * WATER_WAVE_HEIGHT * 5.0;
+*/
+
+	// fm: Use continuous world-space waves; camera-relative noise can jump
+	// when the camera offset or a noise lattice cell changes.
+	// Keep the animated surface continuous. Scrolling value noise makes
+	// individual vertices move like a sawtooth when crossing lattice cells.
+	vec3 wavePos = wpos.xyz;
+	wavePos += mod(cameraOffset, vec3(
+		WATER_WAVE_LENGTH * 24.0,
+		1.0,
+		WATER_WAVE_LENGTH * 30.0));
+	vec2 wind = windDirection.xz;
+	float windSpeed = length(wind);
+	float waveStrength = 0.25 + 0.75 * clamp(windSpeed / 8.0, 0.0, 1.0);
+	wind = windSpeed > 0.001 ? wind / windSpeed : vec2(1.0, 0.0);
+	vec2 side = vec2(-wind.y, wind.x);
+	vec2 waveXZ = vec2(dot(wavePos.xz, wind), dot(wavePos.xz, side));
+	const float tau = 6.28318530718;
+	float waveTime = -animationTimer * WATER_WAVE_SPEED * 10.0;
+	float wave =
+		0.50 * sin(tau * (waveXZ.x / (WATER_WAVE_LENGTH * 8.0) +
+			waveXZ.y / (WATER_WAVE_LENGTH * 5.0) + waveTime)) +
+		0.30 * sin(tau * (waveXZ.x / (WATER_WAVE_LENGTH * 12.0) -
+			waveXZ.y / (WATER_WAVE_LENGTH * 6.0) + waveTime * 0.68)) +
+		0.20 * sin(tau * ((waveXZ.x + waveXZ.y) /
+			(WATER_WAVE_LENGTH * 3.0) + waveTime * 1.31));
+	pos.y += (wave - 1.0) * WATER_WAVE_HEIGHT * 2.5 * waveStrength;
+	// ===
 #elif MATERIAL_TYPE == TILE_MATERIAL_WAVING_LEAVES && ENABLE_WAVING_LEAVES
 	pos.x += disp_x;
 	pos.y += disp_z * 0.1;

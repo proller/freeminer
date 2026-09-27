@@ -486,7 +486,7 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 						sample_pos.Z %= MAP_BLOCKSIZE;
 						return sample_block_it->second->getNodeNoLock(sample_pos);
 					};
-					// TODO: tune block selector
+			// TODO: tune block selector
 
 #if 0
 // Simple grid aligned
@@ -567,11 +567,28 @@ WorldMerger::one_block_stat_t WorldMerger::merge_one_block(MapDatabase *dbase,
 									ndef->getLightingFlags(source_content);
 							if (!source_lf.light_source)
 								continue;
-
-							bool has_transparent_side = false;
 							const auto source_pos = sample_dirs[source_index];
 							const auto plpos =
 									block->getPosRelative() + lpos + source_pos;
+							const auto &source_features = ndef->get(source_content);
+							if (source_features.isLiquid()) {
+								bool connected_liquid = false;
+								for (const auto &side_dir : side_dirs) {
+									const auto side_content =
+											get_light_neighbor(block, plpos + side_dir)
+													.getContent();
+									if (side_content != CONTENT_IGNORE &&
+											side_content != CONTENT_UNKNOWN &&
+											ndef->get(side_content).isLiquid()) {
+										connected_liquid = true;
+										break;
+									}
+								}
+								if (connected_liquid)
+									continue;
+							}
+
+							bool has_transparent_side = false;
 							for (const auto &side_dir : side_dirs) {
 								const auto side_content =
 										get_light_neighbor(block, plpos + side_dir)

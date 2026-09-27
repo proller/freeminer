@@ -35,6 +35,7 @@ Block DEEPSLATE_BRICKS;
 Block DIORITE;
 Block DIRT;
 Block END_STONE_BRICKS;
+Block END_STONE;
 Block FARMLAND;
 Block GLASS;
 Block GLOWSTONE;
@@ -225,6 +226,8 @@ std::array<Block, 7> ADV_RAIL_DIAGONAL_CROSSING;
 Block ADV_RAIL_SLOPE_UP;
 Block ADV_RAIL_SLOPE_DOWN;
 std::array<Block, 3> ADV_RAIL_GENTLE_SLOPE;
+std::array<Block, 2> ADV_RAIL_DIAGONAL_SLOPE;
+bool ADVTRAINS_DIAGONAL_SLOPES_AVAILABLE = false;
 bool ADVTRAINS_JUNCTIONS_AVAILABLE = false;
 bool ADVTRAINS_CROSSINGS_AVAILABLE = false;
 bool ADVTRAINS_SLOPES_AVAILABLE = false;
@@ -464,6 +467,7 @@ void init(MapgenEarth *mg)
 	DIORITE = g("default:stone");
 	DIRT = g("default:dirt");
 	END_STONE_BRICKS = g("default:stonebrick");
+	END_STONE = g("default:endstone");
 	FARMLAND = g("default:dirt");
 	GLASS = g("default:glass");
 	GLOWSTONE = g("default:meselamp");
@@ -705,6 +709,13 @@ void init(MapgenEarth *mg)
 			mg->m_emerge->ndef->getId("advtrains:dtrack_vst31") != CONTENT_IGNORE &&
 			mg->m_emerge->ndef->getId("advtrains:dtrack_vst32") != CONTENT_IGNORE &&
 			mg->m_emerge->ndef->getId("advtrains:dtrack_vst33") != CONTENT_IGNORE;
+	ADVTRAINS_DIAGONAL_SLOPES_AVAILABLE =
+			ADVTRAINS_AVAILABLE &&
+			mg->m_emerge->ndef->getId("advtrains:dtrack_vst1_45") != CONTENT_IGNORE &&
+			mg->m_emerge->ndef->getId("advtrains:dtrack_vst2_45") != CONTENT_IGNORE;
+	if (ADVTRAINS_DIAGONAL_SLOPES_AVAILABLE)
+		ADV_RAIL_DIAGONAL_SLOPE = {
+				g("advtrains:dtrack_vst1_45"), g("advtrains:dtrack_vst2_45")};
 	ADVTRAINS_JUNCTIONS_AVAILABLE =
 			ADVTRAINS_AVAILABLE &&
 			mg->m_emerge->ndef->getId("advtrains:dtrack_swlst") != CONTENT_IGNORE &&

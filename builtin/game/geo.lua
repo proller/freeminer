@@ -73,6 +73,10 @@ local function urlencode(str)
     return str
 end
 
+-- Delegate geometry to the active C++ projection. The fallback below keeps
+-- this file usable with older cores that do not provide these functions.
+local earth_pos_to_ll = core.earth_pos_to_ll
+local earth_ll_to_pos = core.earth_ll_to_pos
 local EQUATOR_LEN = 40075696.0
 local center = {
     X = 0,
@@ -82,7 +86,13 @@ local scale = {
     X = 1,
     Z = 1,
 }
-function pos_to_ll(x, z)
+function pos_to_ll(x, y, z)
+    if earth_pos_to_ll then
+        local ok, result = pcall(earth_pos_to_ll, {x = x, y = y or 0, z = z})
+        if ok and result then
+            return result
+        end
+    end
     local lon = (x * scale.X) / (EQUATOR_LEN / 360) + center.X
     local lat = (z * scale.Z) / (EQUATOR_LEN / 360) + center.Z
     if lat < 90 and lat > -90 and lon < 180 and lon > -180 then
@@ -99,11 +109,26 @@ function pos_to_ll(x, z)
 end
 
 function ll_to_pos(l)
+    if earth_ll_to_pos then
+        local ok, result = pcall(earth_ll_to_pos, l, true)
+        if ok and result then
+            return {
+                x = result.x,
+                y = result.y,
+                z = result.z,
+                curved = result.curved,
+            }
+        end
+        -- The API is installed globally, but rejects worlds whose active
+        -- mapgen is not mg_earth. Keep /geo usable in those worlds by using
+        -- the legacy flat conversion below.
+    end
     local deg2m = EQUATOR_LEN / 360
     local x = math.floor((l.lon / scale.X - center.X) * deg2m)
     local z = math.floor((l.lat / scale.Z - center.Z) * deg2m)
     return {
         x = x,
+        y = 0,
         z = z,
     }
 end
@@ -171,11 +196,11 @@ local function smooth_move_player(player, target, max_h, duration)
     smooth_move_active[move_key] = smooth_move_serial
     local move_id = smooth_move_serial
 
-    -- Keep the step interval short enough to look smooth, and divide the
-    -- requested duration evenly so the last step lands exactly on time.
+    -- Follow elapsed time so delayed callbacks do not stretch the trajectory.
     local step_interval = 0.05
     local steps = math.max(1, math.ceil(duration / step_interval))
     local actual_interval = duration / steps
+    local started_at = core.get_us_time()
 
     -- Limit the arc height so long jumps rise visibly without becoming a
     -- near-vertical launch. For straight vertical moves, do not add an arc.
@@ -204,19 +229,36 @@ local function smooth_move_player(player, target, max_h, duration)
         }
     end
 
-    local function move_step(i)
+    -- Player velocity updates are additive, as with knockback. Compensate for
+    -- the last velocity reported by the client to approach the desired speed.
+    local function set_player_velocity(velocity)
+        local current = player:get_velocity()
+        if current then
+            player:add_velocity(vector.subtract(velocity, current))
+        end
+    end
+
+    local function move_step()
         if smooth_move_active[move_key] ~= move_id then
             return
         end
 
-        if not player:get_pos() then
+        local pos = player:get_pos()
+        if not pos then
             smooth_move_active[move_key] = nil
             return
         end
 
-        if i >= steps then
+        local elapsed = (core.get_us_time() - started_at) / 1000000
+        local velocity = player:get_velocity()
+        if not velocity then
+            smooth_move_active[move_key] = nil
+            return
+        end
+
+        if elapsed >= duration then
             player:set_pos(target)
-            player:set_velocity({
+            set_player_velocity({
                 x = 0,
                 y = 0,
                 z = 0,
@@ -225,21 +267,19 @@ local function smooth_move_player(player, target, max_h, duration)
             return
         end
 
-        local t = smooth_progress(i / steps)
-        local next_t = smooth_progress((i + 1) / steps)
+        local t = smooth_progress(math.min(elapsed / duration, 1))
+        local next_t = smooth_progress(math.min((elapsed + actual_interval) / duration, 1))
         local new_pos = path_pos(t)
         local next_pos = path_pos(next_t)
+        local path_velocity = vector.divide(vector.subtract(next_pos, new_pos), actual_interval)
+        -- Correct position along the path and maintain motion between updates.
         player:set_pos(new_pos)
-        player:set_velocity({
-            x = (next_pos.x - new_pos.x) / actual_interval * 0.25,
-            y = (next_pos.y - new_pos.y) / actual_interval * 0.25,
-            z = (next_pos.z - new_pos.z) / actual_interval * 0.25,
-        })
+        set_player_velocity(path_velocity)
 
-        minetest.after(actual_interval, move_step, i + 1)
+        minetest.after(actual_interval, move_step)
     end
 
-    move_step(0)
+    move_step()
 end
 
 local function simple_deepcopy(tbl)
@@ -258,16 +298,33 @@ local function move_player_to_geo(player, data, smooth)
         local geo_data = simple_deepcopy(data)
 
         local center_y = 0
-        if mg_earth_ok and mg_earth_data and mg_earth_data.center then
+        if not earth_ll_to_pos and mg_earth_ok and mg_earth_data and mg_earth_data.center then
             geo_data.lon = geo_data.lon - mg_earth_data.center.x
             geo_data.lat = geo_data.lat - mg_earth_data.center.z
             center_y = mg_earth_data.center.y
         end
 
-        local pos = ll_to_pos(geo_data)
+        local pos, err = ll_to_pos(geo_data)
+        if not pos then
+            core.chat_send_player(player:get_player_name(),
+                "Earth: Cannot convert destination: " .. (err or "unknown error"))
+            return false
+        end
 
-        -- Allow geographic destinations above the terrain.
-        pos.y = (data.altitude or core.get_spawn_level(pos.x, pos.z)) - center_y
+        -- C++ resolves terrain altitude before projecting all three coordinates.
+        -- Only older cores need the flat vertical-column fallback.
+        if not earth_ll_to_pos then
+            local ground_y = core.get_ground_level(pos.x, pos.z)
+            -- Never use the unsuitable-column sentinel as a coordinate.
+            if ground_y and math.abs(ground_y) >= 100000000 then
+                ground_y = nil
+            end
+            local spawn_y = core.get_spawn_level(pos.x, pos.z)
+            if spawn_y and math.abs(spawn_y) >= 100000000 then
+                spawn_y = nil
+            end
+            pos.y = (tonumber(data.altitude) or ground_y or spawn_y or pos.y or 0) - center_y
+        end
         local message = "Earth: Moving to " .. (data.display_name or "") .. (data.country or "") .. " " ..
                             (data.city or "") .. " : " .. pos.x .. "," .. pos.y .. "," .. pos.z
         print(message)

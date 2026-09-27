@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -19,9 +20,11 @@
 #include "map.h"
 #include "arnis_ground.h"
 #include "arnis_block.h"
+#include "arnis_projection_frame.h"
 #include "arnis-cpp/src/args.h"
 #include "arnis-cpp/src/decals/registry.h"
 #include "arnis-cpp/src/trees/tree_library.h"
+#include "mapgen/earth/arnis_projection_frame.h"
 
 #ifdef stoi
 #undef stoi
@@ -110,6 +113,13 @@ struct WorldEditor
 			return seed;
 		}
 	};
+	struct FacadePanel
+	{
+		int x{}, y{}, z{};
+		std::int8_t facing{};
+		std::uint32_t width{}, height{};
+		std::vector<std::uint8_t> pixels;
+	};
 	struct XZCellHash
 	{
 		std::size_t operator()(const std::pair<int, int> &p) const noexcept
@@ -120,6 +130,8 @@ struct WorldEditor
 		}
 	};
 	MapgenEarth *mg{};
+	// Projection-aware local frame. Flat worlds retain the legacy X/Z behavior.
+	ProjectionFrame projection_frame;
 	Ground *ground{};
 	// Generation-format state shared by the C++ orchestration layer.
 	int generation_format = 0; // Java=0, Bedrock=1, Luanti=2
@@ -169,6 +181,13 @@ struct WorldEditor
 	// emerge threads never exchange intersection indexes or regional styles.
 	std::shared_ptr<const signage::SignageContext> signage_context;
 	std::function<bool(const DecalFrame &)> decal_frame_sink;
+	// Backend contract for preset facade panels.  The mapgen layer supplies the
+	// already-cropped RGB panel; Java/Bedrock/Luanti hosts may encode or place
+	// it according to their native entity/texture mechanism.
+	std::function<bool(int, int, int, std::int8_t, const std::vector<std::uint8_t> &,
+			std::uint32_t, std::uint32_t)>
+			facade_panel_sink;
+	std::vector<FacadePanel> placed_facade_panels;
 	std::unordered_set<std::tuple<int, int, int>, FrameCellHash> frame_cells;
 	std::vector<DecalFrame> placed_frames;
 	std::unordered_set<std::tuple<int, int, int>, FrameCellHash> written_cells;
@@ -245,6 +264,7 @@ struct WorldEditor
 	}
 	void set_start_with_map(bool v) { start_with_map = v; }
 	void set_map_decals(bool v) { map_decals = v; }
+	bool map_decals_enabled() const { return map_decals; }
 	void set_decal_registry(std::shared_ptr<const decals::DecalRegistry> registry)
 	{
 		decal_registry = std::move(registry);
@@ -257,6 +277,27 @@ struct WorldEditor
 	{
 		decal_frame_sink = std::move(sink);
 	}
+	void set_facade_panel_sink(std::function<bool(int, int, int, std::int8_t,
+					const std::vector<std::uint8_t> &, std::uint32_t, std::uint32_t)>
+					sink)
+	{
+		facade_panel_sink = std::move(sink);
+	}
+	bool place_facade_panel(int x, int y, int z, std::int8_t facing,
+			const std::vector<std::uint8_t> &pixels, std::uint32_t width,
+			std::uint32_t height)
+	{
+		if (!width || !height || pixels.size() != std::size_t(width) * height * 3)
+			return false;
+		if (facade_panel_sink &&
+				!facade_panel_sink(x, y, z, facing, pixels, width, height))
+			return false;
+		placed_facade_panels.push_back(
+				FacadePanel{x, y, z, facing, width, height, pixels});
+		return true;
+	}
+	void clear_facade_panels() { placed_facade_panels.clear(); }
+	const std::vector<FacadePanel> &facade_panels() const { return placed_facade_panels; }
 	void set_chest_sink(std::function<void(int, int, int,
 					const std::vector<std::tuple<std::string, int, int>> &)>
 					sink)
@@ -584,6 +625,22 @@ struct WorldEditor
 				block, x, get_absolute_y(x, y, z), z, replace_with, avoid);
 	}
 
+	// Convert a feature-local east/up/north coordinate into engine coordinates.
+	// Callers migrating curved placement should use this before absolute writes.
+	v3pos_t projection_position(double east, double up, double north) const
+	{
+		if (!projection_frame.curved)
+			return {static_cast<pos_t>(std::llround(east)),
+					static_cast<pos_t>(std::llround(up)),
+					static_cast<pos_t>(std::llround(north))};
+		const auto projected = projection_frame.place(east, up, north);
+		return {static_cast<pos_t>(std::llround(projected.X)),
+				static_cast<pos_t>(std::llround(projected.Y)),
+				static_cast<pos_t>(std::llround(projected.Z))};
+	}
+
+	const v3d &projection_up() const { return projection_frame.up; }
+
 	bool try_set_block_absolute(const Block &block, int x, int y, int z,
 			const std::optional<std::vector<Block>> &maybe_variants = {},
 			const std::optional<std::vector<Block>> &maybe_replacements = {})
@@ -643,6 +700,25 @@ struct WorldEditor
 			const std::optional<std::vector<Block>> &maybe_replacements = {})
 	{
 		(void)try_set_block_absolute(block, x, y, z, maybe_variants, maybe_replacements);
+	}
+
+	// Place feature-local east/up/north coordinates through the active
+	// projection frame. Absolute world writes deliberately remain separate.
+	bool try_set_block_local(const Block &block, double east, double up, double north,
+			const std::optional<std::vector<Block>> &maybe_variants = {},
+			const std::optional<std::vector<Block>> &maybe_replacements = {})
+	{
+		const auto pos = projection_position(east, up, north);
+		return try_set_block_absolute(
+				block, pos.X, pos.Y, pos.Z, maybe_variants, maybe_replacements);
+	}
+
+	void set_block_local(const Block &block, double east, double up, double north,
+			const std::optional<std::vector<Block>> &maybe_variants = {},
+			const std::optional<std::vector<Block>> &maybe_replacements = {})
+	{
+		(void)try_set_block_local(
+				block, east, up, north, maybe_variants, maybe_replacements);
 	}
 
 	void set_block_absolute(const Block &block, int x, int y, int z,
@@ -728,6 +804,15 @@ struct WorldEditor
 								static_cast<ll_t>(osmium::detail::coordinate_precision)});
 		// TODO: scale y
 		return std::make_pair(pos2.X, pos2.Y);
+	}
+
+	// Full projected position for feature anchors. The legacy node_to_xz()
+	// remains available for flat Arnis algorithms that only accept X/Z.
+	inline v3pos_t node_to_position(const auto &node, double altitude = 0.0) const
+	{
+		return mg->ll_to_pos3({static_cast<ll_t>(node.location().lat()),
+									  static_cast<ll_t>(node.location().lon())},
+				altitude);
 	}
 
 	std::pair<int, int> get_min_coords() const

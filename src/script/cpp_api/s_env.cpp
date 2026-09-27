@@ -155,7 +155,7 @@ void ScriptApiEnv::environment_Step(float dtime)
 
 void ScriptApiEnv::player_event(ServerActiveObject *player, const std::string &type)
 {
-	player_events.emplace_back(player, type);
+	player_events.emplace_back(pevent{player, type});
 }
 
 void ScriptApiEnv::player_event_process()
