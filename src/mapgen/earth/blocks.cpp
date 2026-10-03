@@ -18,6 +18,7 @@ Block BIRCH_LEAVES;
 Block BIRCH_LOG;
 Block BLACK_CONCRETE;
 Block BLACKSTONE;
+Block BLUE_ICE;
 Block BLUE_FLOWER;
 Block BLUE_TERRACOTTA;
 Block BRICK;
@@ -103,6 +104,7 @@ Block WATER;
 Block SEAGRASS;
 Block KELP_PLANT;
 Block MAGMA_BLOCK;
+Block OBSIDIAN;
 Block KELP;
 Block TALL_SEAGRASS_BOTTOM;
 Block TALL_SEAGRASS_TOP;
@@ -234,6 +236,7 @@ bool ADVTRAINS_SLOPES_AVAILABLE = false;
 bool ADVTRAINS_GENTLE_SLOPES_AVAILABLE = false;
 bool ADVTRAINS_AVAILABLE = false;
 Block ADV_PLATFORM_HIGH;
+Block CACTUS;
 Block COARSE_DIRT;
 Block IRON_ORE;
 Block COAL_ORE;
@@ -246,8 +249,30 @@ Block CLAY;
 Block DIRT_PATH;
 Block ICE;
 Block PACKED_ICE;
+Block LAVA;
+Block POWDER_SNOW;
+Block AMETHYST_BLOCK;
+Block BUDDING_AMETHYST;
+Block AMETHYST_CLUSTER;
+Block SMALL_AMETHYST_BUD;
+Block MEDIUM_AMETHYST_BUD;
+Block LARGE_AMETHYST_BUD;
+Block DRIPSTONE_BLOCK;
+Block POINTED_DRIPSTONE;
+Block GLOW_LICHEN;
+Block BIG_DRIPLEAF;
+Block BIG_DRIPLEAF_STEM;
+Block SMALL_DRIPLEAF_LOWER;
+Block SMALL_DRIPLEAF_UPPER;
 Block MUD;
 Block DEAD_BUSH;
+Block MYCELIUM;
+Block RED_MUSHROOM;
+Block BROWN_MUSHROOM;
+Block MOSS_CARPET;
+Block SWEET_BERRY_BUSH;
+Block PUMPKIN;
+Block LILY_PAD;
 Block TALL_GRASS_BOTTOM;
 Block SUGAR_CANE;
 Block TALL_GRASS_TOP;
@@ -382,6 +407,22 @@ Block GRAY_CONCRETE_POWDER;
 Block CYAN_TERRACOTTA;
 Block BLACK_WOOL;
 Block LIGHT_GRAY_WALL_BANNER;
+Block CORNFLOWER;
+Block OXEYE_DAISY;
+Block ALLIUM;
+Block LILY_OF_THE_VALLEY;
+Block RED_TULIP;
+Block ORANGE_TULIP;
+Block WHITE_TULIP;
+Block PINK_TULIP;
+Block SUNFLOWER_LOWER;
+Block SUNFLOWER_UPPER;
+Block LILAC_LOWER;
+Block LILAC_UPPER;
+Block ROSE_BUSH_LOWER;
+Block ROSE_BUSH_UPPER;
+Block PEONY_LOWER;
+Block PEONY_UPPER;
 
 Block &SMOOTH_STONE_BLOCK = SMOOTH_STONE;
 }
@@ -435,13 +476,18 @@ void init(MapgenEarth *mg)
 				if (usable(id))
 					return id;
 			}
-			if (names.size() > 0)
-				DUMP("Mapping node alternatives missing or liquid", *names.begin());
+			if (names.size() > 0) {
+				errorstream << "Mapping node alternatives missing or liquid "
+							<< *names.begin() << "\n";
+			}
 			return fallback;
 		}
 	};
 	const NodeResolver g{mg, def};
 	const NodeResolver liquid{mg, def, true};
+	const auto flower = [&](std::initializer_list<const char *> names, Block fallback) {
+		return Block{NodeResolver{mg, fallback.id()}(names)};
+	};
 
 	ACACIA_PLANKS = g({"default:acacia_wood", "default:wood"});
 	AIR = CONTENT_AIR;
@@ -451,6 +497,22 @@ void init(MapgenEarth *mg)
 	BLACK_CONCRETE = g({"wool:black", "basic_materials:concrete_block", "default:stone"});
 	BLACKSTONE = g("default:obsidian");
 	BLUE_FLOWER = g("flowers:geranium");
+	RED_FLOWER = g("flowers:tulip");
+	WHITE_FLOWER = g("flowers:dandelion_white");
+	YELLOW_FLOWER = g("flowers:dandelion_yellow");
+	CORNFLOWER = flower({"mcl_flowers:cornflower", "flowers:cornflower"}, BLUE_FLOWER);
+	OXEYE_DAISY =
+			flower({"mcl_flowers:oxeye_daisy", "flowers:oxeye_daisy"}, WHITE_FLOWER);
+	ALLIUM = flower({"mcl_flowers:allium", "flowers:allium"}, RED_FLOWER);
+	LILY_OF_THE_VALLEY =
+			flower({"mcl_flowers:lily_of_the_valley", "flowers:lily_of_the_valley"},
+					WHITE_FLOWER);
+	RED_TULIP = flower({"mcl_flowers:tulip_red", "flowers:tulip_red"}, RED_FLOWER);
+	ORANGE_TULIP =
+			flower({"mcl_flowers:tulip_orange", "flowers:tulip_orange"}, YELLOW_FLOWER);
+	WHITE_TULIP =
+			flower({"mcl_flowers:tulip_white", "flowers:tulip_white"}, WHITE_FLOWER);
+	PINK_TULIP = flower({"mcl_flowers:tulip_pink", "flowers:tulip_pink"}, RED_FLOWER);
 	BLUE_TERRACOTTA = g("default:clay");
 	BRICK = g("default:brick");
 	CAULDRON = g("default:steelblock");
@@ -514,7 +576,6 @@ void init(MapgenEarth *mg)
 	// default:rail is only a Lua alias in Minetest Game. NodeDefManager lookups do
 	// not reliably resolve item aliases, so prefer the actually registered node.
 	RAIL = g({"carts:rail", "default:rail"});
-	RED_FLOWER = g("flowers:tulip");
 	RED_NETHER_BRICK = g("default:obsidianbrick");
 	RED_TERRACOTTA = g("default:clay");
 	RED_WOOL = g("wool:red");
@@ -542,7 +603,8 @@ void init(MapgenEarth *mg)
 			"default:marram_grass_1", "default:grass_3"});
 	KELP_PLANT = g({"marinara:sand_with_kelp", "default:sand_with_kelp",
 			"default:marram_grass_3", "default:marram_grass_1"});
-	MAGMA_BLOCK = g({"default:obsidian", "default:lava_source", "default:stone"});
+	MAGMA_BLOCK = g({"mcl_nether:magma", "default:obsidian", "default:stone"});
+	OBSIDIAN = g({"mcl_core:obsidian", "default:obsidian", "default:stone"});
 	KELP = KELP_PLANT;
 	TALL_SEAGRASS_BOTTOM = g({"marinara:sand_with_seagrass2", "default:marram_grass_2",
 			"default:marram_grass_1"});
@@ -568,13 +630,11 @@ void init(MapgenEarth *mg)
 	EARTH_FENCE_WROUGHT = g(
 			{"homedecor:fence_wrought_iron_2", "xpanes:bar_flat", "default:steelblock"});
 	WHITE_CONCRETE = g({"wool:white", "basic_materials:concrete_block", "default:stone"});
-	WHITE_FLOWER = g("flowers:dandelion_white");
 	WHITE_STAINED_GLASS = GLASS;
 	WHITE_TERRACOTTA = g("default:clay");
 	WHITE_WOOL = g("wool:white");
 	YELLOW_CONCRETE =
 			g({"wool:yellow", "basic_materials:concrete_block", "default:stone"});
-	YELLOW_FLOWER = g("flowers:dandelion_yellow");
 	YELLOW_WOOL = g("wool:yellow");
 	LIME_CONCRETE = g({"wool:green", "wool:yellow", "basic_materials:concrete_block"});
 	CYAN_WOOL = g("wool:cyan");
@@ -800,6 +860,7 @@ void init(MapgenEarth *mg)
 	ADV_RAIL_DIAGONAL_NW_SE = ADV_RAIL_STRAIGHT_45;
 	ADV_RAIL_DIAGONAL_NW_SE.setParam2(1);
 	ADV_PLATFORM_HIGH = g({"advtrains:platform_high_stonebrick", "default:stonebrick"});
+	CACTUS = g({"default:cactus", "mcl_core:cactus"});
 	COARSE_DIRT = g("default:dry_dirt");
 	IRON_ORE = g("default:stone_with_iron");
 	COAL_ORE = g("default:stone_with_coal");
@@ -814,11 +875,54 @@ void init(MapgenEarth *mg)
 	DIRT_PATH = g("default:dirt_with_grass_footsteps");
 	ICE = g("default:ice");
 	PACKED_ICE = g("default:ice");
+	BLUE_ICE = g({"mcl_core:blue_ice", "default:ice"});
+	LAVA = liquid({"mcl_core:lava_source", "default:lava_source"});
+	POWDER_SNOW = g({"mcl_powder_snow:powder_snow", "mcl_core:snow", "default:snow"});
+	AMETHYST_BLOCK = g({"mcl_amethyst:amethyst_block", "mcl_core:stone"});
+	BUDDING_AMETHYST = g({"mcl_amethyst:budding_amethyst", "mcl_amethyst:amethyst_block",
+			"mcl_core:stone"});
+	AMETHYST_CLUSTER = g({"mcl_amethyst:amethyst_cluster",
+			"mcl_amethyst:large_amethyst_bud", "mcl_core:stone"});
+	SMALL_AMETHYST_BUD = g({"mcl_amethyst:small_amethyst_bud",
+			"mcl_amethyst:amethyst_cluster", "mcl_core:stone"});
+	MEDIUM_AMETHYST_BUD = g({"mcl_amethyst:medium_amethyst_bud",
+			"mcl_amethyst:amethyst_cluster", "mcl_core:stone"});
+	LARGE_AMETHYST_BUD = g({"mcl_amethyst:large_amethyst_bud",
+			"mcl_amethyst:amethyst_cluster", "mcl_core:stone"});
+	DRIPSTONE_BLOCK = g({"mcl_dripstone:dripstone_block", "mcl_core:stone"});
+	POINTED_DRIPSTONE = g({"mcl_dripstone:dripstone_bottom_tip",
+			"mcl_dripstone:dripstone_top_tip", "mcl_core:stone"});
+	GLOW_LICHEN = g({"mcl_core:glow_lichen_down", "mcl_core:glow_lichen_d"});
+	BIG_DRIPLEAF = g({"mcl_lush_caves:big_dripleaf_1", "mcl_core:stone"});
+	BIG_DRIPLEAF_STEM = g({"mcl_lush_caves:big_dripleaf_stem_1",
+			"mcl_lush_caves:big_dripleaf_1", "mcl_core:stone"});
+	SMALL_DRIPLEAF_LOWER = g({"mcl_lush_caves:small_dripleaf_1", "mcl_core:stone"});
+	SMALL_DRIPLEAF_UPPER = g({"mcl_lush_caves:small_dripleaf_2",
+			"mcl_lush_caves:small_dripleaf_1", "mcl_core:stone"});
 	MUD = g("default:dirt");
 	DEAD_BUSH = g("default:dry_shrub");
+	MYCELIUM = g({"default:mycelium", "mcl_core:mycelium"});
+	RED_MUSHROOM = g({"flowers:mushroom_red", "mcl_mushrooms:red_mushroom"});
+	BROWN_MUSHROOM = g({"flowers:mushroom_brown", "mcl_mushrooms:brown_mushroom"});
+	MOSS_CARPET = g({"default:moss", "mcl_moss:moss_carpet"});
+	SWEET_BERRY_BUSH = g({"farming:strawberry", "mcl_sweet_berry:bush"});
+	PUMPKIN = g({"farming:pumpkin", "mcl_farming:pumpkin"});
+	LILY_PAD = g({"flowers:waterlily", "mcl_flowers:waterlily"});
 	TALL_GRASS_BOTTOM = g("default:grass_5");
 	SUGAR_CANE = g({"farming:cotton_8", "default:papyrus", "default:grass_5"});
 	TALL_GRASS_TOP = g("default:grass_5");
+	SUNFLOWER_LOWER =
+			flower({"mcl_flowers:sunflower", "flowers:sunflower"}, TALL_GRASS_BOTTOM);
+	SUNFLOWER_UPPER = flower(
+			{"mcl_flowers:sunflower_top", "flowers:sunflower_top"}, TALL_GRASS_TOP);
+	LILAC_LOWER = flower({"mcl_flowers:lilac", "flowers:lilac"}, TALL_GRASS_BOTTOM);
+	LILAC_UPPER = flower({"mcl_flowers:lilac_top", "flowers:lilac_top"}, TALL_GRASS_TOP);
+	ROSE_BUSH_LOWER =
+			flower({"mcl_flowers:rose_bush", "flowers:rose_bush"}, TALL_GRASS_BOTTOM);
+	ROSE_BUSH_UPPER = flower(
+			{"mcl_flowers:rose_bush_top", "flowers:rose_bush_top"}, TALL_GRASS_TOP);
+	PEONY_LOWER = flower({"mcl_flowers:peony", "flowers:peony"}, TALL_GRASS_BOTTOM);
+	PEONY_UPPER = flower({"mcl_flowers:peony_top", "flowers:peony_top"}, TALL_GRASS_TOP);
 	CRAFTING_TABLE = g("default:wood");
 	FURNACE = g("default:furnace");
 	WHITE_CARPET = g("wool:white");
