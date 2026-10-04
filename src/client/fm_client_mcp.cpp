@@ -24,6 +24,8 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "config.h"
 #if USE_CLIENT_MCP
 
+#include <boost/asio/ip/address.hpp>
+#include <boost/asio/post.hpp>
 #include <websocketpp/http/constants.hpp>
 
 #include "chat.h"
@@ -1182,7 +1184,7 @@ void Client::handleMCPMessage(mcp_ws_server_t::connection_ptr connection,
 						ClientActiveObject *object = entry.obj.get();
 						if (!object || object->isLocalPlayer())
 							continue;
-						const v3f pos = object->getPosition() / BS;
+						const auto pos = object->getPosition() / BS;
 						const v3f velocity = object->getVelocity() / BS;
 						Json::Value item;
 						item["id"] = object->getId();
@@ -1215,7 +1217,7 @@ void Client::handleMCPMessage(mcp_ws_server_t::connection_ptr connection,
 							status["success"] = false;
 							status["error"] = "Object is no longer available";
 						} else {
-							const v3f position = object->getPosition();
+							const auto position = object->getPosition();
 							const v3f normal(0.0f, 1.0f, 0.0f);
 							const f32 distance_sq =
 									player ? player->getPosition().getDistanceFromSQ(
@@ -1245,7 +1247,7 @@ void Client::handleMCPMessage(mcp_ws_server_t::connection_ptr connection,
 					status["success"] = false;
 					status["error"] = "Object is no longer available";
 				} else {
-					const v3f position = object->getPosition();
+					const auto position = object->getPosition();
 					const v3f normal(0.0f, 1.0f, 0.0f);
 					const f32 distance_sq =
 							player ? player->getPosition().getDistanceFromSQ(position)
@@ -1284,18 +1286,19 @@ void Client::sendMCPResponse(mcp_ws_server_t::connection_ptr connection,
 {
 	auto payload = std::make_shared<std::string>(
 			Json::writeString(Json::StreamWriterBuilder(), response));
-	m_mcp_http_server.get_io_context().post([connection, payload, session_id]() {
-		websocketpp::lib::error_code ec;
-		connection->append_header("Content-Type", "application/json");
-		if (!session_id.empty())
-			connection->append_header("Mcp-Session-Id", session_id);
-		connection->set_body(*payload);
-		connection->set_status(websocketpp::http::status_code::ok);
-		connection->send_http_response(ec);
-		if (ec)
-			verbosestream << "Failed to send MCP Streamable HTTP response: "
-						  << ec.message() << std::endl;
-	});
+	boost::asio::post(
+			m_mcp_http_server.get_io_context(), [connection, payload, session_id]() {
+				websocketpp::lib::error_code ec;
+				connection->append_header("Content-Type", "application/json");
+				if (!session_id.empty())
+					connection->append_header("Mcp-Session-Id", session_id);
+				connection->set_body(*payload);
+				connection->set_status(websocketpp::http::status_code::ok);
+				connection->send_http_response(ec);
+				if (ec)
+					verbosestream << "Failed to send MCP Streamable HTTP response: "
+								  << ec.message() << std::endl;
+			});
 }
 
 void Client::processMCPRequests()
@@ -1561,7 +1564,7 @@ void Client::startMCPStreamableHttpServer(int port)
 
 		websocketpp::lib::error_code ec;
 		websocketpp::lib::asio::ip::tcp::endpoint endpoint(
-				websocketpp::lib::asio::ip::address::from_string("127.0.0.1"), port);
+				boost::asio::ip::make_address("127.0.0.1"), port);
 		m_mcp_http_server.listen(endpoint, ec);
 		if (ec) {
 			errorstream << "Failed to bind MCP Streamable HTTP server to port " << port
