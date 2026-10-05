@@ -30,6 +30,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <limits>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <tuple>
@@ -1349,10 +1350,9 @@ void MapgenEarth::generateBuildings()
 					verbosestream << "Extracting " << bbox << "\n";
 					CommandExtract extract{{}};
 					const std::vector<std::string> arguments{"--output-format", "pbf",
-							"--strategy", "smart", "--option", "types=any",
-							"--option", "complete-partial-relations=0",
-							"--bbox",
-							bbox, "--output", temporary, path_name};
+							"--strategy", "smart", "--option", "types=any", "--option",
+							"complete-partial-relations=0", "--bbox", bbox, "--output",
+							temporary, path_name};
 					extract.setup(arguments);
 					extract.run();
 				}
@@ -1375,7 +1375,12 @@ void MapgenEarth::generateBuildings()
 				return !error_code.value();
 			};
 
-			for (auto div = 10; div <= 10000; div *= 10) {
+			// A 0.01-degree extract is large enough to cover adjacent mapgen
+			// chunks (including the authored-geometry halo) while remaining a
+			// practical unit to parse and retain once. hdl shares its immutable
+			// parsed elements and flood fills for every chunk that resolves to this
+			// same extract path. Only edge-crossing chunks need the exact bbox.
+			for (auto div = 10; div <= 100; div *= 10) {
 				std::error_code ec;
 				// const auto size = std::filesystem::file_size(use_file, ec);
 				if (ec) {
@@ -1393,11 +1398,10 @@ void MapgenEarth::generateBuildings()
 
 				if (!(bb_start.lat <= coord_min.lat && bb_start.lon <= coord_min.lon &&
 							bb_end.lat >= coord_max.lat && bb_end.lon >= coord_max.lon)) {
-
-					const auto bbox_exact = bbox_to_string(coord_min, coord_max);
-					const auto filename_exact = bbox_to_filename(bbox_exact, 100000);
-					filename_next = filename_exact;
-					bbox_next = bbox_exact;
+					// Keep the last covering aligned extract. A chunk crossing a
+					// 0.01-degree boundary can still share its 0.1-degree parent tile
+					// with neighboring chunks.
+					continue;
 				}
 
 				if (!try_extract(use_file, bbox_next, filename_next)) {
@@ -1410,6 +1414,17 @@ void MapgenEarth::generateBuildings()
 
 				use_file = filename_next;
 				bbox = bbox_next;
+			}
+
+			// Only chunks crossing the coarsest aligned boundary need an exact
+			// extract. Do this once, after trying all reusable tile sizes.
+			if (bbox.empty()) {
+				bbox = bbox_to_string(coord_min, coord_max);
+				const auto filename_exact =
+						folder + DIR_DELIM + "extract.100000." + bbox + ".osm.pbf";
+				if (!try_extract(use_file, bbox, filename_exact))
+					throw std::runtime_error("failed to extract OSM chunk " + bbox);
+				use_file = filename_exact;
 			}
 		}
 
