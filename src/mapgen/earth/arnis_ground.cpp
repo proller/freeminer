@@ -1,7 +1,333 @@
 #include "arnis_ground.h"
 
+#include "arnis-cpp/src/cache_root.h"
+#include "arnis-cpp/src/block_definitions.h"
+#include "arnis-cpp/src/climate.h"
+#include "arnis-cpp/src/elevation/planetary.h"
+#include "arnis-cpp/src/elevation/selector.h"
+#include "arnis-cpp/src/coordinate_system/transformation.h"
+#include "arnis-cpp/src/fm_ecoregion_cache.h"
+#include "arnis-cpp/src/grid_ops.h"
+#include "arnis-cpp/src/water_depth.h"
+#include "arnis-cpp/src/world_editor/floor_state.h"
+
+#include <future>
+#include <iostream>
+#include <stdexcept>
+
 namespace arnis
 {
+
+int extended_min_y_for(const Args &args)
+{
+	if (args.disable_height_limit && !args.bedrock && !args.luanti)
+		return -2032;
+	return world_editor::DEFAULT_MIN_Y;
+}
+
+int extended_max_y_for(const Args &args)
+{
+	if (args.bedrock)
+		return 512;
+	if (args.luanti)
+		return world_editor::DEFAULT_MAX_Y;
+	return 2031;
+}
+
+int min_ground_level_for(const Args &args)
+{
+	const int floor = extended_min_y_for(args);
+	return floor >= world_editor::DEFAULT_MIN_Y ? args.ground_level : floor + 2;
+}
+
+Ground generate_ground_data(const Args &args, const geographic::LLBBox &bbox,
+		const std::filesystem::path &cache_base)
+{
+	return generate_ground_data(
+			args, bbox, GroundFrame::from_args(args, bbox), cache_base);
+}
+
+GroundFrame GroundFrame::local()
+{
+	return {};
+}
+
+GroundFrame GroundFrame::from_args(const Args &args, const geographic::LLBBox &bbox)
+{
+	if (args.one_world_run) {
+		elevation::AffinePolicy policy = elevation::AffinePolicy::fit_with_headroom();
+		if (args.one_world_run->elevation) {
+			const auto &stored = *args.one_world_run->elevation;
+			std::optional<elevation::SoftTop> soft_top;
+			if (stored.soft_top)
+				soft_top = elevation::SoftTop{
+						stored.soft_top->knee_m, stored.soft_top->width_blocks};
+			policy = elevation::AffinePolicy::fixed_mapping({stored.min_height_m,
+					stored.blocks_per_meter, stored.ground_level, soft_top});
+		}
+		const auto origin = std::pair<double, double>{
+				args.one_world_run->origin_lat, args.one_world_run->origin_lon};
+		return projected(bbox, args.scale, one_world::ground_pad_blocks(args.scale),
+				policy, origin, origin);
+	}
+	if (args.projection == projection::ProjectionKind::Local)
+		return local();
+	return projected(bbox, args.scale);
+}
+
+GroundFrame GroundFrame::projected(const geographic::LLBBox &bbox, double scale,
+		std::size_t pad, const elevation::AffinePolicy &policy,
+		std::optional<std::pair<double, double>> anchor,
+		std::optional<std::pair<double, double>> projection_origin)
+{
+	const auto [transformer, rect] =
+			projection_origin
+					? coordinate_system::CoordTransformer::with_web_mercator(bbox, scale,
+							  projection_origin->first, projection_origin->second)
+					: coordinate_system::CoordTransformer::with_web_mercator(bbox, scale);
+	(void)transformer;
+	GroundFrame frame;
+	frame.world_dims = std::pair<std::size_t, std::size_t>{
+			static_cast<std::size_t>(rect.total_blocks_x()),
+			static_cast<std::size_t>(rect.total_blocks_z())};
+	const auto origin = projection_origin.value_or(
+			std::pair<double, double>{(bbox.min().lat() + bbox.max().lat()) * 0.5,
+					(bbox.min().lng() + bbox.max().lng()) * 0.5});
+	frame.mercator.emplace(origin.first, origin.second, scale);
+	frame.pad_blocks = pad;
+	frame.affine = policy;
+	frame.climate_anchor = std::move(anchor);
+	return frame;
+}
+
+double GroundFrame::anchor_lat(const geographic::LLBBox &bbox) const
+{
+	return climate_anchor ? climate_anchor->first
+						  : (bbox.min().lat() + bbox.max().lat()) * 0.5;
+}
+
+std::optional<ecoregion::EcoMap> GroundFrame::ecoregions(const geographic::LLBBox &bbox,
+		std::size_t world_width, std::size_t world_height) const
+{
+	if (!ecoregion::generation_map().map || !world_width || !world_height)
+		return std::nullopt;
+	if (mercator) {
+		const int x0 =
+				projection::snap_edge(mercator->x_for_lon(bbox.min().lng()), false);
+		const int z0 =
+				projection::snap_edge(mercator->z_for_lat(bbox.max().lat()), false);
+		return ecoregion::EcoMap::build(world_width, world_height, {x0, z0},
+				[projection = *mercator, x0, z0](double gx, double gz) {
+					return std::pair<double, double>{
+							projection.lat_for_z(z0 + gz), projection.lon_for_x(x0 + gx)};
+				});
+	}
+	const double top = bbox.max().lat(), left = bbox.min().lng();
+	const double dlat = top - bbox.min().lat();
+	const double dlon = bbox.max().lng() - left;
+	return ecoregion::EcoMap::build(world_width, world_height, {0, 0},
+			[top, left, dlat, dlon, world_width, world_height](double gx, double gz) {
+				return std::pair<double, double>{top - gz / double(world_height) * dlat,
+						left + gx / double(world_width) * dlon};
+			});
+}
+
+GroundFetchPlan GroundFrame::fetch_plan(
+		const geographic::LLBBox &bbox, double scale) const
+{
+	if (!world_dims) {
+		const auto dims = elevation::compute_grid_dims(bbox, scale);
+		return {bbox, dims, 0, {std::get<0>(dims), std::get<1>(dims)}};
+	}
+	const auto [world_width, world_height] = *world_dims;
+	if (pad_blocks <= (std::numeric_limits<std::size_t>::max() - world_width) / 2 &&
+			pad_blocks <= (std::numeric_limits<std::size_t>::max() - world_height) / 2) {
+		const auto padded_width = world_width + 2 * pad_blocks;
+		const auto padded_height = world_height + 2 * pad_blocks;
+		const auto padded_dims =
+				elevation::compute_grid_dims_for_world(padded_width, padded_height);
+		if (mercator && std::get<2>(padded_dims) == padded_width &&
+				std::get<3>(padded_dims) == padded_height) {
+			const double x0 =
+					projection::snap_edge(mercator->x_for_lon(bbox.min().lng()), false) -
+					double(pad_blocks) + 0.5;
+			const double z0 =
+					projection::snap_edge(mercator->z_for_lat(bbox.max().lat()), false) -
+					double(pad_blocks) + 0.5;
+			const double x1 = x0 + double(padded_width - 1);
+			const double z1 = z0 + double(padded_height - 1);
+			const geographic::LLBBox centers(mercator->lat_for_z(z1),
+					mercator->lon_for_x(x0), mercator->lat_for_z(z0),
+					mercator->lon_for_x(x1));
+			return {centers, padded_dims, pad_blocks, {world_width, world_height}};
+		}
+	}
+	const auto dims = elevation::compute_grid_dims_for_world(world_width, world_height);
+	return {bbox, dims, 0, {world_width, world_height}};
+}
+
+Ground generate_ground_data(const Args &args, const geographic::LLBBox &bbox,
+		const GroundFrame &frame, const std::filesystem::path &cache_base)
+{
+	if (!args.valid())
+		throw std::invalid_argument("invalid Arnis ground-generation options");
+	world_editor::set_terrain_top_y(args.ground_level);
+
+	const auto plan = frame.fetch_plan(bbox, args.scale);
+	const auto &fetch_bbox = plan.bbox;
+	const auto [world_width, world_height, grid_width, grid_height] = plan.dims;
+	const auto [final_width, final_height] = plan.final_dims;
+	const auto pad = plan.pad_blocks;
+	const auto bounds = land_cover::GeographicBounds{fetch_bbox.min().lat(),
+			fetch_bbox.min().lng(), fetch_bbox.max().lat(), fetch_bbox.max().lng()};
+	const auto canopy_root = cache_base.empty() ? cache::provider_cache_root("canopy")
+												: cache_base / "canopy";
+	const auto elevation_root = cache_base.empty()
+										? cache::provider_cache_root("elevation")
+										: cache_base / "elevation";
+
+	Ground ground = Ground::new_flat(args.ground_level);
+	ground.set_celestial_body(args.body);
+	ground.set_extended_ceiling(args.disable_height_limit &&
+								extended_max_y_for(args) > world_editor::DEFAULT_MAX_Y);
+	const auto climate_anchor = frame.climate_anchor.value_or(
+			std::pair<double, double>{(bbox.min().lat() + bbox.max().lat()) * 0.5,
+					(bbox.min().lng() + bbox.max().lng()) * 0.5});
+	ground.set_climate(climate::classify(climate_anchor.first, climate_anchor.second));
+
+	const bool earth = is_earth(args.body);
+	std::future<std::optional<canopy::CanopyData>> canopy_job;
+	if (earth && args.canopy_height) {
+		canopy_job = std::async(std::launch::async, [&]() {
+			return canopy::fetch_canopy_data(canopy_root, bounds.min_lat, bounds.min_lng,
+					bounds.max_lat, bounds.max_lng, grid_width, grid_height);
+		});
+	}
+
+	std::optional<land_cover::LandCoverData> cover;
+	if (earth) {
+		auto fetched = land_cover::fetch_land_cover_data(bounds, grid_width, grid_height);
+		if (fetched.width && fetched.height)
+			cover = std::move(fetched);
+	}
+
+	bool elevation_ready = !args.terrain_enabled();
+	std::optional<int> elevation_lowest_y;
+	if (args.terrain_enabled()) {
+		try {
+			const int max_carve_depth =
+					cover ? water_depth::estimate_max_carve_depth(
+									cover->grid, world_width, world_height)
+						  : 0;
+			const int carve_floor = world_editor::min_y() + max_carve_depth + 2;
+			const int water_floor = std::max(args.ground_level, carve_floor);
+			const int sink_floor = std::max(min_ground_level_for(args), carve_floor);
+			const int max_y = extended_max_y_for(args);
+			elevation::ProcessedElevationData processed;
+			if (earth) {
+				elevation::Selector selector(elevation_root,
+						args.aws_only_elevation
+								? elevation::providers::SourceMode::AwsOnly
+								: elevation::providers::SourceMode::Auto);
+				processed = elevation::fetch_elevation_data(selector, fetch_bbox,
+						world_width, world_height, grid_width, grid_height, args.scale,
+						args.height_multiplier, water_floor, sink_floor,
+						args.disable_height_limit, max_y, true, cover ? &*cover : nullptr,
+						frame.affine);
+			} else {
+				auto raw = elevation::fetch_planetary_elevation(args.body, fetch_bbox,
+						grid_width, grid_height, elevation::http_planetary_range_reader(),
+						elevation_root);
+				if (!raw)
+					throw std::runtime_error(
+							"planetary elevation provider returned no data");
+				raw->world_width = world_width;
+				raw->world_height = world_height;
+				processed = elevation::process_elevation_data(fetch_bbox, std::move(*raw),
+						args.scale, args.height_multiplier, water_floor, sink_floor,
+						args.disable_height_limit, max_y, false, nullptr, frame.affine);
+			}
+			if (frame.mercator) {
+				const auto source = [&](std::size_t z) {
+					return grid_ops::mercator_source_row(fetch_bbox.max().lat(),
+							fetch_bbox.min().lat(), processed.heights.size(), z);
+				};
+				const auto lerp = [](float a, float b, double t) {
+					return static_cast<float>(double(a) * (1.0 - t) + double(b) * t);
+				};
+				grid_ops::remap_rows_in_place(processed.heights, source, lerp);
+				if (cover)
+					cover->remap_rows_to_mercator(
+							fetch_bbox.max().lat(), fetch_bbox.min().lat());
+			}
+			if (pad) {
+				grid_ops::crop_rows(
+						processed.heights, pad, pad, final_width, final_height);
+				processed.width =
+						processed.heights.empty() ? 0 : processed.heights.front().size();
+				processed.height = processed.heights.size();
+				processed.world_width = final_width;
+				processed.world_height = final_height;
+				if (cover)
+					cover->crop(pad, pad, final_width, final_height);
+			}
+			elevation_lowest_y = processed.lowest_y();
+			ground.set_elevation_data(processed, frame.anchor_lat(bbox));
+			elevation_ready = true;
+		} catch (const std::exception &e) {
+			std::cerr << "Failed to fetch elevation data: " << e.what()
+					  << "; using flat ground.\n";
+			ground = Ground::new_flat(args.ground_level);
+			ground.set_celestial_body(args.body);
+			ground.set_climate(
+					climate::classify(climate_anchor.first, climate_anchor.second));
+			cover.reset();
+		}
+	} else {
+		ground.set_ground_level(args.ground_level);
+		ground.set_world_dims(final_width, final_height);
+		if (cover && frame.mercator)
+			cover->remap_rows_to_mercator(fetch_bbox.max().lat(), fetch_bbox.min().lat());
+		if (cover && pad)
+			cover->crop(pad, pad, final_width, final_height);
+	}
+
+	if (cover && elevation_ready)
+		ground.set_land_cover_data(std::move(*cover), final_width, final_height);
+	if (canopy_job.valid()) {
+		try {
+			auto canopy_result = canopy_job.get();
+			if (canopy_result && frame.mercator)
+				canopy_result->remap_rows_to_mercator(
+						fetch_bbox.max().lat(), fetch_bbox.min().lat());
+			if (canopy_result && pad)
+				canopy_result->crop(pad, pad, final_width, final_height);
+			if (elevation_ready && canopy_result)
+				ground.set_canopy_data(
+						std::move(*canopy_result), final_width, final_height);
+		} catch (const std::exception &e) {
+			std::clog << "Canopy data unavailable: " << e.what() << '\n';
+		}
+	}
+	if (earth)
+		if (auto map = frame.ecoregions(bbox, final_width, final_height))
+			ground.set_ecoregion_map(std::move(*map));
+	int base = ground.base_level(args.ground_level);
+	if (args.one_world_run && args.disable_height_limit && ground.elevation_enabled) {
+		// Rust's area_floor_for follows the actual lowest block in this
+		// generated area rather than the affine reference plane.
+		if (elevation_lowest_y)
+			base = *elevation_lowest_y;
+	}
+	world_editor::set_base_chunk_y(base);
+	world_editor::set_terrain_floor_y(base);
+	using namespace block_definitions;
+	const Block filler = args.body == CelestialBody::Moon	? ANDESITE
+						 : args.body == CelestialBody::Mars ? RED_TERRACOTTA
+															: GRASS_BLOCK;
+	world_editor::set_base_chunk_block_id(static_cast<std::uint16_t>(filler.id()));
+	return ground;
+}
 
 std::optional<int> Ground::min_level(const std::vector<XZPoint> &points) const
 {
@@ -175,7 +501,13 @@ bool Ground::has_canopy() const
 
 std::optional<ecoregion::Ecoregion> Ground::ecoregion_at(const XZPoint &coord) const
 {
-	if (!ecoregion_map || !mg)
+	if (!ecoregion_map)
+		return std::nullopt;
+	if (ecoregion_map->is_local()) {
+		const auto [align_x, align_z] = ecoregion_map->alignment();
+		return ecoregion_map->at({coord.x + align_x, coord.z + align_z});
+	}
+	if (!mg)
 		return std::nullopt;
 	const auto [lat, lon] = mg->pos_to_ll(coord.X, coord.Y);
 	const auto id = ecoregion_map->id_at(lat, lon);
@@ -333,6 +665,20 @@ void Ground::set_elevation_data(const std::vector<std::vector<double>> &heights,
 	elevation_world_height = world_height ? world_height : height;
 	elevation_enabled = !elevation_grid.empty();
 }
+
+void Ground::set_elevation_data(
+		const elevation::ProcessedElevationData &data, double latitude_for_snow_line)
+{
+	set_elevation_data(
+			data.heights, data.width, data.height, data.world_width, data.world_height);
+	std::optional<ElevationSoftTop> top;
+	if (data.soft_top)
+		top = ElevationSoftTop{data.soft_top->knee_m, data.soft_top->width_blocks};
+	set_elevation_metadata(data.min_height_m, data.blocks_per_meter, snow_threshold_y,
+			data.ground_level, data.slope_correction, top);
+	set_snow_line_for_latitude(latitude_for_snow_line);
+}
+
 void Ground::clear_elevation_data()
 {
 	elevation_grid.clear();

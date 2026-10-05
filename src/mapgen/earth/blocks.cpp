@@ -497,23 +497,40 @@ void init(MapgenEarth *mg)
 	BIRCH_LOG = g({"default:aspen_tree", "default:tree"});
 	BLACK_CONCRETE = g({"wool:black", "basic_materials:concrete_block", "default:stone"});
 	BLACKSTONE = g("default:obsidian");
-	BLUE_FLOWER = g("flowers:geranium");
-	RED_FLOWER = g("flowers:tulip");
-	WHITE_FLOWER = g("flowers:dandelion_white");
-	YELLOW_FLOWER = g("flowers:dandelion_yellow");
-	CORNFLOWER = flower({"mcl_flowers:cornflower", "flowers:cornflower"}, BLUE_FLOWER);
-	OXEYE_DAISY =
-			flower({"mcl_flowers:oxeye_daisy", "flowers:oxeye_daisy"}, WHITE_FLOWER);
-	ALLIUM = flower({"mcl_flowers:allium", "flowers:allium"}, RED_FLOWER);
+	BLUE_FLOWER = g({"flowers:geranium", "mcl_flowers:blue_orchid",
+			"mcl_flowers:azure_bluet", "default:grass_3"});
+	RED_FLOWER = g({"flowers:tulip", "mcl_flowers:poppy", "default:grass_3"});
+	WHITE_FLOWER = g({"flowers:dandelion_white", "mcl_flowers:dandelion",
+			"mcl_flowers:azure_bluet", "default:grass_3"});
+	YELLOW_FLOWER =
+			g({"flowers:dandelion_yellow", "mcl_flowers:dandelion", "default:grass_3"});
+	CORNFLOWER = flower(
+			{"mcl_flowers:cornflower", "flowers:cornflower", "mcl_flowers:blue_orchid",
+					"flowers:geranium", "default:grass_3"},
+			BLUE_FLOWER);
+	OXEYE_DAISY = flower(
+			{"mcl_flowers:oxeye_daisy", "flowers:oxeye_daisy", "mcl_flowers:azure_bluet",
+					"flowers:dandelion_white", "default:grass_3"},
+			WHITE_FLOWER);
+	ALLIUM = flower({"mcl_flowers:allium", "flowers:allium", "mcl_flowers:poppy",
+							"flowers:tulip", "default:grass_3"},
+			RED_FLOWER);
 	LILY_OF_THE_VALLEY =
-			flower({"mcl_flowers:lily_of_the_valley", "flowers:lily_of_the_valley"},
+			flower({"mcl_flowers:lily_of_the_valley", "flowers:lily_of_the_valley",
+						   "mcl_flowers:azure_bluet", "default:grass_3"},
 					WHITE_FLOWER);
-	RED_TULIP = flower({"mcl_flowers:tulip_red", "flowers:tulip_red"}, RED_FLOWER);
-	ORANGE_TULIP =
-			flower({"mcl_flowers:tulip_orange", "flowers:tulip_orange"}, YELLOW_FLOWER);
-	WHITE_TULIP =
-			flower({"mcl_flowers:tulip_white", "flowers:tulip_white"}, WHITE_FLOWER);
-	PINK_TULIP = flower({"mcl_flowers:tulip_pink", "flowers:tulip_pink"}, RED_FLOWER);
+	RED_TULIP = flower({"mcl_flowers:tulip_red", "flowers:tulip_red", "flowers:tulip",
+							   "default:grass_3"},
+			RED_FLOWER);
+	ORANGE_TULIP = flower({"mcl_flowers:tulip_orange", "flowers:tulip_orange",
+								  "flowers:tulip", "default:grass_3"},
+			YELLOW_FLOWER);
+	WHITE_TULIP = flower({"mcl_flowers:tulip_white", "flowers:tulip_white",
+								 "flowers:tulip", "default:grass_3"},
+			WHITE_FLOWER);
+	PINK_TULIP = flower({"mcl_flowers:tulip_pink", "flowers:tulip_pink", "flowers:tulip",
+								"default:grass_3"},
+			RED_FLOWER);
 	BLUE_TERRACOTTA = g("default:clay");
 	BRICK = g("default:brick");
 	CAULDRON = g("default:steelblock");
@@ -528,16 +545,16 @@ void init(MapgenEarth *mg)
 	DARK_OAK_PLANKS = g({"default:wood", "default:junglewood"});
 	DEEPSLATE_BRICKS = g("default:stonebrick");
 	DIORITE = g("default:stone");
-	DIRT = g("default:dirt");
+	DIRT = g({"default:dirt", "mcl_core:dirt"});
 	END_STONE_BRICKS = g("default:stonebrick");
-	END_STONE = g("default:endstone");
-	FARMLAND = g("default:dirt");
+	END_STONE = g({"default:endstone", "mcl_end:end_stone"});
+	FARMLAND = g({"default:dirt", "mcl_farming:soil", "mcl_core:dirt"});
 	GLASS = g("default:glass");
 	GLOWSTONE = g("default:meselamp");
 	GRANITE = g("default:stone");
 	GRASS_BLOCK = g("default:grass_5");
 	GRASS = g("default:grass_3");
-	GRAVEL = g("default:gravel");
+	GRAVEL = g({"default:gravel", "mcl_core:gravel"});
 	GRAY_CONCRETE = g({"basic_materials:concrete_block", "wool:grey", "default:stone"});
 	GRAY_TERRACOTTA = g("default:clay");
 	GREEN_STAINED_HARDENED_CLAY = g("default:clay");
@@ -580,7 +597,7 @@ void init(MapgenEarth *mg)
 	RED_NETHER_BRICK = g("default:obsidianbrick");
 	RED_TERRACOTTA = g("default:clay");
 	RED_WOOL = g("wool:red");
-	SAND = g("default:sand");
+	SAND = g({"default:sand", "mcl_core:sand"});
 	SANDSTONE = g("default:sandstone");
 	SCAFFOLDING = g("default:ladder_steel");
 	SMOOTH_QUARTZ = g("default:stone");
@@ -613,7 +630,8 @@ void init(MapgenEarth *mg)
 			g({"marinara:seagrass2", "default:marram_grass_3", "default:marram_grass_1"});
 	SEA_PICKLE = g({"marinara:seaanemone_tentacle", "marinara:hardcoral_green",
 			"default:coral_green", "default:coral_cyan", "default:coral_skeleton"});
-	SOUL_SAND = g({"default:desert_sand", "default:sand"});
+	SOUL_SAND = g({"default:desert_sand", "mcl_nether:soul_sand", "mcl_core:redsand",
+			"default:sand", "mcl_core:sand"});
 	EARTH_BENCH = g({"homedecor:simple_bench", "stairs:slab_wood", "default:wood"});
 	EARTH_TRASH_CAN =
 			g({"homedecor:trash_can", "pipeworks:trashcan", "default:steelblock"});
@@ -732,7 +750,8 @@ void init(MapgenEarth *mg)
 	DECAL_FRAME = g({"freeminer:arnis_decal_frame", "air"});
 	ANDESITE_WALL = g({"walls:cobble", "default:stone"});
 	STONE_BRICK_WALL = g("default:stonebrick");
-	CARROTS = g("farming:carrot_4");
+	CARROTS = g({"farming:carrot_4", "mcl_farming:carrot_7", "mcl_farming:carrot_4",
+			"default:grass_5"});
 	DARK_OAK_DOOR_LOWER = g("doors:door_wood_a");
 	DARK_OAK_DOOR_UPPER = g("doors:door_wood_b");
 	DARK_OAK_LOG = g({"default:tree", "default:jungletree"});
@@ -741,8 +760,10 @@ void init(MapgenEarth *mg)
 	JUNGLE_LEAVES = g({"default:jungleleaves", "default:leaves"});
 	ACACIA_LOG = g({"default:acacia_tree", "default:tree"});
 	ACACIA_LEAVES = g({"default:acacia_leaves", "default:leaves"});
-	POTATOES = g("farming:potato_4");
-	WHEAT = g("farming:wheat_4");
+	POTATOES = g({"farming:potato_4", "mcl_farming:potato_7", "mcl_farming:potato_4",
+			"default:grass_5"});
+	WHEAT = g({"farming:wheat_4", "mcl_farming:wheat_7", "mcl_farming:wheat_4",
+			"default:grass_5"});
 	BEDROCK = g("default:obsidian");
 	RAIL_NORTH_SOUTH = RAIL;
 	RAIL_EAST_WEST = RAIL;
@@ -879,51 +900,75 @@ void init(MapgenEarth *mg)
 	BLUE_ICE = g({"mcl_core:blue_ice", "default:ice"});
 	LAVA = liquid({"mcl_core:lava_source", "default:lava_source"});
 	POWDER_SNOW = g({"mcl_powder_snow:powder_snow", "mcl_core:snow", "default:snow"});
-	AMETHYST_BLOCK = g({"mcl_amethyst:amethyst_block", "mcl_core:stone"});
-	BUDDING_AMETHYST = g({"mcl_amethyst:budding_amethyst", "mcl_amethyst:amethyst_block",
-			"mcl_core:stone"});
+	AMETHYST_BLOCK =
+			g({"mcl_amethyst:amethyst_block", "default:stone", "mcl_core:stone"});
+	BUDDING_AMETHYST =
+			g({"mcl_amethyst:budding_amethyst_block", "mcl_amethyst:budding_amethyst",
+					"mcl_amethyst:amethyst_block", "default:stone", "mcl_core:stone"});
 	AMETHYST_CLUSTER = g({"mcl_amethyst:amethyst_cluster",
-			"mcl_amethyst:large_amethyst_bud", "mcl_core:stone"});
+			"mcl_amethyst:large_amethyst_bud", "default:stone", "mcl_core:stone"});
 	SMALL_AMETHYST_BUD = g({"mcl_amethyst:small_amethyst_bud",
-			"mcl_amethyst:amethyst_cluster", "mcl_core:stone"});
+			"mcl_amethyst:amethyst_cluster", "default:stone", "mcl_core:stone"});
 	MEDIUM_AMETHYST_BUD = g({"mcl_amethyst:medium_amethyst_bud",
-			"mcl_amethyst:amethyst_cluster", "mcl_core:stone"});
+			"mcl_amethyst:amethyst_cluster", "default:stone", "mcl_core:stone"});
 	LARGE_AMETHYST_BUD = g({"mcl_amethyst:large_amethyst_bud",
-			"mcl_amethyst:amethyst_cluster", "mcl_core:stone"});
-	DRIPSTONE_BLOCK = g({"mcl_dripstone:dripstone_block", "mcl_core:stone"});
+			"mcl_amethyst:amethyst_cluster", "default:stone", "mcl_core:stone"});
+	DRIPSTONE_BLOCK =
+			g({"mcl_dripstone:dripstone_block", "default:stone", "mcl_core:stone"});
 	POINTED_DRIPSTONE = g({"mcl_dripstone:dripstone_bottom_tip",
-			"mcl_dripstone:dripstone_top_tip", "mcl_core:stone"});
-	GLOW_LICHEN = g({"mcl_core:glow_lichen_down", "mcl_core:glow_lichen_d"});
-	BIG_DRIPLEAF = g({"mcl_lush_caves:big_dripleaf_1", "mcl_core:stone"});
+			"mcl_dripstone:dripstone_top_tip", "default:stone", "mcl_core:stone"});
+	GLOW_LICHEN = g({"mcl_core:glow_lichen_down", "mcl_core:glow_lichen_d",
+			"default:coral_green", "default:coral_cyan"});
+	BIG_DRIPLEAF = g({"mcl_lush_caves:big_dripleaf_1", "mcl_flowers:double_grass",
+			"default:grass_5", "default:stone"});
 	BIG_DRIPLEAF_STEM = g({"mcl_lush_caves:big_dripleaf_stem_1",
-			"mcl_lush_caves:big_dripleaf_1", "mcl_core:stone"});
-	SMALL_DRIPLEAF_LOWER = g({"mcl_lush_caves:small_dripleaf_1", "mcl_core:stone"});
+			"mcl_lush_caves:big_dripleaf_1", "default:grass_5", "default:stone"});
+	SMALL_DRIPLEAF_LOWER = g({"mcl_lush_caves:small_dripleaf_1",
+			"mcl_flowers:double_grass", "default:grass_5", "default:stone"});
 	SMALL_DRIPLEAF_UPPER = g({"mcl_lush_caves:small_dripleaf_2",
-			"mcl_lush_caves:small_dripleaf_1", "mcl_core:stone"});
-	MUD = g("default:dirt");
+			"mcl_lush_caves:small_dripleaf_1", "default:grass_5", "default:stone"});
+	MUD = g({"mcl_mud:mud", "default:dirt", "mcl_core:dirt"});
 	DEAD_BUSH = g("default:dry_shrub");
-	MYCELIUM = g({"default:mycelium", "mcl_core:mycelium"});
+	MYCELIUM =
+			g({"default:mycelium", "mcl_core:mycelium", "mcl_core:dirt", "default:dirt"});
 	RED_MUSHROOM = g({"flowers:mushroom_red", "mcl_mushrooms:red_mushroom"});
 	BROWN_MUSHROOM = g({"flowers:mushroom_brown", "mcl_mushrooms:brown_mushroom"});
-	MOSS_CARPET = g({"default:moss", "mcl_moss:moss_carpet"});
-	SWEET_BERRY_BUSH = g({"farming:strawberry", "mcl_sweet_berry:bush"});
-	PUMPKIN = g({"farming:pumpkin", "mcl_farming:pumpkin"});
+	MOSS_CARPET = g({"default:moss", "mcl_moss:moss_carpet", "mcl_moss:moss",
+			"mcl_lush_caves:moss", "default:mossycobble"});
+	SWEET_BERRY_BUSH = g({"farming:strawberry", "mcl_sweet_berry:bush",
+			"mcl_farming:sweet_berry_bush_3", "mcl_farming:sweet_berry_bush_2",
+			"default:grass_5"});
+	PUMPKIN = g({"farming:pumpkin", "mcl_farming:pumpkin", "default:stone"});
 	LILY_PAD = g({"flowers:waterlily", "mcl_flowers:waterlily"});
-	TALL_GRASS_BOTTOM = g("default:grass_5");
+	TALL_GRASS_BOTTOM =
+			g({"default:grass_5", "mcl_flowers:tallgrass", "mcl_flowers:double_grass"});
 	SUGAR_CANE = g({"farming:cotton_8", "default:papyrus", "default:grass_5"});
-	TALL_GRASS_TOP = g("default:grass_5");
-	SUNFLOWER_LOWER =
-			flower({"mcl_flowers:sunflower", "flowers:sunflower"}, TALL_GRASS_BOTTOM);
-	SUNFLOWER_UPPER = flower(
-			{"mcl_flowers:sunflower_top", "flowers:sunflower_top"}, TALL_GRASS_TOP);
-	LILAC_LOWER = flower({"mcl_flowers:lilac", "flowers:lilac"}, TALL_GRASS_BOTTOM);
-	LILAC_UPPER = flower({"mcl_flowers:lilac_top", "flowers:lilac_top"}, TALL_GRASS_TOP);
-	ROSE_BUSH_LOWER =
-			flower({"mcl_flowers:rose_bush", "flowers:rose_bush"}, TALL_GRASS_BOTTOM);
-	ROSE_BUSH_UPPER = flower(
-			{"mcl_flowers:rose_bush_top", "flowers:rose_bush_top"}, TALL_GRASS_TOP);
-	PEONY_LOWER = flower({"mcl_flowers:peony", "flowers:peony"}, TALL_GRASS_BOTTOM);
-	PEONY_UPPER = flower({"mcl_flowers:peony_top", "flowers:peony_top"}, TALL_GRASS_TOP);
+	TALL_GRASS_TOP = g(
+			{"default:grass_5", "mcl_flowers:double_grass_top", "mcl_flowers:tallgrass"});
+	SUNFLOWER_LOWER = flower({"mcl_flowers:sunflower", "flowers:sunflower",
+									 "mcl_flowers:double_grass", "default:grass_5"},
+			TALL_GRASS_BOTTOM);
+	SUNFLOWER_UPPER = flower({"mcl_flowers:sunflower_top", "flowers:sunflower_top",
+									 "mcl_flowers:double_grass_top", "default:grass_5"},
+			TALL_GRASS_TOP);
+	LILAC_LOWER = flower({"mcl_flowers:lilac", "flowers:lilac",
+								 "mcl_flowers:double_grass", "default:grass_5"},
+			TALL_GRASS_BOTTOM);
+	LILAC_UPPER = flower({"mcl_flowers:lilac_top", "flowers:lilac_top",
+								 "mcl_flowers:double_grass_top", "default:grass_5"},
+			TALL_GRASS_TOP);
+	ROSE_BUSH_LOWER = flower({"mcl_flowers:rose_bush", "flowers:rose_bush",
+									 "mcl_flowers:double_grass", "default:grass_5"},
+			TALL_GRASS_BOTTOM);
+	ROSE_BUSH_UPPER = flower({"mcl_flowers:rose_bush_top", "flowers:rose_bush_top",
+									 "mcl_flowers:double_grass_top", "default:grass_5"},
+			TALL_GRASS_TOP);
+	PEONY_LOWER = flower({"mcl_flowers:peony", "flowers:peony",
+								 "mcl_flowers:double_grass", "default:grass_5"},
+			TALL_GRASS_BOTTOM);
+	PEONY_UPPER = flower({"mcl_flowers:peony_top", "flowers:peony_top",
+								 "mcl_flowers:double_grass_top", "default:grass_5"},
+			TALL_GRASS_TOP);
 	CRAFTING_TABLE = g("default:wood");
 	FURNACE = g("default:furnace");
 	WHITE_CARPET = g("wool:white");
@@ -1062,8 +1107,8 @@ void init(MapgenEarth *mg)
 	WAXED_EXPOSED_CUT_COPPER = g({"default:copperblock", "default:stone"});
 	CHERRY_LOG = g({"default:aspen_tree", "default:tree"});
 	CHERRY_LEAVES = g({"default:aspen_leaves", "default:leaves"});
-	GRAY_CONCRETE_POWDER = g({"default:gravel", "dye:grey"});
-	BROWN_CONCRETE_POWDER = g({"default:gravel", "dye:brown"});
+	GRAY_CONCRETE_POWDER = g({"default:gravel", "mcl_core:gravel", "dye:grey"});
+	BROWN_CONCRETE_POWDER = g({"default:gravel", "mcl_core:gravel", "dye:brown"});
 	CYAN_TERRACOTTA = CYAN_CONCRETE;
 	BLACK_WOOL = g("wool:black");
 	LIGHT_GRAY_WALL_BANNER = LIGHT_GRAY_CONCRETE;

@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -227,12 +228,10 @@ public:
 		arnis::WorldEditor editor;
 		editor.mg = mg;
 		editor.set_ground_origin(mg->node_min.X, mg->node_min.Z);
-		const auto pos = mg->ll_to_pos({static_cast<ll_t>(node.location().lat()),
+		const auto position = mg->ll_to_pos({static_cast<ll_t>(node.location().lat()),
 				static_cast<ll_t>(node.location().lon())});
-		const int x = pos.X, z = pos.Y;
-		if (x < mg->node_min.X || x > mg->node_max.X || z < mg->node_min.Z ||
-				z > mg->node_max.Z)
-			return;
+		const int x = position.X;
+		const int z = position.Y;
 		arnis::ProcessedNode processed_node;
 		processed_node.id = id;
 		processed_node.tags = std::move(tags);
@@ -628,26 +627,78 @@ pos_t earth_element_terrain_max(MapgenEarth *mg,
 	return maximum;
 }
 
-struct CachedArnisExtract
+struct EarthElementBounds
 {
-	std::once_flag parse_once;
+	int min_x = std::numeric_limits<int>::max();
+	int min_z = std::numeric_limits<int>::max();
+	int max_x = std::numeric_limits<int>::lowest();
+	int max_z = std::numeric_limits<int>::lowest();
+	bool valid = false;
+};
+
+EarthElementBounds earth_element_bounds(const arnis::ProcessedElement &element)
+{
+	EarthElementBounds bounds;
+	const auto include = [&bounds](int x, int z) {
+		bounds.min_x = std::min(bounds.min_x, x);
+		bounds.min_z = std::min(bounds.min_z, z);
+		bounds.max_x = std::max(bounds.max_x, x);
+		bounds.max_z = std::max(bounds.max_z, z);
+		bounds.valid = true;
+	};
+	if (element.is_node()) {
+		const auto &node = element.as_node();
+		include(node.x, node.z);
+	} else if (element.is_way()) {
+		for (const auto &node : element.as_way().nodes)
+			include(node.x, node.z);
+	} else {
+		for (const auto &member : element.as_relation().members)
+			for (const auto &node : member.way.nodes)
+				include(node.x, node.z);
+	}
+	return bounds;
+}
+
+bool earth_bounds_intersect(const EarthElementBounds &element, const XZBBox &bbox)
+{
+	return element.valid && element.max_x >= bbox.min_x() &&
+		   element.min_x <= bbox.max_x() && element.max_z >= bbox.min_z() &&
+		   element.min_z <= bbox.max_z();
+}
+
+struct CachedArnisChunk
+{
+	std::once_flag elements_once;
 	std::once_flag flood_once;
+	std::once_flag footprints_once;
 	std::mutex flood_wave_mutex;
 	std::size_t active_generators = 0;
 	bool flood_released = false;
 	std::vector<arnis::ProcessedElement> elements;
-	std::unique_ptr<arnis::PreparedBuildingData> prepared_buildings;
 	std::unique_ptr<arnis::FloodFillCache> flood_fill_cache;
-	std::unique_ptr<arnis::BuildingFootprintBitmap> building_footprints;
+	std::shared_ptr<arnis::BuildingFootprintBitmap> building_footprints;
+};
+
+struct CachedArnisExtract
+{
+	std::once_flag parse_once;
+	std::mutex chunks_mutex;
+	std::unordered_map<EarthHorizontalKey, std::shared_ptr<CachedArnisChunk>,
+			EarthHorizontalKeyHash>
+			chunks;
+	std::vector<arnis::ProcessedElement> elements;
+	std::vector<EarthElementBounds> element_bounds;
+	std::unique_ptr<arnis::PreparedBuildingData> prepared_buildings;
 	pos_t authored_max_y = std::numeric_limits<pos_t>::lowest();
 };
 
 class FloodWaveGuard
 {
-	CachedArnisExtract &cached;
+	CachedArnisChunk &cached;
 
 public:
-	explicit FloodWaveGuard(CachedArnisExtract &cached) : cached(cached)
+	explicit FloodWaveGuard(CachedArnisChunk &cached) : cached(cached)
 	{
 		std::lock_guard<std::mutex> lock(cached.flood_wave_mutex);
 		if (cached.flood_released) {
@@ -673,10 +724,10 @@ public:
 	FloodWaveGuard &operator=(const FloodWaveGuard &) = delete;
 };
 
-void generate_cached_arnis(MapgenEarth *mg, CachedArnisExtract &cached)
+void generate_cached_arnis(
+		MapgenEarth *mg, const CachedArnisExtract &tile, CachedArnisChunk &chunk)
 {
-	if (cached.elements.empty() || !cached.flood_fill_cache ||
-			!cached.building_footprints)
+	if (chunk.elements.empty() || !chunk.flood_fill_cache || !chunk.building_footprints)
 		return;
 	arnis::Ground ground;
 	ground.mg = mg;
@@ -702,9 +753,8 @@ void generate_cached_arnis(MapgenEarth *mg, CachedArnisExtract &cached)
 				mg->queueGeneratedSchemEntity(v3pos_t(x, y, z), nbt);
 			});
 	const auto args = earth_arnis_args();
-	FloodWaveGuard flood_wave(cached);
-	if (!arnis::generate_world(editor, cached.elements, args, *cached.flood_fill_cache,
-				*cached.building_footprints, true, cached.prepared_buildings.get()))
+	if (!arnis::generate_world(editor, chunk.elements, args, *chunk.flood_fill_cache,
+				*chunk.building_footprints, true, tile.prepared_buildings.get()))
 		errorstream << "Earth: Arnis world generation failed; check generation options "
 					   "and provider configuration\n";
 }
@@ -718,11 +768,10 @@ class hdl : public handler_i
 	using cache_t = osmium::handler::NodeLocationsForWays<index_t>;
 
 	const std::string path_name;
-	std::mutex cached_extracts_mutex;
-	std::unordered_map<EarthHorizontalKey,
-			std::shared_ptr<earth_osmium_detail::CachedArnisExtract>,
-			EarthHorizontalKeyHash>
-			cached_extracts;
+	// The input path identifies a reusable extracted OSM tile. Parsed/projected
+	// elements are shared; bounded chunk views and their flood fills are cached
+	// separately so each mapchunk does not dispatch the entire source tile.
+	earth_osmium_detail::CachedArnisExtract cached;
 
 public:
 	hdl(MapgenEarth *mg, const std::string &path_name) : path_name{path_name} {}
@@ -737,19 +786,9 @@ public:
 		}
 
 		const EarthHorizontalKey key = mg->horizontalKey();
-		std::shared_ptr<earth_osmium_detail::CachedArnisExtract> cached;
-		{
-			std::lock_guard<std::mutex> lock(cached_extracts_mutex);
-			if (!cached_extracts.contains(key) && cached_extracts.size() >= 8)
-				cached_extracts.erase(cached_extracts.begin());
-			auto [it, inserted] = cached_extracts.try_emplace(key);
-			if (inserted)
-				it->second = std::make_shared<earth_osmium_detail::CachedArnisExtract>();
-			cached = it->second;
-		}
 
 		try {
-			std::call_once(cached->parse_once, [&]() {
+			std::call_once(cached.parse_once, [&]() {
 				osmium::area::Assembler::config_type assembler_config;
 				assembler_config.create_empty_areas = false;
 				osmium::area::MultipolygonManager<osmium::area::Assembler> mp_manager{
@@ -768,53 +807,91 @@ public:
 									osmium::apply(area_buffer, handler);
 								}));
 				handler.finish_relations();
-				cached->elements = std::move(handler.elements);
-				cached->prepared_buildings =
-						std::make_unique<arnis::PreparedBuildingData>(
-								arnis::prepare_building_data(cached->elements));
+				cached.elements = std::move(handler.elements);
+				const auto dropped = arnis::drop_buildings_on_aircraft_pavement(
+						cached.elements, earth_osmium_detail::earth_arnis_args().scale);
+				if (dropped > 0)
+					actionstream << "Earth: skipped " << dropped
+								 << " building(s) on aircraft pavement\n";
+				cached.prepared_buildings = std::make_unique<arnis::PreparedBuildingData>(
+						arnis::prepare_building_data(cached.elements));
 				// The flat-world terrain-max scan samples every X/Z column. On
 				// curved projections that becomes a very expensive cube conversion
 				// loop and does not describe a single horizontal ceiling.
 				const pos_t terrain_max = earth_osmium_detail::earth_element_terrain_max(
-						mg, cached->elements,
-						mg->projection.curved ? mg->water_level
-											  : mg->cachedOrComputeTerrainMaxY());
+						mg, cached.elements, std::numeric_limits<pos_t>::lowest());
 				const pos_t margin = earth_osmium_detail::earth_authored_height_margin(
-						cached->elements);
+						cached.elements);
 				const long double maximum =
 						static_cast<long double>(terrain_max) + margin;
-				cached->authored_max_y =
+				cached.authored_max_y =
 						maximum >= static_cast<long double>(
 										   std::numeric_limits<pos_t>::max())
 								? std::numeric_limits<pos_t>::max()
 								: static_cast<pos_t>(maximum);
-				arnis::prepare_elements_for_generation(cached->elements);
+				arnis::prepare_elements_for_generation(cached.elements);
+				cached.element_bounds.reserve(cached.elements.size());
+				for (const auto &element : cached.elements)
+					cached.element_bounds.push_back(
+							earth_osmium_detail::earth_element_bounds(element));
 			});
 
-			mg->cacheAuthoredMaxY(cached->authored_max_y);
-			if (mg->node_min.Y > cached->authored_max_y)
+			mg->cacheAuthoredMaxY(cached.authored_max_y);
+			if (mg->node_min.Y > cached.authored_max_y)
 				return;
-			if (cached->elements.empty())
+			if (cached.elements.empty())
 				return;
 
-			std::call_once(cached->flood_once, [&]() {
+			std::shared_ptr<earth_osmium_detail::CachedArnisChunk> chunk;
+			{
+				std::lock_guard<std::mutex> lock(cached.chunks_mutex);
+				const auto found = cached.chunks.find(key);
+				if (found != cached.chunks.end()) {
+					chunk = found->second;
+				} else {
+					// Keep a small set of vertically reusable chunk views. In-flight
+					// chunks remain alive through their shared_ptr even if evicted.
+					if (cached.chunks.size() >= 4)
+						cached.chunks.erase(cached.chunks.begin());
+					chunk = std::make_shared<earth_osmium_detail::CachedArnisChunk>();
+					cached.chunks.emplace(key, chunk);
+				}
+			}
+
+			std::call_once(chunk->elements_once, [&]() {
+				constexpr int extra = MAP_BLOCKSIZE * 2;
+				const XZBBox context_bbox(mg->node_min.X - extra, mg->node_min.Z - extra,
+						mg->node_max.X + extra, mg->node_max.Z + extra);
+				for (std::size_t i = 0; i < cached.elements.size(); ++i)
+					if (earth_osmium_detail::earth_bounds_intersect(
+								cached.element_bounds[i], context_bbox))
+						chunk->elements.push_back(cached.elements[i]);
+			});
+			if (chunk->elements.empty())
+				return;
+
+			std::call_once(chunk->flood_once, [&]() {
 				auto args = earth_osmium_detail::earth_arnis_args();
 				auto flood =
-						arnis::FloodFillCache::precompute(cached->elements, args.timeout);
+						arnis::FloodFillCache::precompute(chunk->elements, args.timeout);
 				flood.retain_entries();
-				XZBBox xzbbox(
-						mg->node_min.X, mg->node_min.Z, mg->node_max.X, mg->node_max.Z);
-				auto footprints =
-						flood.collect_building_footprints(cached->elements, xzbbox);
-				cached->flood_fill_cache =
+				chunk->flood_fill_cache =
 						std::make_unique<arnis::FloodFillCache>(std::move(flood));
-				cached->building_footprints =
-						std::make_unique<arnis::BuildingFootprintBitmap>(
-								std::move(footprints));
 			});
 
+			// The parsed tile stays shared, but expensive dispatch/fill preparation
+			// uses only this chunk's spatial view plus the original two-mapblock halo.
+			earth_osmium_detail::FloodWaveGuard flood_wave(*chunk);
+			std::call_once(chunk->footprints_once, [&]() {
+				XZBBox xzbbox(
+						mg->node_min.X, mg->node_min.Z, mg->node_max.X, mg->node_max.Z);
+				chunk->building_footprints =
+						std::make_shared<arnis::BuildingFootprintBitmap>(
+								chunk->flood_fill_cache->collect_building_footprints(
+										chunk->elements, xzbbox));
+			});
 			arnis::init(mg);
-			earth_osmium_detail::generate_cached_arnis(mg, *cached);
+			earth_osmium_detail::generate_cached_arnis(mg, cached, *chunk);
 		} catch (const std::exception &ex) {
 			errorstream << "Earth exception: " << ex.what() << "\n";
 		}
