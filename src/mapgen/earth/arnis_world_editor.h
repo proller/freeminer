@@ -332,6 +332,7 @@ struct WorldEditor
 	{
 		strict_bounds = std::tuple{min_x, min_z, max_x, max_z};
 	}
+	void clear_strict_bounds() { strict_bounds.reset(); }
 	bool owns(int x, int z) const;
 	bool signage_enabled() const { return map_decals && bool(decal_registry); }
 	bool place_sign_node(Block sign, int x, int y, int z, std::int8_t param2,
