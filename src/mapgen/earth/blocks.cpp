@@ -254,12 +254,51 @@ Block POWDER_SNOW;
 Block AMETHYST_BLOCK;
 Block BUDDING_AMETHYST;
 Block AMETHYST_CLUSTER;
+Block CALCITE;
+Block BASALT;
+Block SMOOTH_BASALT;
+Block CAVE_VINES;
+Block CAVE_VINES_PLANT;
+Block CAVE_VINES_UNLIT;
+Block CAVE_VINES_PLANT_LIT;
+Block SPORE_BLOSSOM;
+Block AZALEA;
+Block FLOWERING_AZALEA;
+Block RED_MUSHROOM_BLOCK;
+Block BROWN_MUSHROOM_BLOCK;
+Block MUSHROOM_STEM;
+Block SHROOMLIGHT;
+Block TUBE_CORAL_BLOCK;
+Block BRAIN_CORAL_BLOCK;
+Block BUBBLE_CORAL_BLOCK;
+Block FIRE_CORAL_BLOCK;
+Block HORN_CORAL_BLOCK;
+Block DEAD_TUBE_CORAL_BLOCK;
+Block DEAD_BRAIN_CORAL_BLOCK;
+Block DEAD_BUBBLE_CORAL_BLOCK;
+Block DEAD_FIRE_CORAL_BLOCK;
+Block DEAD_HORN_CORAL_BLOCK;
+Block TUBE_CORAL;
+Block BRAIN_CORAL;
+Block BUBBLE_CORAL;
+Block FIRE_CORAL;
+Block HORN_CORAL;
+Block TUBE_CORAL_FAN;
+Block BRAIN_CORAL_FAN;
+Block BUBBLE_CORAL_FAN;
+Block FIRE_CORAL_FAN;
+Block HORN_CORAL_FAN;
 Block SMALL_AMETHYST_BUD;
 Block MEDIUM_AMETHYST_BUD;
 Block LARGE_AMETHYST_BUD;
 Block DRIPSTONE_BLOCK;
 Block POINTED_DRIPSTONE;
 Block GLOW_LICHEN;
+Block SCULK;
+Block SCULK_VEIN;
+Block SCULK_CATALYST;
+Block SCULK_SENSOR;
+Block SCULK_SHRIEKER;
 Block BIG_DRIPLEAF;
 Block BIG_DRIPLEAF_STEM;
 Block SMALL_DRIPLEAF_LOWER;
@@ -907,6 +946,46 @@ void init(MapgenEarth *mg)
 					"mcl_amethyst:amethyst_block", "default:stone", "mcl_core:stone"});
 	AMETHYST_CLUSTER = g({"mcl_amethyst:amethyst_cluster",
 			"mcl_amethyst:large_amethyst_bud", "default:stone", "mcl_core:stone"});
+	CALCITE = g({"mcl_amethyst:calcite", "default:stone", "mcl_core:stone"});
+	BASALT = g({"mcl_blackstone:basalt", "default:stone", "mcl_core:stone"});
+	SMOOTH_BASALT = g({"mcl_blackstone:basalt_smooth", "mcl_blackstone:basalt",
+			"default:stone", "mcl_core:stone"});
+	CAVE_VINES = g({"mcl_lush_caves:cave_vines_lit", "mcl_lush_caves:cave_vines",
+			"default:vine"});
+	CAVE_VINES_UNLIT = g({"mcl_lush_caves:cave_vines", "mcl_lush_caves:cave_vines_lit",
+			"default:vine"});
+	CAVE_VINES_PLANT = CAVE_VINES_UNLIT;
+	CAVE_VINES_PLANT_LIT = CAVE_VINES;
+	SPORE_BLOSSOM = g({"mcl_lush_caves:spore_blossom", "mcl_flowers:flower_rose"});
+	AZALEA = g({"mcl_lush_caves:azalea", "mcl_flowers:flower_rose"});
+	FLOWERING_AZALEA = g({"mcl_lush_caves:azalea_flowering", "mcl_lush_caves:azalea",
+			"mcl_flowers:flower_rose"});
+	RED_MUSHROOM_BLOCK =
+			g({"mcl_mushrooms:red_mushroom_block_cap_111111", "mcl_core:stone"});
+	BROWN_MUSHROOM_BLOCK =
+			g({"mcl_mushrooms:brown_mushroom_block_cap_111111", "mcl_core:stone"});
+	MUSHROOM_STEM = g({"mcl_mushrooms:brown_mushroom_block_stem_full", "mcl_core:stone"});
+	SHROOMLIGHT = g({"mcl_crimson:shroomlight", "mcl_core:glowstone"});
+	TUBE_CORAL_BLOCK = g({"mcl_ocean:tube_coral_block", "mcl_core:stone"});
+	BRAIN_CORAL_BLOCK = g({"mcl_ocean:brain_coral_block", "mcl_core:stone"});
+	BUBBLE_CORAL_BLOCK = g({"mcl_ocean:bubble_coral_block", "mcl_core:stone"});
+	FIRE_CORAL_BLOCK = g({"mcl_ocean:fire_coral_block", "mcl_core:stone"});
+	HORN_CORAL_BLOCK = g({"mcl_ocean:horn_coral_block", "mcl_core:stone"});
+	DEAD_TUBE_CORAL_BLOCK = g({"mcl_ocean:dead_tube_coral_block", "mcl_core:stone"});
+	DEAD_BRAIN_CORAL_BLOCK = g({"mcl_ocean:dead_brain_coral_block", "mcl_core:stone"});
+	DEAD_BUBBLE_CORAL_BLOCK = g({"mcl_ocean:dead_bubble_coral_block", "mcl_core:stone"});
+	DEAD_FIRE_CORAL_BLOCK = g({"mcl_ocean:dead_fire_coral_block", "mcl_core:stone"});
+	DEAD_HORN_CORAL_BLOCK = g({"mcl_ocean:dead_horn_coral_block", "mcl_core:stone"});
+	TUBE_CORAL = g({"mcl_ocean:tube_coral", "mcl_core:stone"});
+	BRAIN_CORAL = g({"mcl_ocean:brain_coral", "mcl_core:stone"});
+	BUBBLE_CORAL = g({"mcl_ocean:bubble_coral", "mcl_core:stone"});
+	FIRE_CORAL = g({"mcl_ocean:fire_coral", "mcl_core:stone"});
+	HORN_CORAL = g({"mcl_ocean:horn_coral", "mcl_core:stone"});
+	TUBE_CORAL_FAN = g({"mcl_ocean:tube_coral_fan", "mcl_core:stone"});
+	BRAIN_CORAL_FAN = g({"mcl_ocean:brain_coral_fan", "mcl_core:stone"});
+	BUBBLE_CORAL_FAN = g({"mcl_ocean:bubble_coral_fan", "mcl_core:stone"});
+	FIRE_CORAL_FAN = g({"mcl_ocean:fire_coral_fan", "mcl_core:stone"});
+	HORN_CORAL_FAN = g({"mcl_ocean:horn_coral_fan", "mcl_core:stone"});
 	SMALL_AMETHYST_BUD = g({"mcl_amethyst:small_amethyst_bud",
 			"mcl_amethyst:amethyst_cluster", "default:stone", "mcl_core:stone"});
 	MEDIUM_AMETHYST_BUD = g({"mcl_amethyst:medium_amethyst_bud",
@@ -919,6 +998,12 @@ void init(MapgenEarth *mg)
 			"mcl_dripstone:dripstone_top_tip", "default:stone", "mcl_core:stone"});
 	GLOW_LICHEN = g({"mcl_core:glow_lichen_down", "mcl_core:glow_lichen_d",
 			"default:coral_green", "default:coral_cyan"});
+	SCULK = g({"mcl_sculk:sculk", "mcl_core:stone"});
+	SCULK_VEIN =
+			g({"mcl_sculk:vein", "mcl_core:glow_lichen_down", "default:coral_green"});
+	SCULK_CATALYST = g({"mcl_sculk:catalyst", "mcl_sculk:sculk", "mcl_core:stone"});
+	SCULK_SENSOR = g({"mcl_sculk:sensor", "mcl_sculk:sculk", "mcl_core:stone"});
+	SCULK_SHRIEKER = g({"mcl_sculk:shrieker", "mcl_sculk:sculk", "mcl_core:stone"});
 	BIG_DRIPLEAF = g({"mcl_lush_caves:big_dripleaf_1", "mcl_flowers:double_grass",
 			"default:grass_5", "default:stone"});
 	BIG_DRIPLEAF_STEM = g({"mcl_lush_caves:big_dripleaf_stem_1",
