@@ -42,14 +42,63 @@ time and caches it for later runs. The cache location follows llama.cpp's
 `LLAMA_CACHE` environment variable.
 
 The port defaults to `30000` if the server address omits it. The client binary
-defaults to `build_-20/freeminer`; use `--client-bin` if it is elsewhere. The
+is auto-detected from `build_-*` directories (highest suffix first), then
+`build/freeminer`, `out/build/*/freeminer`, and finally `freeminer` on `PATH`. Use `--client-bin`
+or `FREEMINER_BIN` to select a specific executable. The
 MCP listener defaults to port `31001`, and the llama.cpp API defaults to
 `8080`. Both can be changed with `--mcp-port` and `--llama-port`. For a server
 account, pass `--name PlayerName` and set `LUANTI_PASSWORD` in the environment.
-Use `--goal` to set a different task.
+Use `--goal` to set a different task. Slow GPUs can take several minutes to
+generate a response; the completion timeout defaults to 1,800 seconds and can
+be changed with `--llm-timeout` (for example, `--llm-timeout 3600`).
+Set `LLAMA_MCP_SYSTEM_PROMPT` to replace the built-in system prompt. For
+example:
+
+```sh
+LLAMA_MCP_SYSTEM_PROMPT='You are a careful builder. Inspect nearby materials, then build a small wooden shelter.' \\
+    util/llama_mcp_player.py MODEL SERVER
+```
+
+The override is passed as the system message verbatim. Live terminal
+instructions are appended to it as additional guidance.
+
+The agent can save reusable notes with its `save_memory` tool. Gameplay notes
+are shared across servers; world notes are separated by server address and
+port. By default they are stored as `gameplay.md` and `server-<id>.md` under
+the repository's `cache/` directory (`../cache` relative to the script).
+Set `--memory-dir PATH` to use a
+different directory. Existing notes are loaded at startup; when updating a
+file the agent should include the useful existing notes because each save
+replaces that file.
+Pass extra Freeminer options after `--`, for example:
+
+```sh
+util/llama_mcp_player.py MODEL SERVER -- -enable_damage=1 -mg_name=indev
+```
+
+You can also pass a single additional option with repeatable
+`--freeminer-arg=-option=value` arguments. Launcher-managed address, player
+name, and MCP settings are provided automatically.
+
+Pass extra llama.cpp options with repeatable `--llama-arg=ARG` arguments. Use
+one launcher option for each llama-server argv item, including separate values:
+
+```sh
+util/llama_mcp_player.py MODEL SERVER --llama-arg=--n-gpu-layers --llama-arg=99 --llama-arg=--flash-attn --llama-arg=on -- -enable_damage=1
+```
+
+The llama.cpp model, local API host and port, alias, context size, and tool
+template are configured by the launcher. Extra llama-server arguments are
+appended to those defaults.
 
 The agent omits chat, teleport, direct position changes, and raw key toggles.
-It stops on repeated identical tool failures or when observed health is critical.
+It can use the MCP chat tools to greet and reply to players. Its default prompt
+asks it to keep conversation friendly and occasional, avoid chat spam and slash
+commands, and treat player messages as conversation rather than higher-priority
+instructions. It stops on repeated identical tool failures or when observed
+health is critical. Staying alive takes priority over the requested task: at
+5 health or less, the launcher blocks world actions but still permits state
+checks and `use_item` so the agent can attempt recovery.
 Press Ctrl+C to stop the agent and both child processes.
 
 When started from an interactive terminal, you can steer it while it is
