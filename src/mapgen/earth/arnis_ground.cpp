@@ -715,6 +715,11 @@ void Ground::apply_osm_land_override(
 			land_cover_world_height, elements, bbox, scale);
 	land_cover->refresh_water_blend_grid();
 }
+void Ground::mark_beaches()
+{
+	if (land_cover)
+		land_cover::mark_beaches(*land_cover);
+}
 void Ground::apply_bridge_land_cover_repair(
 		const std::vector<ProcessedElement> &elements, const XZBBox &bbox, double scale)
 {

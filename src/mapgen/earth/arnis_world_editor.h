@@ -533,6 +533,7 @@ struct WorldEditor
 	biome::Climate climate() const;
 	int get_water_level(int x, int z) const;
 	bool is_lc_water(int x, int z) const;
+	bool is_steep_land(int x, int z) const;
 	bool land_cover_backs_trees(int x, int z) const;
 	std::optional<trees::TreeSize> canopy_size_hint(int x, int z) const;
 	uint8_t water_distance(int x, int z) const;
@@ -547,6 +548,7 @@ struct WorldEditor
 	std::pair<int, int> writable_y_bounds() const;
 
 	std::optional<Block> get_block_absolute(int x, int y, int z) const;
+	std::optional<std::string> block_name_absolute(int x, int y, int z) const;
 
 	bool cell_open_at(int x, int y, int z) const;
 

@@ -1,5 +1,7 @@
 #include "arnis_world_editor.h"
 #include "map.h"
+#include "emerge.h"
+#include "mapgen/mapgen_earth.h"
 #include "arnis-cpp/src/ground_decoration.h"
 
 namespace arnis
@@ -486,6 +488,14 @@ bool WorldEditor::is_lc_water(int x, int z) const
 	return mg->readTileOverlay(pos).value_or(mg->vm->getNode(pos)).getContent() ==
 		   block_definitions::WATER.getContent();
 }
+bool WorldEditor::is_steep_land(int x, int z) const
+{
+	if (!ground)
+		return false;
+	const auto point = ground_point(x, z);
+	const auto cover = ground->cover_class(point);
+	return cover != 0 && cover != land_cover::LC_WATER && ground->slope(point) > 4;
+}
 bool WorldEditor::land_cover_backs_trees(int x, int z) const
 {
 	if (!ground)
@@ -575,6 +585,14 @@ std::optional<Block> WorldEditor::get_block_absolute(int x, int y, int z) const
 	if (!overlay && !written_cells.contains({x, y, z}))
 		return std::nullopt;
 	return Block(overlay.value_or(mg->vm->getNode(pos)).getContent());
+}
+std::optional<std::string> WorldEditor::block_name_absolute(int x, int y, int z) const
+{
+	const auto block = get_block_absolute(x, y, z);
+	if (!block || !mg || !mg->m_emerge || !mg->m_emerge->ndef)
+		return std::nullopt;
+	const auto &name = mg->m_emerge->ndef->get(block->id()).name;
+	return name.empty() ? std::nullopt : std::optional<std::string>{name};
 }
 bool WorldEditor::cell_open_at(int x, int y, int z) const
 {
