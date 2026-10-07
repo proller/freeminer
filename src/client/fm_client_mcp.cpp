@@ -889,6 +889,17 @@ void Client::handleMCPMessage(mcp_ws_server_t::connection_ptr connection,
 
 	try {
 		std::string method = request["method"].asString();
+		verbosestream << "MCP: request method=" << method;
+		if (request.isMember("id")) {
+			const Json::Value &request_id = request["id"];
+			if (request_id.isString())
+				verbosestream << " id=" << request_id.asString();
+			else if (request_id.isIntegral())
+				verbosestream << " id=" << request_id.asLargestInt();
+		}
+		if (method == "tools/call" && request["params"]["name"].isString())
+			verbosestream << " tool=" << request["params"]["name"].asString();
+		verbosestream << std::endl;
 
 		if (method == "initialize") {
 			Json::Value result;
