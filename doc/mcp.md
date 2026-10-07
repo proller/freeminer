@@ -133,6 +133,10 @@ context after the current model response and its tool calls finish. Recent live
 instructions remain in context as the conversation is shortened. Enter `:help`
 for a reminder or `:stop` (also `:quit`) to stop the agent and child processes.
 Use `--no-interactive` when terminal input should not be read.
+When the model replies without a tool call, the agent continues autonomously
+in both interactive and non-interactive runs. A user continuation message after
+a plain-text reply keeps the conversation valid for llama.cpp. Queued operator
+instructions take priority over the automatic continuation.
 
 `rotate_player` sets absolute camera angles in degrees. `look_at_position`
 accepts a world position in node coordinates, and `look_at_object` accepts an
