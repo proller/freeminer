@@ -137,6 +137,17 @@ When the model replies without a tool call, the agent continues autonomously
 in both interactive and non-interactive runs. A user continuation message after
 a plain-text reply keeps the conversation valid for llama.cpp. Queued operator
 instructions take priority over the automatic continuation.
+If llama.cpp rejects generated tool arguments as invalid JSON, the agent retries
+with shorter history and a reminder to generate one brief, valid tool call.
+Each model request allows at most two recovery attempts; persistent errors are
+still reported. Failed generations do not execute MCP actions.
+
+`take_screenshot` takes no arguments and saves the current rendered game view,
+including the HUD, using the client's `screenshot_path`, `screenshot_format`,
+and `screenshot_quality` settings. It returns `success`, the local image `path`,
+and `format`. Files use the `mcp_` prefix and unique timestamps. The image is
+saved on the machine running the client; the tool does not transmit image data.
+After aiming the camera, allow a frame to render before capturing the view.
 
 `rotate_player` sets absolute camera angles in degrees. `look_at_position`
 accepts a world position in node coordinates, and `look_at_object` accepts an
