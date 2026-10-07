@@ -162,6 +162,7 @@ struct Ground
 			const std::vector<ProcessedElement> &elements, const XZBBox &bbox);
 	void apply_osm_land_override(const std::vector<ProcessedElement> &elements,
 			const XZBBox &bbox, double scale);
+	void mark_beaches();
 	void apply_bridge_land_cover_repair(const std::vector<ProcessedElement> &elements,
 			const XZBBox &bbox, double scale);
 	void set_rotation_mask(RotationMask mask) { rotation_mask = mask; }

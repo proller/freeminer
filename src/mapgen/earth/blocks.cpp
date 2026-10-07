@@ -2,8 +2,11 @@
 #include "emerge.h"
 #include "log.h"
 
+#include <algorithm>
+#include <cctype>
 #include <initializer_list>
 #include <mutex>
+#include <string>
 
 namespace arnis
 {
@@ -43,12 +46,26 @@ Block GLOWSTONE;
 Block GRANITE;
 Block GRASS_BLOCK;
 Block GRASS;
+Block SNOWY_GRASS_BLOCK;
 Block GRAVEL;
 Block GRAY_CONCRETE;
 Block GRAY_TERRACOTTA;
 Block GREEN_STAINED_HARDENED_CLAY;
 Block GREEN_WOOL;
 Block HAY_BALE;
+Block LANTERN;
+Block SOUL_LANTERN;
+Block SMOKER;
+Block EMPTY_FLOWER_POT;
+Block COMPOSTER;
+Block HOPPER;
+Block BLAST_FURNACE;
+Block DISPENSER;
+Block GRINDSTONE;
+Block POLISHED_BLACKSTONE_SLAB;
+Block REDSTONE_LAMP;
+Block AMETHYST_CLUSTER;
+Block CHISELED_QUARTZ_BLOCK;
 Block IRON_BARS;
 Block IRON_BLOCK;
 Block JUNGLE_PLANKS;
@@ -66,8 +83,10 @@ Block OAK_LEAVES;
 Block OAK_LOG;
 Block OAK_PLANKS;
 Block OAK_SLAB;
+Block SPRUCE_SLAB;
 Block ORANGE_TERRACOTTA;
 Block PODZOL;
+Block SNOWY_PODZOL;
 Block POLISHED_ANDESITE;
 Block POLISHED_BASALT;
 Block QUARTZ_BLOCK;
@@ -100,6 +119,11 @@ Block STONE_BRICKS;
 Block STONE;
 Block TERRACOTTA;
 Block WARPED_PLANKS;
+Block WARPED_STAIRS;
+Block WARPED_TRAPDOOR;
+Block WARPED_SLAB;
+Block STRIPPED_WARPED_STEM;
+Block STRIPPED_WARPED_HYPHAE;
 Block WATER;
 Block SEAGRASS;
 Block KELP_PLANT;
@@ -130,6 +154,7 @@ Block YELLOW_FLOWER;
 Block YELLOW_WOOL;
 Block LIME_CONCRETE;
 Block CYAN_WOOL;
+Block GRAY_WOOL;
 Block BLUE_CONCRETE;
 Block PURPLE_CONCRETE;
 Block RED_CONCRETE;
@@ -253,13 +278,59 @@ Block LAVA;
 Block POWDER_SNOW;
 Block AMETHYST_BLOCK;
 Block BUDDING_AMETHYST;
-Block AMETHYST_CLUSTER;
+Block CALCITE;
+Block BASALT;
+Block SMOOTH_BASALT;
+Block CAVE_VINES;
+Block CAVE_VINES_PLANT;
+Block CAVE_VINES_UNLIT;
+Block CAVE_VINES_PLANT_LIT;
+Block SPORE_BLOSSOM;
+Block AZALEA;
+Block FLOWERING_AZALEA;
+Block AZALEA_LEAVES;
+Block FLOWERING_AZALEA_LEAVES;
+Block WHITE_BED;
+Block LECTERN;
+Block CAKE;
+Block MELON;
+Block LOOM;
+Block SMITHING_TABLE;
+Block RED_MUSHROOM_BLOCK;
+Block BROWN_MUSHROOM_BLOCK;
+Block MUSHROOM_STEM;
+Block SHROOMLIGHT;
+Block TUBE_CORAL_BLOCK;
+Block BRAIN_CORAL_BLOCK;
+Block BUBBLE_CORAL_BLOCK;
+Block FIRE_CORAL_BLOCK;
+Block HORN_CORAL_BLOCK;
+Block DEAD_TUBE_CORAL_BLOCK;
+Block DEAD_BRAIN_CORAL_BLOCK;
+Block DEAD_BUBBLE_CORAL_BLOCK;
+Block DEAD_FIRE_CORAL_BLOCK;
+Block DEAD_HORN_CORAL_BLOCK;
+Block TUBE_CORAL;
+Block BRAIN_CORAL;
+Block BUBBLE_CORAL;
+Block FIRE_CORAL;
+Block HORN_CORAL;
+Block TUBE_CORAL_FAN;
+Block BRAIN_CORAL_FAN;
+Block BUBBLE_CORAL_FAN;
+Block FIRE_CORAL_FAN;
+Block HORN_CORAL_FAN;
 Block SMALL_AMETHYST_BUD;
 Block MEDIUM_AMETHYST_BUD;
 Block LARGE_AMETHYST_BUD;
 Block DRIPSTONE_BLOCK;
 Block POINTED_DRIPSTONE;
 Block GLOW_LICHEN;
+Block SCULK;
+Block SCULK_VEIN;
+Block SCULK_CATALYST;
+Block SCULK_SENSOR;
+Block SCULK_SHRIEKER;
 Block BIG_DRIPLEAF;
 Block BIG_DRIPLEAF_STEM;
 Block SMALL_DRIPLEAF_LOWER;
@@ -279,6 +350,9 @@ Block TALL_GRASS_TOP;
 Block CRAFTING_TABLE;
 Block FURNACE;
 Block WHITE_CARPET;
+Block GREEN_CARPET;
+Block LIGHT_BLUE_CARPET;
+Block LIGHT_GRAY_CARPET;
 Block BOOKSHELF;
 Block OAK_PRESSURE_PLATE;
 Block OAK_STAIRS;
@@ -401,6 +475,8 @@ Block WAXED_COPPER_BLOCK;
 Block WAXED_EXPOSED_COPPER;
 Block WAXED_EXPOSED_CHISELED_COPPER;
 Block WAXED_EXPOSED_CUT_COPPER;
+Block MANGROVE_LOG;
+Block MANGROVE_LEAVES;
 Block CHERRY_LOG;
 Block CHERRY_LEAVES;
 Block GRAY_CONCRETE_POWDER;
@@ -460,10 +536,38 @@ void init(MapgenEarth *mg)
 				   (allow_liquids || !mg->m_emerge->ndef->get(id).isLiquid());
 		}
 
+		content_t arnis_node(const char *name) const
+		{
+			// Native Arnis names use the canonical (namespace-free) block name.
+			// Accept names passed either as "stone" or "default:stone" so every
+			// resolver path observes the same Arnis-first precedence.
+			const std::string full_name(name);
+			const auto separator = full_name.find(':');
+			const auto canonical_name = separator == std::string::npos
+												? full_name
+												: full_name.substr(separator + 1);
+			std::string candidate = "arnis:" + canonical_name;
+			std::transform(candidate.begin() + 6, candidate.end(), candidate.begin() + 6,
+					[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+			return mg->m_emerge->ndef->getId(candidate);
+		}
+
+		content_t find(const char *name) const
+		{
+			// Keep every single-node lookup on the same precedence path: native
+			// Arnis block first, then the requested game-specific node name.
+			const auto arnis_id = arnis_node(name);
+			if (usable(arnis_id))
+				return arnis_id;
+
+			const auto id = mg->m_emerge->ndef->getId(name);
+			return usable(id) ? id : CONTENT_IGNORE;
+		}
+
 		content_t operator()(const char *name) const
 		{
-			const auto id = mg->m_emerge->ndef->getId(name);
-			if (!usable(id)) {
+			const auto id = find(name);
+			if (id == CONTENT_IGNORE) {
 				actionstream << "Mapping node missing or liquid " << name << "\n";
 				return fallback;
 			}
@@ -472,6 +576,15 @@ void init(MapgenEarth *mg)
 
 		content_t operator()(std::initializer_list<const char *> names) const
 		{
+			// Resolve every canonical candidate in the Arnis namespace first.
+			// Only after exhausting those names, try game-specific aliases. This
+			// keeps Arnis blocks authoritative without losing compatibility with
+			// Luanti/Mineclonia content packs.
+			for (const auto *name : names) {
+				const auto id = arnis_node(name);
+				if (usable(id))
+					return id;
+			}
 			for (const auto *name : names) {
 				const auto id = mg->m_emerge->ndef->getId(name);
 				if (usable(id))
@@ -483,221 +596,299 @@ void init(MapgenEarth *mg)
 			}
 			return fallback;
 		}
+
+		content_t operator()(const char *block_name, const char *name) const
+		{
+			return (*this)(block_name, {name});
+		}
+
+		content_t operator()(
+				const char *block_name, std::initializer_list<const char *> names) const
+		{
+			const auto id = arnis_node(block_name);
+			if (usable(id))
+				return id;
+			return (*this)(names);
+		}
 	};
 	const NodeResolver g{mg, def};
 	const NodeResolver liquid{mg, def, true};
-	const auto flower = [&](std::initializer_list<const char *> names, Block fallback) {
-		return Block{NodeResolver{mg, fallback.id()}(names)};
+	const auto prefer_arnis = [&](const char *name, Block fallback) {
+		const NodeResolver resolver{mg, fallback.id()};
+		const auto id = resolver.arnis_node(name);
+		return Block{resolver.usable(id) ? id : fallback.id()};
+	};
+	const auto available_node = [&](const char *name) {
+		const NodeResolver resolver{mg, CONTENT_AIR};
+		return resolver.find(name) != CONTENT_IGNORE;
+	};
+	const auto flower = [&](const char *block_name,
+								std::initializer_list<const char *> names,
+								Block fallback) {
+		return Block{NodeResolver{mg, fallback.id()}(block_name, names)};
 	};
 
-	ACACIA_PLANKS = g({"default:acacia_wood", "default:wood"});
+	ACACIA_PLANKS = g("acacia_planks", {"default:acacia_wood", "default:wood"});
 	AIR = CONTENT_AIR;
-	ANDESITE = g("default:stone");
-	BIRCH_LEAVES = g({"default:aspen_leaves", "default:leaves"});
-	BIRCH_LOG = g({"default:aspen_tree", "default:tree"});
-	BLACK_CONCRETE = g({"wool:black", "basic_materials:concrete_block", "default:stone"});
-	BLACKSTONE = g("default:obsidian");
-	BLUE_FLOWER = g({"flowers:geranium", "mcl_flowers:blue_orchid",
-			"mcl_flowers:azure_bluet", "default:grass_3"});
-	RED_FLOWER = g({"flowers:tulip", "mcl_flowers:poppy", "default:grass_3"});
-	WHITE_FLOWER = g({"flowers:dandelion_white", "mcl_flowers:dandelion",
-			"mcl_flowers:azure_bluet", "default:grass_3"});
-	YELLOW_FLOWER =
-			g({"flowers:dandelion_yellow", "mcl_flowers:dandelion", "default:grass_3"});
-	CORNFLOWER = flower(
+	ANDESITE = g("andesite", "default:stone");
+	BIRCH_LEAVES = g("birch_leaves", {"default:aspen_leaves", "default:leaves"});
+	BIRCH_LOG = g("birch_log", {"default:aspen_tree", "default:tree"});
+	BLACK_CONCRETE = g("black_concrete",
+			{"wool:black", "basic_materials:concrete_block", "default:stone"});
+	BLACKSTONE = g("blackstone", "default:obsidian");
+	BLUE_FLOWER = g("blue_flower", {"flowers:geranium", "mcl_flowers:blue_orchid",
+										   "mcl_flowers:azure_bluet", "default:grass_3"});
+	RED_FLOWER =
+			g("red_flower", {"flowers:tulip", "mcl_flowers:poppy", "default:grass_3"});
+	WHITE_FLOWER =
+			g("white_flower", {"flowers:dandelion_white", "mcl_flowers:dandelion",
+									  "mcl_flowers:azure_bluet", "default:grass_3"});
+	YELLOW_FLOWER = g("yellow_flower",
+			{"flowers:dandelion_yellow", "mcl_flowers:dandelion", "default:grass_3"});
+	CORNFLOWER = flower("cornflower",
 			{"mcl_flowers:cornflower", "flowers:cornflower", "mcl_flowers:blue_orchid",
 					"flowers:geranium", "default:grass_3"},
 			BLUE_FLOWER);
-	OXEYE_DAISY = flower(
+	OXEYE_DAISY = flower("oxeye_daisy",
 			{"mcl_flowers:oxeye_daisy", "flowers:oxeye_daisy", "mcl_flowers:azure_bluet",
 					"flowers:dandelion_white", "default:grass_3"},
 			WHITE_FLOWER);
-	ALLIUM = flower({"mcl_flowers:allium", "flowers:allium", "mcl_flowers:poppy",
-							"flowers:tulip", "default:grass_3"},
+	ALLIUM = flower("allium",
+			{"mcl_flowers:allium", "flowers:allium", "mcl_flowers:poppy", "flowers:tulip",
+					"default:grass_3"},
 			RED_FLOWER);
-	LILY_OF_THE_VALLEY =
-			flower({"mcl_flowers:lily_of_the_valley", "flowers:lily_of_the_valley",
-						   "mcl_flowers:azure_bluet", "default:grass_3"},
-					WHITE_FLOWER);
-	RED_TULIP = flower({"mcl_flowers:tulip_red", "flowers:tulip_red", "flowers:tulip",
-							   "default:grass_3"},
-			RED_FLOWER);
-	ORANGE_TULIP = flower({"mcl_flowers:tulip_orange", "flowers:tulip_orange",
-								  "flowers:tulip", "default:grass_3"},
-			YELLOW_FLOWER);
-	WHITE_TULIP = flower({"mcl_flowers:tulip_white", "flowers:tulip_white",
-								 "flowers:tulip", "default:grass_3"},
+	LILY_OF_THE_VALLEY = flower("lily_of_the_valley",
+			{"mcl_flowers:lily_of_the_valley", "flowers:lily_of_the_valley",
+					"mcl_flowers:azure_bluet", "default:grass_3"},
 			WHITE_FLOWER);
-	PINK_TULIP = flower({"mcl_flowers:tulip_pink", "flowers:tulip_pink", "flowers:tulip",
-								"default:grass_3"},
+	RED_TULIP = flower("red_tulip",
+			{"mcl_flowers:tulip_red", "flowers:tulip_red", "flowers:tulip",
+					"default:grass_3"},
 			RED_FLOWER);
-	BLUE_TERRACOTTA = g("default:clay");
-	BRICK = g("default:brick");
-	CAULDRON = g("default:steelblock");
-	CHISELED_STONE_BRICKS = g("default:stonebrick");
-	COBBLESTONE_WALL = g("default:cobble");
-	COBBLESTONE = g("default:cobble");
-	POLISHED_BLACKSTONE_BRICKS = g("default:obsidianbrick");
-	CRACKED_STONE_BRICKS = g("default:stonebrick");
-	CRIMSON_PLANKS = g("default:wood");
-	CUT_SANDSTONE = g("default:sandstone");
-	CYAN_CONCRETE = g({"wool:cyan", "basic_materials:concrete_block", "default:stone"});
-	DARK_OAK_PLANKS = g({"default:wood", "default:junglewood"});
-	DEEPSLATE_BRICKS = g("default:stonebrick");
-	DIORITE = g("default:stone");
-	DIRT = g({"default:dirt", "mcl_core:dirt"});
-	END_STONE_BRICKS = g("default:stonebrick");
-	END_STONE = g({"default:endstone", "mcl_end:end_stone"});
-	FARMLAND = g({"default:dirt", "mcl_farming:soil", "mcl_core:dirt"});
-	GLASS = g("default:glass");
-	GLOWSTONE = g("default:meselamp");
-	GRANITE = g("default:stone");
-	GRASS_BLOCK = g("default:grass_5");
-	GRASS = g("default:grass_3");
-	GRAVEL = g({"default:gravel", "mcl_core:gravel"});
-	GRAY_CONCRETE = g({"basic_materials:concrete_block", "wool:grey", "default:stone"});
-	GRAY_TERRACOTTA = g("default:clay");
-	GREEN_STAINED_HARDENED_CLAY = g("default:clay");
-	GREEN_WOOL = g("wool:green");
-	HAY_BALE = g("farming:straw");
-	IRON_BARS = g({"xpanes:bar_flat", "default:steelblock", "default:stone_with_iron"});
-	IRON_BLOCK = g("default:steelblock");
-	JUNGLE_PLANKS = g({"default:junglewood", "default:wood"});
-	LADDER = g("default:ladder_wood");
-	LIGHT_BLUE_CONCRETE = g({"wool:cyan", "wool:blue", "basic_materials:concrete_block"});
-	LIGHT_BLUE_TERRACOTTA = g("default:clay");
-	LIGHT_GRAY_CONCRETE =
-			g({"basic_materials:concrete_block", "wool:grey", "default:stone"});
-	MOSS_BLOCK = g("default:mossycobble");
-	MOSSY_COBBLESTONE = g("default:mossycobble");
-	MUD_BRICKS = g("default:silver_sandstone_brick");
-	NETHER_BRICK = g("default:obsidianbrick");
-	NETHERITE_BLOCK = g("default:obsidian");
-	OAK_FENCE = g("default:fence_wood");
-	OAK_LEAVES = g("default:leaves");
-	OAK_LOG = g("default:tree");
-	OAK_PLANKS = g("default:wood");
-	OAK_SLAB = g("stairs:slab_wood");
-	ORANGE_TERRACOTTA = g("default:clay");
-	PODZOL = g("default:dirt_with_coniferous_litter");
-	POLISHED_ANDESITE = g("default:stone");
-	POLISHED_BASALT = g("default:stone");
-	QUARTZ_BLOCK = g("default:stone");
-	POLISHED_BLACKSTONE = g({"default:obsidian", "default:stone"});
-	POLISHED_DEEPSLATE = g("default:stone");
-	POLISHED_DIORITE = g("default:stone");
-	POLISHED_GRANITE = g("default:stone");
-	PRISMARINE = g("default:stone");
-	PURPUR_BLOCK = g("default:stone");
-	PURPUR_PILLAR = g("default:stone");
-	QUARTZ_BRICKS = g("default:stone");
+	ORANGE_TULIP = flower("orange_tulip",
+			{"mcl_flowers:tulip_orange", "flowers:tulip_orange", "flowers:tulip",
+					"default:grass_3"},
+			YELLOW_FLOWER);
+	WHITE_TULIP = flower("white_tulip",
+			{"mcl_flowers:tulip_white", "flowers:tulip_white", "flowers:tulip",
+					"default:grass_3"},
+			WHITE_FLOWER);
+	PINK_TULIP = flower("pink_tulip",
+			{"mcl_flowers:tulip_pink", "flowers:tulip_pink", "flowers:tulip",
+					"default:grass_3"},
+			RED_FLOWER);
+	BLUE_TERRACOTTA = g("blue_terracotta", "default:clay");
+	BRICK = g("brick", "default:brick");
+	CAULDRON = g("cauldron", "default:steelblock");
+	CHISELED_STONE_BRICKS = g("chiseled_stone_bricks", "default:stonebrick");
+	COBBLESTONE_WALL = g("cobblestone_wall", "default:cobble");
+	COBBLESTONE = g("cobblestone", "default:cobble");
+	POLISHED_BLACKSTONE_BRICKS = g("polished_blackstone_bricks", "default:obsidianbrick");
+	CRACKED_STONE_BRICKS = g("cracked_stone_bricks", "default:stonebrick");
+	CRIMSON_PLANKS = g("crimson_planks", "default:wood");
+	CUT_SANDSTONE = g("cut_sandstone", "default:sandstone");
+	CYAN_CONCRETE = g("cyan_concrete",
+			{"wool:cyan", "basic_materials:concrete_block", "default:stone"});
+	DARK_OAK_PLANKS = g("dark_oak_planks", {"default:wood", "default:junglewood"});
+	DEEPSLATE_BRICKS = g("deepslate_bricks", "default:stonebrick");
+	DIORITE = g("diorite", "default:stone");
+	DIRT = g("dirt", {"default:dirt", "mcl_core:dirt"});
+	END_STONE_BRICKS = g("end_stone_bricks", "default:stonebrick");
+	END_STONE = g("end_stone", {"default:endstone", "mcl_end:end_stone"});
+	FARMLAND = g("farmland", {"default:dirt", "mcl_farming:soil", "mcl_core:dirt"});
+	GLASS = g("glass", "default:glass");
+	GLOWSTONE = g("glowstone", "default:meselamp");
+	GRANITE = g("granite", "default:stone");
+	GRASS_BLOCK = g("grass_block", "default:grass_5");
+	GRASS = g("grass", "default:grass_3");
+	SNOWY_GRASS_BLOCK = g("snowy_grass_block",
+			{"mcl_core:dirt_with_grass_snow", "mapgen_dirt_with_snow",
+					"basenodes:dirt_with_snow", "default:dirt_with_snow",
+					"default:grass_5"});
+	GRAVEL = g("gravel", {"default:gravel", "mcl_core:gravel"});
+	GRAY_CONCRETE = g("gray_concrete",
+			{"basic_materials:concrete_block", "wool:grey", "default:stone"});
+	GRAY_TERRACOTTA = g("gray_terracotta", "default:clay");
+	GREEN_STAINED_HARDENED_CLAY = g("green_stained_hardened_clay", "default:clay");
+	GREEN_WOOL = g("green_wool", "wool:green");
+	HAY_BALE = g("hay_bale", "farming:straw");
+	IRON_BARS = g("iron_bars",
+			{"xpanes:bar_flat", "default:steelblock", "default:stone_with_iron"});
+	IRON_BLOCK = g("iron_block", "default:steelblock");
+	JUNGLE_PLANKS = g("jungle_planks", {"default:junglewood", "default:wood"});
+	LADDER = g("ladder", "default:ladder_wood");
+	LIGHT_BLUE_CONCRETE = g("light_blue_concrete",
+			{"wool:cyan", "wool:blue", "basic_materials:concrete_block"});
+	LIGHT_BLUE_TERRACOTTA = g("light_blue_terracotta", "default:clay");
+	LIGHT_GRAY_CONCRETE = g("light_gray_concrete",
+			{"basic_materials:concrete_block", "wool:grey", "default:stone"});
+	MOSS_BLOCK = g("moss_block", "default:mossycobble");
+	MOSSY_COBBLESTONE = g("mossy_cobblestone", "default:mossycobble");
+	MUD_BRICKS = g("mud_bricks", "default:silver_sandstone_brick");
+	NETHER_BRICK = g("nether_brick", "default:obsidianbrick");
+	NETHERITE_BLOCK = g("netherite_block", "default:obsidian");
+	OAK_FENCE = g("oak_fence", "default:fence_wood");
+	OAK_LEAVES = g("oak_leaves", "default:leaves");
+	OAK_LOG = g("oak_log", "default:tree");
+	OAK_PLANKS = g("oak_planks", "default:wood");
+	OAK_SLAB = g("oak_slab", "stairs:slab_wood");
+	SPRUCE_SLAB = g("spruce_slab", {"mcl_stairs:slab_spruce", "stairs:slab_wood"});
+	ORANGE_TERRACOTTA = g("orange_terracotta", "default:clay");
+	PODZOL = g("podzol", "default:dirt_with_coniferous_litter");
+	SNOWY_PODZOL = g("snowy_podzol",
+			{"mcl_core:podzol", "default:dirt_with_coniferous_litter", "default:dirt"});
+	POLISHED_ANDESITE = g("polished_andesite", "default:stone");
+	POLISHED_BASALT = g("polished_basalt", "default:stone");
+	QUARTZ_BLOCK = g("quartz_block", "default:stone");
+	POLISHED_BLACKSTONE = g("polished_blackstone", {"default:obsidian", "default:stone"});
+	POLISHED_DEEPSLATE = g("polished_deepslate", "default:stone");
+	POLISHED_DIORITE = g("polished_diorite", "default:stone");
+	POLISHED_GRANITE = g("polished_granite", "default:stone");
+	PRISMARINE = g("prismarine", "default:stone");
+	PURPUR_BLOCK = g("purpur_block", "default:stone");
+	PURPUR_PILLAR = g("purpur_pillar", "default:stone");
+	QUARTZ_BRICKS = g("quartz_bricks", "default:stone");
 	// default:rail is only a Lua alias in Minetest Game. NodeDefManager lookups do
 	// not reliably resolve item aliases, so prefer the actually registered node.
-	RAIL = g({"carts:rail", "default:rail"});
-	RED_NETHER_BRICK = g("default:obsidianbrick");
-	RED_TERRACOTTA = g("default:clay");
-	RED_WOOL = g("wool:red");
-	SAND = g({"default:sand", "mcl_core:sand"});
-	SANDSTONE = g("default:sandstone");
-	SCAFFOLDING = g("default:ladder_steel");
-	SMOOTH_QUARTZ = g("default:stone");
-	SMOOTH_RED_SANDSTONE = g("default:sandstone");
-	SMOOTH_SANDSTONE = g("default:sandstone");
-	SMOOTH_STONE = g("default:stone");
-	SPONGE = g("sponge:sponge");
-	SPRUCE_LOG = g({"default:pine_tree", "default:tree"});
-	SPRUCE_PLANKS = g({"default:pine_wood", "default:wood"});
-	STONE_BLOCK_SLAB =
-			g({"stairs:slab_stone_block", "default:stone_block", "default:stone"});
-	STONE_BRICK_SLAB = g({"stairs:slab_stonebrick", "default:stonebrick"});
-	STONE_BRICKS = g("default:stonebrick");
-	STONE = g("default:stone");
-	TERRACOTTA = g("default:clay");
-	WARPED_PLANKS = g("default:wood");
-	WATER = liquid("default:water_source");
+	RAIL = g("rail", {"carts:rail", "default:rail"});
+	RED_NETHER_BRICK = g("red_nether_brick", "default:obsidianbrick");
+	RED_TERRACOTTA = g("red_terracotta", "default:clay");
+	RED_WOOL = g("red_wool", "wool:red");
+	SAND = g("sand", {"default:sand", "mcl_core:sand"});
+	SANDSTONE = g("sandstone", "default:sandstone");
+	SCAFFOLDING = g("scaffolding", "default:ladder_steel");
+	SMOOTH_QUARTZ = g("smooth_quartz", "default:stone");
+	SMOOTH_RED_SANDSTONE = g("smooth_red_sandstone", "default:sandstone");
+	SMOOTH_SANDSTONE = g("smooth_sandstone", "default:sandstone");
+	SMOOTH_STONE = g("smooth_stone", "default:stone");
+	SPONGE = g("sponge", "sponge:sponge");
+	SPRUCE_LOG = g("spruce_log", {"default:pine_tree", "default:tree"});
+	SPRUCE_PLANKS = g("spruce_planks", {"default:pine_wood", "default:wood"});
+	STONE_BLOCK_SLAB = g("stone_block_slab",
+			{"stairs:slab_stone_block", "default:stone_block", "default:stone"});
+	STONE_BRICK_SLAB =
+			g("stone_brick_slab", {"stairs:slab_stonebrick", "default:stonebrick"});
+	STONE_BRICKS = g("stone_bricks", "default:stonebrick");
+	STONE = g("stone", "default:stone");
+	TERRACOTTA = g("terracotta", "default:clay");
+	WARPED_PLANKS = g("warped_planks", "default:wood");
+	WARPED_STAIRS =
+			g("warped_stairs", {"mcl_stairs:stair_warped_planks",
+									   "stairs:stair_warped_planks", "default:wood"});
+	WARPED_TRAPDOOR = g("warped_trapdoor",
+			{"mcl_doors:trapdoor_warped", "doors:trapdoor", "default:wood"});
+	WARPED_SLAB = g(
+			"warped_slab", {"mcl_stairs:slab_warped_planks", "stairs:slab_warped_planks",
+								   "stairs:slab_wood", "default:wood"});
+	STRIPPED_WARPED_STEM = g(
+			"stripped_warped_stem", {"mcl_crimson:stripped_warped_stem", "default:tree"});
+	STRIPPED_WARPED_HYPHAE = g("stripped_warped_hyphae",
+			{"mcl_crimson:stripped_warped_hyphae", "default:tree"});
+	WATER = liquid("water", "default:water_source");
 	// Rust parity: water_depth.rs uses MineClone ocean/nether blocks.
 	// Divergence: Earth game maps them to available Minetest Game nodes.
-	SEAGRASS = g({"marinara:seagrass", "marinara:sand_with_seagrass",
-			"default:marram_grass_1", "default:grass_3"});
-	KELP_PLANT = g({"marinara:sand_with_kelp", "default:sand_with_kelp",
-			"default:marram_grass_3", "default:marram_grass_1"});
-	MAGMA_BLOCK = g({"mcl_nether:magma", "default:obsidian", "default:stone"});
-	OBSIDIAN = g({"mcl_core:obsidian", "default:obsidian", "default:stone"});
-	KELP = KELP_PLANT;
-	TALL_SEAGRASS_BOTTOM = g({"marinara:sand_with_seagrass2", "default:marram_grass_2",
-			"default:marram_grass_1"});
-	TALL_SEAGRASS_TOP =
-			g({"marinara:seagrass2", "default:marram_grass_3", "default:marram_grass_1"});
-	SEA_PICKLE = g({"marinara:seaanemone_tentacle", "marinara:hardcoral_green",
-			"default:coral_green", "default:coral_cyan", "default:coral_skeleton"});
-	SOUL_SAND = g({"default:desert_sand", "mcl_nether:soul_sand", "mcl_core:redsand",
-			"default:sand", "mcl_core:sand"});
-	EARTH_BENCH = g({"homedecor:simple_bench", "stairs:slab_wood", "default:wood"});
-	EARTH_TRASH_CAN =
-			g({"homedecor:trash_can", "pipeworks:trashcan", "default:steelblock"});
-	EARTH_STREET_LAMP = g({"streets:light_vertical_on", "morelights_vintage:lantern_f",
-			"homedecor:ground_lantern_14", "default:meselamp"});
-	EARTH_WELL = g({"homedecor:well", "default:stonebrick"});
-	EARTH_BARBECUE = g({"homedecor:barbecue", "default:furnace", "default:stone"});
-	EARTH_GRATING = g({"pipeworks:grating", "xpanes:bar_flat", "default:steelblock"});
-	EARTH_FENCE_CHAINLINK = g({"streets:fence_chainlink", "homedecor:fence_chainlink",
-			"xpanes:bar_flat", "default:steelblock"});
-	EARTH_FENCE_BARBED =
-			g({"homedecor:fence_barbed_wire", "xpanes:bar_flat", "default:steelblock"});
-	EARTH_FENCE_PICKET =
-			g({"homedecor:fence_picket", "default:fence_wood", "default:wood"});
-	EARTH_FENCE_WROUGHT = g(
+	SEAGRASS = g("seagrass", {"marinara:seagrass", "marinara:sand_with_seagrass",
+									 "default:marram_grass_1", "default:grass_3"});
+	KELP_PLANT =
+			g("kelp_plant", {"marinara:sand_with_kelp", "default:sand_with_kelp",
+									"default:marram_grass_3", "default:marram_grass_1"});
+	MAGMA_BLOCK =
+			g("magma_block", {"mcl_nether:magma", "default:obsidian", "default:stone"});
+	OBSIDIAN = g("obsidian", {"mcl_core:obsidian", "default:obsidian", "default:stone"});
+	KELP = prefer_arnis("kelp", KELP_PLANT);
+	TALL_SEAGRASS_BOTTOM = g("tall_seagrass_bottom",
+			{"marinara:sand_with_seagrass2", "default:marram_grass_2",
+					"default:marram_grass_1"});
+	TALL_SEAGRASS_TOP = g("tall_seagrass_top",
+			{"marinara:seagrass2", "default:marram_grass_3", "default:marram_grass_1"});
+	SEA_PICKLE =
+			g("sea_pickle", {"marinara:seaanemone_tentacle", "marinara:hardcoral_green",
+									"default:coral_green", "default:coral_cyan",
+									"default:coral_skeleton"});
+	SOUL_SAND =
+			g("soul_sand", {"default:desert_sand", "mcl_nether:soul_sand",
+								   "mcl_core:redsand", "default:sand", "mcl_core:sand"});
+	EARTH_BENCH = g("earth_bench",
+			{"homedecor:simple_bench", "stairs:slab_wood", "default:wood"});
+	EARTH_TRASH_CAN = g("earth_trash_can",
+			{"homedecor:trash_can", "pipeworks:trashcan", "default:steelblock"});
+	EARTH_STREET_LAMP = g("earth_street_lamp",
+			{"streets:light_vertical_on", "morelights_vintage:lantern_f",
+					"homedecor:ground_lantern_14", "default:meselamp"});
+	EARTH_WELL = g("earth_well", {"homedecor:well", "default:stonebrick"});
+	EARTH_BARBECUE = g(
+			"earth_barbecue", {"homedecor:barbecue", "default:furnace", "default:stone"});
+	EARTH_GRATING = g("earth_grating",
+			{"pipeworks:grating", "xpanes:bar_flat", "default:steelblock"});
+	EARTH_FENCE_CHAINLINK = g("earth_fence_chainlink",
+			{"streets:fence_chainlink", "homedecor:fence_chainlink", "xpanes:bar_flat",
+					"default:steelblock"});
+	EARTH_FENCE_BARBED = g("earth_fence_barbed",
+			{"homedecor:fence_barbed_wire", "xpanes:bar_flat", "default:steelblock"});
+	EARTH_FENCE_PICKET = g("earth_fence_picket",
+			{"homedecor:fence_picket", "default:fence_wood", "default:wood"});
+	EARTH_FENCE_WROUGHT = g("earth_fence_wrought",
 			{"homedecor:fence_wrought_iron_2", "xpanes:bar_flat", "default:steelblock"});
-	WHITE_CONCRETE = g({"wool:white", "basic_materials:concrete_block", "default:stone"});
-	WHITE_STAINED_GLASS = GLASS;
-	WHITE_TERRACOTTA = g("default:clay");
-	WHITE_WOOL = g("wool:white");
-	YELLOW_CONCRETE =
-			g({"wool:yellow", "basic_materials:concrete_block", "default:stone"});
-	YELLOW_WOOL = g("wool:yellow");
-	LIME_CONCRETE = g({"wool:green", "wool:yellow", "basic_materials:concrete_block"});
-	CYAN_WOOL = g("wool:cyan");
-	BLUE_CONCRETE = g({"wool:blue", "basic_materials:concrete_block", "default:stone"});
-	PURPLE_CONCRETE =
-			g({"wool:violet", "basic_materials:concrete_block", "default:stone"});
-	RED_CONCRETE = g({"wool:red", "basic_materials:concrete_block", "default:stone"});
-	MAGENTA_CONCRETE =
-			g({"wool:magenta", "wool:violet", "basic_materials:concrete_block"});
-	BROWN_WOOL = g("wool:brown");
-	OXIDIZED_COPPER = g({"default:copperblock", "default:stone"});
-	YELLOW_TERRACOTTA = g("default:clay");
-	SNOW_BLOCK = g("default:snow");
-	SNOW_LAYER = g("default:snow");
-	SIGN = g({"default:sign_wall_wood", "default:sign_wall", "default:wood"});
-	STEEL_SIGN = g(
+	WHITE_CONCRETE = g("white_concrete",
+			{"wool:white", "basic_materials:concrete_block", "default:stone"});
+	WHITE_STAINED_GLASS = prefer_arnis("white_stained_glass", GLASS);
+	WHITE_TERRACOTTA = g("white_terracotta", "default:clay");
+	WHITE_WOOL = g("white_wool", "wool:white");
+	YELLOW_CONCRETE = g("yellow_concrete",
+			{"wool:yellow", "basic_materials:concrete_block", "default:stone"});
+	YELLOW_WOOL = g("yellow_wool", "wool:yellow");
+	LIME_CONCRETE = g("lime_concrete",
+			{"wool:green", "wool:yellow", "basic_materials:concrete_block"});
+	CYAN_WOOL = g("cyan_wool", "wool:cyan");
+	GRAY_WOOL = g("gray_wool",
+			{"wool:grey", "wool:gray", "wool:light_grey", "wool:light_gray"});
+	BLUE_CONCRETE = g("blue_concrete",
+			{"wool:blue", "basic_materials:concrete_block", "default:stone"});
+	PURPLE_CONCRETE = g("purple_concrete",
+			{"wool:violet", "basic_materials:concrete_block", "default:stone"});
+	RED_CONCRETE = g("red_concrete",
+			{"wool:red", "basic_materials:concrete_block", "default:stone"});
+	MAGENTA_CONCRETE = g("magenta_concrete",
+			{"wool:magenta", "wool:violet", "basic_materials:concrete_block"});
+	BROWN_WOOL = g("brown_wool", "wool:brown");
+	OXIDIZED_COPPER = g("oxidized_copper", {"default:copperblock", "default:stone"});
+	YELLOW_TERRACOTTA = g("yellow_terracotta", "default:clay");
+	SNOW_BLOCK = g("snow_block", "default:snow");
+	SNOW_LAYER = g("snow_layer", "default:snow");
+	SIGN = g("sign", {"default:sign_wall_wood", "default:sign_wall", "default:wood"});
+	STEEL_SIGN = g("steel_sign",
 			{"default:sign_wall_steel", "default:sign_wall_wood", "default:steelblock"});
-	TEXT_SIGN_SMALL = g({"street_signs:sign_highway_small_green",
-			"default:sign_wall_steel", "default:sign_wall_wood", "default:steelblock"});
-	TEXT_SIGN_MEDIUM = g({"street_signs:sign_highway_medium_green",
-			"default:sign_wall_steel", "default:sign_wall_wood", "default:steelblock"});
-	TEXT_SIGN_LARGE = g({"street_signs:sign_highway_large_green",
-			"default:sign_wall_steel", "default:sign_wall_wood", "default:steelblock"});
+	TEXT_SIGN_SMALL = g("text_sign_small",
+			{"street_signs:sign_highway_small_green", "default:sign_wall_steel",
+					"default:sign_wall_wood", "default:steelblock"});
+	TEXT_SIGN_MEDIUM = g("text_sign_medium",
+			{"street_signs:sign_highway_medium_green", "default:sign_wall_steel",
+					"default:sign_wall_wood", "default:steelblock"});
+	TEXT_SIGN_LARGE = g("text_sign_large",
+			{"street_signs:sign_highway_large_green", "default:sign_wall_steel",
+					"default:sign_wall_wood", "default:steelblock"});
 	auto optional_sign = [&](const char *name) {
-		const auto id = mg->m_emerge->ndef->getId(name);
-		if (id == CONTENT_IGNORE)
-			return Block{CONTENT_AIR};
-		return Block{id};
+		const NodeResolver resolver{mg, CONTENT_AIR};
+		const auto id = resolver.find(name);
+		return Block{static_cast<content_t>(id == CONTENT_IGNORE ? CONTENT_AIR : id)};
 	};
-	STREETS_AVAILABLE = mg->m_emerge->ndef->getId("streets:asphalt") != CONTENT_IGNORE;
-	ROAD_ASPHALT = g({"streets:asphalt", "basic_materials:concrete_block", "wool:grey",
-			"default:stone"});
-	ROAD_SIDEWALK = g({"streets:sidewalk", "default:stone_block", "default:stone"});
-	STREETS_POLE = g({"streets:bigpole", "walls:cobble", "default:stone"});
-	STREETS_BOLLARD =
-			g({"streets:bollard_steel_manual_up", "walls:cobble", "default:cobble"});
-	STREETS_GUARDRAIL = g({"streets:guardrail", "walls:cobble", "default:cobble"});
+	STREETS_AVAILABLE = available_node("streets:asphalt");
+	ROAD_ASPHALT = g("road_asphalt", {"streets:asphalt", "basic_materials:concrete_block",
+											 "wool:grey", "default:stone"});
+	ROAD_SIDEWALK = g("road_sidewalk",
+			{"streets:sidewalk", "default:stone_block", "default:stone"});
+	STREETS_POLE =
+			g("streets_pole", {"streets:bigpole", "walls:cobble", "default:stone"});
+	STREETS_BOLLARD = g("streets_bollard",
+			{"streets:bollard_steel_manual_up", "walls:cobble", "default:cobble"});
+	STREETS_GUARDRAIL = g(
+			"streets_guardrail", {"streets:guardrail", "walls:cobble", "default:cobble"});
 	STREETS_TRAFFIC_LIGHTS = {optional_sign("streets:trafficlight_top_red"),
 			optional_sign("streets:trafficlight_top_yellow"),
 			optional_sign("streets:trafficlight_top_green")};
 	STREETS_MARKINGS_AVAILABLE =
 			STREETS_AVAILABLE &&
-			mg->m_emerge->ndef->getId(
-					"streets:mark_dashed_white_center_line_on_asphalt") != CONTENT_IGNORE;
+			available_node("streets:mark_dashed_white_center_line_on_asphalt");
 	ROAD_MARK_DASHED_WHITE =
 			optional_sign("streets:mark_dashed_white_center_line_on_asphalt");
 	ROAD_MARK_DASHED_WHITE_R90 =
@@ -706,11 +897,9 @@ void init(MapgenEarth *mg)
 			optional_sign("streets:mark_solid_white_stripe_on_asphalt");
 	ROAD_MARK_SOLID_WHITE_STRIPE_R90 =
 			optional_sign("streets:mark_solid_white_stripe_r90_on_asphalt");
-	STREETS_RRXING_AVAILABLE =
-			mg->m_emerge->ndef->getId("streets:rrxing_bottom") != CONTENT_IGNORE &&
-			mg->m_emerge->ndef->getId("streets:rrxing_middle_center_off") !=
-					CONTENT_IGNORE &&
-			mg->m_emerge->ndef->getId("streets:rrxing_top") != CONTENT_IGNORE;
+	STREETS_RRXING_AVAILABLE = available_node("streets:rrxing_bottom") &&
+							   available_node("streets:rrxing_middle_center_off") &&
+							   available_node("streets:rrxing_top");
 	STREETS_RRXING_BOTTOM = optional_sign("streets:rrxing_bottom");
 	STREETS_RRXING_MIDDLE = optional_sign("streets:rrxing_middle_center_off");
 	STREETS_RRXING_TOP = optional_sign("streets:rrxing_top");
@@ -733,9 +922,8 @@ void init(MapgenEarth *mg)
 	// signs_lib creates the *_onpole variants while registering street_signs.
 	// Keep these optional: Arnis uses its generated decal signs in games which do
 	// not load street_signs, but should prefer the native meshes when they exist.
-	STREET_SIGNS_AVAILABLE =
-			mg->m_emerge->ndef->getId("street_signs:sign_basic") != CONTENT_IGNORE &&
-			mg->m_emerge->ndef->getId("street_signs:sign_stop_onpole") != CONTENT_IGNORE;
+	STREET_SIGNS_AVAILABLE = available_node("street_signs:sign_basic") &&
+							 available_node("street_signs:sign_stop_onpole");
 	STREET_SIGN_BASIC = optional_sign("street_signs:sign_basic");
 	STREET_SIGN_STOP = optional_sign("street_signs:sign_stop_onpole");
 	STREET_SIGN_YIELD = optional_sign("street_signs:sign_yield_onpole");
@@ -747,34 +935,34 @@ void init(MapgenEarth *mg)
 			optional_sign("street_signs:sign_rr_grade_crossbuck_onpole");
 	STREET_SIGN_US_ROUTE = optional_sign("street_signs:sign_us_route_onpole");
 	STREET_SIGN_US_INTERSTATE = optional_sign("street_signs:sign_us_interstate_onpole");
-	DECAL_FRAME = g({"freeminer:arnis_decal_frame", "air"});
-	ANDESITE_WALL = g({"walls:cobble", "default:stone"});
-	STONE_BRICK_WALL = g("default:stonebrick");
-	CARROTS = g({"farming:carrot_4", "mcl_farming:carrot_7", "mcl_farming:carrot_4",
-			"default:grass_5"});
-	DARK_OAK_DOOR_LOWER = g("doors:door_wood_a");
-	DARK_OAK_DOOR_UPPER = g("doors:door_wood_b");
-	DARK_OAK_LOG = g({"default:tree", "default:jungletree"});
-	DARK_OAK_LEAVES = g({"default:leaves", "default:jungleleaves"});
-	JUNGLE_LOG = g({"default:jungletree", "default:tree"});
-	JUNGLE_LEAVES = g({"default:jungleleaves", "default:leaves"});
-	ACACIA_LOG = g({"default:acacia_tree", "default:tree"});
-	ACACIA_LEAVES = g({"default:acacia_leaves", "default:leaves"});
-	POTATOES = g({"farming:potato_4", "mcl_farming:potato_7", "mcl_farming:potato_4",
-			"default:grass_5"});
-	WHEAT = g({"farming:wheat_4", "mcl_farming:wheat_7", "mcl_farming:wheat_4",
-			"default:grass_5"});
-	BEDROCK = g("default:obsidian");
-	RAIL_NORTH_SOUTH = RAIL;
-	RAIL_EAST_WEST = RAIL;
-	RAIL_ASCENDING_EAST = RAIL;
-	RAIL_ASCENDING_WEST = RAIL;
-	RAIL_ASCENDING_NORTH = RAIL;
-	RAIL_ASCENDING_SOUTH = RAIL;
-	RAIL_NORTH_EAST = RAIL;
-	RAIL_NORTH_WEST = RAIL;
-	RAIL_SOUTH_EAST = RAIL;
-	RAIL_SOUTH_WEST = RAIL;
+	DECAL_FRAME = g("decal_frame", {"freeminer:arnis_decal_frame", "air"});
+	ANDESITE_WALL = g("andesite_wall", {"walls:cobble", "default:stone"});
+	STONE_BRICK_WALL = g("stone_brick_wall", "default:stonebrick");
+	CARROTS = g("carrots", {"farming:carrot_4", "mcl_farming:carrot_7",
+								   "mcl_farming:carrot_4", "default:grass_5"});
+	DARK_OAK_DOOR_LOWER = g("dark_oak_door_lower", "doors:door_wood_a");
+	DARK_OAK_DOOR_UPPER = g("dark_oak_door_upper", "doors:door_wood_b");
+	DARK_OAK_LOG = g("dark_oak_log", {"default:tree", "default:jungletree"});
+	DARK_OAK_LEAVES = g("dark_oak_leaves", {"default:leaves", "default:jungleleaves"});
+	JUNGLE_LOG = g("jungle_log", {"default:jungletree", "default:tree"});
+	JUNGLE_LEAVES = g("jungle_leaves", {"default:jungleleaves", "default:leaves"});
+	ACACIA_LOG = g("acacia_log", {"default:acacia_tree", "default:tree"});
+	ACACIA_LEAVES = g("acacia_leaves", {"default:acacia_leaves", "default:leaves"});
+	POTATOES = g("potatoes", {"farming:potato_4", "mcl_farming:potato_7",
+									 "mcl_farming:potato_4", "default:grass_5"});
+	WHEAT = g("wheat", {"farming:wheat_4", "mcl_farming:wheat_7", "mcl_farming:wheat_4",
+							   "default:grass_5"});
+	BEDROCK = g("bedrock", "default:obsidian");
+	RAIL_NORTH_SOUTH = prefer_arnis("rail_north_south", RAIL);
+	RAIL_EAST_WEST = prefer_arnis("rail_east_west", RAIL);
+	RAIL_ASCENDING_EAST = prefer_arnis("rail_ascending_east", RAIL);
+	RAIL_ASCENDING_WEST = prefer_arnis("rail_ascending_west", RAIL);
+	RAIL_ASCENDING_NORTH = prefer_arnis("rail_ascending_north", RAIL);
+	RAIL_ASCENDING_SOUTH = prefer_arnis("rail_ascending_south", RAIL);
+	RAIL_NORTH_EAST = prefer_arnis("rail_north_east", RAIL);
+	RAIL_NORTH_WEST = prefer_arnis("rail_north_west", RAIL);
+	RAIL_SOUTH_EAST = prefer_arnis("rail_south_east", RAIL);
+	RAIL_SOUTH_WEST = prefer_arnis("rail_south_west", RAIL);
 	// Advtrains 2.5+ registers four angular variants and rotates each with
 	// param2. Resolve the complete family only when the mod is present; the
 	// railway renderer then selects either this family or carts for the whole
@@ -812,14 +1000,14 @@ void init(MapgenEarth *mg)
 			mg->m_emerge->ndef->getId("advtrains:dtrack_xingdiag_30l45r") !=
 					CONTENT_IGNORE;
 	if (ADVTRAINS_AVAILABLE) {
-		ADV_RAIL_STRAIGHT_0 = g("advtrains:dtrack_st");
-		ADV_RAIL_STRAIGHT_30 = g("advtrains:dtrack_st_30");
-		ADV_RAIL_STRAIGHT_45 = g("advtrains:dtrack_st_45");
-		ADV_RAIL_STRAIGHT_60 = g("advtrains:dtrack_st_60");
-		ADV_RAIL_CURVE_0 = g("advtrains:dtrack_cr");
-		ADV_RAIL_CURVE_30 = g("advtrains:dtrack_cr_30");
-		ADV_RAIL_CURVE_45 = g("advtrains:dtrack_cr_45");
-		ADV_RAIL_CURVE_60 = g("advtrains:dtrack_cr_60");
+		ADV_RAIL_STRAIGHT_0 = g("adv_rail_straight_0", "advtrains:dtrack_st");
+		ADV_RAIL_STRAIGHT_30 = g("adv_rail_straight_30", "advtrains:dtrack_st_30");
+		ADV_RAIL_STRAIGHT_45 = g("adv_rail_straight_45", "advtrains:dtrack_st_45");
+		ADV_RAIL_STRAIGHT_60 = g("adv_rail_straight_60", "advtrains:dtrack_st_60");
+		ADV_RAIL_CURVE_0 = g("adv_rail_curve_0", "advtrains:dtrack_cr");
+		ADV_RAIL_CURVE_30 = g("adv_rail_curve_30", "advtrains:dtrack_cr_30");
+		ADV_RAIL_CURVE_45 = g("adv_rail_curve_45", "advtrains:dtrack_cr_45");
+		ADV_RAIL_CURVE_60 = g("adv_rail_curve_60", "advtrains:dtrack_cr_60");
 		if (ADVTRAINS_JUNCTIONS_AVAILABLE) {
 			const std::array<std::string, 4> suffixes{{"", "_30", "_45", "_60"}};
 			for (std::size_t i = 0; i < suffixes.size(); ++i) {
@@ -852,11 +1040,12 @@ void init(MapgenEarth *mg)
 			}
 		}
 		if (ADVTRAINS_SLOPES_AVAILABLE) {
-			ADV_RAIL_SLOPE_UP = g("advtrains:dtrack_vst1");
-			ADV_RAIL_SLOPE_DOWN = g("advtrains:dtrack_vst2");
+			ADV_RAIL_SLOPE_UP = g("adv_rail_slope_up", "advtrains:dtrack_vst1");
+			ADV_RAIL_SLOPE_DOWN = g("adv_rail_slope_down", "advtrains:dtrack_vst2");
 		} else {
-			ADV_RAIL_SLOPE_UP = ADV_RAIL_STRAIGHT_0;
-			ADV_RAIL_SLOPE_DOWN = ADV_RAIL_STRAIGHT_0;
+			ADV_RAIL_SLOPE_UP = prefer_arnis("adv_rail_slope_up", ADV_RAIL_STRAIGHT_0);
+			ADV_RAIL_SLOPE_DOWN =
+					prefer_arnis("adv_rail_slope_down", ADV_RAIL_STRAIGHT_0);
 		}
 		if (ADVTRAINS_GENTLE_SLOPES_AVAILABLE) {
 			ADV_RAIL_GENTLE_SLOPE = {g("advtrains:dtrack_vst31"),
@@ -866,252 +1055,417 @@ void init(MapgenEarth *mg)
 					ADV_RAIL_SLOPE_UP, ADV_RAIL_SLOPE_DOWN, ADV_RAIL_SLOPE_DOWN};
 		}
 	} else {
-		ADV_RAIL_STRAIGHT_0 = ADV_RAIL_STRAIGHT_30 = ADV_RAIL_STRAIGHT_45 =
-				ADV_RAIL_STRAIGHT_60 = RAIL;
-		ADV_RAIL_CURVE_0 = ADV_RAIL_CURVE_30 = ADV_RAIL_CURVE_45 = ADV_RAIL_CURVE_60 =
-				RAIL;
-		ADV_RAIL_SLOPE_UP = ADV_RAIL_SLOPE_DOWN = RAIL;
-		ADV_RAIL_GENTLE_SLOPE = {RAIL, RAIL, RAIL};
+		ADV_RAIL_STRAIGHT_0 = prefer_arnis("adv_rail_straight_0", RAIL);
+		ADV_RAIL_STRAIGHT_30 = prefer_arnis("adv_rail_straight_30", RAIL);
+		ADV_RAIL_STRAIGHT_45 = prefer_arnis("adv_rail_straight_45", RAIL);
+		ADV_RAIL_STRAIGHT_60 = prefer_arnis("adv_rail_straight_60", RAIL);
+		ADV_RAIL_CURVE_0 = prefer_arnis("adv_rail_curve_0", RAIL);
+		ADV_RAIL_CURVE_30 = prefer_arnis("adv_rail_curve_30", RAIL);
+		ADV_RAIL_CURVE_45 = prefer_arnis("adv_rail_curve_45", RAIL);
+		ADV_RAIL_CURVE_60 = prefer_arnis("adv_rail_curve_60", RAIL);
+		ADV_RAIL_SLOPE_UP = prefer_arnis("adv_rail_slope_up", RAIL);
+		ADV_RAIL_SLOPE_DOWN = prefer_arnis("adv_rail_slope_down", RAIL);
+		ADV_RAIL_GENTLE_SLOPE = {prefer_arnis("adv_rail_gentle_slope_0", RAIL),
+				prefer_arnis("adv_rail_gentle_slope_1", RAIL),
+				prefer_arnis("adv_rail_gentle_slope_2", RAIL)};
 	}
-	ADV_RAIL_NORTH_SOUTH = ADV_RAIL_STRAIGHT_0;
+	ADV_RAIL_NORTH_SOUTH = prefer_arnis("adv_rail_north_south", ADV_RAIL_STRAIGHT_0);
 	ADV_RAIL_NORTH_SOUTH.setParam2(0);
-	ADV_RAIL_EAST_WEST = ADV_RAIL_STRAIGHT_0;
+	ADV_RAIL_EAST_WEST = prefer_arnis("adv_rail_east_west", ADV_RAIL_STRAIGHT_0);
 	ADV_RAIL_EAST_WEST.setParam2(1);
-	ADV_RAIL_DIAGONAL_NE_SW = ADV_RAIL_STRAIGHT_45;
+	ADV_RAIL_DIAGONAL_NE_SW =
+			prefer_arnis("adv_rail_diagonal_ne_sw", ADV_RAIL_STRAIGHT_45);
 	ADV_RAIL_DIAGONAL_NE_SW.setParam2(0);
-	ADV_RAIL_DIAGONAL_NW_SE = ADV_RAIL_STRAIGHT_45;
+	ADV_RAIL_DIAGONAL_NW_SE =
+			prefer_arnis("adv_rail_diagonal_nw_se", ADV_RAIL_STRAIGHT_45);
 	ADV_RAIL_DIAGONAL_NW_SE.setParam2(1);
-	ADV_PLATFORM_HIGH = g({"advtrains:platform_high_stonebrick", "default:stonebrick"});
-	CACTUS = g({"default:cactus", "mcl_core:cactus"});
-	COARSE_DIRT = g("default:dry_dirt");
-	IRON_ORE = g("default:stone_with_iron");
-	COAL_ORE = g("default:stone_with_coal");
-	GOLD_ORE = g("default:stone_with_gold");
-	COPPER_ORE = g("default:stone_with_copper");
+	ADV_PLATFORM_HIGH = g("adv_platform_high",
+			{"advtrains:platform_high_stonebrick", "default:stonebrick"});
+	CACTUS = g("cactus", {"default:cactus", "mcl_core:cactus"});
+	COARSE_DIRT = g("coarse_dirt", "default:dry_dirt");
+	IRON_ORE = g("iron_ore", "default:stone_with_iron");
+	COAL_ORE = g("coal_ore", "default:stone_with_coal");
+	GOLD_ORE = g("gold_ore", "default:stone_with_gold");
+	COPPER_ORE = g("copper_ore", "default:stone_with_copper");
 	// Luanti's default game has no vanilla lapis/redstone equivalents; mese is
 	// the closest visible ore fallback while diamond is provided directly.
-	LAPIS_ORE = g({"default:stone_with_mese", "default:stone_with_coal"});
-	REDSTONE_ORE = g({"default:stone_with_mese", "default:stone_with_iron"});
-	DIAMOND_ORE = g({"default:stone_with_diamond", "default:stone_with_gold"});
-	CLAY = g("default:clay");
-	DIRT_PATH = g("default:dirt_with_grass_footsteps");
-	ICE = g("default:ice");
-	PACKED_ICE = g("default:ice");
-	BLUE_ICE = g({"mcl_core:blue_ice", "default:ice"});
-	LAVA = liquid({"mcl_core:lava_source", "default:lava_source"});
-	POWDER_SNOW = g({"mcl_powder_snow:powder_snow", "mcl_core:snow", "default:snow"});
-	AMETHYST_BLOCK =
-			g({"mcl_amethyst:amethyst_block", "default:stone", "mcl_core:stone"});
-	BUDDING_AMETHYST =
-			g({"mcl_amethyst:budding_amethyst_block", "mcl_amethyst:budding_amethyst",
+	LAPIS_ORE = g("lapis_ore", {"default:stone_with_mese", "default:stone_with_coal"});
+	REDSTONE_ORE =
+			g("redstone_ore", {"default:stone_with_mese", "default:stone_with_iron"});
+	DIAMOND_ORE =
+			g("diamond_ore", {"default:stone_with_diamond", "default:stone_with_gold"});
+	CLAY = g("clay", "default:clay");
+	DIRT_PATH = g("dirt_path", "default:dirt_with_grass_footsteps");
+	ICE = g("ice", "default:ice");
+	PACKED_ICE = g("packed_ice", "default:ice");
+	BLUE_ICE = g("blue_ice", {"mcl_core:blue_ice", "default:ice"});
+	LAVA = liquid("lava", {"mcl_core:lava_source", "default:lava_source"});
+	POWDER_SNOW = g("powder_snow",
+			{"mcl_powder_snow:powder_snow", "mcl_core:snow", "default:snow"});
+	AMETHYST_BLOCK = g("amethyst_block",
+			{"mcl_amethyst:amethyst_block", "default:stone", "mcl_core:stone"});
+	BUDDING_AMETHYST = g("budding_amethyst",
+			{"mcl_amethyst:budding_amethyst_block", "mcl_amethyst:budding_amethyst",
 					"mcl_amethyst:amethyst_block", "default:stone", "mcl_core:stone"});
-	AMETHYST_CLUSTER = g({"mcl_amethyst:amethyst_cluster",
-			"mcl_amethyst:large_amethyst_bud", "default:stone", "mcl_core:stone"});
-	SMALL_AMETHYST_BUD = g({"mcl_amethyst:small_amethyst_bud",
-			"mcl_amethyst:amethyst_cluster", "default:stone", "mcl_core:stone"});
-	MEDIUM_AMETHYST_BUD = g({"mcl_amethyst:medium_amethyst_bud",
-			"mcl_amethyst:amethyst_cluster", "default:stone", "mcl_core:stone"});
-	LARGE_AMETHYST_BUD = g({"mcl_amethyst:large_amethyst_bud",
-			"mcl_amethyst:amethyst_cluster", "default:stone", "mcl_core:stone"});
-	DRIPSTONE_BLOCK =
-			g({"mcl_dripstone:dripstone_block", "default:stone", "mcl_core:stone"});
-	POINTED_DRIPSTONE = g({"mcl_dripstone:dripstone_bottom_tip",
-			"mcl_dripstone:dripstone_top_tip", "default:stone", "mcl_core:stone"});
-	GLOW_LICHEN = g({"mcl_core:glow_lichen_down", "mcl_core:glow_lichen_d",
-			"default:coral_green", "default:coral_cyan"});
-	BIG_DRIPLEAF = g({"mcl_lush_caves:big_dripleaf_1", "mcl_flowers:double_grass",
-			"default:grass_5", "default:stone"});
-	BIG_DRIPLEAF_STEM = g({"mcl_lush_caves:big_dripleaf_stem_1",
-			"mcl_lush_caves:big_dripleaf_1", "default:grass_5", "default:stone"});
-	SMALL_DRIPLEAF_LOWER = g({"mcl_lush_caves:small_dripleaf_1",
-			"mcl_flowers:double_grass", "default:grass_5", "default:stone"});
-	SMALL_DRIPLEAF_UPPER = g({"mcl_lush_caves:small_dripleaf_2",
-			"mcl_lush_caves:small_dripleaf_1", "default:grass_5", "default:stone"});
-	MUD = g({"mcl_mud:mud", "default:dirt", "mcl_core:dirt"});
-	DEAD_BUSH = g("default:dry_shrub");
-	MYCELIUM =
-			g({"default:mycelium", "mcl_core:mycelium", "mcl_core:dirt", "default:dirt"});
-	RED_MUSHROOM = g({"flowers:mushroom_red", "mcl_mushrooms:red_mushroom"});
-	BROWN_MUSHROOM = g({"flowers:mushroom_brown", "mcl_mushrooms:brown_mushroom"});
-	MOSS_CARPET = g({"default:moss", "mcl_moss:moss_carpet", "mcl_moss:moss",
-			"mcl_lush_caves:moss", "default:mossycobble"});
-	SWEET_BERRY_BUSH = g({"farming:strawberry", "mcl_sweet_berry:bush",
-			"mcl_farming:sweet_berry_bush_3", "mcl_farming:sweet_berry_bush_2",
-			"default:grass_5"});
-	PUMPKIN = g({"farming:pumpkin", "mcl_farming:pumpkin", "default:stone"});
-	LILY_PAD = g({"flowers:waterlily", "mcl_flowers:waterlily"});
-	TALL_GRASS_BOTTOM =
-			g({"default:grass_5", "mcl_flowers:tallgrass", "mcl_flowers:double_grass"});
-	SUGAR_CANE = g({"farming:cotton_8", "default:papyrus", "default:grass_5"});
-	TALL_GRASS_TOP = g(
+	AMETHYST_CLUSTER = g("amethyst_cluster",
+			{"mcl_amethyst:amethyst_cluster", "mcl_amethyst:large_amethyst_bud",
+					"default:stone", "mcl_core:stone"});
+	CALCITE = g("calcite", {"mcl_amethyst:calcite", "default:stone", "mcl_core:stone"});
+	BASALT = g("basalt", {"mcl_blackstone:basalt", "default:stone", "mcl_core:stone"});
+	SMOOTH_BASALT =
+			g("smooth_basalt", {"mcl_blackstone:basalt_smooth", "mcl_blackstone:basalt",
+									   "default:stone", "mcl_core:stone"});
+	CAVE_VINES = g("cave_vines", {"mcl_lush_caves:cave_vines_lit",
+										 "mcl_lush_caves:cave_vines", "default:vine"});
+	CAVE_VINES_UNLIT = g(
+			"cave_vines_unlit", {"mcl_lush_caves:cave_vines",
+										"mcl_lush_caves:cave_vines_lit", "default:vine"});
+	CAVE_VINES_PLANT = prefer_arnis("cave_vines_plant", CAVE_VINES_UNLIT);
+	CAVE_VINES_PLANT_LIT = prefer_arnis("cave_vines_plant_lit", CAVE_VINES);
+	SPORE_BLOSSOM = g(
+			"spore_blossom", {"mcl_lush_caves:spore_blossom", "mcl_flowers:flower_rose"});
+	AZALEA = g("azalea", {"mcl_lush_caves:azalea", "mcl_flowers:flower_rose"});
+	FLOWERING_AZALEA = g("flowering_azalea",
+			{"mcl_lush_caves:azalea_flowering", "mcl_lush_caves:azalea",
+					"mcl_flowers:flower_rose"});
+	AZALEA_LEAVES =
+			g("azalea_leaves", {"mcl_lush_caves:azalea_leaves", "default:leaves"});
+	FLOWERING_AZALEA_LEAVES = g("flowering_azalea_leaves",
+			{"mcl_lush_caves:azalea_leaves_flowering",
+					"mcl_lush_caves:flowering_azalea_leaves",
+					"mcl_lush_caves:azalea_leaves", "default:leaves"});
+	WHITE_BED = g("white_bed",
+			{"mcl_beds:bed_white_bottom", "beds:bed_bottom", "default:wood"});
+	LECTERN = g("lectern", {"mcl_lectern:lectern", "default:bookshelf", "default:wood"});
+	CAKE = g("cake", {"mcl_cake:cake", "default:apple", "default:wood"});
+	MELON = g("melon", {"mcl_farming:melon", "farming:melon", "default:wood"});
+	LOOM = g("loom", {"mcl_loom:loom", "default:wood"});
+	SMITHING_TABLE =
+			g("smithing_table", {"mcl_smithing_table:table", "default:steelblock"});
+	RED_MUSHROOM_BLOCK = g("red_mushroom_block",
+			{"mcl_mushrooms:red_mushroom_block_cap_111111", "mcl_core:stone"});
+	BROWN_MUSHROOM_BLOCK = g("brown_mushroom_block",
+			{"mcl_mushrooms:brown_mushroom_block_cap_111111", "mcl_core:stone"});
+	MUSHROOM_STEM = g("mushroom_stem",
+			{"mcl_mushrooms:brown_mushroom_block_stem_full", "mcl_core:stone"});
+	SHROOMLIGHT = g("shroomlight", {"mcl_crimson:shroomlight", "mcl_core:glowstone"});
+	TUBE_CORAL_BLOCK =
+			g("tube_coral_block", {"mcl_ocean:tube_coral_block", "mcl_core:stone"});
+	BRAIN_CORAL_BLOCK =
+			g("brain_coral_block", {"mcl_ocean:brain_coral_block", "mcl_core:stone"});
+	BUBBLE_CORAL_BLOCK =
+			g("bubble_coral_block", {"mcl_ocean:bubble_coral_block", "mcl_core:stone"});
+	FIRE_CORAL_BLOCK =
+			g("fire_coral_block", {"mcl_ocean:fire_coral_block", "mcl_core:stone"});
+	HORN_CORAL_BLOCK =
+			g("horn_coral_block", {"mcl_ocean:horn_coral_block", "mcl_core:stone"});
+	DEAD_TUBE_CORAL_BLOCK = g("dead_tube_coral_block",
+			{"mcl_ocean:dead_tube_coral_block", "mcl_core:stone"});
+	DEAD_BRAIN_CORAL_BLOCK = g("dead_brain_coral_block",
+			{"mcl_ocean:dead_brain_coral_block", "mcl_core:stone"});
+	DEAD_BUBBLE_CORAL_BLOCK = g("dead_bubble_coral_block",
+			{"mcl_ocean:dead_bubble_coral_block", "mcl_core:stone"});
+	DEAD_FIRE_CORAL_BLOCK = g("dead_fire_coral_block",
+			{"mcl_ocean:dead_fire_coral_block", "mcl_core:stone"});
+	DEAD_HORN_CORAL_BLOCK = g("dead_horn_coral_block",
+			{"mcl_ocean:dead_horn_coral_block", "mcl_core:stone"});
+	TUBE_CORAL = g("tube_coral", {"mcl_ocean:tube_coral", "mcl_core:stone"});
+	BRAIN_CORAL = g("brain_coral", {"mcl_ocean:brain_coral", "mcl_core:stone"});
+	BUBBLE_CORAL = g("bubble_coral", {"mcl_ocean:bubble_coral", "mcl_core:stone"});
+	FIRE_CORAL = g("fire_coral", {"mcl_ocean:fire_coral", "mcl_core:stone"});
+	HORN_CORAL = g("horn_coral", {"mcl_ocean:horn_coral", "mcl_core:stone"});
+	TUBE_CORAL_FAN = g("tube_coral_fan", {"mcl_ocean:tube_coral_fan", "mcl_core:stone"});
+	BRAIN_CORAL_FAN =
+			g("brain_coral_fan", {"mcl_ocean:brain_coral_fan", "mcl_core:stone"});
+	BUBBLE_CORAL_FAN =
+			g("bubble_coral_fan", {"mcl_ocean:bubble_coral_fan", "mcl_core:stone"});
+	FIRE_CORAL_FAN = g("fire_coral_fan", {"mcl_ocean:fire_coral_fan", "mcl_core:stone"});
+	HORN_CORAL_FAN = g("horn_coral_fan", {"mcl_ocean:horn_coral_fan", "mcl_core:stone"});
+	SMALL_AMETHYST_BUD = g("small_amethyst_bud",
+			{"mcl_amethyst:small_amethyst_bud", "mcl_amethyst:amethyst_cluster",
+					"default:stone", "mcl_core:stone"});
+	MEDIUM_AMETHYST_BUD = g("medium_amethyst_bud",
+			{"mcl_amethyst:medium_amethyst_bud", "mcl_amethyst:amethyst_cluster",
+					"default:stone", "mcl_core:stone"});
+	LARGE_AMETHYST_BUD = g("large_amethyst_bud",
+			{"mcl_amethyst:large_amethyst_bud", "mcl_amethyst:amethyst_cluster",
+					"default:stone", "mcl_core:stone"});
+	DRIPSTONE_BLOCK = g("dripstone_block",
+			{"mcl_dripstone:dripstone_block", "default:stone", "mcl_core:stone"});
+	POINTED_DRIPSTONE = g("pointed_dripstone",
+			{"mcl_dripstone:dripstone_bottom_tip", "mcl_dripstone:dripstone_top_tip",
+					"default:stone", "mcl_core:stone"});
+	GLOW_LICHEN = g("glow_lichen", {"mcl_core:glow_lichen_down", "mcl_core:glow_lichen_d",
+										   "default:coral_green", "default:coral_cyan"});
+	SCULK = g("sculk", {"mcl_sculk:sculk", "mcl_core:stone"});
+	SCULK_VEIN = g("sculk_vein",
+			{"mcl_sculk:vein", "mcl_core:glow_lichen_down", "default:coral_green"});
+	SCULK_CATALYST = g("sculk_catalyst",
+			{"mcl_sculk:catalyst", "mcl_sculk:sculk", "mcl_core:stone"});
+	SCULK_SENSOR =
+			g("sculk_sensor", {"mcl_sculk:sensor", "mcl_sculk:sculk", "mcl_core:stone"});
+	SCULK_SHRIEKER = g("sculk_shrieker",
+			{"mcl_sculk:shrieker", "mcl_sculk:sculk", "mcl_core:stone"});
+	BIG_DRIPLEAF = g(
+			"big_dripleaf", {"mcl_lush_caves:big_dripleaf_1", "mcl_flowers:double_grass",
+									"default:grass_5", "default:stone"});
+	BIG_DRIPLEAF_STEM = g("big_dripleaf_stem",
+			{"mcl_lush_caves:big_dripleaf_stem_1", "mcl_lush_caves:big_dripleaf_1",
+					"default:grass_5", "default:stone"});
+	SMALL_DRIPLEAF_LOWER = g("small_dripleaf_lower",
+			{"mcl_lush_caves:small_dripleaf_1", "mcl_flowers:double_grass",
+					"default:grass_5", "default:stone"});
+	SMALL_DRIPLEAF_UPPER = g("small_dripleaf_upper",
+			{"mcl_lush_caves:small_dripleaf_2", "mcl_lush_caves:small_dripleaf_1",
+					"default:grass_5", "default:stone"});
+	MUD = g("mud", {"mcl_mud:mud", "default:dirt", "mcl_core:dirt"});
+	DEAD_BUSH = g("dead_bush", "default:dry_shrub");
+	MYCELIUM = g("mycelium",
+			{"default:mycelium", "mcl_core:mycelium", "mcl_core:dirt", "default:dirt"});
+	RED_MUSHROOM =
+			g("red_mushroom", {"flowers:mushroom_red", "mcl_mushrooms:red_mushroom"});
+	BROWN_MUSHROOM = g(
+			"brown_mushroom", {"flowers:mushroom_brown", "mcl_mushrooms:brown_mushroom"});
+	MOSS_CARPET =
+			g("moss_carpet", {"default:moss", "mcl_moss:moss_carpet", "mcl_moss:moss",
+									 "mcl_lush_caves:moss", "default:mossycobble"});
+	SWEET_BERRY_BUSH = g("sweet_berry_bush",
+			{"farming:strawberry", "mcl_sweet_berry:bush",
+					"mcl_farming:sweet_berry_bush_3", "mcl_farming:sweet_berry_bush_2",
+					"default:grass_5"});
+	PUMPKIN = g("pumpkin", {"farming:pumpkin", "mcl_farming:pumpkin", "default:stone"});
+	LILY_PAD = g("lily_pad", {"flowers:waterlily", "mcl_flowers:waterlily"});
+	TALL_GRASS_BOTTOM = g("tall_grass_bottom",
+			{"default:grass_5", "mcl_flowers:tallgrass", "mcl_flowers:double_grass"});
+	SUGAR_CANE =
+			g("sugar_cane", {"farming:cotton_8", "default:papyrus", "default:grass_5"});
+	TALL_GRASS_TOP = g("tall_grass_top",
 			{"default:grass_5", "mcl_flowers:double_grass_top", "mcl_flowers:tallgrass"});
-	SUNFLOWER_LOWER = flower({"mcl_flowers:sunflower", "flowers:sunflower",
-									 "mcl_flowers:double_grass", "default:grass_5"},
+	SUNFLOWER_LOWER = flower("sunflower_lower",
+			{"mcl_flowers:sunflower", "flowers:sunflower", "mcl_flowers:double_grass",
+					"default:grass_5"},
 			TALL_GRASS_BOTTOM);
-	SUNFLOWER_UPPER = flower({"mcl_flowers:sunflower_top", "flowers:sunflower_top",
-									 "mcl_flowers:double_grass_top", "default:grass_5"},
+	SUNFLOWER_UPPER = flower("sunflower_upper",
+			{"mcl_flowers:sunflower_top", "flowers:sunflower_top",
+					"mcl_flowers:double_grass_top", "default:grass_5"},
 			TALL_GRASS_TOP);
-	LILAC_LOWER = flower({"mcl_flowers:lilac", "flowers:lilac",
-								 "mcl_flowers:double_grass", "default:grass_5"},
+	LILAC_LOWER = flower("lilac_lower",
+			{"mcl_flowers:lilac", "flowers:lilac", "mcl_flowers:double_grass",
+					"default:grass_5"},
 			TALL_GRASS_BOTTOM);
-	LILAC_UPPER = flower({"mcl_flowers:lilac_top", "flowers:lilac_top",
-								 "mcl_flowers:double_grass_top", "default:grass_5"},
+	LILAC_UPPER = flower("lilac_upper",
+			{"mcl_flowers:lilac_top", "flowers:lilac_top", "mcl_flowers:double_grass_top",
+					"default:grass_5"},
 			TALL_GRASS_TOP);
-	ROSE_BUSH_LOWER = flower({"mcl_flowers:rose_bush", "flowers:rose_bush",
-									 "mcl_flowers:double_grass", "default:grass_5"},
+	ROSE_BUSH_LOWER = flower("rose_bush_lower",
+			{"mcl_flowers:rose_bush", "flowers:rose_bush", "mcl_flowers:double_grass",
+					"default:grass_5"},
 			TALL_GRASS_BOTTOM);
-	ROSE_BUSH_UPPER = flower({"mcl_flowers:rose_bush_top", "flowers:rose_bush_top",
-									 "mcl_flowers:double_grass_top", "default:grass_5"},
+	ROSE_BUSH_UPPER = flower("rose_bush_upper",
+			{"mcl_flowers:rose_bush_top", "flowers:rose_bush_top",
+					"mcl_flowers:double_grass_top", "default:grass_5"},
 			TALL_GRASS_TOP);
-	PEONY_LOWER = flower({"mcl_flowers:peony", "flowers:peony",
-								 "mcl_flowers:double_grass", "default:grass_5"},
+	PEONY_LOWER = flower("peony_lower",
+			{"mcl_flowers:peony", "flowers:peony", "mcl_flowers:double_grass",
+					"default:grass_5"},
 			TALL_GRASS_BOTTOM);
-	PEONY_UPPER = flower({"mcl_flowers:peony_top", "flowers:peony_top",
-								 "mcl_flowers:double_grass_top", "default:grass_5"},
+	PEONY_UPPER = flower("peony_upper",
+			{"mcl_flowers:peony_top", "flowers:peony_top", "mcl_flowers:double_grass_top",
+					"default:grass_5"},
 			TALL_GRASS_TOP);
-	CRAFTING_TABLE = g("default:wood");
-	FURNACE = g("default:furnace");
-	WHITE_CARPET = g("wool:white");
-	BOOKSHELF = g("default:bookshelf");
-	OAK_PRESSURE_PLATE =
-			g({"mesecons_pressureplates:pressure_plate_wood_off", "default:wood"});
-	OAK_STAIRS = g({"stairs:stair_wood", "stairs:stair_pine_wood"});
-	CHEST = g("default:chest");
-	RED_CARPET = g("wool:red");
-	ANVIL = g("default:steelblock");
-	NOTE_BLOCK = g("default:wood");
-	OAK_DOOR = g("doors:door_wood_a");
-	BREWING_STAND = g("default:steelblock");
-	RED_BED_NORTH_HEAD = g("beds:bed_top");
-	RED_BED_NORTH_FOOT = g("beds:bed_bottom");
-	RED_BED_EAST_HEAD = g("beds:bed_top");
-	RED_BED_EAST_FOOT = g("beds:bed_bottom");
-	RED_BED_SOUTH_HEAD = g("beds:bed_top");
-	RED_BED_SOUTH_FOOT = g("beds:bed_bottom");
-	RED_BED_WEST_HEAD = g("beds:bed_top");
-	RED_BED_WEST_FOOT = g("beds:bed_bottom");
-	GRAY_STAINED_GLASS = GLASS;
-	LIGHT_GRAY_STAINED_GLASS = GLASS;
-	BROWN_STAINED_GLASS = GLASS;
-	TINTED_GLASS = GLASS;
-	OAK_TRAPDOOR = g("doors:trapdoor");
-	BROWN_CONCRETE = g({"wool:brown", "basic_materials:concrete_block", "default:stone"});
-	BLACK_TERRACOTTA = g("default:clay");
-	BROWN_TERRACOTTA = g("default:clay");
-	STONE_BRICK_STAIRS = g("stairs:stair_stonebrick");
-	MUD_BRICK_STAIRS =
-			g({"stairs:stair_silver_sandstone_brick", "stairs:stair_stonebrick"});
-	POLISHED_BLACKSTONE_BRICK_STAIRS =
-			g({"stairs:stair_obsidianbrick", "stairs:stair_obsidian_block"});
-	BRICK_STAIRS = g({"stairs:stair_brick", "stairs:stair_cobble"});
-	POLISHED_GRANITE_STAIRS = STONE_BRICK_STAIRS;
-	END_STONE_BRICK_STAIRS = STONE_BRICK_STAIRS;
-	POLISHED_DIORITE_STAIRS = STONE_BRICK_STAIRS;
-	SMOOTH_SANDSTONE_STAIRS = g("stairs:stair_sandstone");
-	QUARTZ_STAIRS = STONE_BRICK_STAIRS;
-	POLISHED_ANDESITE_STAIRS = STONE_BRICK_STAIRS;
-	NETHER_BRICK_STAIRS = g({"stairs:stair_obsidianbrick", "stairs:stair_stonebrick"});
+	CRAFTING_TABLE = g("crafting_table", "default:wood");
+	FURNACE = g("furnace", "default:furnace");
+	WHITE_CARPET = g("white_carpet", "wool:white");
+	GREEN_CARPET = g("green_carpet", {"wool:green", "wool:lime", "wool:cyan"});
+	LIGHT_BLUE_CARPET =
+			g("light_blue_carpet", {"wool:light_blue", "wool:cyan", "wool:blue"});
+	LIGHT_GRAY_CARPET =
+			g("light_gray_carpet", {"mcl_wool:silver_carpet", "wool:light_grey",
+										   "wool:light_gray", "wool:grey"});
+	BOOKSHELF = g("bookshelf", "default:bookshelf");
+	OAK_PRESSURE_PLATE = g("oak_pressure_plate",
+			{"mesecons_pressureplates:pressure_plate_wood_off", "default:wood"});
+	OAK_STAIRS = g("oak_stairs", {"stairs:stair_wood", "stairs:stair_pine_wood"});
+	CHEST = g("chest", "default:chest");
+	RED_CARPET = g("red_carpet", "wool:red");
+	ANVIL = g("anvil", "default:steelblock");
+	NOTE_BLOCK = g("note_block", "default:wood");
+	OAK_DOOR = g("oak_door", "doors:door_wood_a");
+	BREWING_STAND = g("brewing_stand", "default:steelblock");
+	RED_BED_NORTH_HEAD = g("red_bed_north_head", "beds:bed_top");
+	RED_BED_NORTH_FOOT = g("red_bed_north_foot", "beds:bed_bottom");
+	RED_BED_EAST_HEAD = g("red_bed_east_head", "beds:bed_top");
+	RED_BED_EAST_FOOT = g("red_bed_east_foot", "beds:bed_bottom");
+	RED_BED_SOUTH_HEAD = g("red_bed_south_head", "beds:bed_top");
+	RED_BED_SOUTH_FOOT = g("red_bed_south_foot", "beds:bed_bottom");
+	RED_BED_WEST_HEAD = g("red_bed_west_head", "beds:bed_top");
+	RED_BED_WEST_FOOT = g("red_bed_west_foot", "beds:bed_bottom");
+	GRAY_STAINED_GLASS = prefer_arnis("gray_stained_glass", GLASS);
+	LIGHT_GRAY_STAINED_GLASS = prefer_arnis("light_gray_stained_glass", GLASS);
+	BROWN_STAINED_GLASS = prefer_arnis("brown_stained_glass", GLASS);
+	TINTED_GLASS = prefer_arnis("tinted_glass", GLASS);
+	OAK_TRAPDOOR = g("oak_trapdoor", "doors:trapdoor");
+	BROWN_CONCRETE = g("brown_concrete",
+			{"wool:brown", "basic_materials:concrete_block", "default:stone"});
+	BLACK_TERRACOTTA = g("black_terracotta", "default:clay");
+	BROWN_TERRACOTTA = g("brown_terracotta", "default:clay");
+	STONE_BRICK_STAIRS = g("stone_brick_stairs", "stairs:stair_stonebrick");
+	MUD_BRICK_STAIRS = g("mud_brick_stairs",
+			{"stairs:stair_silver_sandstone_brick", "stairs:stair_stonebrick"});
+	POLISHED_BLACKSTONE_BRICK_STAIRS = g("polished_blackstone_brick_stairs",
+			{"stairs:stair_obsidianbrick", "stairs:stair_obsidian_block"});
+	BRICK_STAIRS = g("brick_stairs", {"stairs:stair_brick", "stairs:stair_cobble"});
+	POLISHED_GRANITE_STAIRS = prefer_arnis("polished_granite_stairs", STONE_BRICK_STAIRS);
+	END_STONE_BRICK_STAIRS = prefer_arnis("end_stone_brick_stairs", STONE_BRICK_STAIRS);
+	POLISHED_DIORITE_STAIRS = prefer_arnis("polished_diorite_stairs", STONE_BRICK_STAIRS);
+	SMOOTH_SANDSTONE_STAIRS = g("smooth_sandstone_stairs", "stairs:stair_sandstone");
+	QUARTZ_STAIRS = prefer_arnis("quartz_stairs", STONE_BRICK_STAIRS);
+	POLISHED_ANDESITE_STAIRS =
+			prefer_arnis("polished_andesite_stairs", STONE_BRICK_STAIRS);
+	NETHER_BRICK_STAIRS = g("nether_brick_stairs",
+			{"stairs:stair_obsidianbrick", "stairs:stair_stonebrick"});
 
-	COBWEB = g({"farming:cotton_wild", "xpanes:pane_flat", "default:glass"});
-	CHISELLED_BOOKSHELF_NORTH = BOOKSHELF;
-	CHISELLED_BOOKSHELF_EAST = BOOKSHELF;
-	CHISELLED_BOOKSHELF_SOUTH = BOOKSHELF;
-	CHISELLED_BOOKSHELF_WEST = BOOKSHELF;
-	DAMAGED_ANVIL = ANVIL;
+	COBWEB = g("cobweb", {"farming:cotton_wild", "xpanes:pane_flat", "default:glass"});
+	CHISELLED_BOOKSHELF_NORTH = prefer_arnis("chiseled_bookshelf", BOOKSHELF);
+	CHISELLED_BOOKSHELF_EAST = prefer_arnis("chiseled_bookshelf", BOOKSHELF);
+	CHISELLED_BOOKSHELF_SOUTH = prefer_arnis("chiseled_bookshelf", BOOKSHELF);
+	CHISELLED_BOOKSHELF_WEST = prefer_arnis("chiseled_bookshelf", BOOKSHELF);
+	DAMAGED_ANVIL = prefer_arnis("damaged_anvil", ANVIL);
 
-	CHAIN = g({"basic_materials:chain_steel", "xpanes:bar_flat", "default:steelblock"});
-	END_ROD = GLOWSTONE;
-	LIGHTNING_ROD = g({"freeminer:lamp_red", "default:meselamp", "default:copperblock",
-			"basic_materials:brass_block", "default:steelblock"});
-	GOLD_BLOCK = g("default:goldblock");
-	SEA_LANTERN = GLOWSTONE;
-	ORANGE_CONCRETE =
-			g({"wool:orange", "basic_materials:concrete_block", "default:stone"});
-	ORANGE_WOOL = g("wool:orange");
-	BLUE_WOOL = g("wool:blue");
-	GREEN_CONCRETE = g({"wool:green", "basic_materials:concrete_block", "default:stone"});
-	BRICK_WALL = g("default:brick");
-	REDSTONE_BLOCK = g("default:mese");
-	CHAIN_X = CHAIN;
-	CHAIN_Z = CHAIN;
-	SPRUCE_DOOR_LOWER = OAK_DOOR;
-	SPRUCE_DOOR_UPPER = OAK_DOOR;
-	SMOOTH_STONE_SLAB =
-			g({"stairs:slab_stone_block", "stairs:slab_stone", "default:stone"});
-	GLASS_PANE = g({"xpanes:pane_flat", "default:glass"});
-	LIGHT_GRAY_TERRACOTTA = g("default:clay");
-	OAK_SLAB_TOP = OAK_SLAB;
-	OAK_DOOR_UPPER = OAK_DOOR;
-	SPRUCE_LEAVES = g({"default:pine_needles", "default:leaves"});
-	CYAN_STAINED_GLASS = GLASS;
-	BLUE_STAINED_GLASS = GLASS;
-	LIGHT_BLUE_STAINED_GLASS = GLASS;
-	DAYLIGHT_DETECTOR = g({"mesecons_solarpanel:solar_panel_off", "default:glass"});
-	RED_STAINED_GLASS = GLASS;
-	YELLOW_STAINED_GLASS = GLASS;
-	PURPLE_STAINED_GLASS = GLASS;
-	ORANGE_STAINED_GLASS = GLASS;
-	MAGENTA_STAINED_GLASS = GLASS;
-	FLOWER_POT = g("default:clay");
-	OAK_TRAPDOOR_OPEN_NORTH = OAK_TRAPDOOR;
-	OAK_TRAPDOOR_OPEN_SOUTH = OAK_TRAPDOOR;
-	OAK_TRAPDOOR_OPEN_EAST = OAK_TRAPDOOR;
-	OAK_TRAPDOOR_OPEN_WEST = OAK_TRAPDOOR;
-	QUARTZ_SLAB_TOP = g("default:stone");
-	DARK_OAK_TRAPDOOR = OAK_TRAPDOOR;
-	SPRUCE_TRAPDOOR = OAK_TRAPDOOR;
-	BIRCH_TRAPDOOR = OAK_TRAPDOOR;
-	MUD_BRICK_SLAB =
-			g({"stairs:slab_silver_sandstone_brick", "default:silver_sandstone_brick"});
-	BRICK_SLAB = g({"stairs:slab_brick", "default:brick"});
-	POTTED_RED_TULIP = g("flowers:rose");
-	POTTED_DANDELION = g("flowers:dandelion_yellow");
-	POTTED_BLUE_ORCHID = g("flowers:geranium");
+	CHAIN = g("chain",
+			{"basic_materials:chain_steel", "xpanes:bar_flat", "default:steelblock"});
+	END_ROD = prefer_arnis("end_rod", GLOWSTONE);
+	LIGHTNING_ROD = g("lightning_rod",
+			{"freeminer:lamp_red", "default:meselamp", "default:copperblock",
+					"basic_materials:brass_block", "default:steelblock"});
+	GOLD_BLOCK = g("gold_block", "default:goldblock");
+	SEA_LANTERN = prefer_arnis("sea_lantern", GLOWSTONE);
+	LANTERN = g("lantern", {"mcl_lantern:lantern", "default:torch", "default:meselamp"});
+	SOUL_LANTERN = g("soul_lantern",
+			{"mcl_lantern:soul_lantern", "default:torch", "default:meselamp"});
+	SMOKER = g("smoker", {"mcl_furnaces:smoker", "default:furnace"});
+	EMPTY_FLOWER_POT =
+			g("empty_flower_pot", {"mcl_flowerpots:flower_pot", "default:clay"});
+	COMPOSTER = g("composter",
+			{"mcl_composters:composter", "farming:composter", "default:chest"});
+	HOPPER = g("hopper", {"mcl_hoppers:hopper", "hopper:hopper", "default:chest"});
+	BLAST_FURNACE = g("blast_furnace", {"mcl_furnaces:blast_furnace", "default:furnace"});
+	DISPENSER = g("dispenser",
+			{"mcl_dispensers:dispenser", "mesecons:dispenser", "default:chest"});
+	GRINDSTONE = g("grindstone", {"mcl_grindstone:grindstone", "default:stone"});
+	POLISHED_BLACKSTONE_SLAB = g("polished_blackstone_slab",
+			{"mcl_stairs:slab_polished_blackstone", "stairs:slab_stone_block",
+					"default:stone"});
+	REDSTONE_LAMP = g("redstone_lamp",
+			{"mcl_redstone:redstone_lamp", "default:meselamp", "default:stone"});
+	AMETHYST_CLUSTER =
+			g("amethyst_cluster", {"mcl_amethyst:amethyst_cluster", "default:stone"});
+	CHISELED_QUARTZ_BLOCK = g(
+			"chiseled_quartz_block", {"mcl_core:chiseled_quartz_block", "default:stone"});
+	ORANGE_CONCRETE = g("orange_concrete",
+			{"wool:orange", "basic_materials:concrete_block", "default:stone"});
+	ORANGE_WOOL = g("orange_wool", "wool:orange");
+	BLUE_WOOL = g("blue_wool", "wool:blue");
+	GREEN_CONCRETE = g("green_concrete",
+			{"wool:green", "basic_materials:concrete_block", "default:stone"});
+	BRICK_WALL = g("brick_wall", "default:brick");
+	REDSTONE_BLOCK = g("redstone_block", "default:mese");
+	CHAIN_X = prefer_arnis("chain", CHAIN);
+	CHAIN_Z = prefer_arnis("chain", CHAIN);
+	SPRUCE_DOOR_LOWER = prefer_arnis("spruce_door", OAK_DOOR);
+	SPRUCE_DOOR_UPPER = prefer_arnis("spruce_door", OAK_DOOR);
+	SMOOTH_STONE_SLAB = g("smooth_stone_slab",
+			{"stairs:slab_stone_block", "stairs:slab_stone", "default:stone"});
+	GLASS_PANE = g("glass_pane", {"xpanes:pane_flat", "default:glass"});
+	LIGHT_GRAY_TERRACOTTA = g("light_gray_terracotta", "default:clay");
+	OAK_SLAB_TOP = prefer_arnis("oak_slab", OAK_SLAB);
+	OAK_DOOR_UPPER = prefer_arnis("oak_door", OAK_DOOR);
+	SPRUCE_LEAVES = g("spruce_leaves", {"default:pine_needles", "default:leaves"});
+	CYAN_STAINED_GLASS = prefer_arnis("cyan_stained_glass", GLASS);
+	BLUE_STAINED_GLASS = prefer_arnis("blue_stained_glass", GLASS);
+	LIGHT_BLUE_STAINED_GLASS = prefer_arnis("light_blue_stained_glass", GLASS);
+	DAYLIGHT_DETECTOR = g("daylight_detector",
+			{"mesecons_solarpanel:solar_panel_off", "default:glass"});
+	RED_STAINED_GLASS = prefer_arnis("red_stained_glass", GLASS);
+	YELLOW_STAINED_GLASS = prefer_arnis("yellow_stained_glass", GLASS);
+	PURPLE_STAINED_GLASS = prefer_arnis("purple_stained_glass", GLASS);
+	ORANGE_STAINED_GLASS = prefer_arnis("orange_stained_glass", GLASS);
+	MAGENTA_STAINED_GLASS = prefer_arnis("magenta_stained_glass", GLASS);
+	FLOWER_POT = g("flower_pot", "default:clay");
+	OAK_TRAPDOOR_OPEN_NORTH = prefer_arnis("oak_trapdoor", OAK_TRAPDOOR);
+	OAK_TRAPDOOR_OPEN_SOUTH = prefer_arnis("oak_trapdoor", OAK_TRAPDOOR);
+	OAK_TRAPDOOR_OPEN_EAST = prefer_arnis("oak_trapdoor", OAK_TRAPDOOR);
+	OAK_TRAPDOOR_OPEN_WEST = prefer_arnis("oak_trapdoor", OAK_TRAPDOOR);
+	QUARTZ_SLAB_TOP = g("quartz_slab_top", "default:stone");
+	DARK_OAK_TRAPDOOR = prefer_arnis("dark_oak_trapdoor", OAK_TRAPDOOR);
+	SPRUCE_TRAPDOOR = prefer_arnis("spruce_trapdoor", OAK_TRAPDOOR);
+	BIRCH_TRAPDOOR = prefer_arnis("birch_trapdoor", OAK_TRAPDOOR);
+	MUD_BRICK_SLAB = g("mud_brick_slab",
+			{"stairs:slab_silver_sandstone_brick", "default:silver_sandstone_brick"});
+	BRICK_SLAB = g("brick_slab", {"stairs:slab_brick", "default:brick"});
+	POTTED_RED_TULIP = g("potted_red_tulip", "flowers:rose");
+	POTTED_DANDELION = g("potted_dandelion", "flowers:dandelion_yellow");
+	POTTED_BLUE_ORCHID = g("potted_blue_orchid", "flowers:geranium");
 
 	// Initialize missing blocks
-	BARREL = g("default:chest");
-	FERN = g("default:fern_3");
-	CHIPPED_ANVIL = ANVIL;
-	LARGE_FERN_LOWER = g("default:fern_2");
-	LARGE_FERN_UPPER = g("default:fern_3");
-	LEVER = g({"mesecons_walllever:wall_lever_off", "default:steelblock"});
-	COBBLESTONE_STAIRS = g("stairs:stair_cobble");
-	WAXED_CUT_COPPER_STAIRS = g({"stairs:stair_copperblock", "stairs:stair_stonebrick"});
-	MOSSY_STONE_BRICK_STAIRS = g({"stairs:stair_mossycobble", "stairs:stair_stonebrick"});
-	MOSSY_COBBLESTONE_STAIRS = g("stairs:stair_mossycobble");
-	DEEPSLATE_BRICK_STAIRS = STONE_BRICK_STAIRS;
-	POLISHED_DEEPSLATE_STAIRS = STONE_BRICK_STAIRS;
-	RED_NETHER_BRICKS = NETHER_BRICK;
-	SPRUCE_STAIRS = g("stairs:stair_pine_wood");
-	DARK_OAK_STAIRS = OAK_STAIRS;
-	RED_NETHER_BRICK_STAIRS = NETHER_BRICK_STAIRS;
-	WAXED_OXIDIZED_CUT_COPPER_STAIRS =
-			g({"stairs:stair_copperblock", "stairs:stair_stonebrick"});
-	WAXED_OXIDIZED_COPPER = g({"default:copperblock", "default:stone"});
-	ANDESITE_STAIRS = STONE_BRICK_STAIRS;
-	WAXED_EXPOSED_CUT_COPPER_STAIRS =
-			g({"stairs:stair_copperblock", "stairs:stair_stonebrick"});
-	WHITE_WALL_BANNER = WHITE_WOOL;
-	BLUE_WALL_BANNER = BLUE_WOOL;
-	BLACK_WALL_BANNER = BLACK_CONCRETE;
-	RED_WALL_BANNER = RED_WOOL;
-	GREEN_WALL_BANNER = GREEN_WOOL;
-	MOSSY_STONE_BRICKS = g({"default:mossycobble", "default:stonebrick"});
-	DEEPSLATE = STONE;
-	TUFF = STONE;
-	COBBLED_DEEPSLATE = COBBLESTONE;
-	WATER_CAULDRON = CAULDRON;
-	WAXED_COPPER_BLOCK = g({"default:copperblock", "default:stone"});
-	WAXED_EXPOSED_COPPER = g({"default:copperblock", "default:stone"});
-	WAXED_EXPOSED_CHISELED_COPPER = g({"default:copperblock", "default:stone"});
-	WAXED_EXPOSED_CUT_COPPER = g({"default:copperblock", "default:stone"});
-	CHERRY_LOG = g({"default:aspen_tree", "default:tree"});
-	CHERRY_LEAVES = g({"default:aspen_leaves", "default:leaves"});
-	GRAY_CONCRETE_POWDER = g({"default:gravel", "mcl_core:gravel", "dye:grey"});
-	BROWN_CONCRETE_POWDER = g({"default:gravel", "mcl_core:gravel", "dye:brown"});
-	CYAN_TERRACOTTA = CYAN_CONCRETE;
-	BLACK_WOOL = g("wool:black");
-	LIGHT_GRAY_WALL_BANNER = LIGHT_GRAY_CONCRETE;
+	BARREL = g("barrel", "default:chest");
+	FERN = g("fern", "default:fern_3");
+	CHIPPED_ANVIL = prefer_arnis("chipped_anvil", ANVIL);
+	LARGE_FERN_LOWER = g("large_fern_lower", "default:fern_2");
+	LARGE_FERN_UPPER = g("large_fern_upper", "default:fern_3");
+	LEVER = g("lever", {"mesecons_walllever:wall_lever_off", "default:steelblock"});
+	COBBLESTONE_STAIRS = g("cobblestone_stairs", "stairs:stair_cobble");
+	WAXED_CUT_COPPER_STAIRS = g("waxed_cut_copper_stairs",
+			{"stairs:stair_copperblock", "stairs:stair_stonebrick"});
+	MOSSY_STONE_BRICK_STAIRS = g("mossy_stone_brick_stairs",
+			{"stairs:stair_mossycobble", "stairs:stair_stonebrick"});
+	MOSSY_COBBLESTONE_STAIRS = g("mossy_cobblestone_stairs", "stairs:stair_mossycobble");
+	DEEPSLATE_BRICK_STAIRS = prefer_arnis("deepslate_brick_stairs", STONE_BRICK_STAIRS);
+	POLISHED_DEEPSLATE_STAIRS =
+			prefer_arnis("polished_deepslate_stairs", STONE_BRICK_STAIRS);
+	RED_NETHER_BRICKS = prefer_arnis("red_nether_bricks", NETHER_BRICK);
+	SPRUCE_STAIRS = g("spruce_stairs", "stairs:stair_pine_wood");
+	DARK_OAK_STAIRS = prefer_arnis("dark_oak_stairs", OAK_STAIRS);
+	RED_NETHER_BRICK_STAIRS =
+			prefer_arnis("red_nether_brick_stairs", NETHER_BRICK_STAIRS);
+	WAXED_OXIDIZED_CUT_COPPER_STAIRS = g("waxed_oxidized_cut_copper_stairs",
+			{"stairs:stair_copperblock", "stairs:stair_stonebrick"});
+	WAXED_OXIDIZED_COPPER =
+			g("waxed_oxidized_copper", {"default:copperblock", "default:stone"});
+	ANDESITE_STAIRS = prefer_arnis("andesite_stairs", STONE_BRICK_STAIRS);
+	WAXED_EXPOSED_CUT_COPPER_STAIRS = g("waxed_exposed_cut_copper_stairs",
+			{"stairs:stair_copperblock", "stairs:stair_stonebrick"});
+	WHITE_WALL_BANNER = prefer_arnis("white_wall_banner", WHITE_WOOL);
+	BLUE_WALL_BANNER = prefer_arnis("blue_wall_banner", BLUE_WOOL);
+	BLACK_WALL_BANNER = prefer_arnis("black_wall_banner", BLACK_CONCRETE);
+	RED_WALL_BANNER = prefer_arnis("red_wall_banner", RED_WOOL);
+	GREEN_WALL_BANNER = prefer_arnis("green_wall_banner", GREEN_WOOL);
+	MOSSY_STONE_BRICKS =
+			g("mossy_stone_bricks", {"default:mossycobble", "default:stonebrick"});
+	DEEPSLATE = prefer_arnis("deepslate", STONE);
+	TUFF = prefer_arnis("tuff", STONE);
+	COBBLED_DEEPSLATE = prefer_arnis("cobbled_deepslate", COBBLESTONE);
+	WATER_CAULDRON = prefer_arnis("cauldron", CAULDRON);
+	WAXED_COPPER_BLOCK =
+			g("waxed_copper_block", {"default:copperblock", "default:stone"});
+	WAXED_EXPOSED_COPPER =
+			g("waxed_exposed_copper", {"default:copperblock", "default:stone"});
+	WAXED_EXPOSED_CHISELED_COPPER =
+			g("waxed_exposed_chiseled_copper", {"default:copperblock", "default:stone"});
+	WAXED_EXPOSED_CUT_COPPER =
+			g("waxed_exposed_cut_copper", {"default:copperblock", "default:stone"});
+	MANGROVE_LOG = g("mangrove_log", {"mcl_core:mangrove_log", "default:tree"});
+	MANGROVE_LEAVES =
+			g("mangrove_leaves", {"mcl_core:mangrove_leaves", "default:leaves"});
+	CHERRY_LOG = g("cherry_log", {"default:aspen_tree", "default:tree"});
+	CHERRY_LEAVES = g("cherry_leaves", {"default:aspen_leaves", "default:leaves"});
+	GRAY_CONCRETE_POWDER =
+			g("gray_concrete_powder", {"default:gravel", "mcl_core:gravel", "dye:grey"});
+	BROWN_CONCRETE_POWDER = g(
+			"brown_concrete_powder", {"default:gravel", "mcl_core:gravel", "dye:brown"});
+	CYAN_TERRACOTTA = prefer_arnis("cyan_terracotta", CYAN_CONCRETE);
+	BLACK_WOOL = g("black_wool", "wool:black");
+	LIGHT_GRAY_WALL_BANNER = prefer_arnis("light_gray_wall_banner", LIGHT_GRAY_CONCRETE);
 
 	// Content IDs are local to a NodeDefManager. A process may open another
 	// world/game without restarting, so remember which registry these mappings
