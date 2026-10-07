@@ -2398,6 +2398,12 @@ void Client::makeScreenshot(const std::string & name)
 	video::IVideoDriver *driver = m_rendering_engine->get_video_driver();
 	std::string filename;
 	if (takeScreenshot(driver, filename, name)) {
+        // fm:
+		if (name == "timelapse_") {
+			return;
+		}
+		// ===
+
 		std::string msg = fmtgettext("Saved screenshot to \"%s\"", filename.c_str());
 		pushToChatQueue(new ChatMessage(CHATMESSAGE_TYPE_SYSTEM,
 				utf8_to_wide(msg)));
