@@ -77,6 +77,14 @@ different directory. Existing notes are loaded at startup; when updating a
 file the agent should include the useful existing notes because each save
 replaces that file.
 
+Conversation context is saved after completed turns and on exit as
+`context-<id>.json` in the memory directory, keyed by player name and server.
+Run again with the same `--name` and server to resume recent conversation and
+live operator instructions. The system prompt is rebuilt and the agent is
+instructed to verify current state before continuing. Use `--no-resume` to
+start fresh. Random default player names create separate checkpoints, so use
+a fixed `--name` for continuity.
+
 The agent can also keep up to 1,500 characters of interaction notes per player.
 These are stored as separate `player-<id>.md` files in the same memory
 directory. When the agent reads chat history, saved notes for senders in that
@@ -146,3 +154,10 @@ a server command.
 `id`, `type`, `sender`, `text`, `formatted`, and `timestamp`. For polling, pass
 the previous response's `next_after_id` as `after_id`. Up to 1,000 messages are
 retained and each call returns at most 200.
+
+For node inventories such as chests, open the node first with `use_item` at its
+coordinates, then call `get_inventory` to discover its list names and slot
+indices. When moving items, omit node coordinates for player inventory
+endpoints and provide node coordinates only for the node endpoint. Do not guess
+indices or retry an unavailable inventory move without opening and inspecting
+the container first.

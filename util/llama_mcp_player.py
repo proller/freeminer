@@ -81,7 +81,32 @@ Do not dig below yourself or through sand, gravel, unsupported blocks, fluids,
 or lava. If the route is unsafe or repeated attempts fail, stop and report the
 position and obstacle rather than digging blindly.
 Save verified, reusable gameplay lessons and server-specific world discoveries
-with save_memory; keep notes short, factual, and useful to the next run."""
+with save_memory; keep notes short, factual, and useful to the next run.
+For chest or node inventory transfers, approach the node and open it with
+use_item targeting its coordinates, then call get_inventory to learn the actual
+list names and slot indices. In move_inventory_item, omit node coordinates for
+the player inventory endpoint and provide node coordinates only for a node
+inventory endpoint. Never guess slot indices or use the same node as both
+endpoints for an ordinary chest transfer. If an inventory is unavailable,
+open it and inspect again; do not repeat the unchanged failed move."""
+
+
+TOOL_GUIDANCE = {
+    "use_item": (
+        " Right-click a chest/container node with node_x/y/z to open its inventory "
+        "before reading or moving its slots."
+    ),
+    "get_inventory": (
+        " Node inventories must first be opened in game with use_item. Use the "
+        "returned lists and indices; do not guess them."
+    ),
+    "move_inventory_item": (
+        " First open a node inventory with use_item and inspect it with get_inventory. "
+        "For a player endpoint omit its node coordinates; provide node coordinates "
+        "only for a node endpoint. Use the actual list names and indices returned "
+        "by get_inventory."
+    ),
+}
 
 MAX_TOOL_RESULT_CHARS = 2000
 MAX_RECENT_MESSAGES = 12
@@ -94,6 +119,74 @@ DEFAULT_MEMORY_DIR = Path(__file__).resolve().parent.parent / "cache"
 def get_system_prompt() -> str:
     """Use the environment override when set, including an intentionally empty value."""
     return os.environ.get(SYSTEM_PROMPT_ENV, SYSTEM_PROMPT)
+
+
+def context_path(memory_dir: Path, player_name: str, host: str, port: int) -> Path:
+    key = hashlib.sha256(
+        f"{player_name}\n{host.lower()}:{port}".encode("utf-8")
+    ).hexdigest()[:16]
+    return memory_dir / f"context-{key}.json"
+
+
+def load_context(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            not isinstance(data, dict)
+            or data.get("version") != 1
+            or not isinstance(data.get("messages"), list)
+            or not all(isinstance(item, dict) for item in data["messages"])
+            or not isinstance(data.get("operator_instructions", []), list)
+            or not all(isinstance(item, str) for item in data.get("operator_instructions", []))
+        ):
+            raise ValueError("Invalid conversation checkpoint")
+        return data
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as error:
+        print(f"Could not load conversation {path}: {error}", file=sys.stderr)
+        return {}
+
+
+def save_context(
+    path: Path, messages: list[dict[str, Any]], goal: str,
+    operator_instructions: list[str],
+) -> None:
+    if not messages:
+        return
+    # An interrupted action batch must not leave unmatched tool calls in the
+    # restored conversation. Only retain fully completed exchanges.
+    history: list[dict[str, Any]] = []
+    index = 0
+    while index < len(messages):
+        item = messages[index]
+        calls = item.get("tool_calls", []) if item.get("role") == "assistant" else []
+        if calls:
+            replies = messages[index + 1:index + 1 + len(calls)]
+            if (
+                len(replies) != len(calls)
+                or any(reply.get("role") != "tool" for reply in replies)
+                or {reply.get("tool_call_id") for reply in replies}
+                != {call.get("id") for call in calls}
+            ):
+                break
+            history.extend([item, *replies])
+            index += len(calls) + 1
+        else:
+            if item.get("role") != "tool":
+                history.append(item)
+            index += 1
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps({
+            "version": 1, "goal": goal,
+            "messages": compact_messages(history, MAX_RECENT_MESSAGES),
+            "operator_instructions": operator_instructions[-8:],
+        }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(path)
+    except OSError as error:
+        print(f"Could not save conversation {path}: {error}", file=sys.stderr)
 
 
 def memory_paths(memory_dir: Path, host: str, port: int) -> dict[str, Path]:
@@ -354,10 +447,8 @@ def compact_messages(
         return messages
     recent = messages[-recent_limit:]
     # A tool reply without its matching assistant tool-call message is not
-    # valid chat history. Drop leading tool replies and their assistant call.
+    # valid chat history. Drop leading tool replies from the sliced history.
     while recent and recent[0].get("role") == "tool":
-        recent.pop(0)
-    if recent and recent[0].get("role") == "assistant" and recent[0].get("tool_calls"):
         recent.pop(0)
     return [messages[0], messages[1], *recent]
 
@@ -446,6 +537,10 @@ def parse_args() -> argparse.Namespace:
         help="Stop after this many model turns; 0 means unlimited (default)",
     )
     parser.add_argument("--ctx-size", type=int, default=8192)
+    parser.add_argument(
+        "--no-resume", action="store_true",
+        help="Start a fresh conversation instead of loading the saved context",
+    )
     parser.add_argument(
         "--memory-dir",
         type=Path,
@@ -539,6 +634,9 @@ def main() -> int:
 
     processes: list[subprocess.Popen[bytes]] = []
     temp_config: str | None = None
+    checkpoint = context_path(args.memory_dir.expanduser(), args.name, host, port)
+    messages: list[dict[str, Any]] = []
+    operator_instructions: list[str] = []
     try:
         llama_command = [
             args.llama_server,
@@ -630,7 +728,6 @@ def main() -> int:
         if SYSTEM_PROMPT_ENV in os.environ:
             print(f"Using system prompt from {SYSTEM_PROMPT_ENV}.", flush=True)
         command_queue: queue.Queue[str | None] = queue.Queue()
-        operator_instructions: list[str] = []
         if not args.no_interactive and sys.stdin.isatty():
             print(
                 "Live control: type an instruction and press Enter. "
@@ -658,10 +755,32 @@ def main() -> int:
 
             threading.Thread(target=read_operator_input, daemon=True).start()
 
-        messages: list[dict[str, Any]] = [
+        messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": args.goal},
         ]
+        restored = {} if args.no_resume else load_context(checkpoint)
+        if restored:
+            messages.extend(restored["messages"][2:])
+            operator_instructions = restored.get("operator_instructions", [])[-8:]
+            if operator_instructions:
+                messages[0]["content"] = system_prompt + (
+                    "\n\nCurrent operator instructions (follow the newest):\n"
+                    + "\n".join(f"- {item}" for item in operator_instructions)
+                )
+            messages.append({
+                "role": "user",
+                "content": (
+                    "Resuming after a restart. Inspect current player state and inventory "
+                    "before acting; previous positions, object IDs, and observations may "
+                    "be outdated. Do not replay completed actions. "
+                    + (f"The new startup goal is: {args.goal}"
+                       if restored.get("goal") != args.goal
+                       else "Continue the previous task, following the latest operator instructions.")
+                ),
+            })
+            print(f"[context] Restored conversation for {args.name} from {checkpoint}.", flush=True)
+        save_context(checkpoint, messages, args.goal, operator_instructions)
 
         def apply_operator_input() -> bool:
             """Add queued operator instructions; return true when asked to stop."""
@@ -707,7 +826,8 @@ def main() -> int:
                         "type": "function",
                         "function": {
                             "name": tool["name"],
-                            "description": tool.get("description", ""),
+                            "description": tool.get("description", "")
+                            + TOOL_GUIDANCE.get(tool["name"], ""),
                             "parameters": tool.get(
                                 "inputSchema", {"type": "object", "properties": {}}
                             ),
@@ -745,6 +865,9 @@ def main() -> int:
             if choice.get("content"):
                 print(f"[agent] {choice['content']}", flush=True)
             if not calls:
+                messages.append({"role": "assistant", "content": choice.get("content") or ""})
+                messages = compact_messages(messages, MAX_RECENT_MESSAGES)
+                save_context(checkpoint, messages, args.goal, operator_instructions)
                 # Keep the session alive so a later terminal instruction can
                 # start another task even if the model has no action right now.
                 time.sleep(0.25)
@@ -869,6 +992,7 @@ def main() -> int:
             # Keep enough recent context for action feedback without letting
             # map scans grow the prompt for the entire session.
             messages = compact_messages(messages, MAX_RECENT_MESSAGES)
+            save_context(checkpoint, messages, args.goal, operator_instructions)
         else:
             print(f"Reached the {args.max_turns}-turn limit.", flush=True)
         return 0
@@ -879,6 +1003,7 @@ def main() -> int:
         print(f"Player agent failed: {error}", file=sys.stderr)
         return 1
     finally:
+        save_context(checkpoint, messages, args.goal, operator_instructions)
         for process in reversed(processes):
             if process.poll() is None:
                 process.send_signal(signal.SIGINT)
