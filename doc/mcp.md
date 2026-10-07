@@ -22,6 +22,9 @@ The Freeminer client must already be running with `enable_mcp = true`.
 
 Each HTTP session must perform the MCP `initialize` exchange and send
 `notifications/initialized` before listing or calling tools.
+Game reconnects restart the MCP listener and invalidate previous sessions.
+The llama.cpp player automatically initializes a fresh session and retries a
+tool request once when the server rejects its old session with HTTP 404.
 
 ## Local llama.cpp player
 
@@ -48,8 +51,10 @@ or `FREEMINER_BIN` to select a specific executable. The
 MCP listener defaults to port `31001`, and the llama.cpp API defaults to
 `8080`. Both can be changed with `--mcp-port` and `--llama-port`. For a server
 account, pass `--name PlayerName` and set `LUANTI_PASSWORD` in the environment.
-Use `--goal` to set a different task. Slow GPUs can take several minutes to
-generate a response; the completion timeout defaults to 1,800 seconds and can
+Use `--goal` or the `LLAMA_MCP_GOAL` environment variable to set a different
+task. With `bot.sh`, use `GOAL='build a castle' bash ./bot.sh`; the wrapper
+passes the value without splitting it on spaces. Slow GPUs can take several
+minutes to generate a response; the completion timeout defaults to 1,800 seconds and can
 be changed with `--llm-timeout` (for example, `--llm-timeout 3600`).
 Set `LLAMA_MCP_SYSTEM_PROMPT` to replace the built-in system prompt. For
 example:
@@ -60,7 +65,8 @@ LLAMA_MCP_SYSTEM_PROMPT='You are a careful builder. Inspect nearby materials, th
 ```
 
 The override is passed as the system message verbatim. Live terminal
-instructions are appended to it as additional guidance.
+instructions and the current in-game player name are appended as additional
+guidance.
 
 The agent can save reusable notes with its `save_memory` tool. Gameplay notes
 are shared across servers; world notes are separated by server address and
@@ -70,6 +76,13 @@ Set `--memory-dir PATH` to use a
 different directory. Existing notes are loaded at startup; when updating a
 file the agent should include the useful existing notes because each save
 replaces that file.
+
+The agent can also keep up to 1,500 characters of interaction notes per player.
+These are stored as separate `player-<id>.md` files in the same memory
+directory. When the agent reads chat history, saved notes for senders in that
+history are attached automatically. It can also load a player's notes directly
+with `load_player_memory`. Player notes should stay brief and factual and avoid
+sensitive personal information.
 Pass extra Freeminer options after `--`, for example:
 
 ```sh
@@ -99,6 +112,11 @@ instructions. It stops on repeated identical tool failures or when observed
 health is critical. Staying alive takes priority over the requested task: at
 5 health or less, the launcher blocks world actions but still permits state
 checks and `use_item` so the agent can attempt recovery.
+If movement stops making progress, the agent is instructed to inspect its
+position and nearby nodes, then clear a narrow ascending staircase when safely
+trapped underground. It should preserve footing and avoid digging below itself
+or through falling blocks, fluids, or lava; if it cannot find a safe route, it
+should stop and report the obstruction.
 Press Ctrl+C to stop the agent and both child processes.
 
 When started from an interactive terminal, you can steer it while it is
