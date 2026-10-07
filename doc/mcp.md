@@ -158,6 +158,12 @@ view. Aimed camera rays are useful for ordinary view-dependent interaction,
 while `dig_node`, `place_node`, and object action tools can target their
 explicit positions or IDs without changing the camera.
 
+For `place_node`, `x/y/z` is the empty target node. The required
+`under_x/under_y/under_z` identifies the support node the player points at.
+That node must be pointable and share a face with the target: exactly one axis
+differs by 1 and the other two match. Inspect nearby nodes and use a real support
+node; the client rejects nonadjacent or unpointable `under` positions.
+
 ## Chat tools
 
 `send_chat_message` sends public chat as the connected player. Its result has a
