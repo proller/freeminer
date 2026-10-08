@@ -283,6 +283,8 @@ void ABMHandler::apply(MapBlock *block, uint8_t activate)
 		block->humidity_add = 0;
 	}
 
+	// Candidate arrays are long-lived; do not retain geometric growth headroom.
+	selected_triggers.shrink_to_fit();
 	auto replacement = selected_triggers.empty()
 							   ? nullptr
 							   : std::make_unique<MapBlock::abm_triggers_type>(
@@ -290,6 +292,7 @@ void ABMHandler::apply(MapBlock *block, uint8_t activate)
 	{
 		std::lock_guard<std::mutex> lock(block->abm_triggers_mutex);
 		block->abm_triggers = std::move(replacement);
+		block->abm_candidates_evicted = false;
 	}
 }
 
@@ -429,24 +432,39 @@ size_t MapBlock::abmTriggersRun(ServerEnvironment *m_env, u32 time, uint8_t acti
 bool MapBlock::hasAbmTriggers()
 {
 	std::unique_lock<std::mutex> lock(abm_triggers_mutex, std::try_to_lock);
-	return lock.owns_lock() && abm_triggers && !abm_triggers->empty();
+	return lock.owns_lock() &&
+		   (abm_candidates_evicted || (abm_triggers && !abm_triggers->empty()));
+}
+
+void MapBlock::releaseAbmCandidates()
+{
+	std::lock_guard<std::mutex> lock(abm_triggers_mutex);
+	abm_candidates_evicted |= abm_triggers && !abm_triggers->empty();
+	abm_triggers.reset();
 }
 
 uint8_t ServerEnvironment::analyzeBlock(MapBlockPtr block)
 {
+	bool rebuild_evicted;
+	{
+		std::lock_guard<std::mutex> lock(block->abm_triggers_mutex);
+		rebuild_evicted = block->abm_candidates_evicted;
+	}
 	u32 block_timestamp = block->getActualTimestamp();
-	if (block->m_next_analyze_timestamp > block_timestamp) {
+	if (!rebuild_evicted && block->m_next_analyze_timestamp > block_timestamp) {
 		// infostream<<"not anlalyzing: "<< block->getPos() <<"ats="<<block->m_next_analyze_timestamp<< " bts="<< block_timestamp<<std::endl;
 		return {};
 	}
 	ScopeProfiler sp(g_profiler, "ABM analyze", SPT_ADD);
-	if (!block->analyzeContent())
+	if (!block->analyzeContent() && !rebuild_evicted)
 		return {};
-	const uint8_t activate = block_timestamp - block->m_next_analyze_timestamp > 3600
-									 ? ABM_ACTIVATE_CATCH_UP
-									 : ABM_ACTIVATE_NORMAL;
+	const uint8_t activate =
+			block_timestamp > block->m_next_analyze_timestamp &&
+							block_timestamp - block->m_next_analyze_timestamp > 3600
+					? ABM_ACTIVATE_CATCH_UP
+					: ABM_ACTIVATE_NORMAL;
 	m_abmhandler.apply(block.get(), activate);
 	// infostream<<"ServerEnvironment::analyzeBlock p="<<block->getPos()<< " tdiff="<<block_timestamp - block->m_next_analyze_timestamp <<" co="<<block->content_only <<" triggers="<<(block->abm_triggers ? block->abm_triggers->size() : -1) <<std::endl;
-	block->m_next_analyze_timestamp = block_timestamp + 2;
+	block->m_next_analyze_timestamp = block_timestamp + 30;
 	return activate;
 }
