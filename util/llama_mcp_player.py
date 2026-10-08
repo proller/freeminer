@@ -730,6 +730,38 @@ def main() -> int:
             f"Connected to {host}:{port} as {args.name}; MCP exposes {len(tools)} tools.",
             flush=True,
         )
+
+        def restart_game_client(reason: str) -> None:
+            """Restart a dead client/MCP transport and establish a fresh session."""
+            nonlocal client, tools
+            print(f"[mcp] {reason}; restarting Freeminer.", flush=True)
+            if client.poll() is None:
+                client.terminate()
+                try:
+                    client.wait(timeout=8)
+                except subprocess.TimeoutExpired:
+                    client.kill()
+                    client.wait()
+            mcp.session_id = None
+            client = subprocess.Popen(client_command)
+            processes.append(client)
+            deadline = time.monotonic() + 180
+            while time.monotonic() < deadline:
+                if client.poll() is not None:
+                    raise RuntimeError(
+                        f"Freeminer exited with status {client.returncode} during restart"
+                    )
+                try:
+                    tools = mcp.connect()
+                    print(
+                        "[mcp] Freeminer reconnected; inspect current game state.",
+                        flush=True,
+                    )
+                    return
+                except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError):
+                    time.sleep(1)
+            raise TimeoutError("Timed out waiting for the restarted MCP endpoint")
+
         memory_files = memory_paths(args.memory_dir.expanduser(), host, port)
         memories = read_memories(memory_files)
         system_prompt = get_system_prompt()
@@ -846,6 +878,19 @@ def main() -> int:
             if apply_operator_input():
                 print("Stopping player agent by operator request.", flush=True)
                 break
+            if client.poll() is not None:
+                restart_game_client(f"Freeminer exited with status {client.returncode}")
+                player_health = None
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "The game client restarted. The last interrupted action may "
+                            "or may not have happened. Do not replay it blindly; inspect "
+                            "player state, inventory, and nearby world before continuing."
+                        ),
+                    }
+                )
             turn += 1
             messages = compact_messages(messages, MAX_RECENT_MESSAGES)
             request_payload = {
@@ -1010,7 +1055,36 @@ def main() -> int:
                         except (
                             Exception
                         ) as error:  # keep a transient tool failure inside the agent loop
-                            result = f"Tool request failed: {error}"
+                            if isinstance(error, urllib.error.HTTPError):
+                                result = f"Tool request failed: {error}"
+                            elif isinstance(
+                                error,
+                                (
+                                    urllib.error.URLError,
+                                    TimeoutError,
+                                    ConnectionError,
+                                    OSError,
+                                ),
+                            ):
+                                try:
+                                    restart_game_client(
+                                        f"MCP transport failed ({error})"
+                                    )
+                                    player_health = None
+                                    recovery_hint = True
+                                    result = (
+                                        "MCP disconnected and Freeminer was restarted. "
+                                        "The result of this action is unknown, so it was "
+                                        "not retried. Inspect current player state, inventory, "
+                                        "and nearby world before continuing."
+                                    )
+                                except Exception as restart_error:
+                                    result = (
+                                        f"MCP transport failed: {error}. Client recovery "
+                                        f"also failed: {restart_error}"
+                                    )
+                            else:
+                                result = f"Tool request failed: {error}"
                         print(f"[result] {result[:1000]}", flush=True)
                         if name == "get_chat_messages":
                             result = add_player_memories_to_chat(
