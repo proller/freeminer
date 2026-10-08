@@ -137,6 +137,10 @@ When the model replies without a tool call, the agent continues autonomously
 in both interactive and non-interactive runs. A user continuation message after
 a plain-text reply keeps the conversation valid for llama.cpp. Queued operator
 instructions take priority over the automatic continuation.
+If the Freeminer process exits or its MCP connection is refused, the launcher
+restarts the client and establishes a fresh MCP session. It does not replay a
+tool call whose response was lost, because that action may already have run;
+the agent is told to inspect the current state before proceeding.
 If llama.cpp rejects generated tool arguments as invalid JSON, the agent retries
 with shorter history and a reminder to generate one brief, valid tool call.
 Each model request allows at most two recovery attempts; persistent errors are

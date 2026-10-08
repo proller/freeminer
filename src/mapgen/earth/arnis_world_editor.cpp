@@ -3,6 +3,14 @@
 #include "emerge.h"
 #include "mapgen/mapgen_earth.h"
 #include "arnis-cpp/src/ground_decoration.h"
+#include "arnis-cpp/src/world_editor/floor_state.h"
+
+#include <algorithm>
+#include <array>
+#include <bit>
+#include <cmath>
+#include <limits>
+#include <string_view>
 
 namespace arnis
 {
@@ -55,8 +63,16 @@ bool WorldEditor::place_facade_panel(int x, int y, int z, std::int8_t facing,
 		return false;
 	if (facade_panel_sink && !facade_panel_sink(x, y, z, facing, pixels, width, height))
 		return false;
-	placed_facade_panels.push_back(FacadePanel{x, y, z, facing, width, height, pixels});
+	record_facade_panel(x, y, z, facing, pixels, width, height);
 	return true;
+}
+void WorldEditor::record_facade_panel(int x, int y, int z, std::int8_t facing,
+		const std::vector<std::uint8_t> &pixels, std::uint32_t width,
+		std::uint32_t height)
+{
+	if (!width || !height || pixels.size() != std::size_t(width) * height * 3)
+		return;
+	placed_facade_panels.push_back(FacadePanel{x, y, z, facing, width, height, pixels});
 }
 void WorldEditor::set_chest_with_items_absolute(
 		int x, int y, int z, const std::vector<std::tuple<std::string, int, int>> &items)
@@ -131,6 +147,50 @@ bool WorldEditor::place_text_sign(
 	}
 	return place_sign_node(sign, x, y, z, facing, text);
 }
+bool WorldEditor::add_item_display(
+		double x, double absolute_y, double z, std::int64_t seed, nlohmann::json extra)
+{
+	if (!entity_sink || !std::isfinite(x) || !std::isfinite(absolute_y) ||
+			!std::isfinite(z))
+		return false;
+	constexpr auto min_coord = static_cast<double>(std::numeric_limits<int>::min());
+	constexpr auto max_coord = static_cast<double>(std::numeric_limits<int>::max());
+	if (x < min_coord || x > max_coord || absolute_y < min_coord ||
+			absolute_y > max_coord || z < min_coord || z > max_coord)
+		return false;
+	const auto bx = static_cast<int>(std::floor(x));
+	const auto by = static_cast<int>(std::floor(absolute_y));
+	const auto bz = static_cast<int>(std::floor(z));
+	if (!owns(bx, bz) || (mg && (bx < mg->node_min.X || bx > mg->node_max.X ||
+										bz < mg->node_min.Z || bz > mg->node_max.Z)))
+		return false;
+	if (!extra.is_object())
+		return false;
+
+	// Match Rust's build_deterministic_uuid("minecraft:item_display", bx, by,
+	// bz, seed), using unsigned operations to make wrapping explicit.
+	std::uint64_t hash = 17;
+	for (const unsigned char byte : std::string_view("minecraft:item_display"))
+		hash = hash * 31 + byte;
+	hash = hash * 31 + static_cast<std::uint64_t>(seed);
+	const auto signed_x = static_cast<std::uint64_t>(static_cast<std::int64_t>(bx));
+	const auto signed_y = static_cast<std::uint64_t>(static_cast<std::int64_t>(by));
+	const auto signed_z = static_cast<std::uint64_t>(static_cast<std::int64_t>(bz));
+	const std::uint64_t seed_a = hash ^ (signed_x << 32) ^ (signed_y * 17);
+	const std::uint64_t seed_b = std::rotl(hash, 7) ^ (signed_z * 31) ^ (signed_x * 13);
+	const auto uuid_word = [](std::uint64_t value) {
+		return std::bit_cast<std::int32_t>(static_cast<std::uint32_t>(value));
+	};
+	nlohmann::json entity = {{"id", "minecraft:item_display"},
+			{"Pos", {x, absolute_y, z}}, {"Motion", {0.0, 0.0, 0.0}},
+			{"Rotation", {0.0f, 0.0f}}, {"OnGround", 1}, {"FallDistance", 0.0f},
+			{"Fire", -20}, {"Air", 300}, {"PortalCooldown", 0},
+			{"UUID", {uuid_word(seed_a >> 32), uuid_word(seed_a), uuid_word(seed_b >> 32),
+							 uuid_word(seed_b)}}};
+	for (auto it = extra.begin(); it != extra.end(); ++it)
+		entity[it.key()] = it.value();
+	return entity_sink(entity);
+}
 std::tuple<int, int, int> WorldEditor::decal_frame_cell(
 		int x, int y, int z, std::int8_t facing)
 {
@@ -201,9 +261,8 @@ bool WorldEditor::place_decal_panel(int x, int y, int z, std::int8_t facing,
 					  hz = z + rz * col + (facing <= 1 ? floor_z * row : 0);
 			const auto [fx, fy, fz] = decal_frame_cell(hx, hy, hz, facing);
 			if (!owns(fx, fz) || fy - get_ground_level(fx, fz) < 1 ||
-					frame_cells.contains({fx, fy, fz}) ||
-					(require_hosts &&
-							!check_for_block_absolute(hx, hy, hz, std::nullopt)))
+					frame_cells.contains({fx, fy, fz}) || !cell_open_at(fx, fy, fz) ||
+					(require_hosts && cell_open_at(hx, hy, hz)))
 				return false;
 		}
 	for (int row = 0; row < int(entry->rows); ++row)
@@ -382,18 +441,22 @@ bool WorldEditor::check_for_block(
 }
 bool WorldEditor::block_at(int x, int y, int z) const
 {
-	return get_block_absolute(x, get_absolute_y(x, y, z), z).has_value();
+	return check_for_block_absolute(x, get_absolute_y(x, y, z), z);
 }
 std::optional<int> WorldEditor::highest_block_between(
 		int x, int z, int min_y, int max_y) const
 {
 	if (!mg || !mg->vm)
 		return std::nullopt;
+	min_y = std::max(min_y, world_editor::min_y());
+	max_y = std::min(max_y, world_editor::world_max_y());
 	if (min_y > max_y)
-		std::swap(min_y, max_y);
-	for (int y = max_y; y >= min_y; --y) {
-		if (get_block_absolute(x, y, z))
+		return std::nullopt;
+	for (int y = max_y;; --y) {
+		if (check_for_block_absolute(x, y, z))
 			return y;
+		if (y == min_y)
+			break;
 	}
 	return std::nullopt;
 }
@@ -476,17 +539,11 @@ int WorldEditor::get_water_level(int x, int z) const
 }
 bool WorldEditor::is_lc_water(int x, int z) const
 {
-	if (ground && ground->has_land_cover()) {
-		return ground->cover_class(ground_point(x, z)) == land_cover::LC_WATER;
-	}
-	if (!mg || !mg->vm)
-		return false;
-	const v3pos_t pos{static_cast<pos_t>(x), static_cast<pos_t>(get_water_level(x, z)),
-			static_cast<pos_t>(z)};
-	if (!mg->vm->exists(pos))
-		return false;
-	return mg->readTileOverlay(pos).value_or(mg->vm->getNode(pos)).getContent() ==
-		   block_definitions::WATER.getContent();
+	// Match Rust's is_lc_water: this answers whether the terrain source marks
+	// the column as ESA water, not whether an earlier generation pass wrote a
+	// water block there.  The distinction matters while reconstructing water
+	// areas, before their own fill decisions have completed.
+	return ground && ground->cover_class(ground_point(x, z)) == land_cover::LC_WATER;
 }
 bool WorldEditor::is_steep_land(int x, int z) const
 {
@@ -596,12 +653,39 @@ std::optional<std::string> WorldEditor::block_name_absolute(int x, int y, int z)
 }
 bool WorldEditor::cell_open_at(int x, int y, int z) const
 {
-	return !get_block_absolute(x, y, z);
+	const auto block = get_block_absolute(x, y, z);
+	if (!block || block->getContent() == CONTENT_AIR ||
+			block->getContent() == CONTENT_IGNORE)
+		return true;
+	const auto name = block_name_absolute(x, y, z);
+	if (!name)
+		return false;
+	// Rust checks the canonical Minecraft block name. Freeminer node names vary
+	// by backend, so compare the semantic suffix and retain aliases used by the
+	// supported Luanti games.
+	const std::string_view full_name = *name;
+	const auto separator = full_name.find(':');
+	const auto short_name = separator == std::string_view::npos
+									? full_name
+									: full_name.substr(separator + 1);
+	static constexpr std::array<std::string_view, 44> passable{"grass", "short_grass",
+			"tall_grass", "fern", "large_fern", "dead_bush", "seagrass", "tall_seagrass",
+			"snow", "dandelion", "poppy", "blue_orchid", "azure_bluet", "cornflower",
+			"oxeye_daisy", "allium", "lily_of_the_valley", "sweet_berry_bush",
+			"sunflower", "lilac", "rose_bush", "peony", "brown_mushroom", "red_mushroom",
+			"sugar_cane", "lily_pad", "grass_3", "tallgrass", "double_grass",
+			"double_grass_top", "fern_2", "fern_3", "dry_shrub", "papyrus", "waterlily",
+			"geranium", "dandelion_yellow", "dandelion_white", "mushroom_brown",
+			"mushroom_red", "flower_tulip", "sweet_berry_bush_1", "sweet_berry_bush_2",
+			"sweet_berry_bush_3"};
+	return std::find(passable.begin(), passable.end(), short_name) != passable.end() ||
+		   short_name.ends_with("_carpet") || short_name.ends_with("_tulip");
 }
-void WorldEditor::set_block_if_absent_absolute(const Block &block, int x, int y, int z)
+bool WorldEditor::set_block_if_absent_absolute(const Block &block, int x, int y, int z)
 {
 	if (!check_for_block_absolute(x, y, z))
-		set_block_absolute(block, x, y, z);
+		return try_set_block_absolute(block, x, y, z);
+	return false;
 }
 
 void WorldEditor::register_support_column(int x, int z, const Block &block)
@@ -619,18 +703,89 @@ std::optional<Block> WorldEditor::support_column(int x, int z) const
 void WorldEditor::fill_column_absolute(
 		const Block &block, int x, int z, int min_y, int max_y, bool skip_existing)
 {
+	if (min_y > world_editor::world_max_y() || !mg || !mg->vm || !pos_ok(x, z))
+		return;
+	min_y = std::clamp(min_y, world_editor::min_y(), world_editor::world_max_y());
+	max_y = std::clamp(max_y, world_editor::min_y(), world_editor::world_max_y());
 	if (max_y < min_y)
 		return;
+	static const std::optional<std::vector<Block>> replace_any{std::vector<Block>{}};
 	for (int y = min_y; y <= max_y; ++y) {
 		if (skip_existing && check_for_block_absolute(x, y, z))
 			continue;
-		if (skip_existing)
-			set_block_absolute(block, x, y, z);
-		else
-			set_block_absolute(block, x, y, z, std::nullopt,
-					std::optional<std::vector<Block>>(std::vector<Block>{}));
+		try_set_block_absolute(block, x, y, z, std::nullopt, replace_any);
 	}
 }
+
+bool WorldEditor::bulk_fill_chunk_sections_below(int chunk_x, int chunk_z,
+		int section_y_min, int section_y_max, const Block &block)
+{
+	if (section_y_max < section_y_min)
+		return true;
+	if (!mg || !mg->vm)
+		return false;
+
+	const auto x0 = static_cast<std::int64_t>(chunk_x) * 16;
+	const auto z0 = static_cast<std::int64_t>(chunk_z) * 16;
+	if (x0 < std::numeric_limits<pos_t>::min() ||
+			x0 + 15 > std::numeric_limits<pos_t>::max() ||
+			z0 < std::numeric_limits<pos_t>::min() ||
+			z0 + 15 > std::numeric_limits<pos_t>::max())
+		return false;
+
+	bool all_clean = true;
+	for (int section_y = section_y_min; section_y <= section_y_max; ++section_y) {
+		const int y0 = section_y * 16;
+		bool empty = true;
+		bool writable = true;
+		for (int y = y0; y < y0 + 16 && empty && writable; ++y) {
+			if (y < world_editor::min_y() || y > world_editor::world_max_y()) {
+				writable = false;
+				break;
+			}
+			for (int dx = 0; dx < 16 && empty && writable; ++dx) {
+				for (int dz = 0; dz < 16; ++dz) {
+					const int x = static_cast<int>(x0 + dx);
+					const int z = static_cast<int>(z0 + dz);
+					const v3pos_t pos{static_cast<pos_t>(x), static_cast<pos_t>(y),
+							static_cast<pos_t>(z)};
+					if (!pos_ok(x, z) || !mg->vm->exists(pos)) {
+						writable = false;
+						break;
+					}
+					const auto overlay = mg->readTileOverlay(pos);
+					if (!overlay && !written_cells.contains({x, y, z}))
+						continue;
+					const auto node = overlay.value_or(mg->vm->getNode(pos));
+					const auto content = node.getContent();
+					if (content != CONTENT_AIR && content != CONTENT_IGNORE) {
+						empty = false;
+						break;
+					}
+				}
+			}
+		}
+		if (!writable || !empty) {
+			all_clean = false;
+			continue;
+		}
+
+		for (int y = y0; y < y0 + 16; ++y)
+			for (int dx = 0; dx < 16; ++dx)
+				for (int dz = 0; dz < 16; ++dz) {
+					const int x = static_cast<int>(x0 + dx);
+					const int z = static_cast<int>(z0 + dz);
+					const v3pos_t pos{static_cast<pos_t>(x), static_cast<pos_t>(y),
+							static_cast<pos_t>(z)};
+					if (!mg->writeTileOverlay(pos, block))
+						mg->vm->setNode(pos, block);
+					written_cells.emplace(x, y, z);
+					++mg->stat.set;
+				}
+	}
+	return all_clean;
+}
+
 void WorldEditor::place_wall_banner(const Block &block, int x, int y, int z,
 		const std::string &facing, const std::string &base_color,
 		const std::vector<std::pair<std::string, std::string>> &patterns)

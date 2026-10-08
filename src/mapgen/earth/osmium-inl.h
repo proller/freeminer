@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstddef>
@@ -753,6 +754,23 @@ void generate_cached_arnis(
 				mg->queueGeneratedSchemEntity(v3pos_t(x, y, z), nbt);
 			});
 	const auto args = earth_arnis_args();
+	// Raster providers use the editor bounds, even when the host enters through
+	// generate_world rather than generate_world_with_options.
+	const pos_t sample_y = ((mg->node_min + mg->node_max) / 2).Y;
+	const std::array corners{
+			mg->pos_to_ll(v3pos_t(mg->node_min.X, sample_y, mg->node_min.Z)),
+			mg->pos_to_ll(v3pos_t(mg->node_max.X, sample_y, mg->node_min.Z)),
+			mg->pos_to_ll(v3pos_t(mg->node_min.X, sample_y, mg->node_max.Z)),
+			mg->pos_to_ll(v3pos_t(mg->node_max.X, sample_y, mg->node_max.Z))};
+	double min_lat = corners.front().lat, max_lat = min_lat;
+	double min_lon = corners.front().lon, max_lon = min_lon;
+	for (const auto &corner : corners) {
+		min_lat = std::min(min_lat, corner.lat);
+		max_lat = std::max(max_lat, corner.lat);
+		min_lon = std::min(min_lon, corner.lon);
+		max_lon = std::max(max_lon, corner.lon);
+	}
+	editor.set_geographic_bounds(min_lat, max_lat, min_lon, max_lon);
 	if (!arnis::generate_world(editor, chunk.elements, args, *chunk.flood_fill_cache,
 				*chunk.building_footprints, true, tile.prepared_buildings.get()))
 		errorstream << "Earth: Arnis world generation failed; check generation options "

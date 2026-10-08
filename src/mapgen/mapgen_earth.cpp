@@ -823,12 +823,18 @@ bool MapgenEarth::mergeTileOverlay()
 	if (!tile_overlay || !vm)
 		return false;
 	for (const auto &[key, node] : tile_overlay->writes) {
-		if (key.x < tile_overlay->min_x || key.x > tile_overlay->max_x ||
-				key.z < tile_overlay->min_z || key.z > tile_overlay->max_z)
-			continue;
 		const v3pos_t pos{key.x, key.y, key.z};
-		if (vm->exists(pos))
-			vm->setNode(pos, node);
+		if (!vm->exists(pos))
+			continue;
+		const bool authoritative =
+				key.x >= tile_overlay->min_x && key.x <= tile_overlay->max_x &&
+				key.z >= tile_overlay->min_z && key.z <= tile_overlay->max_z;
+		// A tile owns its core and overwrites it. Its halo only supplies writes
+		// missed by the adjacent tile, matching Rust's WorldToModify::merge:
+		// preserve an earlier neighbor's non-air result, but fill remaining air.
+		if (!authoritative && vm->getNode(pos).getContent() != CONTENT_AIR)
+			continue;
+		vm->setNode(pos, node);
 	}
 	tile_overlay.reset();
 	return true;
