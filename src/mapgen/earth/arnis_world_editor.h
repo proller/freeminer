@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include <nlohmann/json.hpp>
 #include <osmium/osm/location.hpp>
 
 #include "arnis_ground.h"
@@ -103,6 +104,7 @@ struct WorldEditor
 	}
 	void release_sealed_surface() { sealed_surface.reset(); }
 	bool surface_is_sealed(int x, int z) const;
+	bool nested_area_owns(int x, int z) const;
 	struct DecalFrame
 	{
 		int x, y, z;
@@ -146,6 +148,7 @@ struct WorldEditor
 	bool bake_lighting = false;
 	bool start_with_map = false;
 	bool place_schematics_enabled = true;
+	bool schematic_tree_pack_available = false;
 	bool map_decals = true;
 	// Matches trees::RegionSelector::base_spacing() for the default pack; hosts
 	// loading a differently scaled schematic pack may override it.
@@ -185,10 +188,18 @@ struct WorldEditor
 			int, int, int, const std::vector<std::tuple<std::string, int, int>> &)>
 			barrel_sink;
 	std::function<void(int, int, int)> bed_sink;
+	// Optional backend event for newly generated water/lava source blocks. Java
+	// exporters serialize scheduled ticks; live-world hosts may handle flow via
+	// their native simulation instead.
+	std::function<void(const Block &, pos_t, pos_t, pos_t)> fluid_tick_sink;
 	// Raw schematic block-entity payload, retained for backends that support it.
 	std::function<void(int, int, int, const std::vector<std::uint8_t> &)>
 			schem_entity_sink;
 	std::function<void(int, int, int, const std::string &)> item_frame_sink;
+	// Backend-native entity payload. Java-capable consumers can serialize this
+	// directly to entity NBT; the mapgen host may leave it unset when entities
+	// are not supported by its output format.
+	std::function<bool(const nlohmann::json &)> entity_sink;
 	std::function<void(int, int, int, const std::string &, const std::string &,
 			const std::vector<std::pair<std::string, std::string>> &)>
 			banner_sink;
@@ -207,7 +218,10 @@ struct WorldEditor
 	std::unordered_set<std::tuple<int, int, int>, FrameCellHash> frame_cells;
 	std::vector<DecalFrame> placed_frames;
 	std::unordered_map<std::int64_t, Block> support_columns;
-	std::unordered_set<std::tuple<int, int, int>, FrameCellHash> written_cells;
+	using WrittenCellSet = std::unordered_set<std::tuple<int, int, int>, FrameCellHash>;
+	WrittenCellSet written_cells;
+	WrittenCellSet tile_merged_written_cells;
+	bool tile_scope_active = false;
 	// Effective terrain/road elevation cache. The dense part covers the mapchunk
 	// and its OSM halo; only unusual out-of-halo queries use the sparse fallback.
 	// Road registration overwrites an existing sampled terrain entry.
@@ -229,6 +243,11 @@ struct WorldEditor
 	{
 		tree_slot_spacing_blocks = std::max(1, spacing);
 	}
+	void set_schematic_tree_pack_available(bool available)
+	{
+		schematic_tree_pack_available = available;
+	}
+	bool has_schematic_tree_pack() const { return schematic_tree_pack_available; }
 	int get_tree_slot_spacing() const { return tree_slot_spacing_blocks; }
 	int tree_slot_spacing() const { return tree_slot_spacing_blocks; }
 	void set_ground_origin(int x, int z);
@@ -287,6 +306,9 @@ struct WorldEditor
 			std::uint32_t height);
 	void clear_facade_panels() { placed_facade_panels.clear(); }
 	const std::vector<FacadePanel> &facade_panels() const { return placed_facade_panels; }
+	void record_facade_panel(int x, int y, int z, std::int8_t facing,
+			const std::vector<std::uint8_t> &pixels, std::uint32_t width,
+			std::uint32_t height);
 	void set_chest_sink(std::function<void(int, int, int,
 					const std::vector<std::tuple<std::string, int, int>> &)>
 					sink)
@@ -307,6 +329,16 @@ struct WorldEditor
 	{
 		bed_sink = std::move(sink);
 	}
+	void set_fluid_tick_sink(std::function<void(const Block &, pos_t, pos_t, pos_t)> sink)
+	{
+		fluid_tick_sink = std::move(sink);
+	}
+	void schedule_fluid_tick(const Block &fluid, pos_t x, pos_t y, pos_t z)
+	{
+		if ((fluid == block_definitions::WATER || fluid == block_definitions::LAVA) &&
+				fluid_tick_sink)
+			fluid_tick_sink(fluid, x, y, z);
+	}
 	void set_schem_entity_sink(
 			std::function<void(int, int, int, const std::vector<std::uint8_t> &)> sink)
 	{
@@ -316,6 +348,13 @@ struct WorldEditor
 	{
 		item_frame_sink = std::move(sink);
 	}
+	void set_entity_sink(std::function<bool(const nlohmann::json &)> sink)
+	{
+		entity_sink = std::move(sink);
+	}
+	bool has_entity_sink() const { return static_cast<bool>(entity_sink); }
+	bool add_item_display(double x, double absolute_y, double z, std::int64_t seed,
+			nlohmann::json extra);
 	void set_banner_sink(
 			std::function<void(int, int, int, const std::string &, const std::string &,
 					const std::vector<std::pair<std::string, std::string>> &)>
@@ -410,11 +449,35 @@ struct WorldEditor
 	}
 	bool begin_tile(int min_x, int min_z, int max_x, int max_z)
 	{
-		return !begin_tile_sink || begin_tile_sink(min_x, min_z, max_x, max_z);
+		if (begin_tile_sink && !begin_tile_sink(min_x, min_z, max_x, max_z))
+			return false;
+		if (!tile_scope_active) {
+			tile_merged_written_cells.clear();
+			tile_merged_written_cells.insert(written_cells.begin(), written_cells.end());
+			tile_scope_active = true;
+		}
+		written_cells.clear();
+		return true;
 	}
 	bool merge_tile(int min_x, int min_z, int max_x, int max_z)
 	{
-		return !merge_tile_sink || merge_tile_sink(min_x, min_z, max_x, max_z);
+		if (merge_tile_sink && !merge_tile_sink(min_x, min_z, max_x, max_z))
+			return false;
+		if (tile_scope_active) {
+			tile_merged_written_cells.insert(written_cells.begin(), written_cells.end());
+			written_cells.clear();
+		}
+		return true;
+	}
+	void finish_tile_pass()
+	{
+		if (!tile_scope_active)
+			return;
+		tile_merged_written_cells.insert(written_cells.begin(), written_cells.end());
+		written_cells.insert(
+				tile_merged_written_cells.begin(), tile_merged_written_cells.end());
+		tile_merged_written_cells.clear();
+		tile_scope_active = false;
 	}
 	bool flush_requested_now() const { return flush_requested; }
 	bool save_requested_now() const { return save_requested; }
@@ -552,12 +615,16 @@ struct WorldEditor
 
 	bool cell_open_at(int x, int y, int z) const;
 
-	void set_block_if_absent_absolute(const Block &block, int x, int y, int z);
+	bool set_block_if_absent_absolute(const Block &block, int x, int y, int z);
 	void register_support_column(int x, int z, const Block &block);
 	std::optional<Block> support_column(int x, int z) const;
 
 	void fill_column_absolute(
 			const Block &block, int x, int z, int min_y, int max_y, bool skip_existing);
+	// Fill completely untouched 16x16x16 sections below a terrain surface.
+	// Returns true only when every section in the requested range was empty.
+	bool bulk_fill_chunk_sections_below(int chunk_x, int chunk_z, int section_y_min,
+			int section_y_max, const Block &block);
 
 	void place_wall_banner(const Block &block, int x, int y, int z,
 			const std::string &facing, const std::string &base_color,

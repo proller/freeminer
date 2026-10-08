@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <utility>
 #include <tuple>
@@ -59,7 +60,9 @@ struct Ground
 	std::optional<RotationMask> rotation_mask;
 	biome::Climate climate_state = biome::Climate::Temperate;
 	UrbanGroundLookup urban_lookup;
-	std::optional<ecoregion::EcoMap> ecoregion_map;
+	// Shared immutable grid, matching Rust's Arc<EcoMap> and avoiding a full
+	// raster copy when Ground is copied for generation/transformation stages.
+	std::shared_ptr<const ecoregion::EcoMap> ecoregions;
 	static Ground new_flat(int ground_level)
 	{
 		Ground ground;
@@ -146,7 +149,10 @@ struct Ground
 			const elevation::ProcessedElevationData &data, double latitude_for_snow_line);
 	std::optional<elevation::ElevationAffine> elevation_affine() const
 	{
-		if (!elevation_enabled)
+		// Rust returns None unless sampled ElevationData exists as well as
+		// elevation being enabled; metadata alone is not a usable terrain grid.
+		if (!elevation_enabled || elevation_grid.empty() || elevation_world_width == 0 ||
+				elevation_world_height == 0 || elevation_grid.front().empty())
 			return std::nullopt;
 		return elevation::ElevationAffine{elevation_min_height_m,
 				elevation_blocks_per_meter, elevation_ground_level.value_or(0),
@@ -172,8 +178,17 @@ struct Ground
 	void set_climate(biome::Climate value) { climate_state = value; }
 	void set_urban_lookup(UrbanGroundLookup lookup) { urban_lookup = std::move(lookup); }
 	bool is_urban(int x, int z) const { return urban_lookup.is_urban(x, z); }
-	void set_ecoregion_map(ecoregion::EcoMap map) { ecoregion_map = std::move(map); }
+	void set_ecoregion_map(std::shared_ptr<const ecoregion::EcoMap> map)
+	{
+		ecoregions = std::move(map);
+	}
+	void set_ecoregion_map(ecoregion::EcoMap map)
+	{
+		ecoregions = std::make_shared<const ecoregion::EcoMap>(std::move(map));
+	}
 	std::optional<ecoregion::Ecoregion> ecoregion_at(const XZPoint &coord) const;
+	// Rust Ground::ecoregion_map exposes a non-owning view of the full map.
+	const ecoregion::EcoMap *ecoregion_map() const { return ecoregions.get(); }
 
 	void set_land_cover_data(land_cover::LandCoverData data, std::size_t world_width,
 			std::size_t world_height);
@@ -226,7 +241,7 @@ struct GroundFrame
 			std::optional<std::pair<double, double>> projection_origin = std::nullopt);
 	GroundFetchPlan fetch_plan(const geographic::LLBBox &, double scale) const;
 	double anchor_lat(const geographic::LLBBox &) const;
-	std::optional<ecoregion::EcoMap> ecoregions(const geographic::LLBBox &,
+	std::shared_ptr<const ecoregion::EcoMap> ecoregions(const geographic::LLBBox &,
 			std::size_t world_width, std::size_t world_height) const;
 };
 

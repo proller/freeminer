@@ -35,6 +35,8 @@ Block CRIMSON_PLANKS;
 Block CUT_SANDSTONE;
 Block CYAN_CONCRETE;
 Block DARK_OAK_PLANKS;
+Block DARK_OAK_SLAB;
+Block DARK_OAK_FENCE;
 Block DEEPSLATE_BRICKS;
 Block DIORITE;
 Block DIRT;
@@ -84,6 +86,7 @@ Block OAK_LOG;
 Block OAK_PLANKS;
 Block OAK_SLAB;
 Block SPRUCE_SLAB;
+Block SPRUCE_FENCE;
 Block ORANGE_TERRACOTTA;
 Block PODZOL;
 Block SNOWY_PODZOL;
@@ -270,6 +273,13 @@ Block COPPER_ORE;
 Block LAPIS_ORE;
 Block REDSTONE_ORE;
 Block DIAMOND_ORE;
+Block DEEPSLATE_COAL_ORE;
+Block DEEPSLATE_IRON_ORE;
+Block DEEPSLATE_COPPER_ORE;
+Block DEEPSLATE_GOLD_ORE;
+Block DEEPSLATE_REDSTONE_ORE;
+Block DEEPSLATE_LAPIS_ORE;
+Block DEEPSLATE_DIAMOND_ORE;
 Block CLAY;
 Block DIRT_PATH;
 Block ICE;
@@ -613,6 +623,16 @@ void init(MapgenEarth *mg)
 	};
 	const NodeResolver g{mg, def};
 	const NodeResolver liquid{mg, def, true};
+	const auto optional_g = [&](const char *block_name, Block fallback,
+									std::initializer_list<const char *> names) {
+		NodeResolver resolver{mg, fallback.id()};
+		if (const auto id = resolver.find(block_name); id != CONTENT_IGNORE)
+			return Block{id};
+		for (const auto *name : names)
+			if (const auto id = resolver.find(name); id != CONTENT_IGNORE)
+				return Block{id};
+		return fallback;
+	};
 	const auto prefer_arnis = [&](const char *name, Block fallback) {
 		const NodeResolver resolver{mg, fallback.id()};
 		const auto id = resolver.arnis_node(name);
@@ -690,12 +710,20 @@ void init(MapgenEarth *mg)
 	CYAN_CONCRETE = g("cyan_concrete",
 			{"wool:cyan", "basic_materials:concrete_block", "default:stone"});
 	DARK_OAK_PLANKS = g("dark_oak_planks", {"default:wood", "default:junglewood"});
+	DARK_OAK_SLAB = g("dark_oak_slab", {"mcl_stairs:slab_dark_oak", "stairs:slab_wood"});
+	DARK_OAK_FENCE =
+			g("dark_oak_fence", {"mcl_fences:dark_oak_fence", "default:fence_wood"});
 	DEEPSLATE_BRICKS = g("deepslate_bricks", "default:stonebrick");
 	DIORITE = g("diorite", "default:stone");
-	DIRT = g("dirt", {"default:dirt", "mcl_core:dirt"});
+	DIRT = g("dirt", {"default:dirt", "mcl_core:dirt", "default:dirt_with_grass",
+							 "default:clay", "default:stone"});
 	END_STONE_BRICKS = g("end_stone_bricks", "default:stonebrick");
-	END_STONE = g("end_stone", {"default:endstone", "mcl_end:end_stone"});
-	FARMLAND = g("farmland", {"default:dirt", "mcl_farming:soil", "mcl_core:dirt"});
+	END_STONE = g("end_stone",
+			{"default:endstone", "mcl_end:end_stone", "mcl_end:end_stone_bricks",
+					"default:sandstone", "default:stone"});
+	FARMLAND = g("farmland",
+			{"default:dirt", "mcl_farming:soil", "mcl_core:dirt", "farming:soil",
+					"default:dirt_with_grass", "default:clay", "default:stone"});
 	GLASS = g("glass", "default:glass");
 	GLOWSTONE = g("glowstone", "default:meselamp");
 	GRANITE = g("granite", "default:stone");
@@ -705,7 +733,8 @@ void init(MapgenEarth *mg)
 			{"mcl_core:dirt_with_grass_snow", "mapgen_dirt_with_snow",
 					"basenodes:dirt_with_snow", "default:dirt_with_snow",
 					"default:grass_5"});
-	GRAVEL = g("gravel", {"default:gravel", "mcl_core:gravel"});
+	GRAVEL = g("gravel", {"default:gravel", "mcl_core:gravel", "default:cobble",
+								 "default:stone", "mcl_core:stone"});
 	GRAY_CONCRETE = g("gray_concrete",
 			{"basic_materials:concrete_block", "wool:grey", "default:stone"});
 	GRAY_TERRACOTTA = g("gray_terracotta", "default:clay");
@@ -733,6 +762,8 @@ void init(MapgenEarth *mg)
 	OAK_PLANKS = g("oak_planks", "default:wood");
 	OAK_SLAB = g("oak_slab", "stairs:slab_wood");
 	SPRUCE_SLAB = g("spruce_slab", {"mcl_stairs:slab_spruce", "stairs:slab_wood"});
+	SPRUCE_FENCE = g("spruce_fence",
+			{"mcl_fences:spruce_fence", "default:fence_pine_wood", "default:fence_wood"});
 	ORANGE_TERRACOTTA = g("orange_terracotta", "default:clay");
 	PODZOL = g("podzol", "default:dirt_with_coniferous_litter");
 	SNOWY_PODZOL = g("snowy_podzol",
@@ -754,7 +785,8 @@ void init(MapgenEarth *mg)
 	RED_NETHER_BRICK = g("red_nether_brick", "default:obsidianbrick");
 	RED_TERRACOTTA = g("red_terracotta", "default:clay");
 	RED_WOOL = g("red_wool", "wool:red");
-	SAND = g("sand", {"default:sand", "mcl_core:sand"});
+	SAND = g("sand", {"default:sand", "mcl_core:sand", "default:sandstone",
+							 "mcl_core:sandstone", "default:stone"});
 	SANDSTONE = g("sandstone", "default:sandstone");
 	SCAFFOLDING = g("scaffolding", "default:ladder_steel");
 	SMOOTH_QUARTZ = g("smooth_quartz", "default:stone");
@@ -805,9 +837,10 @@ void init(MapgenEarth *mg)
 			g("sea_pickle", {"marinara:seaanemone_tentacle", "marinara:hardcoral_green",
 									"default:coral_green", "default:coral_cyan",
 									"default:coral_skeleton"});
-	SOUL_SAND =
-			g("soul_sand", {"default:desert_sand", "mcl_nether:soul_sand",
-								   "mcl_core:redsand", "default:sand", "mcl_core:sand"});
+	SOUL_SAND = g("soul_sand",
+			{"default:desert_sand", "mcl_nether:soul_sand", "mcl_core:redsand",
+					"default:sand", "mcl_core:sand", "default:desert_sandstone",
+					"default:sandstone", "default:stone"});
 	EARTH_BENCH = g("earth_bench",
 			{"homedecor:simple_bench", "stairs:slab_wood", "default:wood"});
 	EARTH_TRASH_CAN = g("earth_trash_can",
@@ -1094,6 +1127,27 @@ void init(MapgenEarth *mg)
 			g("redstone_ore", {"default:stone_with_mese", "default:stone_with_iron"});
 	DIAMOND_ORE =
 			g("diamond_ore", {"default:stone_with_diamond", "default:stone_with_gold"});
+	DEEPSLATE_COAL_ORE = optional_g("deepslate_coal_ore", COAL_ORE,
+			{"mcl_core:deepslate_coal_ore", "mcl_deepslate:deepslate_coal_ore",
+					"mcl_deepslate:deepslate_with_coal"});
+	DEEPSLATE_IRON_ORE = optional_g("deepslate_iron_ore", IRON_ORE,
+			{"mcl_core:deepslate_iron_ore", "mcl_deepslate:deepslate_iron_ore",
+					"mcl_deepslate:deepslate_with_iron"});
+	DEEPSLATE_COPPER_ORE = optional_g("deepslate_copper_ore", COPPER_ORE,
+			{"mcl_core:deepslate_copper_ore", "mcl_deepslate:deepslate_copper_ore",
+					"mcl_deepslate:deepslate_with_copper"});
+	DEEPSLATE_GOLD_ORE = optional_g("deepslate_gold_ore", GOLD_ORE,
+			{"mcl_core:deepslate_gold_ore", "mcl_deepslate:deepslate_gold_ore",
+					"mcl_deepslate:deepslate_with_gold"});
+	DEEPSLATE_REDSTONE_ORE = optional_g("deepslate_redstone_ore", REDSTONE_ORE,
+			{"mcl_core:deepslate_redstone_ore", "mcl_deepslate:deepslate_redstone_ore",
+					"mcl_deepslate:deepslate_with_redstone"});
+	DEEPSLATE_LAPIS_ORE = optional_g("deepslate_lapis_ore", LAPIS_ORE,
+			{"mcl_core:deepslate_lapis_ore", "mcl_deepslate:deepslate_lapis_ore",
+					"mcl_deepslate:deepslate_with_lapis"});
+	DEEPSLATE_DIAMOND_ORE = optional_g("deepslate_diamond_ore", DIAMOND_ORE,
+			{"mcl_core:deepslate_diamond_ore", "mcl_deepslate:deepslate_diamond_ore",
+					"mcl_deepslate:deepslate_with_diamond"});
 	CLAY = g("clay", "default:clay");
 	DIRT_PATH = g("dirt_path", "default:dirt_with_grass_footsteps");
 	ICE = g("ice", "default:ice");
@@ -1115,19 +1169,24 @@ void init(MapgenEarth *mg)
 	SMOOTH_BASALT =
 			g("smooth_basalt", {"mcl_blackstone:basalt_smooth", "mcl_blackstone:basalt",
 									   "default:stone", "mcl_core:stone"});
-	CAVE_VINES = g("cave_vines", {"mcl_lush_caves:cave_vines_lit",
-										 "mcl_lush_caves:cave_vines", "default:vine"});
-	CAVE_VINES_UNLIT = g(
-			"cave_vines_unlit", {"mcl_lush_caves:cave_vines",
-										"mcl_lush_caves:cave_vines_lit", "default:vine"});
+	CAVE_VINES = g("cave_vines",
+			{"mcl_lush_caves:cave_vines_lit", "mcl_lush_caves:cave_vines", "default:vine",
+					"default:leaves", "default:grass_5", "default:stone"});
+	CAVE_VINES_UNLIT = g("cave_vines_unlit",
+			{"mcl_lush_caves:cave_vines", "mcl_lush_caves:cave_vines_lit", "default:vine",
+					"default:leaves", "default:grass_5", "default:stone"});
 	CAVE_VINES_PLANT = prefer_arnis("cave_vines_plant", CAVE_VINES_UNLIT);
 	CAVE_VINES_PLANT_LIT = prefer_arnis("cave_vines_plant_lit", CAVE_VINES);
-	SPORE_BLOSSOM = g(
-			"spore_blossom", {"mcl_lush_caves:spore_blossom", "mcl_flowers:flower_rose"});
-	AZALEA = g("azalea", {"mcl_lush_caves:azalea", "mcl_flowers:flower_rose"});
+	SPORE_BLOSSOM = g("spore_blossom",
+			{"mcl_lush_caves:spore_blossom", "mcl_flowers:flower_rose", "flowers:rose",
+					"flowers:viola", "default:leaves", "default:stone"});
+	AZALEA = g(
+			"azalea", {"mcl_lush_caves:azalea", "mcl_flowers:flower_rose",
+							  "default:bush_leaves", "default:leaves", "default:stone"});
 	FLOWERING_AZALEA = g("flowering_azalea",
 			{"mcl_lush_caves:azalea_flowering", "mcl_lush_caves:azalea",
-					"mcl_flowers:flower_rose"});
+					"mcl_flowers:flower_rose", "default:bush_leaves", "flowers:rose",
+					"default:leaves", "default:stone"});
 	AZALEA_LEAVES =
 			g("azalea_leaves", {"mcl_lush_caves:azalea_leaves", "default:leaves"});
 	FLOWERING_AZALEA_LEAVES = g("flowering_azalea_leaves",
@@ -1143,44 +1202,86 @@ void init(MapgenEarth *mg)
 	SMITHING_TABLE =
 			g("smithing_table", {"mcl_smithing_table:table", "default:steelblock"});
 	RED_MUSHROOM_BLOCK = g("red_mushroom_block",
-			{"mcl_mushrooms:red_mushroom_block_cap_111111", "mcl_core:stone"});
+			{"mcl_mushrooms:red_mushroom_block_cap_111111", "mcl_core:stone", "wool:red",
+					"default:wood", "default:stone"});
 	BROWN_MUSHROOM_BLOCK = g("brown_mushroom_block",
-			{"mcl_mushrooms:brown_mushroom_block_cap_111111", "mcl_core:stone"});
+			{"mcl_mushrooms:brown_mushroom_block_cap_111111", "mcl_core:stone",
+					"wool:brown", "default:wood", "default:stone"});
 	MUSHROOM_STEM = g("mushroom_stem",
-			{"mcl_mushrooms:brown_mushroom_block_stem_full", "mcl_core:stone"});
-	SHROOMLIGHT = g("shroomlight", {"mcl_crimson:shroomlight", "mcl_core:glowstone"});
-	TUBE_CORAL_BLOCK =
-			g("tube_coral_block", {"mcl_ocean:tube_coral_block", "mcl_core:stone"});
-	BRAIN_CORAL_BLOCK =
-			g("brain_coral_block", {"mcl_ocean:brain_coral_block", "mcl_core:stone"});
-	BUBBLE_CORAL_BLOCK =
-			g("bubble_coral_block", {"mcl_ocean:bubble_coral_block", "mcl_core:stone"});
-	FIRE_CORAL_BLOCK =
-			g("fire_coral_block", {"mcl_ocean:fire_coral_block", "mcl_core:stone"});
-	HORN_CORAL_BLOCK =
-			g("horn_coral_block", {"mcl_ocean:horn_coral_block", "mcl_core:stone"});
+			{"mcl_mushrooms:brown_mushroom_block_stem_full", "mcl_core:stone",
+					"default:aspen_tree", "default:aspen_wood", "default:wood",
+					"default:stone"});
+	SHROOMLIGHT = g(
+			"shroomlight", {"mcl_crimson:shroomlight", "mcl_core:glowstone",
+								   "default:meselamp", "default:torch", "default:stone"});
+	TUBE_CORAL_BLOCK = g("tube_coral_block",
+			{"mcl_ocean:tube_coral_block", "mcl_core:stone", "marinara:hardcoral_blue",
+					"default:coral_brown", "default:coral_skeleton", "default:stone"});
+	BRAIN_CORAL_BLOCK = g("brain_coral_block",
+			{"mcl_ocean:brain_coral_block", "mcl_core:stone", "marinara:hardcoral_pink",
+					"default:coral_brown", "default:coral_skeleton", "default:stone"});
+	BUBBLE_CORAL_BLOCK = g("bubble_coral_block",
+			{"mcl_ocean:bubble_coral_block", "mcl_core:stone",
+					"marinara:hardcoral_violet", "default:coral_brown",
+					"default:coral_skeleton", "default:stone"});
+	FIRE_CORAL_BLOCK = g("fire_coral_block",
+			{"mcl_ocean:fire_coral_block", "mcl_core:stone", "marinara:hardcoral_red",
+					"default:coral_orange", "default:coral_skeleton", "default:stone"});
+	HORN_CORAL_BLOCK = g("horn_coral_block",
+			{"mcl_ocean:horn_coral_block", "mcl_core:stone", "marinara:hardcoral_yellow",
+					"default:coral_brown", "default:coral_skeleton", "default:stone"});
 	DEAD_TUBE_CORAL_BLOCK = g("dead_tube_coral_block",
-			{"mcl_ocean:dead_tube_coral_block", "mcl_core:stone"});
+			{"mcl_ocean:dead_tube_coral_block", "mcl_core:stone",
+					"default:coral_skeleton", "marinara:hardcoral", "default:stone"});
 	DEAD_BRAIN_CORAL_BLOCK = g("dead_brain_coral_block",
-			{"mcl_ocean:dead_brain_coral_block", "mcl_core:stone"});
+			{"mcl_ocean:dead_brain_coral_block", "mcl_core:stone",
+					"default:coral_skeleton", "marinara:hardcoral", "default:stone"});
 	DEAD_BUBBLE_CORAL_BLOCK = g("dead_bubble_coral_block",
-			{"mcl_ocean:dead_bubble_coral_block", "mcl_core:stone"});
+			{"mcl_ocean:dead_bubble_coral_block", "mcl_core:stone",
+					"default:coral_skeleton", "marinara:hardcoral", "default:stone"});
 	DEAD_FIRE_CORAL_BLOCK = g("dead_fire_coral_block",
-			{"mcl_ocean:dead_fire_coral_block", "mcl_core:stone"});
+			{"mcl_ocean:dead_fire_coral_block", "mcl_core:stone",
+					"default:coral_skeleton", "marinara:hardcoral", "default:stone"});
 	DEAD_HORN_CORAL_BLOCK = g("dead_horn_coral_block",
-			{"mcl_ocean:dead_horn_coral_block", "mcl_core:stone"});
-	TUBE_CORAL = g("tube_coral", {"mcl_ocean:tube_coral", "mcl_core:stone"});
-	BRAIN_CORAL = g("brain_coral", {"mcl_ocean:brain_coral", "mcl_core:stone"});
-	BUBBLE_CORAL = g("bubble_coral", {"mcl_ocean:bubble_coral", "mcl_core:stone"});
-	FIRE_CORAL = g("fire_coral", {"mcl_ocean:fire_coral", "mcl_core:stone"});
-	HORN_CORAL = g("horn_coral", {"mcl_ocean:horn_coral", "mcl_core:stone"});
-	TUBE_CORAL_FAN = g("tube_coral_fan", {"mcl_ocean:tube_coral_fan", "mcl_core:stone"});
+			{"mcl_ocean:dead_horn_coral_block", "mcl_core:stone",
+					"default:coral_skeleton", "marinara:hardcoral", "default:stone"});
+	TUBE_CORAL = g("tube_coral", {"mcl_ocean:tube_coral", "mcl_core:stone",
+										 "default:coral_cyan", "marinara:hardcoral_blue",
+										 "default:coral_skeleton", "default:stone"});
+	BRAIN_CORAL =
+			g("brain_coral", {"mcl_ocean:brain_coral", "mcl_core:stone",
+									 "default:coral_pink", "marinara:hardcoral_pink",
+									 "default:coral_skeleton", "default:stone"});
+	BUBBLE_CORAL =
+			g("bubble_coral", {"mcl_ocean:bubble_coral", "mcl_core:stone",
+									  "default:coral_pink", "marinara:hardcoral_violet",
+									  "default:coral_skeleton", "default:stone"});
+	FIRE_CORAL = g("fire_coral",
+			{"mcl_ocean:fire_coral", "mcl_core:stone", "default:coral_orange",
+					"marinara:hardcoral_red", "default:coral_skeleton", "default:stone"});
+	HORN_CORAL =
+			g("horn_coral", {"mcl_ocean:horn_coral", "mcl_core:stone",
+									"default:coral_brown", "marinara:hardcoral_yellow",
+									"default:coral_skeleton", "default:stone"});
+	TUBE_CORAL_FAN =
+			g("tube_coral_fan", {"mcl_ocean:tube_coral_fan", "mcl_core:stone",
+										"default:coral_cyan", "marinara:hardcoral_blue",
+										"default:coral_skeleton", "default:stone"});
 	BRAIN_CORAL_FAN =
-			g("brain_coral_fan", {"mcl_ocean:brain_coral_fan", "mcl_core:stone"});
-	BUBBLE_CORAL_FAN =
-			g("bubble_coral_fan", {"mcl_ocean:bubble_coral_fan", "mcl_core:stone"});
-	FIRE_CORAL_FAN = g("fire_coral_fan", {"mcl_ocean:fire_coral_fan", "mcl_core:stone"});
-	HORN_CORAL_FAN = g("horn_coral_fan", {"mcl_ocean:horn_coral_fan", "mcl_core:stone"});
+			g("brain_coral_fan", {"mcl_ocean:brain_coral_fan", "mcl_core:stone",
+										 "default:coral_pink", "marinara:hardcoral_pink",
+										 "default:coral_skeleton", "default:stone"});
+	BUBBLE_CORAL_FAN = g(
+			"bubble_coral_fan", {"mcl_ocean:bubble_coral_fan", "mcl_core:stone",
+										"default:coral_pink", "marinara:hardcoral_violet",
+										"default:coral_skeleton", "default:stone"});
+	FIRE_CORAL_FAN = g("fire_coral_fan",
+			{"mcl_ocean:fire_coral_fan", "mcl_core:stone", "default:coral_orange",
+					"marinara:hardcoral_red", "default:coral_skeleton", "default:stone"});
+	HORN_CORAL_FAN = g(
+			"horn_coral_fan", {"mcl_ocean:horn_coral_fan", "mcl_core:stone",
+									  "default:coral_brown", "marinara:hardcoral_yellow",
+									  "default:coral_skeleton", "default:stone"});
 	SMALL_AMETHYST_BUD = g("small_amethyst_bud",
 			{"mcl_amethyst:small_amethyst_bud", "mcl_amethyst:amethyst_cluster",
 					"default:stone", "mcl_core:stone"});
@@ -1197,15 +1298,19 @@ void init(MapgenEarth *mg)
 					"default:stone", "mcl_core:stone"});
 	GLOW_LICHEN = g("glow_lichen", {"mcl_core:glow_lichen_down", "mcl_core:glow_lichen_d",
 										   "default:coral_green", "default:coral_cyan"});
-	SCULK = g("sculk", {"mcl_sculk:sculk", "mcl_core:stone"});
+	SCULK = g("sculk",
+			{"mcl_sculk:sculk", "mcl_core:stone", "default:obsidian", "default:stone"});
 	SCULK_VEIN = g("sculk_vein",
 			{"mcl_sculk:vein", "mcl_core:glow_lichen_down", "default:coral_green"});
-	SCULK_CATALYST = g("sculk_catalyst",
-			{"mcl_sculk:catalyst", "mcl_sculk:sculk", "mcl_core:stone"});
+	SCULK_CATALYST = g(
+			"sculk_catalyst", {"mcl_sculk:catalyst", "mcl_sculk:sculk", "mcl_core:stone",
+									  "default:obsidian", "default:stone"});
 	SCULK_SENSOR =
-			g("sculk_sensor", {"mcl_sculk:sensor", "mcl_sculk:sculk", "mcl_core:stone"});
-	SCULK_SHRIEKER = g("sculk_shrieker",
-			{"mcl_sculk:shrieker", "mcl_sculk:sculk", "mcl_core:stone"});
+			g("sculk_sensor", {"mcl_sculk:sensor", "mcl_sculk:sculk", "mcl_core:stone",
+									  "default:obsidian", "default:stone"});
+	SCULK_SHRIEKER = g(
+			"sculk_shrieker", {"mcl_sculk:shrieker", "mcl_sculk:sculk", "mcl_core:stone",
+									  "default:obsidian", "default:stone"});
 	BIG_DRIPLEAF = g(
 			"big_dripleaf", {"mcl_lush_caves:big_dripleaf_1", "mcl_flowers:double_grass",
 									"default:grass_5", "default:stone"});
@@ -1218,10 +1323,15 @@ void init(MapgenEarth *mg)
 	SMALL_DRIPLEAF_UPPER = g("small_dripleaf_upper",
 			{"mcl_lush_caves:small_dripleaf_2", "mcl_lush_caves:small_dripleaf_1",
 					"default:grass_5", "default:stone"});
-	MUD = g("mud", {"mcl_mud:mud", "default:dirt", "mcl_core:dirt"});
+	MUD = g("mud", {"mcl_mud:mud", "default:dirt", "mcl_core:dirt", "default:clay",
+						   "default:dirt_with_rainforest_litter",
+						   "default:dirt_with_grass", "default:stone"});
 	DEAD_BUSH = g("dead_bush", "default:dry_shrub");
-	MYCELIUM = g("mycelium",
-			{"default:mycelium", "mcl_core:mycelium", "mcl_core:dirt", "default:dirt"});
+	MYCELIUM =
+			g("mycelium", {"default:mycelium", "mcl_core:mycelium", "mcl_core:dirt",
+								  "default:dirt", "default:dirt_with_coniferous_litter",
+								  "default:dirt_with_rainforest_litter",
+								  "default:dirt_with_grass", "default:stone"});
 	RED_MUSHROOM =
 			g("red_mushroom", {"flowers:mushroom_red", "mcl_mushrooms:red_mushroom"});
 	BROWN_MUSHROOM = g(
@@ -1358,8 +1468,6 @@ void init(MapgenEarth *mg)
 					"default:stone"});
 	REDSTONE_LAMP = g("redstone_lamp",
 			{"mcl_redstone:redstone_lamp", "default:meselamp", "default:stone"});
-	AMETHYST_CLUSTER =
-			g("amethyst_cluster", {"mcl_amethyst:amethyst_cluster", "default:stone"});
 	CHISELED_QUARTZ_BLOCK = g(
 			"chiseled_quartz_block", {"mcl_core:chiseled_quartz_block", "default:stone"});
 	ORANGE_CONCRETE = g("orange_concrete",

@@ -17,6 +17,22 @@
 
 namespace arnis
 {
+namespace
+{
+// Rust's `f64::round() as i32` rounds ties away from zero, maps NaN to zero,
+// and saturates infinities/out-of-range values. Avoid `llround` followed by a
+// narrowing cast, whose result is not defined for those boundary inputs.
+int rust_round_i32(double value)
+{
+	if (std::isnan(value))
+		return 0;
+	if (value >= static_cast<double>(std::numeric_limits<int>::max()))
+		return std::numeric_limits<int>::max();
+	if (value <= static_cast<double>(std::numeric_limits<int>::min()))
+		return std::numeric_limits<int>::min();
+	return static_cast<int>(std::round(value));
+}
+} // namespace
 
 int extended_min_y_for(const Args &args)
 {
@@ -67,12 +83,23 @@ GroundFrame GroundFrame::from_args(const Args &args, const geographic::LLBBox &b
 		}
 		const auto origin = std::pair<double, double>{
 				args.one_world_run->origin_lat, args.one_world_run->origin_lon};
-		return projected(bbox, args.scale, one_world::ground_pad_blocks(args.scale),
-				policy, origin, origin);
+		try {
+			return projected(bbox, args.scale, one_world::ground_pad_blocks(args.scale),
+					policy, origin, origin);
+		} catch (const std::exception &) {
+			// ProjectionSpec::transformer in Rust returns an error for a bbox
+			// outside the supported projected domain, and GroundFrame deliberately
+			// falls back to local coordinates in that case.
+			return local();
+		}
 	}
 	if (args.projection == projection::ProjectionKind::Local)
 		return local();
-	return projected(bbox, args.scale);
+	try {
+		return projected(bbox, args.scale);
+	} catch (const std::exception &) {
+		return local();
+	}
 }
 
 GroundFrame GroundFrame::projected(const geographic::LLBBox &bbox, double scale,
@@ -106,30 +133,35 @@ double GroundFrame::anchor_lat(const geographic::LLBBox &bbox) const
 						  : (bbox.min().lat() + bbox.max().lat()) * 0.5;
 }
 
-std::optional<ecoregion::EcoMap> GroundFrame::ecoregions(const geographic::LLBBox &bbox,
-		std::size_t world_width, std::size_t world_height) const
+std::shared_ptr<const ecoregion::EcoMap> GroundFrame::ecoregions(
+		const geographic::LLBBox &bbox, std::size_t world_width,
+		std::size_t world_height) const
 {
 	if (!ecoregion::generation_map().map || !world_width || !world_height)
-		return std::nullopt;
+		return {};
 	if (mercator) {
 		const int x0 =
 				projection::snap_edge(mercator->x_for_lon(bbox.min().lng()), false);
 		const int z0 =
 				projection::snap_edge(mercator->z_for_lat(bbox.max().lat()), false);
-		return ecoregion::EcoMap::build(world_width, world_height, {x0, z0},
+		auto map = ecoregion::EcoMap::build(world_width, world_height, {x0, z0},
 				[projection = *mercator, x0, z0](double gx, double gz) {
 					return std::pair<double, double>{
 							projection.lat_for_z(z0 + gz), projection.lon_for_x(x0 + gx)};
 				});
+		return map ? std::make_shared<const ecoregion::EcoMap>(std::move(*map))
+				   : std::shared_ptr<const ecoregion::EcoMap>{};
 	}
 	const double top = bbox.max().lat(), left = bbox.min().lng();
 	const double dlat = top - bbox.min().lat();
 	const double dlon = bbox.max().lng() - left;
-	return ecoregion::EcoMap::build(world_width, world_height, {0, 0},
+	auto map = ecoregion::EcoMap::build(world_width, world_height, {0, 0},
 			[top, left, dlat, dlon, world_width, world_height](double gx, double gz) {
 				return std::pair<double, double>{top - gz / double(world_height) * dlat,
 						left + gx / double(world_width) * dlon};
 			});
+	return map ? std::make_shared<const ecoregion::EcoMap>(std::move(*map))
+			   : std::shared_ptr<const ecoregion::EcoMap>{};
 }
 
 GroundFetchPlan GroundFrame::fetch_plan(
@@ -311,7 +343,7 @@ Ground generate_ground_data(const Args &args, const geographic::LLBBox &bbox,
 	}
 	if (earth)
 		if (auto map = frame.ecoregions(bbox, final_width, final_height))
-			ground.set_ecoregion_map(std::move(*map));
+			ground.set_ecoregion_map(std::move(map));
 	int base = ground.base_level(args.ground_level);
 	if (args.one_world_run && args.disable_height_limit && ground.elevation_enabled) {
 		// Rust's area_floor_for follows the actual lowest block in this
@@ -335,13 +367,10 @@ std::optional<int> Ground::min_level(const std::vector<XZPoint> &points) const
 		return elevation_ground_level.value_or(0);
 	if (points.empty())
 		return std::nullopt;
-	int minY = 9999999;
-	for (auto &pt : points) {
-		int y = level(pt);
-		if (y < minY)
-			minY = y;
-	}
-	return minY == 9999999 ? std::nullopt : std::optional<int>(minY);
+	int min_y = level(points.front());
+	for (const auto &point : points)
+		min_y = std::min(min_y, level(point));
+	return min_y;
 }
 std::optional<int> Ground::max_level(const std::vector<XZPoint> &points) const
 {
@@ -383,11 +412,13 @@ int Ground::level(const XZPoint &pos) const
 			const auto x1 = std::min(width - 1, x0 + 1),
 					   z1 = std::min(height - 1, z0 + 1);
 			const double tx = xr - std::floor(xr), tz = zr - std::floor(zr);
-			const double top =
-					elevation_grid[z0][x0] * (1.0 - tx) + elevation_grid[z0][x1] * tx;
-			const double bottom =
-					elevation_grid[z1][x0] * (1.0 - tx) + elevation_grid[z1][x1] * tx;
-			return static_cast<int>(std::llround(top * (1.0 - tz) + bottom * tz));
+			const double v00 = elevation_grid[z0][x0];
+			const double v10 = elevation_grid[z0][x1];
+			const double v01 = elevation_grid[z1][x0];
+			const double v11 = elevation_grid[z1][x1];
+			const double lerp_top = v00 + (v10 - v00) * tx;
+			const double lerp_bottom = v01 + (v11 - v01) * tx;
+			return rust_round_i32(lerp_top + (lerp_bottom - lerp_top) * tz);
 		}
 	}
 	if (!mg)
@@ -431,10 +462,13 @@ double Ground::level_exact(const XZPoint &pos) const
 	const auto x1 = std::min(width - 1, x0 + 1);
 	const auto z1 = std::min(height - 1, z0 + 1);
 	const double tx = xr - std::floor(xr), tz = zr - std::floor(zr);
-	const double top = elevation_grid[z0][x0] * (1.0 - tx) + elevation_grid[z0][x1] * tx;
-	const double bottom =
-			elevation_grid[z1][x0] * (1.0 - tx) + elevation_grid[z1][x1] * tx;
-	return top * (1.0 - tz) + bottom * tz;
+	const double v00 = elevation_grid[z0][x0];
+	const double v10 = elevation_grid[z0][x1];
+	const double v01 = elevation_grid[z1][x0];
+	const double v11 = elevation_grid[z1][x1];
+	const double lerp_top = v00 + (v10 - v00) * tx;
+	const double lerp_bottom = v01 + (v11 - v01) * tx;
+	return lerp_top + (lerp_bottom - lerp_top) * tz;
 }
 
 double Ground::slope_exact(const XZPoint &pos) const
@@ -465,7 +499,7 @@ std::pair<double, std::pair<double, double>> Ground::slope_and_gradient(
 			level_exact({pos.x, pos.z + step})}};
 	const auto [min_it, max_it] = std::minmax_element(samples.begin(), samples.end());
 	const double raw = *max_it - *min_it;
-	const int mid_y = static_cast<int>(std::llround((*min_it + *max_it) * 0.5));
+	const int mid_y = rust_round_i32((*min_it + *max_it) * 0.5);
 	const double slope = std::max(
 			0.0, raw * elevation_slope_correction * slope_soft_top_stretch(mid_y));
 	return {slope, {samples[0] - samples[1], samples[3] - samples[2]}};
@@ -485,7 +519,7 @@ double Ground::convexity(const XZPoint &pos) const
 		mean += level_exact({pos.x + dx, pos.z + dz});
 	mean /= static_cast<double>(ring.size());
 	// The sample ring is twice the four-block slope baseline used by Rust.
-	const int center_y = static_cast<int>(std::llround(level_exact(pos)));
+	const int center_y = rust_round_i32(level_exact(pos));
 	return (mean - level_exact(pos)) * 0.5 * elevation_slope_correction *
 		   slope_soft_top_stretch(center_y);
 }
@@ -501,16 +535,16 @@ bool Ground::has_canopy() const
 
 std::optional<ecoregion::Ecoregion> Ground::ecoregion_at(const XZPoint &coord) const
 {
-	if (!ecoregion_map)
+	if (!ecoregions)
 		return std::nullopt;
-	if (ecoregion_map->is_local()) {
-		const auto [align_x, align_z] = ecoregion_map->alignment();
-		return ecoregion_map->at({coord.x + align_x, coord.z + align_z});
+	if (ecoregions->is_local()) {
+		const auto [align_x, align_z] = ecoregions->alignment();
+		return ecoregions->at({coord.x + align_x, coord.z + align_z});
 	}
 	if (!mg)
 		return std::nullopt;
 	const auto [lat, lon] = mg->pos_to_ll(coord.X, coord.Y);
-	const auto id = ecoregion_map->id_at(lat, lon);
+	const auto id = ecoregions->id_at(lat, lon);
 	return id ? ecoregion::lookup(*id) : std::nullopt;
 }
 double Ground::blocks_per_meter() const
@@ -880,21 +914,13 @@ std::optional<std::tuple<int, int, int, int>> Ground::lc_water_block_bounds() co
 	if (!any)
 		return std::nullopt;
 
-	auto span = [](std::size_t g_lo, std::size_t g_hi, std::size_t world_dim,
-						std::size_t grid_dim) {
-		if (grid_dim <= 1 || world_dim <= 1)
-			return std::pair<int, int>{0, static_cast<int>(world_dim - 1)};
-		const double f =
-				static_cast<double>(world_dim - 1) / static_cast<double>(grid_dim - 1);
-		const int lo =
-				static_cast<int>(std::floor((static_cast<double>(g_lo) - 0.5) * f)) - 1;
-		const int hi =
-				static_cast<int>(std::ceil((static_cast<double>(g_hi) + 0.5) * f)) + 1;
-		return std::pair<int, int>{
-				std::max(0, lo), std::min(static_cast<int>(world_dim - 1), hi)};
-	};
-	const auto [x0, x1] = span(gx0, gx1, land_cover_world_width, lc.width);
-	const auto [z0, z1] = span(gz0, gz1, land_cover_world_height, lc.height);
+	// Rust derives the block bounds from ElevationData's world dimensions.
+	// Reuse the same span mapper as water-depth preprocessing so the two paths
+	// cannot drift on grid edges or degenerate dimensions.
+	const auto [x0, x1] = water_depth::grid_span_to_block_span(
+			gx0, gx1, elevation_world_width, lc.width);
+	const auto [z0, z1] = water_depth::grid_span_to_block_span(
+			gz0, gz1, elevation_world_height, lc.height);
 	return std::tuple<int, int, int, int>{x0, z0, x1, z1};
 }
 int Ground::slope(const XZPoint &coord) const
@@ -918,7 +944,7 @@ int Ground::slope(const XZPoint &coord) const
 		return std::numeric_limits<int>::max();
 	if (scaled <= static_cast<long double>(std::numeric_limits<int>::min()))
 		return std::numeric_limits<int>::min();
-	return static_cast<int>(std::llround(scaled));
+	return rust_round_i32(static_cast<double>(scaled));
 }
 int Ground::water_level(const XZPoint &coord) const
 {
@@ -936,10 +962,8 @@ int Ground::water_level(const XZPoint &coord) const
 					 {0, -r}, {0, r}, {-r, -r}, {-r, r}, {r, -r}, {r, r}}})
 			lowest = std::min(lowest, level({coord.x + dx, coord.z + dz}));
 	const int cliff_drop =
-			extended_ceiling
-					? std::max(radius,
-							  static_cast<int>(std::llround(25.0 * blocks_per_meter())))
-					: radius;
+			extended_ceiling ? std::max(radius, rust_round_i32(25.0 * blocks_per_meter()))
+							 : radius;
 	// Match Rust's saturating_sub: malformed/overflowing DEM values must not
 	// wrap into a negative drop and accidentally bypass the cliff guard.
 	const auto drop = static_cast<long double>(center) - static_cast<long double>(lowest);
