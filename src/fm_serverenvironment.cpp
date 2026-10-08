@@ -26,6 +26,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "serverenvironment.h"
 #include "servermap.h"
 #include "util/timetaker.h"
+#include <algorithm>
 
 size_t ServerEnvironment::blockStep(MapBlockPtr block, float dtime_s, uint8_t activate)
 {
@@ -54,7 +55,15 @@ size_t ServerEnvironment::blockStep(MapBlockPtr block, float dtime_s, uint8_t ac
 		return m_script->node_on_timer(p, n, t.elapsed, t.timeout);
 	});
 
-	return block->abmTriggersRun(this, m_game_time, activate);
+	// Inactive/random/world blocks keep only an eligibility bit between visits.
+	activate |= analyzeBlock(block);
+	const auto triggered = block->abmTriggersRun(this, m_game_time, activate);
+	{
+		const auto lock = m_active_blocks.m_list.try_lock_shared_rec();
+		if (lock->owns_lock() && !m_active_blocks.m_list.count(block->getPos()))
+			block->releaseAbmCandidates();
+	}
+	return triggered;
 }
 
 int ServerEnvironment::analyzeBlocks(float dtime, unsigned int max_cycle_ms)
@@ -62,7 +71,8 @@ int ServerEnvironment::analyzeBlocks(float dtime, unsigned int max_cycle_ms)
 	const auto started = porting::getTimeMs();
 	size_t active_blocks = 0, analyzed = 0, random_calls = 0, random_triggers = 0;
 	u32 n = 0, calls = 0;
-	const auto end_ms = porting::getTimeMs() + max_cycle_ms;
+	// Background analysis is deliberately lazy; generation and players take priority.
+	const auto end_ms = porting::getTimeMs() + std::min(max_cycle_ms, 5u);
 	if (m_active_block_analyzed_last || m_analyze_blocks_interval.step(dtime, 1.0)) {
 		//if (!m_active_block_analyzed_last) infostream<<"Start ABM analyze cycle s="<<m_active_blocks.m_list.size()<<std::endl;
 		TimeTaker timer("env: block analyze and abm apply from " +
@@ -89,6 +99,11 @@ int ServerEnvironment::analyzeBlocks(float dtime, unsigned int max_cycle_ms)
 				continue;
 
 			analyzeBlock(block);
+			{
+				const auto lock = m_active_blocks.m_list.try_lock_shared_rec();
+				if (lock->owns_lock() && !m_active_blocks.m_list.count(p))
+					block->releaseAbmCandidates();
+			}
 			++analyzed;
 
 			if (porting::getTimeMs() > end_ms) {
