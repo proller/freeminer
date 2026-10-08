@@ -600,6 +600,27 @@ void init(MapgenEarth *mg)
 				if (usable(id))
 					return id;
 			}
+			// Content packs commonly expose the same terrain under different
+			// namespaces. After exhausting material-specific aliases, use a
+			// generic solid fallback rather than resolving to CONTENT_IGNORE.
+			// Do not apply this to liquid mappings (water/lava).
+			if (!allow_liquids) {
+				for (const auto *name : {"mapgen_stone", "basenodes:stone",
+							 "mcl_core:stone", "default:stone", "mapgen_desert_stone",
+							 "basenodes:desert_stone", "mcl_core:desert_stone",
+							 "default:desert_stone", "mapgen_dirt", "basenodes:dirt",
+							 "mcl_core:dirt", "default:dirt", "basenodes:dirt_with_grass",
+							 "mcl_core:dirt_with_grass", "default:dirt_with_grass",
+							 "mapgen_sand", "basenodes:sand", "mcl_core:sand",
+							 "default:sand", "basenodes:desert_sand", "mcl_core:red_sand",
+							 "default:desert_sand", "mapgen_gravel", "basenodes:gravel",
+							 "mcl_core:gravel", "default:gravel", "basenodes:cobble",
+							 "mcl_core:cobble", "default:cobble"}) {
+					const auto id = mg->m_emerge->ndef->getId(name);
+					if (usable(id))
+						return id;
+				}
+			}
 			if (names.size() > 0) {
 				errorstream << "Mapping node alternatives missing or liquid "
 							<< *names.begin() << "\n";
@@ -715,15 +736,22 @@ void init(MapgenEarth *mg)
 			g("dark_oak_fence", {"mcl_fences:dark_oak_fence", "default:fence_wood"});
 	DEEPSLATE_BRICKS = g("deepslate_bricks", "default:stonebrick");
 	DIORITE = g("diorite", "default:stone");
-	DIRT = g("dirt", {"default:dirt", "mcl_core:dirt", "default:dirt_with_grass",
-							 "default:clay", "default:stone"});
+	DIRT = g("dirt",
+			{"default:dirt", "mcl_core:dirt", "mcl_core:dirt_with_grass",
+					"basenodes:dirt", "spring:dirt", "default:dirt_with_grass",
+					"basenodes:dirt_with_grass", "default:clay", "mcl_core:clay",
+					"mapgen_dirt", "default:stone", "basenodes:stone", "mcl_core:stone"});
 	END_STONE_BRICKS = g("end_stone_bricks", "default:stonebrick");
 	END_STONE = g("end_stone",
 			{"default:endstone", "mcl_end:end_stone", "mcl_end:end_stone_bricks",
-					"default:sandstone", "default:stone"});
+					"mcl_end:purpur_block", "default:desert_stone", "default:sandstone",
+					"mapgen_stone", "basenodes:stone", "mcl_core:stone",
+					"default:stone"});
 	FARMLAND = g("farmland",
 			{"default:dirt", "mcl_farming:soil", "mcl_core:dirt", "farming:soil",
-					"default:dirt_with_grass", "default:clay", "default:stone"});
+					"mcl_core:dirt_with_grass", "basenodes:dirt", "spring:dirt",
+					"mapgen_dirt", "default:dirt_with_grass", "default:clay",
+					"basenodes:stone", "default:stone"});
 	GLASS = g("glass", "default:glass");
 	GLOWSTONE = g("glowstone", "default:meselamp");
 	GRANITE = g("granite", "default:stone");
@@ -733,8 +761,9 @@ void init(MapgenEarth *mg)
 			{"mcl_core:dirt_with_grass_snow", "mapgen_dirt_with_snow",
 					"basenodes:dirt_with_snow", "default:dirt_with_snow",
 					"default:grass_5"});
-	GRAVEL = g("gravel", {"default:gravel", "mcl_core:gravel", "default:cobble",
-								 "default:stone", "mcl_core:stone"});
+	GRAVEL = g("gravel", {"default:gravel", "mcl_core:gravel", "basenodes:gravel",
+								 "mapgen_gravel", "default:cobble", "mcl_core:cobble",
+								 "basenodes:stone", "default:stone", "mcl_core:stone"});
 	GRAY_CONCRETE = g("gray_concrete",
 			{"basic_materials:concrete_block", "wool:grey", "default:stone"});
 	GRAY_TERRACOTTA = g("gray_terracotta", "default:clay");
@@ -785,8 +814,9 @@ void init(MapgenEarth *mg)
 	RED_NETHER_BRICK = g("red_nether_brick", "default:obsidianbrick");
 	RED_TERRACOTTA = g("red_terracotta", "default:clay");
 	RED_WOOL = g("red_wool", "wool:red");
-	SAND = g("sand", {"default:sand", "mcl_core:sand", "default:sandstone",
-							 "mcl_core:sandstone", "default:stone"});
+	SAND = g("sand", {"default:sand", "mcl_core:sand", "basenodes:sand", "mapgen_sand",
+							 "spring:sand", "mcl_core:red_sand", "default:sandstone",
+							 "mcl_core:sandstone", "basenodes:stone", "default:stone"});
 	SANDSTONE = g("sandstone", "default:sandstone");
 	SCAFFOLDING = g("scaffolding", "default:ladder_steel");
 	SMOOTH_QUARTZ = g("smooth_quartz", "default:stone");
@@ -839,8 +869,9 @@ void init(MapgenEarth *mg)
 									"default:coral_skeleton"});
 	SOUL_SAND = g("soul_sand",
 			{"default:desert_sand", "mcl_nether:soul_sand", "mcl_core:redsand",
-					"default:sand", "mcl_core:sand", "default:desert_sandstone",
-					"default:sandstone", "default:stone"});
+					"mcl_core:red_sand", "default:sand", "mcl_core:sand", "mapgen_sand",
+					"basenodes:sand", "spring:sand", "default:desert_sandstone",
+					"default:sandstone", "basenodes:stone", "default:stone"});
 	EARTH_BENCH = g("earth_bench",
 			{"homedecor:simple_bench", "stairs:slab_wood", "default:wood"});
 	EARTH_TRASH_CAN = g("earth_trash_can",
@@ -1170,29 +1201,38 @@ void init(MapgenEarth *mg)
 			g("smooth_basalt", {"mcl_blackstone:basalt_smooth", "mcl_blackstone:basalt",
 									   "default:stone", "mcl_core:stone"});
 	CAVE_VINES = g("cave_vines",
-			{"mcl_lush_caves:cave_vines_lit", "mcl_lush_caves:cave_vines", "default:vine",
-					"default:leaves", "default:grass_5", "default:stone"});
+			{"mcl_lush_caves:cave_vines_lit", "mcl_lush_caves:cave_vines",
+					"mcl_lush_caves:cave_vines_plant_lit",
+					"mcl_lush_caves:cave_vines_plant", "default:vine", "default:leaves",
+					"default:grass_5", "basenodes:stone", "default:stone"});
 	CAVE_VINES_UNLIT = g("cave_vines_unlit",
-			{"mcl_lush_caves:cave_vines", "mcl_lush_caves:cave_vines_lit", "default:vine",
-					"default:leaves", "default:grass_5", "default:stone"});
+			{"mcl_lush_caves:cave_vines", "mcl_lush_caves:cave_vines_lit",
+					"mcl_lush_caves:cave_vines_plant",
+					"mcl_lush_caves:cave_vines_plant_lit", "default:vine",
+					"default:leaves", "default:grass_5", "basenodes:stone",
+					"default:stone"});
 	CAVE_VINES_PLANT = prefer_arnis("cave_vines_plant", CAVE_VINES_UNLIT);
 	CAVE_VINES_PLANT_LIT = prefer_arnis("cave_vines_plant_lit", CAVE_VINES);
 	SPORE_BLOSSOM = g("spore_blossom",
 			{"mcl_lush_caves:spore_blossom", "mcl_flowers:flower_rose", "flowers:rose",
-					"flowers:viola", "default:leaves", "default:stone"});
-	AZALEA = g(
-			"azalea", {"mcl_lush_caves:azalea", "mcl_flowers:flower_rose",
-							  "default:bush_leaves", "default:leaves", "default:stone"});
+					"flowers:viola", "mcl_flowers:flower_allium", "default:leaves",
+					"basenodes:stone", "default:stone"});
+	AZALEA = g("azalea", {"mcl_lush_caves:azalea", "mcl_lush_caves:azalea_bush",
+								 "mcl_flowers:flower_rose", "default:bush_leaves",
+								 "default:leaves", "basenodes:stone", "default:stone"});
 	FLOWERING_AZALEA = g("flowering_azalea",
 			{"mcl_lush_caves:azalea_flowering", "mcl_lush_caves:azalea",
-					"mcl_flowers:flower_rose", "default:bush_leaves", "flowers:rose",
-					"default:leaves", "default:stone"});
-	AZALEA_LEAVES =
-			g("azalea_leaves", {"mcl_lush_caves:azalea_leaves", "default:leaves"});
+					"mcl_lush_caves:flowering_azalea_bush", "mcl_flowers:flower_rose",
+					"default:bush_leaves", "flowers:rose", "default:leaves",
+					"basenodes:stone", "default:stone"});
+	AZALEA_LEAVES = g("azalea_leaves",
+			{"mcl_lush_caves:azalea_leaves", "mcl_lush_caves:azalea_leaves_fruiting",
+					"default:leaves", "basenodes:stone", "default:stone"});
 	FLOWERING_AZALEA_LEAVES = g("flowering_azalea_leaves",
 			{"mcl_lush_caves:azalea_leaves_flowering",
 					"mcl_lush_caves:flowering_azalea_leaves",
-					"mcl_lush_caves:azalea_leaves", "default:leaves"});
+					"mcl_lush_caves:azalea_leaves", "default:leaves", "basenodes:stone",
+					"default:stone"});
 	WHITE_BED = g("white_bed",
 			{"mcl_beds:bed_white_bottom", "beds:bed_bottom", "default:wood"});
 	LECTERN = g("lectern", {"mcl_lectern:lectern", "default:bookshelf", "default:wood"});
