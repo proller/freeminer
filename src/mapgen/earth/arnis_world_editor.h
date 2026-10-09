@@ -150,6 +150,7 @@ struct WorldEditor
 	bool place_schematics_enabled = true;
 	bool schematic_tree_pack_available = false;
 	bool map_decals = true;
+	int first_decal_map_id = decals::DecalRegistry::FIRST_ID;
 	// Matches trees::RegionSelector::base_spacing() for the default pack; hosts
 	// loading a differently scaled schematic pack may override it.
 	int tree_slot_spacing_blocks = 5;
@@ -283,6 +284,7 @@ struct WorldEditor
 	void set_start_with_map(bool v) { start_with_map = v; }
 	void set_map_decals(bool v) { map_decals = v; }
 	bool map_decals_enabled() const { return map_decals; }
+	void set_first_decal_map_id(int id) { first_decal_map_id = id; }
 	void set_decal_registry(std::shared_ptr<const decals::DecalRegistry> registry)
 	{
 		decal_registry = std::move(registry);

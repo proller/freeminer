@@ -7,6 +7,7 @@ if(USE_OSMIUM)
           ${CMAKE_CURRENT_SOURCE_DIR}/arnis_ground.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/arnis_world_editor.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/arnis_projection_frame.cpp
+          ${CMAKE_CURRENT_SOURCE_DIR}/osmium.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/blocks.cpp
      )
 	install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/arnis-cpp/assets" DESTINATION "${SHAREDIR}/assets/arnis")
