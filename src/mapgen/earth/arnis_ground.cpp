@@ -4,6 +4,7 @@
 #include "arnis-cpp/src/block_definitions.h"
 #include "arnis-cpp/src/climate.h"
 #include "arnis-cpp/src/elevation/planetary.h"
+#include "arnis-cpp/src/elevation/cache.h"
 #include "arnis-cpp/src/elevation/selector.h"
 #include "arnis-cpp/src/coordinate_system/transformation.h"
 #include "arnis-cpp/src/fm_ecoregion_cache.h"
@@ -203,6 +204,10 @@ Ground generate_ground_data(const Args &args, const geographic::LLBBox &bbox,
 {
 	if (!args.valid())
 		throw std::invalid_argument("invalid Arnis ground-generation options");
+	// Match Rust's once-daily background sweep of stale elevation/land-cover
+	// tiles. Keep the host-supplied cache root authoritative when present.
+	elevation::spawn_throttled_cleanup(
+			cache_base.empty() ? cache::tile_cache_root() : cache_base);
 	world_editor::set_terrain_top_y(args.ground_level);
 
 	const auto plan = frame.fetch_plan(bbox, args.scale);
