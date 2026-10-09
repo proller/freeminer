@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cctype>
 #include <cmath>
 #include <cstddef>
@@ -497,37 +498,238 @@ arnis::Args earth_arnis_args()
 {
 	// Freeminer owns the application cache directory; all Arnis providers derive
 	// their cache subdirectories from this one configured base.
-	arnis::cache::set_base_directory(
+	::arnis::cache::set_base_directory(
 			std::filesystem::path(porting::path_cache) / "earth" / "arnis");
 	// Assets are installed independently from the executable and cache tree.
-	arnis::assets::set_base_directory(
+	::arnis::assets::set_base_directory(
 			std::filesystem::path(porting::path_share) / "assets" / "arnis");
-	arnis::Args args;
-	args.use_3d = true;
-	args.interior = true;
-	args.roof = true;
-	args.signage = arnis::SignageLevel::Full;
-	args.fillground = true;
-	args.disable_height_limit = true;
-	args.building_facades = true;
-	std::string mapillary_token;
-	g_settings->getNoEx("mapillary_token", mapillary_token);
-	if (!mapillary_token.empty()) {
-		args.mapillary_facades = true;
-		args.mapillary_probe = true;
-		args.mapillary_token = mapillary_token;
-		// mapillary_facades_dir is an existing export input, not a download
-		// cache. Providers already derive their cache from cache::base_directory().
-	}
-	args.facade_detail = arnis::FacadeDetail::High;
-	args.building_facades_dir = arnis::cache::facade_cache_root().string();
-	args.signage = arnis::SignageLevel::Full;
-	args.fillground = true;
-	args.caves = true;
-	args.cave_biomes =
+	::arnis::Args arnis;
+	arnis.use_3d = true;
+	arnis.interior = true;
+	arnis.roof = true;
+	arnis.signage = ::arnis::SignageLevel::Full;
+	arnis.fillground = true;
+	arnis.disable_height_limit = true;
+	arnis.building_facades = true;
+	arnis.facade_detail = ::arnis::FacadeDetail::High;
+	arnis.caves = true;
+	arnis.cave_biomes =
 			"lush=100,dripstone=100,deepdark=100,mushroom=100,ice=100,amethyst=100,volcanic=100,coral=100";
+	arnis.canopy_height = false;
 
-	return args;
+	// Settings::getNoEx only exposes strings, so parse values here while leaving
+	// Args defaults intact whenever a setting is absent or malformed.
+	const auto get_setting = [](const char *name, std::string &value) {
+		return g_settings && g_settings->getNoEx(std::string("arnis.") + name, value);
+	};
+	const auto read_bool = [&](const char *name, bool &value) {
+		std::string raw;
+		if (!get_setting(name, raw))
+			return;
+		std::transform(raw.begin(), raw.end(), raw.begin(),
+				[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		if (raw == "true" || raw == "yes" || raw == "1" || raw == "on")
+			value = true;
+		else if (raw == "false" || raw == "no" || raw == "0" || raw == "off")
+			value = false;
+	};
+	const auto read_int = [&](const char *name, int &value) {
+		std::string raw;
+		if (!get_setting(name, raw))
+			return;
+		char *end = nullptr;
+		errno = 0;
+		const long parsed = std::strtol(raw.c_str(), &end, 10);
+		while (end && std::isspace(static_cast<unsigned char>(*end)))
+			++end;
+		if (errno != ERANGE && end != raw.c_str() && end && *end == '\0' &&
+				parsed >= std::numeric_limits<int>::min() &&
+				parsed <= std::numeric_limits<int>::max())
+			value = static_cast<int>(parsed);
+	};
+	const auto read_double = [&](const char *name, double &value) {
+		std::string raw;
+		if (!get_setting(name, raw))
+			return;
+		char *end = nullptr;
+		const double parsed = std::strtod(raw.c_str(), &end);
+		while (end && std::isspace(static_cast<unsigned char>(*end)))
+			++end;
+		if (end != raw.c_str() && end && *end == '\0' && std::isfinite(parsed))
+			value = parsed;
+	};
+	const auto read_optional_double = [&](const char *name,
+											  std::optional<double> &value) {
+		std::string raw;
+		if (!get_setting(name, raw))
+			return;
+		char *end = nullptr;
+		const double parsed = std::strtod(raw.c_str(), &end);
+		while (end && std::isspace(static_cast<unsigned char>(*end)))
+			++end;
+		if (end != raw.c_str() && end && *end == '\0' && std::isfinite(parsed))
+			value = parsed;
+	};
+	const auto read_string = [&](const char *name, std::string &value) {
+		std::string raw;
+		if (get_setting(name, raw))
+			value = std::move(raw);
+	};
+	const auto read_optional_string = [&](const char *name,
+											  std::optional<std::string> &value) {
+		std::string raw;
+		if (get_setting(name, raw))
+			value = std::move(raw);
+	};
+	const auto read_optional_bool = [&](const char *name, std::optional<bool> &value) {
+		std::string raw;
+		if (!get_setting(name, raw))
+			return;
+		std::transform(raw.begin(), raw.end(), raw.begin(),
+				[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		if (raw == "true" || raw == "yes" || raw == "1" || raw == "on")
+			value = true;
+		else if (raw == "false" || raw == "no" || raw == "0" || raw == "off")
+			value = false;
+	};
+
+	// Core generation and terrain settings.
+	read_double("scale", arnis.scale);
+	read_double("height_multiplier", arnis.height_multiplier);
+	read_double("celestial_latitude_degrees", arnis.celestial_latitude_degrees);
+	read_int("ground_level", arnis.ground_level);
+	read_double("rotation", arnis.rotation);
+	read_bool("use_3d", arnis.use_3d);
+	read_bool("interior", arnis.interior);
+	read_bool("roof", arnis.roof);
+	read_bool("fillground", arnis.fillground);
+	read_bool("disable_height_limit", arnis.disable_height_limit);
+	read_bool("legacy_terrain", arnis.legacy_terrain);
+	read_bool("legacy_trees", arnis.legacy_trees);
+	read_bool("canopy_height", arnis.canopy_height);
+	read_bool("overture", arnis.overture);
+	read_bool("aws_only_elevation", arnis.aws_only_elevation);
+	read_bool("city_boundaries", arnis.city_boundaries);
+	read_bool("caves", arnis.caves);
+	read_bool("benchmark", arnis.benchmark);
+	read_bool("debug", arnis.debug);
+	{
+		std::string mode;
+		if (get_setting("mode", mode))
+			arnis.mode = ::arnis::generation_mode_from_string(mode);
+	}
+	arnis.apply_mode_defaults();
+	{
+		std::string body;
+		if (get_setting("body", body))
+			arnis.body = ::arnis::celestial_body_from_string(body);
+	}
+	{
+		std::string projection;
+		if (get_setting("projection", projection))
+			arnis.projection =
+					::arnis::projection::projection_kind_from_string(projection);
+	}
+	{
+		std::string size;
+		if (get_setting("max_tree_size", size))
+			arnis.max_tree_size = ::arnis::trees::tree_size_from_string(size);
+	}
+
+	// Facade, Mapillary, signage, and Overture options.
+	read_bool("building_facades", arnis.building_facades);
+	read_optional_bool("mapillary_facades", arnis.mapillary_facades);
+	read_bool("mapillary_probe", arnis.mapillary_probe);
+	{
+		int pixels = static_cast<int>(arnis.facade_px);
+		read_int("facade_px", pixels);
+		if (pixels >= 0)
+			arnis.facade_px = static_cast<std::uint32_t>(pixels);
+	}
+	{
+		std::string detail;
+		if (get_setting("facade_detail", detail))
+			arnis.facade_detail = ::arnis::facade_detail_from_string(detail);
+	}
+	{
+		std::string mode;
+		if (get_setting("mapillary_facade_mode", mode))
+			arnis.mapillary_facade_mode = ::arnis::facade_mode_from_string(mode);
+	}
+	{
+		std::string level;
+		if (get_setting("signage", level))
+			arnis.signage = ::arnis::signage_level_from_string(level);
+	}
+	{
+		std::string source;
+		if (get_setting("overture_source", source))
+			arnis.overture_source = ::arnis::overture_source_from_string(source);
+	}
+	std::string mapillary_token;
+	read_string("mapillary_token", mapillary_token);
+	if (!mapillary_token.empty()) {
+		if (!arnis.mapillary_facades.has_value())
+			arnis.mapillary_facades = true;
+		std::string probe_setting;
+		if (!get_setting("mapillary_probe", probe_setting))
+			arnis.mapillary_probe = true;
+		arnis.mapillary_token = mapillary_token;
+	}
+	read_optional_string("mapillary_debug_dir", arnis.mapillary_debug_dir);
+	read_optional_string("mapillary_facades_dir", arnis.mapillary_facades_dir);
+	read_optional_string("mapillary_facade_debug_dir", arnis.mapillary_facade_debug_dir);
+	read_string("mapillary_facade_debug_walls", arnis.mapillary_facade_debug_walls);
+	arnis.building_facades_dir = ::arnis::cache::facade_cache_root().string();
+	read_optional_string("building_facades_dir", arnis.building_facades_dir);
+
+	// Cave tuning and tree-library paths.
+	read_optional_string("cave_biomes", arnis.cave_biomes);
+	read_optional_string("cave_asset_pack", arnis.cave_asset_pack);
+	read_string("downloader", arnis.downloader);
+	read_string("osm_tiles_url", arnis.osm_tiles_url);
+	read_bool("no_tile_archive", arnis.no_tile_archive);
+	read_bool("bake_lighting", arnis.bake_lighting);
+	read_bool("map_preview", arnis.map_preview);
+	read_bool("map_item", arnis.map_item);
+	read_bool("voxy_lod", arnis.voxy_lod);
+	{
+		std::string raw;
+		if (get_setting("world_time", raw)) {
+			char *end = nullptr;
+			errno = 0;
+			const long long parsed = std::strtoll(raw.c_str(), &end, 10);
+			while (end && std::isspace(static_cast<unsigned char>(*end)))
+				++end;
+			if (errno != ERANGE && end != raw.c_str() && end && *end == '\0')
+				arnis.world_time = static_cast<std::int64_t>(parsed);
+		}
+	}
+	{
+		std::optional<double> latitude;
+		std::optional<double> longitude;
+		read_optional_double("spawn_lat", latitude);
+		read_optional_double("spawn_lng", longitude);
+		arnis.spawn_lat = latitude;
+		arnis.spawn_lng = longitude;
+	}
+	{
+		std::string gamemode;
+		if (get_setting("gamemode", gamemode))
+			arnis.gamemode = ::arnis::game_mode_from_string(gamemode);
+	}
+	{
+		std::optional<double> seconds;
+		read_optional_double("timeout", seconds);
+		if (seconds && *seconds >= 0.0 &&
+				*seconds <=
+						static_cast<double>(std::numeric_limits<std::int64_t>::max()) /
+								1000.0)
+			arnis.timeout = std::chrono::milliseconds(
+					static_cast<std::int64_t>(*seconds * 1000.0));
+	}
+
+	return arnis;
 }
 
 std::optional<double> earth_dimension_meters(const std::string &text)
