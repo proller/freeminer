@@ -516,7 +516,9 @@ arnis::Args earth_arnis_args()
 	arnis.caves = true;
 	arnis.cave_biomes =
 			"lush=100,dripstone=100,deepdark=100,mushroom=100,ice=100,amethyst=100,volcanic=100,coral=100";
-	arnis.canopy_height = false;
+	// Match Rust's default. The shared canopy cache keeps this single raster
+	// available across chunk-generation threads without per-thread downloads.
+	arnis.canopy_height = true;
 
 	// Settings::getNoEx only exposes strings, so parse values here while leaving
 	// Args defaults intact whenever a setting is absent or malformed.
@@ -593,6 +595,16 @@ arnis::Args earth_arnis_args()
 		else if (raw == "false" || raw == "no" || raw == "0" || raw == "off")
 			value = false;
 	};
+
+	// Keep the complete CLI-facing input/output option surface configurable for
+	// library users embedding Arnis in Freeminer. These are intentionally
+	// optional: an absent setting leaves the host-provided/default value intact.
+	read_optional_string("file", arnis.file);
+	read_optional_string("save_json_file", arnis.save_json_file);
+	read_optional_string("path", arnis.path);
+	read_optional_string("world_name", arnis.world_name);
+	read_bool("bedrock", arnis.bedrock);
+	read_bool("luanti", arnis.luanti);
 
 	// Core generation and terrain settings.
 	read_double("scale", arnis.scale);
