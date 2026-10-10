@@ -35,6 +35,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "client/localplayer.h"
 #include "client/clientobject.h"
 #include "client/content_cao.h"
+#include "client/renderingengine.h"
 #include "clientmap.h"
 #include "constants.h"
 #include "inventory.h"
@@ -47,6 +48,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "settings.h"
 #include "util/numeric.h"
 #include "util/pointedthing.h"
+#include "util/screenshot.h"
 #include "version.h"
 
 #include <algorithm>
@@ -649,7 +651,8 @@ static bool validateMCPToolArguments(
 	};
 
 	if (tool == "get_player_state" || tool == "get_pointed_thing" ||
-			tool == "get_nearby_objects" || tool == "stop_player_control")
+			tool == "get_nearby_objects" || tool == "stop_player_control" ||
+			tool == "take_screenshot")
 		return true;
 	if (tool == "get_inventory") {
 		if (!optional_integer("node_x") || !optional_integer("node_y") ||
@@ -889,6 +892,17 @@ void Client::handleMCPMessage(mcp_ws_server_t::connection_ptr connection,
 
 	try {
 		std::string method = request["method"].asString();
+		verbosestream << "MCP: request method=" << method;
+		if (request.isMember("id")) {
+			const Json::Value &request_id = request["id"];
+			if (request_id.isString())
+				verbosestream << " id=" << request_id.asString();
+			else if (request_id.isIntegral())
+				verbosestream << " id=" << request_id.asLargestInt();
+		}
+		if (method == "tools/call" && request["params"]["name"].isString())
+			verbosestream << " tool=" << request["params"]["name"].asString();
+		verbosestream << std::endl;
 
 		if (method == "initialize") {
 			Json::Value result;
@@ -1086,6 +1100,9 @@ void Client::handleMCPMessage(mcp_ws_server_t::connection_ptr connection,
 					"get_pointed_thing", "Get the current pointed thing under cursor."));
 			tools.append(makeMCPTool("get_nearby_objects",
 					"List nearby visible objects with IDs, positions, velocity, and display text."));
+			tools.append(makeMCPTool("take_screenshot",
+					"Save the current rendered game view, including HUD, to the configured "
+					"screenshot directory. Returns the local file path; no arguments."));
 			Json::Value object_action_schema = makeMCPObjectSchema();
 			addMCPSchemaProperty(object_action_schema, "object_id", "integer",
 					"Object ID from get_nearby_objects.");
@@ -1627,6 +1644,18 @@ void Client::handleMCPMessage(mcp_ws_server_t::connection_ptr connection,
 						pointed.raw_intersection_normal.Z;
 				pointed_obj["distance_sq"] = pointed.distanceSq;
 				setMCPTextResult(response, pointed_obj);
+			} else if (tool_name == "take_screenshot") {
+				Json::Value result;
+				std::string filename;
+				result["success"] = takeScreenshot(
+						m_rendering_engine->get_video_driver(), filename, "mcp_");
+				if (result["success"].asBool()) {
+					result["path"] = filename;
+					result["format"] = g_settings->get("screenshot_format");
+				} else {
+					result["error"] = "Could not capture or save the game screenshot";
+				}
+				setMCPStatusResult(response, result);
 			} else if (tool_name == "get_nearby_objects") {
 				Json::Value result;
 				LocalPlayer *local_player = m_env.getLocalPlayer();
@@ -1655,7 +1684,8 @@ void Client::handleMCPMessage(mcp_ws_server_t::connection_ptr connection,
 						item["velocity"]["x"] = velocity.X;
 						item["velocity"]["y"] = velocity.Y;
 						item["velocity"]["z"] = velocity.Z;
-						item["info"] = object->infoText();
+						item["info"] = wide_to_utf8(
+								unescape_translate(utf8_to_wide(object->infoText())));
 						if (const auto *cao = dynamic_cast<const GenericCAO *>(object))
 							item["name"] = cao->getName();
 						list.append(item);

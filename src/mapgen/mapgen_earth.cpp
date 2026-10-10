@@ -30,6 +30,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include <limits>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <tuple>
@@ -822,12 +823,18 @@ bool MapgenEarth::mergeTileOverlay()
 	if (!tile_overlay || !vm)
 		return false;
 	for (const auto &[key, node] : tile_overlay->writes) {
-		if (key.x < tile_overlay->min_x || key.x > tile_overlay->max_x ||
-				key.z < tile_overlay->min_z || key.z > tile_overlay->max_z)
-			continue;
 		const v3pos_t pos{key.x, key.y, key.z};
-		if (vm->exists(pos))
-			vm->setNode(pos, node);
+		if (!vm->exists(pos))
+			continue;
+		const bool authoritative =
+				key.x >= tile_overlay->min_x && key.x <= tile_overlay->max_x &&
+				key.z >= tile_overlay->min_z && key.z <= tile_overlay->max_z;
+		// A tile owns its core and overwrites it. Its halo only supplies writes
+		// missed by the adjacent tile, matching Rust's WorldToModify::merge:
+		// preserve an earlier neighbor's non-air result, but fill remaining air.
+		if (!authoritative && vm->getNode(pos).getContent() != CONTENT_AIR)
+			continue;
+		vm->setNode(pos, node);
 	}
 	tile_overlay.reset();
 	return true;
@@ -1349,10 +1356,9 @@ void MapgenEarth::generateBuildings()
 					verbosestream << "Extracting " << bbox << "\n";
 					CommandExtract extract{{}};
 					const std::vector<std::string> arguments{"--output-format", "pbf",
-							"--strategy", "smart", "--option", "types=any",
-							"--option", "complete-partial-relations=0",
-							"--bbox",
-							bbox, "--output", temporary, path_name};
+							"--strategy", "smart", "--option", "types=any", "--option",
+							"complete-partial-relations=0", "--bbox", bbox, "--output",
+							temporary, path_name};
 					extract.setup(arguments);
 					extract.run();
 				}
@@ -1375,7 +1381,12 @@ void MapgenEarth::generateBuildings()
 				return !error_code.value();
 			};
 
-			for (auto div = 10; div <= 10000; div *= 10) {
+			// A 0.01-degree extract is large enough to cover adjacent mapgen
+			// chunks (including the authored-geometry halo) while remaining a
+			// practical unit to parse and retain once. hdl shares its immutable
+			// parsed elements and flood fills for every chunk that resolves to this
+			// same extract path. Only edge-crossing chunks need the exact bbox.
+			for (auto div = 10; div <= 100; div *= 10) {
 				std::error_code ec;
 				// const auto size = std::filesystem::file_size(use_file, ec);
 				if (ec) {
@@ -1393,11 +1404,10 @@ void MapgenEarth::generateBuildings()
 
 				if (!(bb_start.lat <= coord_min.lat && bb_start.lon <= coord_min.lon &&
 							bb_end.lat >= coord_max.lat && bb_end.lon >= coord_max.lon)) {
-
-					const auto bbox_exact = bbox_to_string(coord_min, coord_max);
-					const auto filename_exact = bbox_to_filename(bbox_exact, 100000);
-					filename_next = filename_exact;
-					bbox_next = bbox_exact;
+					// Keep the last covering aligned extract. A chunk crossing a
+					// 0.01-degree boundary can still share its 0.1-degree parent tile
+					// with neighboring chunks.
+					continue;
 				}
 
 				if (!try_extract(use_file, bbox_next, filename_next)) {
@@ -1411,12 +1421,23 @@ void MapgenEarth::generateBuildings()
 				use_file = filename_next;
 				bbox = bbox_next;
 			}
+
+			// Only chunks crossing the coarsest aligned boundary need an exact
+			// extract. Do this once, after trying all reusable tile sizes.
+			if (bbox.empty()) {
+				bbox = bbox_to_string(coord_min, coord_max);
+				const auto filename_exact =
+						folder + DIR_DELIM + "extract.100000." + bbox + ".osm.pbf";
+				if (!try_extract(use_file, bbox, filename_exact))
+					throw std::runtime_error("failed to extract OSM chunk " + bbox);
+				use_file = filename_exact;
+			}
 		}
 
 		if (std::filesystem::exists(use_file) && std::filesystem::file_size(use_file)) {
 			const auto lock = std::lock_guard{maps_holder->osm_bbox_lock};
 			if (!maps_holder->osm_bbox.contains(bbox)) {
-				const auto osm = std::make_shared<hdl>(this, use_file);
+				const auto osm = earth_osmium_detail::make_handler(this, use_file);
 				//const auto lock = maps_holder->osm_bbox.lock_unique_rec();
 				if (!maps_holder->osm_bbox.contains(bbox)) {
 					maps_holder->osm_bbox.emplace(bbox, osm);

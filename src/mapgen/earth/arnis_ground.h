@@ -5,17 +5,24 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <utility>
+#include <tuple>
 
 #include "arnis_types.h"
 #include "arnis-cpp/src/celestial.h"
+#include "arnis-cpp/src/elevation/postprocess.h"
+#include "arnis-cpp/src/elevation/pipeline.h"
+#include "arnis-cpp/src/args.h"
 #include "mapgen/mapgen_earth.h"
 #include "arnis-cpp/src/biome.h"
 #include "arnis-cpp/src/canopy/canopy.h"
 #include "arnis-cpp/src/land_cover/land_cover.h"
 #include "arnis-cpp/src/ecoregion.h"
 #include "arnis-cpp/src/urban_ground.h"
+#include "arnis-cpp/src/coordinate_system/geographic/llbbox.h"
+#include "arnis-cpp/src/projection/web_mercator.h"
 
 namespace arnis
 {
@@ -53,7 +60,9 @@ struct Ground
 	std::optional<RotationMask> rotation_mask;
 	biome::Climate climate_state = biome::Climate::Temperate;
 	UrbanGroundLookup urban_lookup;
-	std::optional<ecoregion::EcoMap> ecoregion_map;
+	// Shared immutable grid, matching Rust's Arc<EcoMap> and avoiding a full
+	// raster copy when Ground is copied for generation/transformation stages.
+	std::shared_ptr<const ecoregion::EcoMap> ecoregions;
 	static Ground new_flat(int ground_level)
 	{
 		Ground ground;
@@ -136,6 +145,22 @@ struct Ground
 	void set_elevation_data(const std::vector<std::vector<double>> &heights,
 			std::size_t width, std::size_t height, std::size_t world_width,
 			std::size_t world_height);
+	void set_elevation_data(
+			const elevation::ProcessedElevationData &data, double latitude_for_snow_line);
+	std::optional<elevation::ElevationAffine> elevation_affine() const
+	{
+		// Rust returns None unless sampled ElevationData exists as well as
+		// elevation being enabled; metadata alone is not a usable terrain grid.
+		if (!elevation_enabled || elevation_grid.empty() || elevation_world_width == 0 ||
+				elevation_world_height == 0 || elevation_grid.front().empty())
+			return std::nullopt;
+		return elevation::ElevationAffine{elevation_min_height_m,
+				elevation_blocks_per_meter, elevation_ground_level.value_or(0),
+				elevation_soft_top ? std::optional<elevation::SoftTop>(elevation::SoftTop{
+											 elevation_soft_top->knee_m,
+											 elevation_soft_top->width_blocks})
+								   : std::nullopt};
+	}
 	void set_elevation_enabled(bool enabled) { elevation_enabled = enabled; }
 	void clear_elevation_data();
 	void set_world_dims(std::size_t world_width, std::size_t world_height);
@@ -143,6 +168,7 @@ struct Ground
 			const std::vector<ProcessedElement> &elements, const XZBBox &bbox);
 	void apply_osm_land_override(const std::vector<ProcessedElement> &elements,
 			const XZBBox &bbox, double scale);
+	void mark_beaches();
 	void apply_bridge_land_cover_repair(const std::vector<ProcessedElement> &elements,
 			const XZBBox &bbox, double scale);
 	void set_rotation_mask(RotationMask mask) { rotation_mask = mask; }
@@ -152,8 +178,17 @@ struct Ground
 	void set_climate(biome::Climate value) { climate_state = value; }
 	void set_urban_lookup(UrbanGroundLookup lookup) { urban_lookup = std::move(lookup); }
 	bool is_urban(int x, int z) const { return urban_lookup.is_urban(x, z); }
-	void set_ecoregion_map(ecoregion::EcoMap map) { ecoregion_map = std::move(map); }
+	void set_ecoregion_map(std::shared_ptr<const ecoregion::EcoMap> map)
+	{
+		ecoregions = std::move(map);
+	}
+	void set_ecoregion_map(ecoregion::EcoMap map)
+	{
+		ecoregions = std::make_shared<const ecoregion::EcoMap>(std::move(map));
+	}
 	std::optional<ecoregion::Ecoregion> ecoregion_at(const XZPoint &coord) const;
+	// Rust Ground::ecoregion_map exposes a non-owning view of the full map.
+	const ecoregion::EcoMap *ecoregion_map() const { return ecoregions.get(); }
 
 	void set_land_cover_data(land_cover::LandCoverData data, std::size_t world_width,
 			std::size_t world_height);
@@ -179,5 +214,43 @@ struct Ground
 	int slope(const XZPoint &coord) const;
 	int water_level(const XZPoint &coord) const;
 };
+
+struct GroundFetchPlan
+{
+	geographic::LLBBox bbox;
+	std::tuple<std::size_t, std::size_t, std::size_t, std::size_t> dims;
+	std::size_t pad_blocks = 0;
+	std::pair<std::size_t, std::size_t> final_dims;
+};
+
+// The Rust GroundFrame contract, split from the Freeminer host so library
+// callers can prepare local or projected/padded grids before generation.
+struct GroundFrame
+{
+	std::optional<std::pair<std::size_t, std::size_t>> world_dims;
+	std::optional<projection::WebMercatorProjection> mercator;
+	std::size_t pad_blocks = 0;
+	elevation::AffinePolicy affine{};
+	std::optional<std::pair<double, double>> climate_anchor;
+
+	static GroundFrame local();
+	static GroundFrame from_args(const Args &, const geographic::LLBBox &);
+	static GroundFrame projected(const geographic::LLBBox &, double scale,
+			std::size_t pad_blocks = 0, const elevation::AffinePolicy &affine = {},
+			std::optional<std::pair<double, double>> climate_anchor = std::nullopt,
+			std::optional<std::pair<double, double>> projection_origin = std::nullopt);
+	GroundFetchPlan fetch_plan(const geographic::LLBBox &, double scale) const;
+	double anchor_lat(const geographic::LLBBox &) const;
+	std::shared_ptr<const ecoregion::EcoMap> ecoregions(const geographic::LLBBox &,
+			std::size_t world_width, std::size_t world_height) const;
+};
+
+int min_ground_level_for(const Args &args);
+int extended_min_y_for(const Args &args);
+int extended_max_y_for(const Args &args);
+Ground generate_ground_data(const Args &args, const geographic::LLBBox &bbox,
+		const std::filesystem::path &cache_base = {});
+Ground generate_ground_data(const Args &args, const geographic::LLBBox &bbox,
+		const GroundFrame &frame, const std::filesystem::path &cache_base = {});
 
 }

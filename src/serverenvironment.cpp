@@ -1099,6 +1099,13 @@ void ServerEnvironment::step(float dtime, double uptime, unsigned int max_cycle_
 
 		// Convert active objects that are no more in active blocks to static
 		deactivateFarObjects(false);
+		// fm: Inactive blocks need no persistent per-node ABM candidate arrays.
+		for (const v3pos_t &p : blocks_removed) {
+			if (auto block = m_map->getBlock(p, true)) {
+				block->releaseAbmCandidates();
+			}
+		}
+		// ===
 
 /*
 		for (const v3bpos_t &p: blocks_removed) {

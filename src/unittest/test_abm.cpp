@@ -162,6 +162,19 @@ void TestABM::testCachedABM(ServerEnvironment *env, TestABMDefinition *definitio
 			static_cast<size_t>(max_catch_up_runs));
 	UASSERTEQ(unsigned int, definition->triggers, max_catch_up_runs);
 	UASSERTEQ(uint8_t, definition->last_activate, ABM_ACTIVATE_CATCH_UP);
+	// fm: Eviction preserves random eligibility and rebuilds even before refresh.
+	block->releaseAbmCandidates();
+	UASSERT(!block->abm_triggers);
+	UASSERT(block->hasAbmTriggers());
+	block->m_next_analyze_timestamp = block->getActualTimestamp() + 30;
+	env->analyzeBlock(block);
+	UASSERT(block->abm_triggers);
+	UASSERT(!block->abm_candidates_evicted);
+	block->releaseAbmCandidates();
+	block->setNodeNoCheck({1, 1, 1}, MapNode(CONTENT_AIR));
+	env->analyzeBlock(block);
+	UASSERT(!block->hasAbmTriggers());
+	// ===
 }
 
 } // namespace

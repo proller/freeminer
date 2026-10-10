@@ -111,7 +111,7 @@ struct maps_holder_t
 	hgts hgt_reader{data_root};
 	using osm_ptr = std::shared_ptr<handler_i>;
 	// Parsed dense-city extracts are large; keep only the active neighbourhood.
-	lru_cache<std::string, osm_ptr, 8> osm_bbox;
+	lru_cache<std::string, osm_ptr, 4> osm_bbox;
 	std::mutex download_lock;
 	std::mutex osm_bbox_lock;
 	std::mutex osm_http_lock;

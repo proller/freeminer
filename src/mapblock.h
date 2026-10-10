@@ -548,6 +548,9 @@ public:
 	using abm_triggers_type = std::vector<abm_trigger_one>;
 	std::unique_ptr<abm_triggers_type> abm_triggers;
 	std::mutex abm_triggers_mutex;
+	// Remember eligibility without retaining an inactive block's candidate array.
+	bool abm_candidates_evicted{};
+	void releaseAbmCandidates();
 	size_t abmTriggersRun(ServerEnvironment *m_env, u32 time, uint8_t activate = 0);
 	bool hasAbmTriggers();
 	uint32_t m_abm_timestamp{};
@@ -807,4 +810,3 @@ inline v3pos_t getBlockPosRelative(const v3bpos_t &p)
 std::string analyze_block(MapBlock *block);
 
 using MapBlockPtr = std::shared_ptr<MapBlock>;
-

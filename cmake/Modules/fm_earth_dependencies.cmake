@@ -60,6 +60,26 @@ elseif(ENABLE_TIFF AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/libtiff/CMake
     list(APPEND FREEMINER_COMMON_LIBRARIES ${TIFF_LIBRARY})
 endif()
 
+# Mapterhorn's current terrain pyramid is lossless WebP. Keep decoding
+# optional for platforms without libwebp; the provider then reports unavailable
+# and the Rust-compatible AWS Terrarium fallback is used.
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(FM_WEBP QUIET IMPORTED_TARGET libwebp)
+endif()
+if(TARGET PkgConfig::FM_WEBP)
+    target_link_libraries(fm_dependencies INTERFACE PkgConfig::FM_WEBP)
+    target_compile_definitions(fm_dependencies INTERFACE FM_HAVE_WEBP=1)
+else()
+    find_path(FM_WEBP_INCLUDE_DIR webp/decode.h)
+    find_library(FM_WEBP_LIBRARY NAMES webp)
+    if(FM_WEBP_INCLUDE_DIR AND FM_WEBP_LIBRARY)
+        target_include_directories(fm_dependencies SYSTEM INTERFACE ${FM_WEBP_INCLUDE_DIR})
+        target_link_libraries(fm_dependencies INTERFACE ${FM_WEBP_LIBRARY})
+        target_compile_definitions(fm_dependencies INTERFACE FM_HAVE_WEBP=1)
+    endif()
+endif()
+
 option(ENABLE_ONNXRUNTIME "Enable ONNX Runtime for Terrain Diffusion mapgen" 1)
 if(ENABLE_ONNXRUNTIME)
     set(ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/onnxruntime"
