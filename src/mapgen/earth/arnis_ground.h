@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -41,6 +42,10 @@ struct Ground
 		int orig_min_x = 0, orig_max_x = 0, orig_min_z = 0, orig_max_z = 0;
 	};
 	MapgenEarth *mg = nullptr;
+	// Freeminer's mapgen adapter can delegate terrain queries to its native
+	// height sampler when no standalone Arnis elevation raster is installed.
+	// Coordinates are Ground-local, like the Rust-compatible elevation grid.
+	std::function<int(const XZPoint &)> host_elevation;
 	std::optional<land_cover::LandCoverData> land_cover;
 	std::size_t land_cover_world_width = 0;
 	std::size_t land_cover_world_height = 0;
@@ -190,6 +195,12 @@ struct Ground
 		ecoregions = std::make_shared<const ecoregion::EcoMap>(std::move(map));
 	}
 	std::optional<ecoregion::Ecoregion> ecoregion_at(const XZPoint &coord) const;
+	// Rust-compatible query name; retain ecoregion_at for existing Freeminer
+	// callers while exposing Ground::ecoregion to library consumers.
+	std::optional<ecoregion::Ecoregion> ecoregion(const XZPoint &coord) const
+	{
+		return ecoregion_at(coord);
+	}
 	// Rust Ground::ecoregion_map exposes a non-owning view of the full map.
 	const ecoregion::EcoMap *ecoregion_map() const { return ecoregions.get(); }
 
