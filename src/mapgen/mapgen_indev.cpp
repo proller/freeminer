@@ -165,12 +165,12 @@ MapgenIndev::MapgenIndev(MapgenIndevParams *params, EmergeParams *emerge) :
 	floatland_density = params->floatland_density;
 	floatland_ywater = params->floatland_ywater;
 
-	noise_layers =
-			new Noise(&sp->np_layers, seed, csize.X, csize.Y + y_oversize_down + y_oversize_up, csize.Z);
+	noise_layers = new Noise(&sp->np_layers, seed, csize.X,
+			csize.Y + y_oversize_down + y_oversize_up, csize.Z);
 	layers_init(emerge, sp->paramsj);
 
-	noise_cave_indev = new Noise(
-			&sp->np_cave_indev, seed, csize.X, csize.Y + y_oversize_down + y_oversize_up, csize.Z);
+	noise_cave_indev = new Noise(&sp->np_cave_indev, seed, csize.X,
+			csize.Y + y_oversize_down + y_oversize_up, csize.Z);
 
 	if (spflags & MGV6_FLOATLANDS) {
 
@@ -178,8 +178,8 @@ MapgenIndev::MapgenIndev(MapgenIndevParams *params, EmergeParams *emerge) :
 		this->float_offset_cache = new float[csize.Y + 2];
 
 		// 3D noise, 1 up, 1 down overgeneration
-		noise_floatland =
-				new Noise(&params->np_floatland, seed, csize.X, csize.Y + y_oversize_down + y_oversize_up, csize.Z);
+		noise_floatland = new Noise(&params->np_floatland, seed, csize.X,
+				csize.Y + y_oversize_down + y_oversize_up, csize.Z);
 	}
 }
 
@@ -244,6 +244,10 @@ MapgenIndevParams::MapgenIndevParams()
 void MapgenIndevParams::readParams(const Settings *settings)
 {
 	MapgenV6Params::readParams(settings);
+	// Indev has its own exposed flags; retain v6 flags as a legacy fallback.
+	if (settings->exists("mgindev_spflags")) {
+		settings->getFlagStrNoEx("mgindev_spflags", spflags, flagdesc_mapgen_v6);
+	}
 
 	auto mg_params = settings->getJson("mg_params", paramsj);
 	if (!mg_params.isNull())
@@ -271,6 +275,7 @@ void MapgenIndevParams::readParams(const Settings *settings)
 void MapgenIndevParams::writeParams(Settings *settings) const
 {
 	MapgenV6Params::writeParams(settings);
+	settings->setFlagStr("mgindev_spflags", spflags, flagdesc_mapgen_v6);
 
 	settings->setJson("mg_params", paramsj);
 
@@ -394,7 +399,7 @@ pos_t MapgenIndev::generateGround()
 	// 'Generate floatlands in this mapchunk' bool for
 	// simplification of condition checks in y-loop.
 	bool gen_floatlands = false;
-	u8 cache_index = 0;
+	size_t cache_index = 0;
 	// Y values where floatland tapering starts
 	pos_t float_taper_ymax = floatland_ymax - floatland_taper;
 	pos_t float_taper_ymin = floatland_ymin + floatland_taper;
@@ -406,7 +411,8 @@ pos_t MapgenIndev::generateGround()
 		noise_floatland->noiseMap3D(node_min.X, node_min.Y - y_oversize_down, node_min.Z);
 
 		// Cache floatland noise offset values, for floatland tapering
-		for (pos_t y = node_min.Y - y_oversize_down; y <= node_max.Y + y_oversize_up; y++, cache_index++) {
+		for (pos_t y = node_min.Y - y_oversize_down; y <= node_max.Y + y_oversize_up;
+				y++, cache_index++) {
 			float float_offset = 0.0f;
 			if (y > float_taper_ymax) {
 				float_offset = std::pow((y - float_taper_ymax) / (float)floatland_taper,
@@ -448,7 +454,8 @@ pos_t MapgenIndev::generateGround()
 			cache_index = 0;
 			u32 index3d = (z - node_min.Z) * zstride + (x - node_min.X);
 
-			for (pos_t y = node_min.Y - y_oversize_down; y <= node_max.Y + y_oversize_up; y++, index3d += ystride, cache_index++) {
+			for (pos_t y = node_min.Y - y_oversize_down; y <= node_max.Y + y_oversize_up;
+					y++, index3d += ystride, cache_index++) {
 				if (!vm->m_data[i]) {
 
 					if (y <= surface_y) {
@@ -485,8 +492,8 @@ pos_t MapgenIndev::generateGround()
 						vm->m_data[i] =
 								(heat < 0 && y > heat / 3) ? n_ice : n_water_source;
 						if (liquid_pressure > 0 && y <= 0) {
-							const int pressure = ((ItemGroupList)m_emerge->ndef
-													->get(vm->m_data[i])
+							const int pressure =
+									((ItemGroupList)m_emerge->ndef->get(vm->m_data[i])
 													.groups)["pressure"];
 							if (pressure > 0) {
 								int add = water_level - y;

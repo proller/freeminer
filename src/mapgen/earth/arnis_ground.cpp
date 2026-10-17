@@ -10,6 +10,7 @@
 #include "arnis-cpp/src/projection/projection_spec.h"
 #include "arnis-cpp/src/fm_ecoregion_cache.h"
 #include "arnis-cpp/src/grid_ops.h"
+#include "arnis-cpp/src/land_cover/osm_water_override.h"
 #include "arnis-cpp/src/water_depth.h"
 #include "arnis-cpp/src/world_editor/floor_state.h"
 
@@ -109,6 +110,11 @@ GroundFrame GroundFrame::local()
 GroundFrame GroundFrame::from_args(const Args &args, const geographic::LLBBox &bbox)
 {
 	const auto spec = projection::ProjectionSpec::from_args(args);
+	// Match Rust GroundFrame::from_args: an explicitly local projection stays
+	// local even when One World state is present. The One World affine/padding
+	// policy only applies after a projected transformer has been selected.
+	if (spec.kind == projection::ProjectionKind::Local)
+		return local();
 	if (args.one_world_run) {
 		elevation::AffinePolicy policy = elevation::AffinePolicy::fit_with_headroom();
 		if (args.one_world_run->elevation) {
@@ -131,8 +137,6 @@ GroundFrame GroundFrame::from_args(const Args &args, const geographic::LLBBox &b
 			return local();
 		}
 	}
-	if (spec.kind == projection::ProjectionKind::Local)
-		return local();
 	try {
 		return projected(bbox, spec.scale);
 	} catch (const std::exception &) {
@@ -418,25 +422,11 @@ Ground generate_ground_data(const Args &args, const geographic::LLBBox &bbox,
 
 std::optional<int> Ground::min_level(const std::vector<XZPoint> &points) const
 {
-	if (!elevation_enabled)
-		return elevation_ground_level.value_or(0);
-	if (points.empty())
-		return std::nullopt;
-	int min_y = level(points.front());
-	for (const auto &point : points)
-		min_y = std::min(min_y, level(point));
-	return min_y;
+	return min_level(points.begin(), points.end());
 }
 std::optional<int> Ground::max_level(const std::vector<XZPoint> &points) const
 {
-	if (!elevation_enabled)
-		return elevation_ground_level.value_or(0);
-	if (points.empty())
-		return std::nullopt;
-	int maxY = std::numeric_limits<int>::min();
-	for (const auto &pt : points)
-		maxY = std::max(maxY, level(pt));
-	return maxY;
+	return max_level(points.begin(), points.end());
 }
 int Ground::level(const XZPoint &pos) const
 {
@@ -639,7 +629,10 @@ void Ground::set_canopy_data(
 void Ground::set_canopy_data(
 		const std::vector<std::uint8_t> &grid, std::size_t width, std::size_t height)
 {
-	if (width == 0 || height == 0)
+	// Rust's rotation-only overload replaces canopy pixels only when the Ground
+	// already has canopy data. Do not turn a previously unavailable/disabled
+	// canopy provider into an apparently valid all-zero raster during rotation.
+	if (!canopy_data || width == 0 || height == 0)
 		return;
 	set_canopy_data(canopy::CanopyData(grid, width, height),
 			canopy_world_width ? canopy_world_width : width,
