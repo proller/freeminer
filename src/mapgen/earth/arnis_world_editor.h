@@ -6,9 +6,11 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <tuple>
 #include <unordered_map>
@@ -50,6 +52,23 @@ namespace cars
 {
 class CarNetwork;
 }
+}
+
+namespace trains
+{
+class TrainRouteNetwork;
+}
+
+// fm: Shared native rail geometry must survive chunk clipping and tile workers.
+namespace railways::advtrains
+{
+struct RailNetwork;
+}
+// ===
+
+namespace fuel_stations
+{
+class FuelIndex;
 }
 
 namespace trees::mapped
@@ -105,19 +124,73 @@ extern Block ADV_PLATFORM_HIGH;
 
 namespace world_editor
 {
+using RailHeightKey = std::tuple<std::uint64_t, int, int>;
+using RailHeightMap = std::map<RailHeightKey, int>;
+
 // A “WorldEditor” that can set blocks in your map
 struct WorldEditor
 {
 	std::shared_ptr<const highways::SignalIndex> traffic_signal_index;
 	std::shared_ptr<const highways::cars::CarNetwork> car_network;
+	// Backend-neutral train routes and schedules, shared with tile workers for
+	// consumers that animate or otherwise interpret generated rail services.
+	std::shared_ptr<const trains::TrainRouteNetwork> train_network;
+	// fm: Full-source native topology and grades, immutable during generation.
+	std::shared_ptr<const railways::advtrains::RailNetwork> native_rail_network;
+	std::set<std::uint64_t> native_generated_rails;
+	// ===
+	// Actual rail-node elevations keyed by OSM way and world XZ. The shared
+	// storage is written by parallel tile editors and read after generation.
+	std::shared_ptr<RailHeightMap> rail_heights;
+	std::shared_ptr<std::mutex> rail_heights_mutex;
 	std::shared_ptr<const CoordinateBitmap> sealed_surface;
+	std::shared_ptr<const CoordinateBitmap> clear_corridors;
+	std::shared_ptr<const fuel_stations::FuelIndex> fuel_index;
+	void enable_rail_height_collection()
+	{
+		rail_heights = std::make_shared<RailHeightMap>();
+		rail_heights_mutex = std::make_shared<std::mutex>();
+	}
+	void register_rail(std::uint64_t way, int x, int z, int y) const
+	{
+		if (!rail_heights || !rail_heights_mutex)
+			return;
+		std::lock_guard<std::mutex> lock(*rail_heights_mutex);
+		rail_heights->insert_or_assign(RailHeightKey{way, x, z}, y);
+	}
+	std::optional<int> rail_height(std::uint64_t way, int x, int z) const
+	{
+		if (!rail_heights || !rail_heights_mutex)
+			return std::nullopt;
+		std::lock_guard<std::mutex> lock(*rail_heights_mutex);
+		const auto it = rail_heights->find(RailHeightKey{way, x, z});
+		return it == rail_heights->end() ? std::nullopt : std::optional<int>(it->second);
+	}
+	RailHeightMap rail_height_snapshot() const
+	{
+		if (!rail_heights || !rail_heights_mutex)
+			return {};
+		std::lock_guard<std::mutex> lock(*rail_heights_mutex);
+		return *rail_heights;
+	}
 	void set_sealed_surface(std::shared_ptr<const CoordinateBitmap> mask)
 	{
 		sealed_surface = std::move(mask);
 	}
+	void set_clear_corridors(std::shared_ptr<const CoordinateBitmap> mask)
+	{
+		clear_corridors = std::move(mask);
+	}
+	void set_fuel_index(std::shared_ptr<const fuel_stations::FuelIndex> index)
+	{
+		fuel_index = std::move(index);
+	}
+	bool in_clear_corridor(int x, int z) const;
 	void release_sealed_surface()
 	{
 		sealed_surface.reset();
+		clear_corridors.reset();
+		fuel_index.reset();
 		mapped_trunks.reset();
 	}
 	bool under_mapped_crown(int x, int z) const;
@@ -187,6 +260,7 @@ struct WorldEditor
 	// Matches trees::RegionSelector::base_spacing() for the default pack; hosts
 	// loading a differently scaled schematic pack may override it.
 	int tree_slot_spacing_blocks = 5;
+	std::function<double(int)> tree_crown_columns;
 	std::function<std::optional<bool>(WorldEditor &, int, int, int, std::uint8_t,
 			std::optional<trees::Habitat>, bool, bool, bool, bool)>
 			regional_tree_placer;
@@ -196,6 +270,7 @@ struct WorldEditor
 	// Authored OSM trunks suppress procedural canopy crowns in the same cells,
 	// matching Rust's MappedTrunks pass during streamed ground decoration.
 	std::shared_ptr<const trees::mapped::MappedTrunks> mapped_trunks;
+	std::shared_ptr<const std::vector<std::pair<int, int>>> mapped_cranes;
 	GameMode gamemode = GameMode::Creative;
 	std::int64_t world_time = 6000;
 	std::string level_name, projection_name;
@@ -204,9 +279,8 @@ struct WorldEditor
 	// editor lets renderer-side pipeline ports (tree packs, previews, landmarks)
 	// use the same metadata without depending on a Rust-only GenerationOptions.
 	double min_lat = 0.0, max_lat = 0.0, min_lon = 0.0, max_lon = 0.0;
-	// One World generation uses a stable climate anchor so independently
-	// generated areas keep the same biome-sensitive palettes and vegetation.
-	std::optional<std::pair<double, double>> climate_anchor;
+	// Climate and regional palettes use the center of these area bounds, matching
+	// the Rust writer for both normal generation and One World extensions.
 	bool flush_requested = false, save_requested = false;
 	std::function<bool()> flush_sink, save_sink, preview_sink, map_item_sink,
 			world_settings_sink;
@@ -280,6 +354,12 @@ struct WorldEditor
 	std::vector<DecalFrame> active_placed_frames;
 	std::unordered_map<std::pair<int, int>, Block, XZCellHash> support_columns;
 	std::unordered_map<std::pair<int, int>, Block, XZCellHash> active_support_columns;
+	// Track hedge cells so later area cleanup (for example sports-pitch clearing)
+	// does not erase a living boundary that was emitted by the barrier pass.
+	std::unordered_set<std::pair<int, int>, XZCellHash> hedge_columns;
+	// Claim each deterministic regional-tree trunk slot once per tile editor, as
+	// in Rust, so several ground cells snapping to one schematic do not stamp it twice.
+	std::unordered_set<std::pair<int, int>, XZCellHash> claimed_tree_slots;
 	// Sparse, tile-local road elevations. Keep these separate from the terrain
 	// sample cache so tile results can transfer only their own road surfaces.
 	using RoadSurfaceOverrides = std::unordered_map<std::pair<int, int>, int, XZCellHash>;
@@ -287,10 +367,25 @@ struct WorldEditor
 	// terrain passes, then transferred to the committed map at ordered merge.
 	RoadSurfaceOverrides road_surface_overrides;
 	RoadSurfaceOverrides active_road_surface_overrides;
+	// Lamps are installed before later water passes; retain their columns so
+	// quay-edge false positives can be removed once water has been carved.
+	std::vector<std::pair<int, int>> lamp_columns;
+	// Bounds of the full generation area. Tile merges keep the owning tile's
+	// road elevations and retain non-owned values only outside this area.
+	std::optional<std::tuple<int, int, int, int>> generation_bounds;
 	bool tile_active = false;
 	using WrittenCellSet = std::unordered_set<std::tuple<int, int, int>, FrameCellHash>;
 	WrittenCellSet written_cells;
 	WrittenCellSet tile_merged_written_cells;
+	// Preserve generic block states alongside mapgen's MapNode representation so
+	// later material-only passes can retain the state at that exact position.
+	std::unordered_map<std::tuple<int, int, int>, std::shared_ptr<const BlockProperties>,
+			FrameCellHash>
+			block_properties_by_cell;
+	// Retain only the block-state bit needed by winter roof styling. MapNode does
+	// not carry generic Java/Sponge properties, so the output callback alone
+	// cannot answer whether a generated slab or stair has a full top face.
+	WrittenCellSet full_top_state_cells;
 	bool tile_scope_active = false;
 	// Effective terrain elevation cache. The dense part covers the mapchunk and
 	// its OSM halo; unusual out-of-halo queries use the sparse fallback. Road
@@ -378,6 +473,12 @@ struct WorldEditor
 	{
 		signage_context = std::move(context);
 	}
+	std::shared_ptr<const signage::SignageContext> take_signage_context()
+	{
+		auto context = std::move(signage_context);
+		signage_context.reset();
+		return context;
+	}
 	void set_decal_frame_sink(std::function<bool(WorldEditor &, const DecalFrame &)> sink,
 			bool thread_safe = false)
 	{
@@ -394,6 +495,10 @@ struct WorldEditor
 			std::vector<std::uint8_t> pixels, std::uint32_t width, std::uint32_t height);
 	void clear_facade_panels() { placed_facade_panels.clear(); }
 	const std::vector<FacadePanel> &facade_panels() const { return placed_facade_panels; }
+	std::vector<FacadePanel> take_facade_panels()
+	{
+		return std::exchange(placed_facade_panels, {});
+	}
 	void record_facade_panel(int x, int y, int z, std::int8_t facing,
 			std::vector<std::uint8_t> pixels, std::uint32_t width, std::uint32_t height,
 			const std::string &item_name = {});
@@ -511,6 +616,19 @@ struct WorldEditor
 	}
 	void clear_strict_bounds() { strict_bounds.reset(); }
 	bool owns(int x, int z) const;
+	// Whether a cell is inside the full generation rectangle. Unlike pos_ok(),
+	// this is independent of the active mapgen buffer and is shared by tile
+	// workers; owned clip-margin cells may still be processed outside it.
+	bool in_bounds(int x, int z) const
+	{
+		if (!generation_bounds)
+			return pos_ok(x, z);
+		const auto &[min_x, min_z, max_x, max_z] = *generation_bounds;
+		return x >= min_x && x <= max_x && z >= min_z && z <= max_z;
+	}
+	void register_hedge(int x, int z) { hedge_columns.emplace(x, z); }
+	bool is_hedge(int x, int z) const { return hedge_columns.contains({x, z}); }
+	bool claim_tree_slot(int x, int z) { return claimed_tree_slots.emplace(x, z).second; }
 	bool signage_enabled() const { return map_decals && bool(decal_registry); }
 	bool place_sign_node(Block sign, int x, int y, int z, std::int8_t param2,
 			const std::string &text = {});
@@ -561,10 +679,6 @@ struct WorldEditor
 		return {min_lat, max_lat, min_lon, max_lon};
 	}
 	std::pair<double, double> geo_anchor() const;
-	void set_climate_anchor(std::optional<std::pair<double, double>> anchor)
-	{
-		climate_anchor = std::move(anchor);
-	}
 	void set_output_path(std::filesystem::path p) { output_path = std::move(p); }
 	void set_block_properties_sink(
 			std::function<void(const BlockWithProperties &, int, int, int)> sink)
@@ -633,7 +747,11 @@ struct WorldEditor
 		written_cells.clear();
 		return true;
 	}
-	bool merge_tile(int, int, int, int)
+	void set_generation_bounds(int min_x, int min_z, int max_x, int max_z)
+	{
+		generation_bounds = std::tuple{min_x, min_z, max_x, max_z};
+	}
+	bool merge_tile(int min_x, int min_z, int max_x, int max_z)
 	{
 		if (merge_tile_sink) {
 			if (!active_tile_overlay)
@@ -643,8 +761,18 @@ struct WorldEditor
 			else if (!merge_tile_sink(*active_tile_overlay))
 				return false;
 		}
-		for (const auto &[coordinate, y] : active_road_surface_overrides)
-			road_surface_overrides.insert_or_assign(coordinate, y);
+		for (const auto &[coordinate, y] : active_road_surface_overrides) {
+			const auto &[x, z] = coordinate;
+			const bool owned = x >= min_x && x <= max_x && z >= min_z && z <= max_z;
+			const bool outside_world = !generation_bounds || [&] {
+				const auto &[world_min_x, world_min_z, world_max_x, world_max_z] =
+						*generation_bounds;
+				return x < world_min_x || x > world_max_x || z < world_min_z ||
+					   z > world_max_z;
+			}();
+			if (owned || outside_world)
+				road_surface_overrides.insert_or_assign(coordinate, y);
+		}
 		active_road_surface_overrides.clear();
 		for (const auto &[coordinate, block] : active_support_columns)
 			support_columns.insert_or_assign(coordinate, block);
@@ -664,8 +792,9 @@ struct WorldEditor
 	}
 	WorldEditor make_tile_worker() const;
 	bool tile_worker_callbacks_safe() const;
-	bool merge_tile_worker(
-			WorldEditor &&worker, int min_x, int min_z, int max_x, int max_z);
+	bool merge_tile_worker(WorldEditor &&worker, int min_x, int min_z, int max_x,
+			int max_z,
+			const std::set<std::pair<int, int>> *road_surface_regions = nullptr);
 	void finish_tile_pass()
 	{
 		if (!tile_scope_active)
@@ -755,6 +884,10 @@ struct WorldEditor
 	// separate from check_for_block because callers need an occupancy test,
 	// rather than a material filter (notably vertically-grown wetland reeds).
 	bool block_at(int x, int y, int z) const;
+	bool has_full_top_state(int x, int y, int z) const
+	{
+		return full_top_state_cells.contains({x, y, z});
+	}
 
 	// Highest occupied absolute Y in an inclusive column interval.  Tree canopy
 	// placement samples this before writing leaves, just as Rust does, so a low
@@ -787,18 +920,35 @@ struct WorldEditor
 	std::pair<int, int> get_max_coords() const;
 	int get_absolute_y(int x, int y, int z) const;
 	int get_ground_level(int x, int z) const;
+	// Rust-compatible name for the ground Y already assigned by a road, track,
+	// or cut at this column. Keep road_surface_y for existing Freeminer callers.
+	std::optional<int> surface_override(int x, int z) const;
+	std::optional<int> road_surface_y(int x, int z) const;
 	std::optional<int> terrain_level(int x, int z) const;
 	void register_road_surface_y(int x, int z, int y);
 	RoadSurfaceOverrides take_road_surface_overrides();
+	void register_lamp(int x, int z) { lamp_columns.emplace_back(x, z); }
+	std::vector<std::pair<int, int>> take_lamps()
+	{
+		return std::exchange(lamp_columns, {});
+	}
 	void merge_road_surface_overrides(RoadSurfaceOverrides overrides);
 	void merge_road_surface_overrides_in_regions(RoadSurfaceOverrides overrides,
 			const std::unordered_set<std::pair<int, int>, XZCellHash> &regions);
+	void release_road_surface_overrides(int region_x, int region_z);
+	// Road elevations are generation-only inputs. Drop them after the final
+	// world-style pass has consumed them, before backend persistence/finalization.
+	void release_road_surface_overrides();
 	bool water_source_is_enclosed(int x, int z) const;
 	biome::Climate climate() const;
 	int get_water_level(int x, int z) const;
 	bool is_lc_water(int x, int z) const;
 	bool is_steep_land(int x, int z) const;
 	bool land_cover_backs_trees(int x, int z) const;
+	std::optional<std::optional<std::uint8_t>> canopy_top_m(
+			int x, int z, int radius) const;
+	std::optional<int> canopy_height_hint(int x, int z) const;
+	std::optional<double> typical_mapped_tree_height_m() const;
 	std::optional<trees::TreeSize> canopy_size_hint(int x, int z) const;
 	uint8_t water_distance(int x, int z) const;
 
@@ -812,6 +962,8 @@ struct WorldEditor
 	std::pair<int, int> writable_y_bounds() const;
 
 	std::optional<Block> get_block_absolute(int x, int y, int z) const;
+	std::optional<BlockWithProperties> get_block_with_properties_absolute(
+			int x, int y, int z) const;
 	std::optional<std::string> block_name_absolute(int x, int y, int z) const;
 	std::optional<std::string> block_name(const Block &block) const;
 

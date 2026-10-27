@@ -20,6 +20,18 @@ struct socket *Connection::getPeer(session_t peer_id)
 	return node->second;
 }
 
+void Connection::clearPeerState(session_t peer_id)
+{
+	if (peer_id == PEER_ID_SERVER)
+		m_association_ready.store(false, std::memory_order_release);
+	m_established_peers.erase(peer_id);
+	m_peers_address.erase(peer_id);
+	recv_buf.erase(peer_id);
+	pending_sends.erase(peer_id);
+	m_send_failure_log.erase(peer_id);
+	m_peer_activity.erase(peer_id);
+}
+
 bool Connection::deletePeer(session_t peer_id, bool timeout)
 {
 	cs << "Connection::deletePeer " << peer_id << ", " << timeout << std::endl;
@@ -35,7 +47,7 @@ bool Connection::deletePeer(session_t peer_id, bool timeout)
 		sock = nullptr;
 		sock_connect = false;
 		sock_listen = false;
-		usrsctp_close(peer_sock);
+		closeSocket(peer_sock);
 
 		putEvent(ConnectionEvent::peerRemoved(peer_id, timeout, {}));
 		return true;
@@ -53,15 +65,13 @@ bool Connection::deletePeer(session_t peer_id, bool timeout)
 			sock_connect = false;
 		}
 		if (peer_sock)
-			usrsctp_close(peer_sock);
+			closeSocket(peer_sock);
 
 		m_peers.erase(node);
 	}
 
+	clearPeerState(peer_id);
 	putEvent(ConnectionEvent::peerRemoved(peer_id, timeout, {}));
-	m_peers_address.erase(peer_id);
-	recv_buf.erase(peer_id);
-	pending_sends.erase(peer_id);
 	return true;
 }
 
@@ -88,11 +98,8 @@ ConnectionEventPtr Connection::waitEvent(u32 timeout_ms)
 
 void Connection::putCommand(ConnectionCommandPtr c)
 {
-	// TODO? if (!m_shutting_down)
-	{
-		m_command_queue.push_back(c);
-		// m_sendThread->Trigger();
-	}
+	m_command_queue.push_back(c);
+	m_wakeup->notify();
 }
 
 void Connection::Serve(Address bind_addr)
@@ -102,12 +109,20 @@ void Connection::Serve(Address bind_addr)
 
 void Connection::Connect(Address address)
 {
-	putCommand(ConnectionCommand::connect(address));
+	ConnectToHost(address, {});
+}
+
+void Connection::ConnectToHost(Address address, const std::string &address_name)
+{
+	auto command = ConnectionCommand::connect(address);
+	command->address_name = address_name;
+	putCommand(command);
 }
 
 bool Connection::Connected()
 {
-	if (!m_peers.count(PEER_ID_SERVER))
+	if (!m_association_ready.load(std::memory_order_acquire) ||
+			!m_peers.count(PEER_ID_SERVER))
 		return false;
 
 	// TODO: why do we even need to know our peer id?

@@ -2,10 +2,14 @@
 Copyright (C) 2023 proller <proler@gmail.com>
 */
 
+#include <algorithm>
 #include <cstdint>
 #include "network/sctp/internal.h"
 
 #if USE_SCTP
+#if USE_WEBSOCKET_SCTP
+#include "network/ws_sctp/connection.h"
+#endif
 
 namespace con_sctp
 {
@@ -62,6 +66,10 @@ Connection::Connection(u32 max_packet_size, float timeout, bool ipv6,
 	}
 	// #endif
 
+	const u32 peer_timeout =
+			std::min(g_settings->getU32("sctp_peer_timeout"), u32(86400));
+	m_peer_timeout_ms = peer_timeout * 1000;
+
 	if (start_worker)
 		start();
 }
@@ -72,7 +80,8 @@ unsigned int Connection::sctp_refcount = 0;
 
 Connection::~Connection()
 {
-
+	stop();
+	m_wakeup->notify();
 	join();
 	disconnect();
 
@@ -95,13 +104,18 @@ void Connection::finish_sctp()
 	}
 
 	for (int i = 0; i < 100; ++i) {
-		if (!usrsctp_finish())
-			break;
+		if (!usrsctp_finish()) {
+			sctp_inited = false;
+			sctp_inited_by_me = false;
+			return;
+		}
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-		// cs << "Connection::~Connection() wait " << i << std::endl;
 	}
 
-	sctp_inited = false;
+	// Pending sockets still belong to the live stack. A later connection must
+	// reuse it; calling usrsctp_init again would overwrite active stack state.
+	warningstream << "SCTP shutdown still pending; retaining the initialized stack"
+				  << std::endl;
 	sctp_inited_by_me = false;
 }
 
@@ -110,19 +124,71 @@ void Connection::finish_sctp()
 void *Connection::run()
 {
 	while (!stopRequested()) {
-		while (!m_command_queue.empty()) {
+		m_wakeup->wait(0);
+		for (unsigned budget = 0; budget < 256 && !m_command_queue.empty(); ++budget) {
 			auto c = m_command_queue.pop_frontNoEx();
 			processCommand(c);
 		}
-		flushPendingSends();
-		if (receive() <= 0) {
-			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		checkPeerTimeouts();
+		const bool more_sends = flushPendingSends();
+		const int received = receive();
+		if (received <= 0 && !more_sends && m_command_queue.empty() && !stopRequested()) {
+			// Commands and socket upcalls interrupt this wait immediately. Keep
+			// the old retry bound for transient route errors with no upcall.
+			m_wakeup->wait(1);
 		}
 	}
 
 	disconnect();
-
 	return nullptr;
+}
+
+void Connection::configureSocketWakeup(struct socket *peer)
+{
+	if (usrsctp_set_non_blocking(peer, 1) < 0 ||
+			SctpSocketWakeup::attach(peer, m_wakeup) < 0)
+		throw ConnectionException("Cannot configure SCTP worker notifications");
+}
+
+void Connection::closeSocket(struct socket *peer)
+{
+	if (!peer)
+		return;
+	SctpSocketWakeup::detach(peer);
+	usrsctp_close(peer);
+}
+
+void Connection::checkPeerTimeouts()
+{
+	if (!m_peer_timeout_ms)
+		return;
+	const u32 now = porting::getTimeMs();
+	if (u32(now - m_last_timeout_check) < 1000)
+		return;
+	m_last_timeout_check = now;
+	std::vector<session_t> expired;
+	for (auto &[id, activity] : m_peer_activity) {
+		auto *peer = getPeer(id);
+		if (!peer)
+			continue;
+		// SCTP_PEER_ACTIVITY returns the association receive sequence.
+		sctp_assoc_value response = {};
+		socklen_t length = sizeof(response);
+		// A failed query does not extend the deadline.
+		if (usrsctp_getsockopt(
+					peer, IPPROTO_SCTP, SCTP_PEER_ACTIVITY, &response, &length) == 0 &&
+				response.assoc_value != activity.first) {
+			activity = {response.assoc_value, now};
+		}
+		if (u32(now - activity.second) >= m_peer_timeout_ms)
+			expired.push_back(id);
+	}
+	for (auto id : expired) {
+		warningstream << "SCTP peer " << id << " timed out: no peer response for "
+					  << m_peer_timeout_ms / 1000 << " seconds" << std::endl;
+		logPaths(id, getPeer(id), "peer response timeout");
+		deletePeer(id, true);
+	}
 }
 
 /* Internal stuff */
@@ -146,7 +212,7 @@ void Connection::processCommand(ConnectionCommandPtr c)
 		return;
 	case CONNCMD_CONNECT:
 		dout_con << getDesc() << " processing CONNCMD_CONNECT" << std::endl;
-		connect_addr(c->address);
+		connect_addr(c->address, c->address_name);
 		return;
 	case CONNCMD_DISCONNECT:
 		dout_con << getDesc() << " processing CONNCMD_DISCONNECT" << std::endl;
@@ -159,11 +225,11 @@ void Connection::processCommand(ConnectionCommandPtr c)
 		return;
 	case CONNCMD_SEND:
 		dout_con << getDesc() << " processing CONNCMD_SEND" << std::endl;
-		send_(c->peer_id, c->channelnum, c->data, c->reliable);
+		send_(c->peer_id, c);
 		return;
 	case CONNCMD_SEND_TO_ALL:
 		dout_con << getDesc() << " processing CONNCMD_SEND_TO_ALL" << std::endl;
-		sendToAll(c->channelnum, c->data, c->reliable);
+		sendToAll(c);
 		return;
 		/*	case CONNCMD_DELETE_PEER:
 				dout_con << getDesc() << " processing CONNCMD_DELETE_PEER" << std::endl;
@@ -172,6 +238,9 @@ void Connection::processCommand(ConnectionCommandPtr c)
 		*/
 	case CONCMD_ACK:
 	case CONCMD_CREATE_PEER:
+	case CONNCMD_RESEND_ONE:
+	case CONNCMD_PEER_ID_SET:
+		// MTP control commands; SCTP manages retransmission and peers itself.
 		break;
 	}
 }
@@ -204,7 +273,16 @@ void Connection::sctp_setup(u16 port)
 
 	cs << "sctp_setup(" << port << ")" << std::endl;
 	//DUMP("sctp_conn_output", (uintptr_t)sctp_conn_output);
+#if defined(__linux__) && !defined(__EMSCRIPTEN__)
+	usrsctp_set_diagnostic_logger([](int warning, const char *message) {
+		(warning ? warningstream : infostream) << "SCTP " << message << std::endl;
+	});
+#endif
+#if USE_WEBSOCKET_SCTP
+	usrsctp_init(port, con_ws_sctp::connectionOutput, debug_func);
+#else
 	usrsctp_init(port, sctp_conn_output, debug_func);
+#endif
 	// usrsctp_init_nothreads(port, nullptr, debug_func);
 
 #if SCTP_DEBUG
@@ -220,28 +298,7 @@ void Connection::sctp_setup(u16 port)
 	usrsctp_sysctl_set_sctp_asconf_enable(0);
 #endif
 
-	// #if __ANDROID__
-#ifndef __EMSCRIPTEN__
-	usrsctp_sysctl_set_sctp_mobility_fasthandoff(1);
-	usrsctp_sysctl_set_sctp_mobility_base(1);
-
-	usrsctp_sysctl_set_sctp_inits_include_nat_friendly(1);
-#endif
-
-	usrsctp_sysctl_set_sctp_cmt_on_off(1); // SCTP_CMT_MAX
-	usrsctp_sysctl_set_sctp_cmt_use_dac(1);
-	usrsctp_sysctl_set_sctp_buffer_splitting(1);
-
-	// usrsctp_sysctl_set_sctp_max_retran_chunk(5); // def 30
-	usrsctp_sysctl_set_sctp_shutdown_guard_time_default(20); // def 180
-	usrsctp_sysctl_set_sctp_heartbeat_interval_default(10);
-	// usrsctp_sysctl_set_sctp_init_rtx_max_default(5); //def 8
-	// usrsctp_sysctl_set_sctp_assoc_rtx_max_default(5); //def 10
-	// usrsctp_sysctl_set_sctp_max_retran_chunk(5); //30
-
-	// #if !defined(SCTP_WITH_NO_CSUM)
-	// usrsctp_sysctl_set_sctp_no_csum_on_loopback(1);
-	// #endif
+	configureDefaults();
 }
 
 } // namespace

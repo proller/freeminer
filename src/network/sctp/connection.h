@@ -32,9 +32,12 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "threading/concurrent_map.h"
 #include "threading/concurrent_unordered_map.h"
 #include "threading/thread_vector.h"
+#include "fm_sctp_wakeup.h"
 #include "util/container.h"
 #include "util/pointer.h"
 
+#include <atomic>
+#include <unordered_set>
 #include <mutex>
 #include <deque>
 
@@ -76,6 +79,7 @@ public:
 
 	void Serve(Address bind_addr) override;
 	void Connect(Address address) override;
+	void ConnectToHost(Address address, const std::string &address_name) override;
 	bool Connected() override;
 	void Disconnect() override;
 	bool ReceiveTimeoutMs(NetworkPacket *pkt, u32 timeout_ms) override;
@@ -103,21 +107,27 @@ protected:
 	virtual int receive();
 	void runTimeouts(float dtime);
 	virtual void serve(const Address &address);
-	void connect_addr(const Address &address);
+	void connect_addr(const Address &address, const std::string &address_name);
 	void connect_conn(const Address &address);
-	void disconnect();
+	virtual void disconnect();
 	void finish_sctp();
-	void sendToAll(u8 channelnum, SharedBuffer<u8> data, bool reliable);
-	void send_(session_t peer_id, u8 channelnum, SharedBuffer<u8> data, bool reliable);
+	void sendToAll(const ConnectionCommandPtr &command);
+	void send_(session_t peer_id, const ConnectionCommandPtr &command);
 
 protected:
 	struct socket *getPeer(session_t peer_id);
 
 	virtual bool deletePeer(session_t peer_id, bool timeout = 0);
+	void clearPeerState(session_t peer_id);
+	void setPeerAddress(session_t peer_id, const Address &address)
+	{
+		m_peers_address.insert_or_assign(peer_id, address);
+	}
 
 private:
 	MutexedQueue<ConnectionEventPtr> m_event_queue;
 	MutexedQueue<ConnectionCommandPtr> m_command_queue;
+	std::shared_ptr<SctpWakeup> m_wakeup = std::make_shared<SctpWakeup>();
 
 	u32 m_protocol_id;
 	u32 m_max_packet_size;
@@ -181,6 +191,8 @@ protected:
 
 	std::pair<int, bool> recv_(session_t peer_id, struct socket *sock);
 	void sock_setup(/*session_t peer_id,*/ struct socket *sock);
+	void configureSocketWakeup(struct socket *peer);
+	void closeSocket(struct socket *peer);
 	void sctp_setup(u16 port = 9899);
 	struct socket *sctp_server_sock{};
 	virtual void onAssociationChange(
@@ -190,13 +202,21 @@ private:
 	struct PendingSend
 	{
 		u8 channel;
-		SharedBuffer<u8> data;
+		ConnectionCommandPtr command;
 		bool reliable;
 		size_t offset = 0;
 	};
+	std::atomic_bool m_association_ready{false};
+	std::unordered_set<session_t> m_established_peers;
 	std::unordered_map<session_t, std::deque<PendingSend>> pending_sends;
-	void flushPendingSends();
+	bool flushPendingSends();
+	void checkPeerTimeouts();
+	u32 m_peer_timeout_ms = 60000;
+	u32 m_last_timeout_check = 0;
+	// Received sequence and local monotonic time when it last changed.
+	std::unordered_map<session_t, std::pair<u32, u32>> m_peer_activity;
 	std::unordered_map<session_t, std::array<std::string, 10>> recv_buf;
+	std::unordered_map<session_t, std::pair<u32, u32>> m_send_failure_log;
 
 	void handle_association_change_event(
 			session_t peer_id, const struct sctp_assoc_change *sac);

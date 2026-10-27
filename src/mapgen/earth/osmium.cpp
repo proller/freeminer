@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -31,8 +32,10 @@
 #include <osmium/index/map/sparse_mem_array.hpp>
 #include <osmium/io/file.hpp>
 #include <osmium/io/pbf_input.hpp>
+#include <osmium/io/reader.hpp>
 #include <osmium/osm/entity_bits.hpp>
 #include <osmium/osm/node.hpp>
+#include <osmium/osm/relation.hpp>
 #include <osmium/osm/way.hpp>
 #include <osmium/tags/tags_filter.hpp>
 
@@ -40,10 +43,14 @@
 #endif
 
 #include "arnis-cpp/src/data_processing.h"
+// Native track geometry is planned before chunk-local feature clipping.
+#include "arnis-cpp/src/element_processing/advtrains.h"
 #include "arnis-cpp/src/clipping.h"
 #include "arnis-cpp/src/floodfill_cache.h"
 #include "arnis-cpp/src/osm_parser.h"
 #include "arnis-cpp/src/overture.h"
+#include "arnis-cpp/src/element_processing/way_segments.h"
+#include "arnis-cpp/src/element_processing/relation_area.h"
 
 #if 0
 static constexpr auto floor_height = 4;
@@ -202,6 +209,52 @@ public:
 };
 #endif
 
+namespace
+{
+using MemberRole = arnis::ProcessedMemberRole;
+
+bool closed_ring(const arnis::ProcessedWay &way)
+{
+	if (way.nodes.size() < 3)
+		return false;
+	const auto &first = way.nodes.front();
+	const auto &last = way.nodes.back();
+	return first.id == last.id || (first.x == last.x && first.z == last.z);
+}
+
+bool mostly_inside(const std::vector<arnis::ProcessedNode> &ring,
+		const std::vector<arnis::ProcessedNode> &around)
+{
+	return arnis::element_processing::mostly_inside(
+			ring, around, [](const arnis::ProcessedNode &point) {
+				return std::pair<std::int32_t, std::int32_t>{point.x, point.z};
+			});
+}
+
+bool repeats_relation_area_tags(
+		const arnis::ProcessedWay &way, const arnis::tags_t &relation)
+{
+	if (!closed_ring(way))
+		return false;
+	const auto area = arnis::element_processing::relation_area(relation);
+	if (!area || !arnis::element_processing::relation_area_draws_area(*area, relation))
+		return false;
+	const auto inherited_or_descriptive = [&](const auto &tag) {
+		const auto &key = tag.first;
+		return key == "name" || key.ends_with("_name") || key == "wikidata" ||
+			   key == "area" || key == "type" || relation.get(key) == tag.second;
+	};
+	const bool has_independent_tag =
+			std::any_of(way.tags.begin(), way.tags.end(), [&](const auto &tag) {
+				const auto &key = tag.first;
+				return key != "name" && !key.ends_with("_name") && key != "wikidata" &&
+					   key != "area" && key != "type";
+			});
+	return has_independent_tag &&
+		   std::all_of(way.tags.begin(), way.tags.end(), inherited_or_descriptive);
+}
+} // namespace
+
 class MyHandler : public osmium::handler::Handler
 {
 public:
@@ -217,8 +270,14 @@ public:
 	std::unordered_map<std::uint64_t, std::size_t> way_indices;
 	struct PendingRelation
 	{
+		struct Way
+		{
+			std::uint64_t id;
+			std::optional<arnis::ProcessedMemberRole> role;
+			bool blank_role;
+		};
 		arnis::ProcessedRelation relation;
-		std::vector<std::pair<std::uint64_t, arnis::ProcessedMemberRole>> ways;
+		std::vector<Way> ways;
 	};
 	std::vector<PendingRelation> pending_relations;
 
@@ -311,6 +370,10 @@ public:
 		// separate topology list only for ways where unresolved refs were dropped.
 		if (way_missing_nodes)
 			processed_way.source_node_refs = std::move(source_node_refs);
+		// This handler populates an extract-wide cache shared by many mapchunks.
+		// Keep source geometry here: clipping to the first caller's mapchunk loses
+		// all the other chunks' buildings/roads before their views are constructed.
+		// The chunk element-selection pass below performs the bounded clipping.
 		way_indices.emplace(id, elements.size());
 		elements.emplace_back(std::move(processed_way));
 	}
@@ -373,11 +436,14 @@ public:
 				processed_role = arnis::ProcessedMemberRole::Inner;
 			else if (role == "part" && type == "building")
 				processed_role = arnis::ProcessedMemberRole::Part;
-			else if (role != "part" && building_relation)
+			// Rust treats a `part` member as a building part only on
+			// type=building relations. On a building multipolygon it is not
+			// an outer ring either, so do not let the generic building fallback
+			// turn it into one.
+			else if (building_relation && role != "part")
 				processed_role = arnis::ProcessedMemberRole::Outer;
-			if (!processed_role)
-				continue;
-			pending.ways.emplace_back(way_id, *processed_role);
+			pending.ways.push_back({way_id, processed_role,
+					role.empty() && type == "multipolygon" && !building_relation});
 		}
 		if (!pending.ways.empty())
 			pending_relations.push_back(std::move(pending));
@@ -390,30 +456,121 @@ public:
 		// their own way below, just as the Rust parser creates a new Arc there.
 		std::unordered_map<std::uint64_t, std::shared_ptr<arnis::ProcessedWay>>
 				shared_relation_ways;
+		std::unordered_set<std::uint64_t> repeated_outer_ways;
 		for (auto &pending : pending_relations) {
-			const XZBBox bbox(
-					mg->node_min.X, mg->node_min.Z, mg->node_max.X, mg->node_max.Z);
-			for (const auto &[way_id, role] : pending.ways) {
-				const auto found = way_indices.find(way_id);
+			std::vector<std::shared_ptr<arnis::ProcessedWay>> member_ways(
+					pending.ways.size());
+			std::vector<std::optional<MemberRole>> roles(pending.ways.size());
+			for (std::size_t i = 0; i < pending.ways.size(); ++i) {
+				const auto &pending_way = pending.ways[i];
+				const auto found = way_indices.find(pending_way.id);
 				if (found == way_indices.end())
 					continue;
-				auto [shared, inserted] = shared_relation_ways.try_emplace(way_id);
+				auto [shared, inserted] =
+						shared_relation_ways.try_emplace(pending_way.id);
 				if (inserted)
 					shared->second = std::make_shared<arnis::ProcessedWay>(
 							elements[found->second].as_way());
-				pending.relation.members.emplace_back(shared->second, role);
+				member_ways[i] = shared->second;
+				roles[i] = pending_way.role;
+			}
+			// Rust resolves a blank role geometrically for multipolygons: open
+			// pieces must join a ring end-to-end, while closed rings use nesting
+			// parity. Leave isolated blank ways out of the relation.
+			std::unordered_map<std::uint64_t, std::size_t> end_degree;
+			std::unordered_map<std::uint64_t, std::vector<MemberRole>>
+					explicit_roles_at_end;
+			for (std::size_t i = 0; i < member_ways.size(); ++i) {
+				if ((!roles[i] && !pending.ways[i].blank_role) || !member_ways[i] ||
+						member_ways[i]->nodes.size() < 2 || closed_ring(*member_ways[i]))
+					continue;
+				const auto &nodes = member_ways[i]->nodes;
+				for (const auto id : {nodes.front().id, nodes.back().id}) {
+					++end_degree[id];
+					if (roles[i] && *roles[i] != MemberRole::Part)
+						explicit_roles_at_end[id].push_back(*roles[i]);
+				}
+			}
+			for (std::size_t i = 0; i < member_ways.size(); ++i) {
+				if (!pending.ways[i].blank_role || !member_ways[i] ||
+						member_ways[i]->nodes.size() < 2 || closed_ring(*member_ways[i]))
+					continue;
+				const auto &nodes = member_ways[i]->nodes;
+				const auto a = nodes.front().id, b = nodes.back().id;
+				if (end_degree[a] != 2 || end_degree[b] != 2)
+					continue;
+				std::vector<MemberRole> adjacent;
+				for (const auto id : {a, b})
+					if (const auto it = explicit_roles_at_end.find(id);
+							it != explicit_roles_at_end.end())
+						adjacent.insert(
+								adjacent.end(), it->second.begin(), it->second.end());
+				roles[i] =
+						!adjacent.empty() && std::all_of(adjacent.begin(), adjacent.end(),
+													 [](MemberRole role) {
+														 return role == MemberRole::Inner;
+													 })
+								? MemberRole::Inner
+								: MemberRole::Outer;
+			}
+			std::vector<std::pair<std::optional<std::size_t>,
+					std::vector<arnis::ProcessedNode>>>
+					closed_containers;
+			std::vector<std::vector<arnis::ProcessedNode>> resolved_outer_pieces;
+			std::vector<std::vector<arnis::ProcessedNode>> resolved_inner_pieces;
+			for (std::size_t i = 0; i < member_ways.size(); ++i) {
+				if (!member_ways[i] || !roles[i] || *roles[i] == MemberRole::Part ||
+						closed_ring(*member_ways[i]))
+					continue;
+				auto &ring_sets = *roles[i] == MemberRole::Inner ? resolved_inner_pieces
+																 : resolved_outer_pieces;
+				ring_sets.push_back(member_ways[i]->nodes);
+			}
+			arnis::merge_way_segments(resolved_outer_pieces);
+			arnis::merge_way_segments(resolved_inner_pieces);
+			for (const auto *ring_set : {&resolved_outer_pieces, &resolved_inner_pieces})
+				for (const auto &ring : *ring_set)
+					// Match Rust's container predicate: a closed polygon has at least
+					// four entries including its repeated first-node endpoint.
+					if (ring.size() >= 4 && ring.front().id == ring.back().id)
+						closed_containers.emplace_back(std::nullopt, ring);
+			for (std::size_t i = 0; i < member_ways.size(); ++i) {
+				if (!member_ways[i] || !closed_ring(*member_ways[i]) ||
+						(!roles[i] && !pending.ways[i].blank_role) ||
+						(roles[i] && *roles[i] == MemberRole::Part))
+					continue;
+				closed_containers.emplace_back(i, member_ways[i]->nodes);
+			}
+			for (std::size_t i = 0; i < member_ways.size(); ++i) {
+				if (!pending.ways[i].blank_role || !member_ways[i] ||
+						!closed_ring(*member_ways[i]))
+					continue;
+				std::size_t containing = 0;
+				for (const auto &[member_index, ring] : closed_containers) {
+					if (member_index == i)
+						continue;
+					if (mostly_inside(member_ways[i]->nodes, ring))
+						++containing;
+				}
+				roles[i] = containing % 2 ? MemberRole::Inner : MemberRole::Outer;
+			}
+			for (std::size_t i = 0; i < member_ways.size(); ++i) {
+				if (member_ways[i] && roles[i])
+					pending.relation.members.emplace_back(member_ways[i], *roles[i]);
 			}
 			const auto &tags = pending.relation.tags;
+			const auto man_made = tags.get("man_made");
 			const bool filled_area = tags.contains("natural") ||
-									 tags.contains("landuse") || tags.contains("leisure");
+									 tags.contains("landuse") ||
+									 tags.contains("leisure") ||
+									 (man_made == "pier" || man_made == "breakwater" ||
+											 man_made == "groyne");
 			const bool water_area =
 					tags.contains("water") ||
 					(tags.get("natural") == "water" || tags.get("natural") == "bay") ||
 					tags.get("waterway") == "dock";
 			const bool building_area =
 					tags.contains("building") || tags.contains("building:part");
-			const bool keep_unclipped =
-					water_area || (building_area && tags.get("type") == "multipolygon");
 			const auto is_open = [](const arnis::ProcessedWay &way) {
 				if (way.nodes.size() < 3)
 					return true;
@@ -441,61 +598,10 @@ public:
 					if (rings && member.way->nodes.size() >= 2)
 						rings->push_back(member.way->nodes);
 				}
-				std::function<void(std::vector<std::vector<arnis::ProcessedNode>> &)>
-						merge_segments;
-				merge_segments = [&](auto &rings) {
-					const auto matches = [](const auto &a, const auto &b) {
-						return a.id == b.id ||
-							   (std::abs(a.x - b.x) <= 1 && std::abs(a.z - b.z) <= 1);
-					};
-					std::vector<bool> removed(rings.size(), false);
-					std::vector<std::vector<arnis::ProcessedNode>> merged;
-					for (std::size_t i = 0; i < rings.size(); ++i) {
-						for (std::size_t j = 0; j < rings.size(); ++j) {
-							if (i == j || removed[i] || removed[j] || rings[i].empty() ||
-									rings[j].empty())
-								continue;
-							const auto &a = rings[i];
-							const auto &b = rings[j];
-							if (matches(a.front(), a.back()) ||
-									matches(b.front(), b.back()))
-								continue;
-							std::vector<arnis::ProcessedNode> joined;
-							if (matches(a.front(), b.front())) {
-								joined.assign(a.rbegin(), a.rend());
-								joined.insert(
-										joined.end(), std::next(b.begin()), b.end());
-							} else if (matches(a.back(), b.back())) {
-								joined = a;
-								joined.insert(
-										joined.end(), std::next(b.rbegin()), b.rend());
-							} else if (matches(a.front(), b.back())) {
-								joined = b;
-								joined.insert(
-										joined.end(), std::next(a.begin()), a.end());
-							} else if (matches(a.back(), b.front())) {
-								joined = a;
-								joined.insert(
-										joined.end(), std::next(b.begin()), b.end());
-							} else {
-								continue;
-							}
-							removed[i] = removed[j] = true;
-							merged.push_back(std::move(joined));
-						}
-					}
-					for (std::size_t i = removed.size(); i > 0; --i)
-						if (removed[i - 1])
-							rings.erase(
-									rings.begin() + static_cast<std::ptrdiff_t>(i - 1));
-					const auto merged_count = merged.size();
-					for (auto &ring : merged)
-						rings.push_back(std::move(ring));
-					if (merged_count > 0)
-						merge_segments(rings);
-				};
-				merge_segments(outer_rings);
-				merge_segments(inner_rings);
+				// Share the same Rust-parity segment merger used by the land and water
+				// override paths, keeping multipolygon ring closure rules in one place.
+				arnis::merge_way_segments(outer_rings);
+				arnis::merge_way_segments(inner_rings);
 				std::vector<arnis::ProcessedMember> assembled;
 				for (const auto &[role, rings] :
 						{std::pair{arnis::ProcessedMemberRole::Outer, &outer_rings},
@@ -514,8 +620,7 @@ public:
 								continue;
 							ring.push_back(first);
 						}
-						auto clipped = arnis::clipping::clip_way_to_bbox(ring, bbox);
-						if (clipped.size() < 4)
+						if (ring.size() < 4)
 							continue;
 						arnis::ProcessedWay way;
 						way.id = (std::uint64_t{1} << 61) |
@@ -524,28 +629,41 @@ public:
 								 (role == arnis::ProcessedMemberRole::Inner ? (1U << 15)
 																			: 0U) |
 								 (current_index & 0x7fff);
-						way.nodes = std::move(clipped);
+						way.nodes = std::move(ring);
 						assembled.push_back({std::move(way), role});
 					}
 				}
 				pending.relation.members = std::move(assembled);
-			} else if (!keep_unclipped) {
-				std::vector<arnis::ProcessedMember> clipped_members;
-				clipped_members.reserve(pending.relation.members.size());
-				for (auto &member : pending.relation.members) {
-					auto clipped =
-							arnis::clipping::clip_way_to_bbox(member.way->nodes, bbox);
-					if (clipped.empty())
-						continue;
-					member.way = std::make_shared<arnis::ProcessedWay>(*member.way);
-					member.way->nodes = std::move(clipped);
-					clipped_members.push_back(std::move(member));
+			}
+			const bool holed = std::any_of(pending.relation.members.begin(),
+					pending.relation.members.end(), [](const auto &member) {
+						return member.role == arnis::ProcessedMemberRole::Inner;
+					});
+			if (holed) {
+				for (std::size_t i = 0; i < member_ways.size(); ++i) {
+					if (member_ways[i] && roles[i] &&
+							*roles[i] == arnis::ProcessedMemberRole::Outer &&
+							repeats_relation_area_tags(*member_ways[i], tags))
+						repeated_outer_ways.insert(member_ways[i]->id);
 				}
-				pending.relation.members = std::move(clipped_members);
 			}
 			if (!pending.relation.members.empty())
 				elements.emplace_back(std::move(pending.relation));
 		}
+		elements.erase(std::remove_if(elements.begin(), elements.end(),
+							   [&](const auto &element) {
+								   return element.is_way() &&
+										  element.as_way().nodes.empty();
+							   }),
+				elements.end());
+		if (!repeated_outer_ways.empty())
+			elements.erase(std::remove_if(elements.begin(), elements.end(),
+								   [&](const auto &element) {
+									   return element.is_way() &&
+											  repeated_outer_ways.contains(
+													  element.as_way().id);
+								   }),
+					elements.end());
 		if (unresolved_node_refs > 0) {
 			const double percent =
 					100.0 * unresolved_node_refs /
@@ -579,6 +697,7 @@ arnis::Args earth_arnis_args()
 	arnis.interior = true;
 	arnis.roof = true;
 	arnis.signage = ::arnis::SignageLevel::Full;
+	arnis.moving_vehicles = true;
 	arnis.moving_cars = true;
 	arnis.traffic_lights = true;
 	arnis.fillground = true;
@@ -697,6 +816,8 @@ arnis::Args earth_arnis_args()
 	read_bool("aws_only_elevation", arnis.aws_only_elevation);
 	read_bool("city_boundaries", arnis.city_boundaries);
 	read_bool("caves", arnis.caves);
+	read_bool("winter", arnis.winter);
+	read_bool("post_apocalyptic", arnis.post_apocalyptic);
 	read_bool("traffic_lights", arnis.traffic_lights);
 	read_bool("moving_cars", arnis.moving_cars);
 	read_bool("benchmark", arnis.benchmark);
@@ -1033,6 +1154,9 @@ struct CachedArnisChunk
 struct CachedArnisExtract
 {
 	std::once_flag parse_once;
+	// Adjacent chunks must share topology, route tie-breaks, and rail grades.
+	mutable std::once_flag native_rails_once;
+	mutable std::shared_ptr<const arnis::railways::advtrains::RailNetwork> native_rails;
 	std::mutex chunks_mutex;
 	std::unordered_map<EarthHorizontalKey, std::shared_ptr<CachedArnisChunk>,
 			EarthHorizontalKeyHash>
@@ -1041,6 +1165,7 @@ struct CachedArnisExtract
 	std::vector<EarthElementBounds> element_bounds;
 	std::unique_ptr<arnis::PreparedBuildingData> prepared_buildings;
 	std::shared_ptr<arnis::mapillary::FacadeJob> facade_job;
+	bool skip_osm = false;
 	pos_t authored_max_y = std::numeric_limits<pos_t>::lowest();
 };
 
@@ -1115,6 +1240,15 @@ void generate_cached_arnis(
 			[mg](MapgenEarth::TileOverlayId id) { return mg->mergeTileOverlay(id); },
 			true);
 	editor.ground = &ground;
+	// Build once from uncut source ways and sample terrain in world coordinates.
+	// Routing independently clipped ways changes endpoints and obstacles at seams.
+	if (arnis::railways::advtrains::available()) {
+		std::call_once(tile.native_rails_once, [&]() {
+			tile.native_rails =
+					arnis::railways::advtrains::build_network(tile.elements, editor);
+		});
+		editor.native_rail_network = tile.native_rails;
+	}
 	editor.set_schem_entity_sink(
 			[mg](std::optional<MapgenEarth::TileOverlayId> tile_id, int x, int y, int z,
 					const std::vector<std::uint8_t> &nbt) {
@@ -1176,6 +1310,28 @@ public:
 		try {
 			generation_stage = "OSM extract parsing and preparation";
 			std::call_once(cached.parse_once, [&]() {
+				const auto args = earth_osmium_detail::earth_arnis_args();
+				cached.skip_osm = args.skip_osm();
+				if (cached.skip_osm) {
+					// Rust does not load an OSM file below the object scale or for
+					// non-Earth bodies, but still runs terrain generation. Preserve
+					// that path here: an empty feature set must not short-circuit the
+					// Arnis terrain pass. Keep enough of the vertical terrain extent
+					// for generated vegetation and ground decorations to reach this
+					// handler; authored OSM heights are absent by definition.
+					const long double max_y =
+							static_cast<long double>(mg->cachedOrComputeTerrainMaxY()) +
+							256.0L;
+					cached.authored_max_y =
+							max_y >= static_cast<long double>(
+											 std::numeric_limits<pos_t>::max())
+									? std::numeric_limits<pos_t>::max()
+									: static_cast<pos_t>(max_y);
+					cached.prepared_buildings =
+							std::make_unique<arnis::PreparedBuildingData>(
+									arnis::prepare_building_data(cached.elements));
+					return;
+				}
 				osmium::area::Assembler::config_type assembler_config;
 				assembler_config.create_empty_areas = false;
 				osmium::area::MultipolygonManager<osmium::area::Assembler> mp_manager{
@@ -1184,11 +1340,16 @@ public:
 				cache_t node_cache{index};
 				node_cache.ignore_errors();
 				osmium::io::File file{path_name, "pbf"};
-				osmium::relations::read_relations(file, mp_manager);
+				{
+					osmium::io::Reader relation_reader{
+							file, osmium::osm_entity_bits::relation};
+					osmium::apply(relation_reader, mp_manager);
+					relation_reader.close();
+					mp_manager.prepare_for_lookup();
+				}
 				osmium::io::Reader reader{file};
 				const auto source_header = reader.header();
 				const auto source_bounds = source_header.joined_boxes();
-				const auto args = earth_osmium_detail::earth_arnis_args();
 				std::optional<arnis::geographic::LLBBox> bbox;
 				if (source_bounds.valid()) {
 					bbox.emplace(source_bounds.bottom_left().lat(),
@@ -1296,7 +1457,7 @@ public:
 			mg->cacheAuthoredMaxY(cached.authored_max_y);
 			if (mg->node_min.Y > cached.authored_max_y)
 				return;
-			if (cached.elements.empty())
+			if (cached.elements.empty() && !cached.skip_osm)
 				return;
 
 			std::shared_ptr<earth_osmium_detail::CachedArnisChunk> chunk;
@@ -1315,17 +1476,78 @@ public:
 				}
 			}
 
+			// Resolve native rail availability before caching chunk source geometry.
+			arnis::init(mg);
 			generation_stage = "chunk element selection";
 			std::call_once(chunk->elements_once, [&]() {
 				constexpr int extra = MAP_BLOCKSIZE * 2;
 				const XZBBox context_bbox(mg->node_min.X - extra, mg->node_min.Z - extra,
 						mg->node_max.X + extra, mg->node_max.Z + extra);
-				for (std::size_t i = 0; i < cached.elements.size(); ++i)
-					if (earth_osmium_detail::earth_bounds_intersect(
-								cached.element_bounds[i], context_bbox))
-						chunk->elements.push_back(cached.elements[i]);
+				// Native routing can detour up to 48 nodes from source geometry.
+				const XZBBox rail_context_bbox(mg->node_min.X - 64, mg->node_min.Z - 64,
+						mg->node_max.X + 64, mg->node_max.Z + 64);
+				for (std::size_t i = 0; i < cached.elements.size(); ++i) {
+					// Select routed tracks even when only their detour enters this chunk.
+					const auto &source = cached.elements[i];
+					const bool native_rail = arnis::railways::advtrains::available() &&
+											 source.is_way() &&
+											 source.as_way().tags.contains("railway");
+					if (!earth_osmium_detail::earth_bounds_intersect(
+								cached.element_bounds[i],
+								native_rail ? rail_context_bbox : context_bbox))
+						continue;
+					if (source.is_way()) {
+						const auto &source_way = source.as_way();
+						// Keep original native railway endpoints and shared OSM nodes.
+						if (native_rail) {
+							chunk->elements.push_back(source);
+							continue;
+						}
+						arnis::ProcessedWay clipped_way;
+						clipped_way.id = source_way.id;
+						clipped_way.tags = source_way.tags;
+						clipped_way.source_node_refs = source_way.source_node_refs;
+						clipped_way.nodes = arnis::clipping::clip_way_to_bbox(
+								source_way.nodes, context_bbox);
+						if (clipped_way.nodes.empty())
+							continue;
+						chunk->elements.emplace_back(std::move(clipped_way));
+					} else if (source.is_relation()) {
+						auto relation = source.as_relation();
+						const auto &tags = relation.tags;
+						// Like Rust parsing, water and building multipolygons must keep
+						// their source arcs until the renderer joins them into rings.
+						const bool keep_unclipped =
+								tags.contains("water") ||
+								tags.get("natural") == "water" ||
+								tags.get("natural") == "bay" ||
+								tags.get("waterway") == "dock" ||
+								((tags.contains("building") ||
+										 tags.contains("building:part")) &&
+										tags.get("type") == "multipolygon");
+						if (!keep_unclipped) {
+							std::vector<arnis::ProcessedMember> members;
+							members.reserve(relation.members.size());
+							for (const auto &member : relation.members) {
+								auto nodes = arnis::clipping::clip_way_to_bbox(
+										member.way->nodes, context_bbox);
+								if (nodes.empty())
+									continue;
+								auto way = std::make_shared<arnis::ProcessedWay>(
+										*member.way);
+								way->nodes = std::move(nodes);
+								members.emplace_back(std::move(way), member.role);
+							}
+							relation.members = std::move(members);
+						}
+						if (!relation.members.empty())
+							chunk->elements.emplace_back(std::move(relation));
+					} else {
+						chunk->elements.push_back(source);
+					}
+				}
 			});
-			if (chunk->elements.empty())
+			if (chunk->elements.empty() && !cached.skip_osm)
 				return;
 
 			generation_stage = "chunk flood-fill preparation";
@@ -1350,7 +1572,6 @@ public:
 								chunk->flood_fill_cache->collect_building_footprints(
 										chunk->elements, xzbbox));
 			});
-			arnis::init(mg);
 			generation_stage = "Arnis world generation";
 			earth_osmium_detail::generate_cached_arnis(mg, cached, *chunk);
 		} catch (const std::exception &ex) {

@@ -1,4 +1,9 @@
 #include "arnis_adapter.h"
+#include "arnis-cpp/src/fm_native_signs.h"
+// fm: Native train placement configuration and host node resolution.
+#include "arnis-cpp/src/fm_native_trains.h"
+#include "settings.h"
+// ===
 #include "emerge.h"
 #include "log.h"
 
@@ -55,6 +60,7 @@ Block CRIMSON_SLAB;
 Block CRIMSON_STAIRS;
 Block CUT_SANDSTONE;
 Block CUT_SANDSTONE_SLAB;
+Block CHISELED_SANDSTONE;
 Block CYAN_CARPET;
 Block CYAN_CONCRETE;
 Block DARK_OAK_PLANKS;
@@ -334,6 +340,14 @@ Block CAVE_VINES;
 Block CAVE_VINES_PLANT;
 Block CAVE_VINES_UNLIT;
 Block CAVE_VINES_PLANT_LIT;
+Block NETHERRACK;
+Block FIRE;
+Block CRACKED_DEEPSLATE_BRICKS;
+Block CRACKED_DEEPSLATE_TILES;
+Block CRACKED_POLISHED_BLACKSTONE_BRICKS;
+Block CRACKED_NETHER_BRICKS;
+Block MOSSY_COBBLESTONE_WALL;
+Block VINE;
 Block SPORE_BLOSSOM;
 Block AZALEA;
 Block FLOWERING_AZALEA;
@@ -450,6 +464,8 @@ Block CHAIN;
 Block END_ROD;
 Block LIGHTNING_ROD;
 Block GOLD_BLOCK;
+Block RAW_GOLD_BLOCK;
+Block LAPIS_BLOCK;
 Block SEA_LANTERN;
 Block ORANGE_CONCRETE;
 Block ORANGE_WOOL;
@@ -459,6 +475,9 @@ Block BRICK_WALL;
 Block REDSTONE_BLOCK;
 Block CHAIN_X;
 Block CHAIN_Z;
+Block CHAIN_Y;
+Block PINK_CONCRETE;
+Block LIME_STAINED_GLASS;
 Block SPRUCE_DOOR_LOWER;
 Block SPRUCE_DOOR_UPPER;
 Block SMOOTH_STONE_SLAB;
@@ -932,6 +951,9 @@ void init(MapgenEarth *mg)
 	CRACKED_STONE_BRICKS = g("cracked_stone_bricks", "default:stonebrick");
 	CRIMSON_PLANKS = g("crimson_planks", "default:wood");
 	CUT_SANDSTONE = g("cut_sandstone", "default:sandstone");
+	CHISELED_SANDSTONE = g("chiseled_sandstone",
+			{"mcl_core:chiseled_sandstone", "mcl_core:sandstone_chiseled",
+					"default:sandstone"});
 	CYAN_CONCRETE = g("cyan_concrete",
 			{"wool:cyan", "basic_materials:concrete_block", "default:stone"});
 	DARK_OAK_PLANKS = g("dark_oak_planks", {"default:wood", "default:junglewood"});
@@ -1048,9 +1070,8 @@ void init(MapgenEarth *mg)
 	RED_TERRACOTTA = g("red_terracotta", "default:clay");
 	RED_WOOL = g("red_wool", "wool:red");
 	SAND = g("sand", {"default:sand", "mcl_core:sand", "basenodes:sand", "mapgen_sand",
-							 "spring:sand",
-							 "mapgen_desert_sand", "default:silver_sand", "ethereal:sand",
-							 "default:silver_sand", "mcl_core:sandstone",
+							 "spring:sand", "mapgen_desert_sand", "default:silver_sand",
+							 "ethereal:sand", "default:silver_sand", "mcl_core:sandstone",
 							 "default:sandstone", "basenodes:stone", "default:stone"});
 	RED_SAND = optional_g("red_sand", SAND,
 			{"mcl_core:red_sand", "mcl_core:redsand", "default:red_sand",
@@ -1181,6 +1202,25 @@ void init(MapgenEarth *mg)
 		const auto id = resolver.find(name);
 		return Block{static_cast<content_t>(id == CONTENT_IGNORE ? CONTENT_AIR : id)};
 	};
+	native_sign_nodes.clear();
+	for (const char *name : {"streets:sign_eu_majorroad_center",
+				 "streets:sign_eu_noparking_center",
+				 "streets:sign_us_noparkingboth_center",
+				 "streets:sign_eu_deadendstreet_center", "streets:sign_us_deadend_center",
+				 "streets:sign_eu_onewayright_center",
+				 "streets:sign_us_onewayright_center", "streets:sign_eu_highway_center",
+				 "streets:sign_eu_highwayend_center", "streets:sign_eu_cyclepath_center",
+				 "streets:sign_us_bikelane_center", "streets:sign_eu_parkingsite_center",
+				 "streets:sign_eu_info_center", "streets:sign_eu_busstation_center",
+				 "streets:sign_us_speedlimit50_center", "default:sign_wall_steel",
+				 "default:sign_wall_wood", "street_signs:sign_highway_small_green",
+				 "street_signs:sign_highway_medium_green",
+				 "street_signs:sign_highway_large_green",
+				 "street_signs:sign_basic_top_only"}) {
+		const auto sign = optional_sign(name);
+		if (sign.id() != CONTENT_AIR)
+			native_sign_nodes.emplace(name, sign);
+	}
 	STREETS_AVAILABLE = available_node("streets:asphalt");
 	ROAD_ASPHALT = g("road_asphalt", {"streets:asphalt", "basic_materials:concrete_block",
 											 "wool:grey", "default:stone"});
@@ -1245,6 +1285,15 @@ void init(MapgenEarth *mg)
 	STREET_SIGN_US_ROUTE = optional_sign("street_signs:sign_us_route_onpole");
 	STREET_SIGN_US_INTERSTATE = optional_sign("street_signs:sign_us_interstate_onpole");
 	DECAL_FRAME = g("decal_frame", {"freeminer:arnis_decal_frame", "air"});
+	// fm: Disabled modes preserve the existing backend representation.
+	std::string train_mode = "auto";
+	g_settings->getNoEx("arnis_train_mode", train_mode);
+	native_train_marker =
+			train_mode == "auto" ? optional_sign("freeminer:arnis_train_spawn") : AIR;
+	u32 train_interval = 512;
+	g_settings->getU32NoEx("arnis_train_interval", train_interval);
+	native_train_interval = std::clamp<u32>(train_interval, 64, 65536);
+	// ===
 	ANDESITE_WALL = g("andesite_wall", {"walls:cobble", "default:stone"});
 	STONE_BRICK_WALL = g("stone_brick_wall", "default:stonebrick");
 	CARROTS = g("carrots", {"farming:carrot_4", "mcl_farming:carrot_7",
@@ -1490,6 +1539,16 @@ void init(MapgenEarth *mg)
 					"default:stone"});
 	CAVE_VINES_PLANT = prefer_arnis("cave_vines_plant", CAVE_VINES_UNLIT);
 	CAVE_VINES_PLANT_LIT = prefer_arnis("cave_vines_plant_lit", CAVE_VINES);
+	NETHERRACK = prefer_arnis("netherrack", NETHER_BRICK);
+	FIRE = optional_g("fire", AIR, {"mcl_fire:fire", "fire:basic_flame"});
+	CRACKED_DEEPSLATE_BRICKS = prefer_arnis("cracked_deepslate_bricks", DEEPSLATE_BRICKS);
+	CRACKED_DEEPSLATE_TILES = prefer_arnis("cracked_deepslate_tiles", DEEPSLATE_TILES);
+	CRACKED_POLISHED_BLACKSTONE_BRICKS = prefer_arnis(
+			"cracked_polished_blackstone_bricks", POLISHED_BLACKSTONE_BRICKS);
+	CRACKED_NETHER_BRICKS = prefer_arnis("cracked_nether_bricks", NETHER_BRICK);
+	MOSSY_COBBLESTONE_WALL = prefer_arnis("mossy_cobblestone_wall", COBBLESTONE_WALL);
+	VINE = optional_g("vine", AIR,
+			{"mcl_vines:vine", "mcl_core:vine", "flowers:vine", "default:vine"});
 	SPORE_BLOSSOM = g("spore_blossom",
 			{"mcl_lush_caves:spore_blossom", "spore_blossom",
 					"mcl_lush_caves:spore_blossom_hanging",
@@ -1849,6 +1908,11 @@ void init(MapgenEarth *mg)
 			{"freeminer:lamp_red", "default:meselamp", "default:copperblock",
 					"basic_materials:brass_block", "default:steelblock"});
 	GOLD_BLOCK = g("gold_block", "default:goldblock");
+	RAW_GOLD_BLOCK =
+			g("raw_gold_block", {"mcl_core:raw_gold_block", "mcl_raw_ores:raw_gold_block",
+										"default:goldblock"});
+	LAPIS_BLOCK = g("lapis_block",
+			{"mcl_core:lapisblock", "mcl_core:lapis_block", "default:stone"});
 	SEA_LANTERN = prefer_arnis("sea_lantern", GLOWSTONE);
 	LANTERN = g("lantern", {"mcl_lantern:lantern", "default:torch", "default:meselamp"});
 	SOUL_LANTERN = g("soul_lantern",
@@ -1876,10 +1940,17 @@ void init(MapgenEarth *mg)
 	BLUE_WOOL = g("blue_wool", "wool:blue");
 	GREEN_CONCRETE = g("green_concrete",
 			{"wool:green", "basic_materials:concrete_block", "default:stone"});
+	PINK_CONCRETE = prefer_arnis("pink_concrete",
+			g("pink_concrete",
+					{"wool:pink", "basic_materials:concrete_block", "default:stone"}));
 	BRICK_WALL = g("brick_wall", "default:brick");
 	REDSTONE_BLOCK = g("redstone_block", "default:mese");
 	CHAIN_X = prefer_arnis("chain", CHAIN);
+	CHAIN_X.param2 = 12; // Mineclonia chain axis=x, matching Rust's CHAIN_X.
 	CHAIN_Z = prefer_arnis("chain", CHAIN);
+	CHAIN_Z.param2 = 4; // Mineclonia chain axis=z, matching Rust's CHAIN_Z.
+	CHAIN_Y = prefer_arnis("chain", CHAIN);
+	CHAIN_Y.param2 = 0; // Mineclonia's default chain axis is vertical.
 	SPRUCE_DOOR_LOWER = prefer_arnis("spruce_door", OAK_DOOR);
 	SPRUCE_DOOR_UPPER = prefer_arnis("spruce_door", OAK_DOOR);
 	SMOOTH_STONE_SLAB = g("smooth_stone_slab",
@@ -1898,6 +1969,7 @@ void init(MapgenEarth *mg)
 	YELLOW_STAINED_GLASS = prefer_arnis("yellow_stained_glass", GLASS);
 	PURPLE_STAINED_GLASS = prefer_arnis("purple_stained_glass", GLASS);
 	ORANGE_STAINED_GLASS = prefer_arnis("orange_stained_glass", GLASS);
+	LIME_STAINED_GLASS = prefer_arnis("lime_stained_glass", GLASS);
 	MAGENTA_STAINED_GLASS = prefer_arnis("magenta_stained_glass", GLASS);
 	FLOWER_POT = g("flower_pot", "default:clay");
 	OAK_TRAPDOOR_OPEN_NORTH = prefer_arnis("oak_trapdoor", OAK_TRAPDOOR);

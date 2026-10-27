@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <initializer_list>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -60,6 +61,12 @@ inline XZ::operator XZPoint()
 
 struct tags_t : public std::unordered_map<std::string, std::string>
 {
+	using base_type = std::unordered_map<std::string, std::string>;
+	using base_type::base_type;
+
+	tags_t() = default;
+	tags_t(std::initializer_list<base_type::value_type> values) : base_type(values) {}
+
 	std::string get(const std::string &k) const
 	{
 		if (const auto it = find(k); it != end())
@@ -172,6 +179,14 @@ public:
 	}
 
 	ProcessedWay const &as_way() const
+	{
+		if (!is_way()) {
+			throw std::runtime_error("ProcessedElement: not a Way");
+		}
+		return std::get<ProcessedWay>(*this);
+	}
+
+	ProcessedWay &as_way()
 	{
 		if (!is_way()) {
 			throw std::runtime_error("ProcessedElement: not a Way");
