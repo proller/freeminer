@@ -49,6 +49,7 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 #include "map.h"
 #include "mapblock.h"
 #include "mapgen_earth.h"
+#include "earth/fm_arnis_rail_notify.h"
 #include "mapgen/earth/hgt.h"
 #include "mapgen/earth/http.h"
 #include "mapnode.h"
@@ -619,7 +620,9 @@ MapgenEarth::MapgenEarth(MapgenEarthParams *params_, EmergeParams *emerge) :
 */
 
 	if (!maps_holder) {
-		maps_holder = std::make_unique<maps_holder_t>();
+		s16 world_elevation_step = 11;
+		g_settings->getS16NoEx("earth_world_elevation_step", world_elevation_step);
+		maps_holder = std::make_unique<maps_holder_t>(world_elevation_step);
 	}
 
 	{
@@ -1819,6 +1822,11 @@ bool MapgenEarth::calcBlockWind(const v3pos_t &p, uint64_t seed, float timeofday
 	return true;
 }
 
+maps_holder_t::maps_holder_t(int16_t world_elevation_step) :
+		hgt_reader{data_root, world_elevation_step}
+{
+}
+
 maps_holder_t::~maps_holder_t()
 {
 	for (const auto &file : files_to_delete) {
@@ -1831,6 +1839,7 @@ maps_holder_t::~maps_holder_t()
 
 void MapgenEarth::makeChunk(BlockMakeData *data)
 {
+	generated_rail_positions.clear();
 	// Pre-conditions
 	assert(data->vmanip);
 	assert(data->nodedef);
@@ -1851,6 +1860,7 @@ void MapgenEarth::makeChunk(BlockMakeData *data)
 
 	blockseed = getBlockSeed2(full_node_min, seed);
 	const auto finish_generation = [this]() {
+		fm_notify_arnis_rails(gennotify, generated_rail_positions);
 		this->generating = false;
 		this->active_block_data = nullptr;
 	};

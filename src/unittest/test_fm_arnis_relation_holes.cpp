@@ -1,8 +1,10 @@
 #include "test.h"
 
 #include "mapgen/earth/arnis-cpp/src/data_processing.h"
+#include "mapgen/earth/arnis-cpp/src/building_suppression.h"
 #include "mapgen/earth/arnis-cpp/src/element_processing/relation_area.h"
 #include "mapgen/earth/arnis-cpp/src/element_processing/subprocessor/interior/index.h"
+#include "mapgen/earth/arnis-cpp/src/element_processing/waterfront.h"
 #include "mapgen/earth/arnis-cpp/src/floodfill_cache.h"
 #include "mapgen/earth/arnis-cpp/src/land_cover/osm_water_override.h"
 #include "mapgen/earth/arnis-cpp/src/osm_parser.h"
@@ -41,11 +43,13 @@ public:
 		TEST(testNestedOuterGetsItsOwnHoleGroup);
 		TEST(testHoleGroupingIgnoresBoundaryVertices);
 		TEST(testInnerRingsCutHolesButIslandsStayWhole);
+		TEST(testPierKeepsDeckOnIslandInsideHole);
 		TEST(testBuildingCourtyardKeepsNestedKeepFootprint);
 		TEST(testWaterOverrideKeepsPondOnIslandInHole);
 		TEST(testBuildingInAreaHoleDoesNotInheritAreaUse);
 		TEST(testMissingLanduseTagRetainsRustPredicateSemantics);
 		TEST(testOpenRideOutlineSuppressesContainedBuildingPart);
+		TEST(testListedNonResidentialPartRelationDoesNotInheritHousing);
 		TEST(testStreamingXmlParserHandlesQuotedMarkupAndEntityOrder);
 	}
 
@@ -242,6 +246,52 @@ public:
 		UASSERT(!fills.holes_in(island, inners, std::nullopt).has_value());
 	}
 
+	void testPierKeepsDeckOnIslandInsideHole()
+	{
+		auto ring = [](std::uint64_t id, int min, int max) {
+			arnis::ProcessedWay way;
+			way.id = id;
+			way.nodes = square(min, max);
+			for (std::size_t i = 0; i + 1 < way.nodes.size(); ++i)
+				way.nodes[i].id = id * 10 + i;
+			way.nodes.back().id = way.nodes.front().id;
+			return way;
+		};
+
+		arnis::ProcessedRelation pier{};
+		pier.id = 9;
+		pier.tags.emplace("man_made", "pier");
+		pier.members.emplace_back(ring(1, 10, 60), arnis::ProcessedMemberRole::Outer);
+		pier.members.emplace_back(ring(2, 20, 50), arnis::ProcessedMemberRole::Inner);
+		pier.members.emplace_back(ring(3, 30, 40), arnis::ProcessedMemberRole::Outer);
+
+		auto footway = [](std::uint64_t id, int x0, int x1, int z) {
+			arnis::ProcessedWay way;
+			way.id = id;
+			way.tags.emplace("highway", "footway");
+			for (const auto &[x, node_id] : std::vector<std::pair<int, std::uint64_t>>{
+						 {x0, id * 10}, {x1, id * 10 + 1}}) {
+				arnis::ProcessedNode node{};
+				node.id = node_id;
+				node.x = x;
+				node.z = z;
+				way.nodes.push_back(node);
+			}
+			return way;
+		};
+		std::vector<arnis::ProcessedElement> elements{
+				arnis::ProcessedElement(std::move(pier)),
+				arnis::ProcessedElement(footway(4, 32, 38, 35)),
+				arnis::ProcessedElement(footway(5, 22, 28, 25))};
+		const auto cache = arnis::FloodFillCache::precompute(elements, std::nullopt);
+
+		UASSERT(arnis::waterfront::drop_paths_on_piers(
+						elements, 1.0, cache, std::nullopt) == 1);
+		UASSERT(elements.size() == 2);
+		UASSERT(elements[1].is_way());
+		UASSERT(elements[1].as_way().id == 5);
+	}
+
 	void testBuildingCourtyardKeepsNestedKeepFootprint()
 	{
 		auto make_way = [](std::uint64_t id, int min, int max) {
@@ -299,6 +349,58 @@ public:
 				{{0.2, 0.2}, {0.2, 0.3}, {0.3, 0.3}, {0.3, 0.2}, {0.2, 0.2}}, part_tags));
 		const auto prepared = arnis::prepare_building_data(elements);
 		UASSERT(prepared.outline_suppression.contains({"way", 2}));
+	}
+
+	void testListedNonResidentialPartRelationDoesNotInheritHousing()
+	{
+		auto way = [](std::uint64_t id, double min, double max) {
+			arnis::ProcessedWay result;
+			result.id = id;
+			const double coords[5][2]{
+					{min, min}, {max, min}, {max, max}, {min, max}, {min, min}};
+			for (int i = 0; i < 5; ++i) {
+				arnis::ProcessedNode node{};
+				node.id = id * 10 + static_cast<std::uint64_t>(i);
+				node.latitude = coords[i][0];
+				node.longitude = coords[i][1];
+				result.nodes.push_back(node);
+				result.source_node_refs.push_back(node.id);
+			}
+			return result;
+		};
+		auto outer = way(10, 0.0, 1.0);
+		auto part = way(20, 0.2, 0.4);
+		arnis::ProcessedRelation housing_outline{};
+		housing_outline.id = 1;
+		housing_outline.tags.emplace("type", "multipolygon");
+		housing_outline.tags.emplace("building", "apartments");
+		housing_outline.source_members.push_back({"way", outer.id, "outer"});
+		arnis::ProcessedRelation part_relation{};
+		part_relation.id = 2;
+		part_relation.tags.emplace("type", "multipolygon");
+		part_relation.tags.emplace("building:part", "yes");
+		part_relation.source_members.push_back({"way", part.id, "outer"});
+
+		const auto prepare = [&](bool listed_by_office) {
+			std::vector<arnis::ProcessedElement> elements;
+			elements.emplace_back(outer);
+			elements.emplace_back(part);
+			elements.emplace_back(housing_outline);
+			elements.emplace_back(part_relation);
+			if (listed_by_office) {
+				arnis::ProcessedRelation office{};
+				office.id = 3;
+				office.tags.emplace("type", "building");
+				office.tags.emplace("building", "office");
+				office.source_members.push_back(
+						{"relation", housing_outline.id, "outline"});
+				office.source_members.push_back({"relation", part_relation.id, "part"});
+				elements.emplace_back(std::move(office));
+			}
+			return arnis::prepare_building_data(elements);
+		};
+		UASSERT(prepare(false).housing_relation_parts.contains(part_relation.id));
+		UASSERT(!prepare(true).housing_relation_parts.contains(part_relation.id));
 	}
 
 	void testStreamingXmlParserHandlesQuotedMarkupAndEntityOrder()

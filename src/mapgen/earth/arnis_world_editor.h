@@ -25,6 +25,7 @@
 #include "arnis_block.h"
 #include "arnis_projection_frame.h"
 #include "arnis-cpp/src/args.h"
+#include "arnis-cpp/src/bedrock_addon.h"
 #include "arnis-cpp/src/decals/registry.h"
 #include "arnis-cpp/src/trees/tree_library.h"
 #include "mapgen/earth/arnis_projection_frame.h"
@@ -135,6 +136,9 @@ struct WorldEditor
 	// Backend-neutral train routes and schedules, shared with tile workers for
 	// consumers that animate or otherwise interpret generated rail services.
 	std::shared_ptr<const trains::TrainRouteNetwork> train_network;
+	// Bedrock vehicle behavior/resource-pack descriptors. The host owns how to
+	// persist or interpret these files; the generator does not write an archive.
+	std::shared_ptr<const bedrock_addon::Addon> bedrock_vehicle_payload;
 	// fm: Full-source native topology and grades, immutable during generation.
 	std::shared_ptr<const railways::advtrains::RailNetwork> native_rail_network;
 	std::set<std::uint64_t> native_generated_rails;
@@ -197,6 +201,7 @@ struct WorldEditor
 	bool surface_is_sealed(int x, int z) const;
 	bool nested_area_owns(int x, int z) const;
 	uint8_t cover_class(int x, int z) const;
+	bool near_beach(int x, int z, double reach) const;
 	std::optional<ecoregion::Ecoregion> ecoregion(int x, int z) const;
 	struct DecalFrame
 	{

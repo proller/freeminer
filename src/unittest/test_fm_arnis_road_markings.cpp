@@ -3,8 +3,10 @@
 #include "mapgen/earth/arnis-cpp/src/element_processing/highways.h"
 #include "mapgen/earth/arnis-cpp/src/element_processing/road_markings.h"
 #include "mapgen/earth/arnis-cpp/src/element_processing/signage.h"
+#include "mapgen/earth/arnis-cpp/src/floodfill_cache.h"
 #include "mapgen/earth/arnis-cpp/src/decals/draw.h"
 #include "mapgen/earth/arnis-cpp/src/decals/templates.h"
+#include "mapgen/earth/arnis_world_editor.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -12,6 +14,13 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+namespace arnis::highways
+{
+CoordinateBitmap collect_road_surface_coords(
+		const std::vector<ProcessedElement> &elements,
+		const world_editor::WorldEditor &editor, const ::XZBBox &bounds, double scale);
+}
 
 namespace
 {
@@ -75,6 +84,29 @@ public:
 		TEST(testStopNamesUseReadableTwoLineFallback);
 		TEST(testStopNameTextStaysOffPlateBorder);
 		TEST(testPierFootwayIsNotARoadSurface);
+		TEST(testUkRouteShieldColours);
+	}
+
+	void testUkRouteShieldColours()
+	{
+		const auto shield_for = [](const char *highway, const char *ref) {
+			tags_t tags;
+			tags.emplace("highway", highway);
+			tags.emplace("ref", ref);
+			const auto signs =
+					signage::highway_way_signs(tags, decals::SignRegion::UkIreland);
+			UASSERT(signs.shield.has_value());
+			const auto *shield = std::get_if<decals::RouteShieldKey>(&*signs.shield);
+			UASSERT(shield != nullptr);
+			return shield->style;
+		};
+
+		UASSERT(shield_for("motorway", "M25") == decals::ShieldStyle::Blue);
+		UASSERT(shield_for("motorway", "A1(M)") == decals::ShieldStyle::Blue);
+		UASSERT(shield_for("trunk", "A40") == decals::ShieldStyle::Green);
+		UASSERT(shield_for("primary", "N7") == decals::ShieldStyle::Green);
+		UASSERT(shield_for("primary", "A501") == decals::ShieldStyle::WhitePlate);
+		UASSERT(shield_for("secondary", "B1234") == decals::ShieldStyle::WhitePlate);
 	}
 
 	void testPierFootwayIsNotARoadSurface()
@@ -85,6 +117,18 @@ public:
 				way(2, {node(20, 0, 40), node(21, 40, 40)}, {{"highway", "footway"}});
 		UASSERT(!highways::surface_highway_type(pier).has_value());
 		UASSERT(highways::surface_highway_type(ordinary) == "footway");
+
+		// The classification feeds the water/depth road mask. Exercise that full
+		// consumer too: a pier is a deck, so the water below its footprint must
+		// remain eligible for water carving while an ordinary path masks the ground.
+		const std::vector<ProcessedElement> elements{
+				ProcessedElement(pier), ProcessedElement(ordinary)};
+		const XZBBox bounds(0, 0, 60, 60);
+		world_editor::WorldEditor editor;
+		const auto road_mask =
+				highways::collect_road_surface_coords(elements, editor, bounds, 1.0);
+		UASSERT(!road_mask.contains(20, 20));
+		UASSERT(road_mask.contains(20, 40));
 	}
 
 	void testCrossingWayUsesTagsFromRoadNodes()

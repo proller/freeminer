@@ -3,6 +3,7 @@
 #include "mapgen/earth/arnis-cpp/src/mode_filter.h"
 #include "mapgen/earth/arnis-cpp/src/osm_parser.h"
 #include "mapgen/earth/arnis-cpp/src/data_processing.h"
+#include "mapgen/earth/arnis-cpp/src/datapack/extras.h"
 #include "mapgen/earth/arnis-cpp/src/world_editor/common.h"
 
 #include <algorithm>
@@ -52,6 +53,7 @@ public:
 		TEST(testStorageMayContainChecksItsRepresentation);
 		TEST(testRustParityOsmTagFilters);
 		TEST(testRustPrioritySortLeavesBroadLanduseLast);
+		TEST(testGameplayExtrasFilterByFormat);
 	}
 
 	void testTerrainOnlyKeepsWaterAndNature()
@@ -152,6 +154,19 @@ public:
 		UASSERT(discovery.contains("wikipedia"));
 		UASSERT(discovery.get("wikipedia").empty());
 		UASSERT(!discovery.contains("wikimedia_commons"));
+
+		arnis::tags_t pool;
+		pool.emplace("leisure", "swimming_pool");
+		pool.emplace("natural", "water");
+		pool.emplace("water", "pool");
+		arnis::osm_parser::filter_tags(pool);
+		UASSERT(pool.size() == 1);
+		UASSERT(pool.get("leisure") == "swimming_pool");
+		arnis::tags_t lake;
+		lake.emplace("natural", "water");
+		lake.emplace("water", "lake");
+		arnis::osm_parser::filter_tags(lake);
+		UASSERT(lake.size() == 2);
 	}
 
 	void testRustPrioritySortLeavesBroadLanduseLast()
@@ -173,6 +188,35 @@ public:
 		UASSERT(elements[0].id() == 11);
 		UASSERT(elements[1].id() == 12);
 		UASSERT(elements[2].id() == 10);
+	}
+
+	void testGameplayExtrasFilterByFormat()
+	{
+		arnis::Args args;
+		args.body = arnis::CelestialBody::Mars;
+		args.body_gravity = true;
+		args.traffic_lights = true;
+		args.discoveries = true;
+		args.pause_menu = true;
+		args.zombie_outbreak = true;
+		args.disasters = true;
+		args.moving_vehicles = true;
+
+		const auto requested = arnis::datapack::Extras::from_args(args);
+		UASSERT(requested.any());
+		UASSERT(requested.wants_places());
+		const auto java = requested.for_format(arnis::WorldFormat::JavaAnvil);
+		UASSERT(java.gravity && java.traffic_lights && java.discoveries &&
+				java.pause_menu && java.outbreak && java.disasters && java.cars);
+		const auto bedrock = requested.for_format(arnis::WorldFormat::BedrockMcWorld);
+		UASSERT(bedrock.cars);
+		UASSERT(!bedrock.gravity && !bedrock.traffic_lights && !bedrock.discoveries &&
+				!bedrock.pause_menu && !bedrock.outbreak && !bedrock.disasters &&
+				!bedrock.trains);
+		UASSERT(!requested.for_format(arnis::WorldFormat::LuantiWorld).any());
+
+		args.one_world_run = arnis::one_world::RunContext{};
+		UASSERT(!arnis::datapack::Extras::from_args(args).any());
 	}
 };
 
