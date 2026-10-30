@@ -83,6 +83,10 @@ elevation::TerrainHints terrain_hints_for(const Args &args,
 			!args.skip_objects() && args.mode != GenerationMode::Blueprint &&
 			!args.vanilla_height && !args.disable_height_limit && !args.luanti &&
 			is_earth(args.body) && !args.one_world_run;
+	// Rust's TerrainHints::from_osm marks the staged Overture message whenever
+	// automatic height fitting can use Overture structures, even if this caller
+	// has already fetched Overture and supplies it synchronously below.
+	hints.overture_follows = args.overture && automatic_height;
 	if (automatic_height) {
 		if (overture_data && args.overture) {
 			hints.tall_structures =
@@ -96,7 +100,8 @@ elevation::TerrainHints terrain_hints_for(const Args &args,
 }
 
 std::optional<std::string> height_overflow_without_terrain(const Args &args,
-		const geographic::LLBBox &bbox, const elevation::TerrainHints &hints)
+		const geographic::LLBBox &bbox, const elevation::TerrainHints &hints,
+		const std::function<std::vector<elevation::TallModel>()> &late_overture)
 {
 	if (args.ground_level < world_editor::DEFAULT_MIN_Y + 2 ||
 			args.ground_level >
@@ -114,6 +119,11 @@ std::optional<std::string> height_overflow_without_terrain(const Args &args,
 	};
 	collect(hints.tall_models);
 	collect(hints.tall_structures);
+	// Match Rust's vanilla_misses: Overture is a lazy second source, consulted
+	// only when OSM peaks and structures still fit. Flat terrain has no elevation
+	// pipeline to do this check later, so resolve the pending source here.
+	if (top <= vanilla_top && hints.overture_follows && late_overture)
+		collect(late_overture());
 	if (top > vanilla_top) {
 		std::ostringstream message;
 		message << "a building or landmark reaches Y " << std::ceil(top)
@@ -372,10 +382,15 @@ Ground generate_ground_data(const Args &args, const geographic::LLBBox &bbox,
 		std::vector<elevation::TallModel>().swap(terrain_hints.tall_models);
 	// Keep the fallback decision separately: the hint lists themselves are moved
 	// into elevation processing and tall structures are released after band pick.
-	const auto no_terrain_overflow =
-			auto_height_for(args)
-					? height_overflow_without_terrain(args, bbox, terrain_hints)
-					: std::nullopt;
+	// The elevation fit has its own ordered Overture fallback, so don't consume
+	// that lazy source here when terrain generation is enabled.
+	const bool overture_follows = terrain_hints.overture_follows;
+	const std::function<std::vector<elevation::TallModel>()> no_late_overture;
+	const auto &flat_overture = args.terrain_enabled() ? no_late_overture : late_overture;
+	const auto no_terrain_overflow = auto_height_for(args)
+											 ? height_overflow_without_terrain(args, bbox,
+													   terrain_hints, flat_overture)
+											 : std::nullopt;
 	// Match Rust's once-daily background sweep of stale elevation/land-cover
 	// tiles. Keep the host-supplied cache root authoritative when present.
 	elevation::spawn_throttled_cleanup(
@@ -530,8 +545,16 @@ Ground generate_ground_data(const Args &args, const geographic::LLBBox &bbox,
 			ground.set_celestial_body(args.body);
 			ground.set_climate(frame.climate(bbox));
 			cover.reset();
-			if (auto_height_for(args) && no_terrain_overflow) {
-				std::clog << "Extended build height: " << *no_terrain_overflow << '\n';
+			auto flat_overflow = no_terrain_overflow;
+			if (auto_height_for(args) && !flat_overflow && overture_follows &&
+					late_overture) {
+				elevation::TerrainHints overture_hints;
+				overture_hints.tall_structures = late_overture();
+				flat_overflow = height_overflow_without_terrain(
+						args, bbox, overture_hints, no_late_overture);
+			}
+			if (auto_height_for(args) && flat_overflow) {
+				std::clog << "Extended build height: " << *flat_overflow << '\n';
 				ground.set_extended_ceiling(true);
 				extend_world_bounds_for(args);
 			}
