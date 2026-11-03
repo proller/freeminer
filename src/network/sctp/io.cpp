@@ -620,7 +620,7 @@ void Connection::serve(const Address &bind_address)
 	sctp_setup(bind_address.getPort());
 
 	if ((sock = usrsctp_socket(domain, SOCK_STREAM, IPPROTO_SCTP, NULL, server_send_cb, 0,
-		                     NULL)) == NULL) {
+				 NULL)) == NULL) {
 		cs << ("usrsctp_socket is NULL") << std::endl;
 		putEvent(ConnectionEvent::bindFailed());
 		return;
@@ -657,9 +657,7 @@ void Connection::serve(const Address &bind_address)
 		}
 	} else if (domain == AF_CONN) {
 
-		struct sockaddr_conn sconn
-		{
-		};
+		struct sockaddr_conn sconn{};
 
 		sconn.sconn_family = AF_CONN;
 #ifdef HAVE_SCONN_LEN
