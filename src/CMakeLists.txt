@@ -270,6 +270,9 @@ if(ENABLE_SPATIAL)
 	endif()
 endif(ENABLE_SPATIAL)
 
+# fm: Detect OpenSSL after Freeminer's bundled dependencies are configured.
+if (0)
+# ===
 option(ENABLE_OPENSSL "Use OpenSSL's libcrypto for faster SHA implementations" TRUE)
 set(USE_OPENSSL FALSE)
 
@@ -282,6 +285,10 @@ if(ENABLE_OPENSSL)
 		message(STATUS "OpenSSL not found!")
 	endif()
 endif(ENABLE_OPENSSL)
+
+# fm: 
+endif()
+# ===
 
 
 find_package(ZLIB REQUIRED)
@@ -397,6 +404,22 @@ endif()
 check_include_files(endian.h HAVE_ENDIAN_H)
 
 include(freeminer_src)
+
+# fm: Prefer the configured OpenSSL target, including a bundled build.
+option(ENABLE_OPENSSL "Use OpenSSL's libcrypto for faster SHA implementations" TRUE)
+set(USE_OPENSSL FALSE)
+if(ENABLE_OPENSSL)
+	if(NOT TARGET OpenSSL::Crypto)
+		find_package(OpenSSL 3.0)
+	endif()
+	if(TARGET OpenSSL::Crypto)
+		set(USE_OPENSSL TRUE)
+		message(STATUS "OpenSSL's libcrypto SHA enabled.")
+	else()
+		message(STATUS "OpenSSL not found!")
+	endif()
+endif()
+# ===
 
 if((NOT PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR) AND EXISTS "${PROJECT_SOURCE_DIR}/cmake_config.h")
 	message(FATAL_ERROR "You are doing an out-of-tree build, but build artifacts are left in-tree. This will break the build!")
