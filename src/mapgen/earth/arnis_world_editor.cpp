@@ -287,6 +287,8 @@ WorldEditor WorldEditor::make_tile_worker() const
 	worker.bake_lighting = bake_lighting;
 	worker.start_with_map = start_with_map;
 	worker.place_schematics_enabled = place_schematics_enabled;
+	worker.enabled_props = enabled_props;
+	worker.enabled_props = enabled_props;
 	worker.schematic_tree_pack_available = schematic_tree_pack_available;
 	worker.map_decals = map_decals;
 	worker.first_decal_map_id = first_decal_map_id;
@@ -339,6 +341,7 @@ WorldEditor WorldEditor::make_tile_worker() const
 	worker.ground_origin_x = ground_origin_x;
 	worker.ground_origin_z = ground_origin_z;
 	worker.ground_origin_set = ground_origin_set;
+	worker.write_bounds = write_bounds;
 	worker.generation_bounds = generation_bounds;
 	worker.generation_outline = generation_outline;
 	return worker;
@@ -460,6 +463,20 @@ bool WorldEditor::merge_tile_worker(WorldEditor &&worker, int min_x, int min_z, 
 	merge_top_states(worker.written_cells);
 	merge_block_properties(worker.tile_merged_written_cells);
 	merge_block_properties(worker.written_cells);
+	auto merge_nbt_properties = [&](const WrittenCellSet &written) {
+		for (const auto &cell : written) {
+			const auto &[x, y, z] = cell;
+			if (!worker.owns(x, z))
+				continue;
+			if (const auto found = worker.nbt_properties_by_cell.find(cell);
+					found != worker.nbt_properties_by_cell.end())
+				nbt_properties_by_cell.insert_or_assign(cell, found->second);
+			else
+				nbt_properties_by_cell.erase(cell);
+		}
+	};
+	merge_nbt_properties(worker.tile_merged_written_cells);
+	merge_nbt_properties(worker.written_cells);
 	flush_requested = flush_requested || worker.flush_requested;
 	save_requested = save_requested || worker.save_requested;
 	return true;
@@ -535,7 +552,7 @@ void WorldEditor::set_chest_with_items_absolute(
 		return;
 	nlohmann::json nbt_items = nlohmann::json::array();
 	for (const auto &[id, slot, count] : items)
-		nbt_items.push_back({{"id", id}, {"Slot", slot}, {"Count", count}});
+		nbt_items.push_back({{"id", id}, {"Slot", slot}, {"count", count}});
 	if (chest_sink) {
 		chest_sink(x, y, z, items);
 		return;
@@ -666,6 +683,8 @@ void WorldEditor::set_barrel_with_nbt_items_absolute(
 }
 bool WorldEditor::owns(int x, int z) const
 {
+	if (!in_write_bounds(x, z))
+		return false;
 	if (!strict_bounds)
 		return true;
 	const auto [min_x, min_z, max_x, max_z] = *strict_bounds;
@@ -978,6 +997,8 @@ bool WorldEditor::try_set_block_absolute(const Block &block, int x, int y, int z
 	if (!allow_outside_outline && generation_outline &&
 			!generation_outline->contains(x, z))
 		return false;
+	if (!in_write_bounds(x, z))
+		return false;
 	// Match Rust WorldToModify: discard writes above the selected world's ceiling,
 	// but clamp writes below its floor onto the floor section (bedrock placement
 	// relies on this when the host VM exposes a deeper range).
@@ -1015,6 +1036,7 @@ bool WorldEditor::try_set_block_absolute(const Block &block, int x, int y, int z
 		written_cells.insert(key);
 		full_top_state_cells.erase(key);
 		block_properties_by_cell.erase(key);
+		nbt_properties_by_cell.erase(key);
 		return true;
 	}
 
@@ -1060,6 +1082,7 @@ bool WorldEditor::try_set_block_absolute(const Block &block, int x, int y, int z
 	written_cells.insert(key);
 	full_top_state_cells.erase(key);
 	block_properties_by_cell.erase(key);
+	nbt_properties_by_cell.erase(key);
 	++mg->stat.set;
 	return true;
 }
@@ -1094,9 +1117,14 @@ bool WorldEditor::try_set_block_with_properties_absolute(const BlockWithProperti
 		block_properties_by_cell.erase(key);
 	else
 		block_properties_by_cell.insert_or_assign(key, bwp.properties);
+	if (bwp.nbt_properties)
+		nbt_properties_by_cell.insert_or_assign(key, bwp.nbt_properties);
+	else
+		nbt_properties_by_cell.erase(key);
 	// Block states are carried by the tile's block output, but this legacy
 	// side-channel is not part of TileOverlay and must only be emitted once.
-	if (block_properties_sink && owns(x, z) && !bwp.property_values().empty())
+	if (block_properties_sink && owns(x, z) &&
+			(!bwp.property_values().empty() || bwp.nbt_properties))
 		block_properties_sink(bwp, x, y, z);
 	const auto &properties = bwp.property_values();
 	const auto type = properties.find("type");
@@ -1139,6 +1167,21 @@ bool WorldEditor::block_at(int x, int y, int z) const
 std::optional<int> WorldEditor::highest_block_between(
 		int x, int z, int min_y, int max_y) const
 {
+	if (standalone_storage) {
+		min_y = std::max(min_y, world_editor::min_y());
+		max_y = std::min(max_y, world_editor::world_max_y());
+		if (min_y > max_y)
+			return std::nullopt;
+		std::optional<int> highest;
+		for (const auto &[cell, block] : standalone_blocks) {
+			const auto &[bx, by, bz] = cell;
+			if (bx == x && bz == z && by >= min_y && by <= max_y &&
+					block.id() != CONTENT_AIR && block.id() != CONTENT_IGNORE &&
+					(!generation_outline || generation_outline->contains(bx, bz)))
+				highest = std::max(highest.value_or(std::numeric_limits<int>::min()), by);
+		}
+		return highest;
+	}
 	if (!mg || !mg->vm)
 		return std::nullopt;
 	min_y = std::max(min_y, world_editor::min_y());
@@ -1203,6 +1246,10 @@ void WorldEditor::probe_resident()
 								return arnis::water_probe::Spot::Open;
 							if (block->id() == WATER.id())
 								return arnis::water_probe::Spot::Water;
+							// Rust's walker probe treats lily pads like air here: they float on
+							// water and must not become a solid footing or head obstruction.
+							if (block->id() == LILY_PAD.id())
+								return arnis::water_probe::Spot::Open;
 							const auto name = block_name(*block);
 							if (!name)
 								return arnis::water_probe::Spot::Open;
@@ -1326,6 +1373,35 @@ std::optional<int> WorldEditor::lowest_carved_bed(int x, int z, int radius) cons
 				lowest = lowest ? std::min(*lowest, *bed) : *bed;
 	return lowest;
 }
+std::optional<int> WorldEditor::lowest_water_beside(int x, int z) const
+{
+	if (!water_field || !ground || !water_field->deeper_than_crust())
+		return std::nullopt;
+	std::optional<int> lowest;
+	for (const auto &[dx, dz] :
+			std::array<std::pair<int, int>, 4>{{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}}) {
+		const int nx = x + dx, nz = z + dz;
+		const int depth = water_field->depth_at(nx, nz);
+		if (depth <= 0)
+			continue;
+		const int surface = ground->water_level(ground_point(nx, nz));
+		const int carve = std::min(std::clamp(depth, 0, water_depth::MAX_WATER_DEPTH),
+				std::max(0, surface - world_editor::min_y() - 2));
+		const int bottom = surface - carve;
+		lowest = lowest ? std::min(*lowest, bottom) : bottom;
+	}
+	return lowest;
+}
+bool WorldEditor::water_stands_over_neighbour(int x, int z, int water_y) const
+{
+	if (!ground)
+		return false;
+	for (const auto &[dx, dz] :
+			std::array<std::pair<int, int>, 4>{{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}})
+		if (ground->water_level(ground_point(x + dx, z + dz)) <= water_y - 2)
+			return true;
+	return false;
+}
 std::optional<double> WorldEditor::terrain_level_exact(int x, int z) const
 {
 	if (!ground)
@@ -1392,6 +1468,12 @@ biome::Climate WorldEditor::climate() const
 			std::isfinite(max_lon) && max_lat > min_lat && max_lon > min_lon)
 		return climate::classify_bbox(min_lat, min_lon, max_lat, max_lon);
 	return ground ? ground->climate() : biome::Climate::Temperate;
+}
+std::optional<biome::Climate> WorldEditor::local_climate(int x, int z) const
+{
+	if (!ground || !ground->climate_field)
+		return std::nullopt;
+	return ground->climate_at(ground_point(x, z));
 }
 std::pair<double, double> WorldEditor::geo_anchor() const
 {
@@ -1602,8 +1684,15 @@ std::optional<BlockWithProperties> WorldEditor::get_block_with_properties_absolu
 	if (!block)
 		return std::nullopt;
 	if (const auto found = block_properties_by_cell.find({x, y, z});
-			found != block_properties_by_cell.end())
+			found != block_properties_by_cell.end()) {
+		if (const auto raw = nbt_properties_by_cell.find({x, y, z});
+				raw != nbt_properties_by_cell.end())
+			return BlockWithProperties{*block, found->second, raw->second};
 		return BlockWithProperties{*block, found->second};
+	}
+	if (const auto raw = nbt_properties_by_cell.find({x, y, z});
+			raw != nbt_properties_by_cell.end())
+		return BlockWithProperties::from_value(*block, *raw->second);
 	if (const auto properties = block->properties())
 		return BlockWithProperties{*block, *properties};
 	return BlockWithProperties{*block};

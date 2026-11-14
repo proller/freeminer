@@ -3,12 +3,41 @@
 #include "mapgen/earth/arnis-cpp/src/block_definitions.h"
 #include "mapgen/earth/arnis-cpp/src/land_cover/land_cover.h"
 #include "mapgen/earth/arnis-cpp/src/water_depth.h"
+#include "mapgen/earth/arnis-cpp/src/water_detail.h"
 #include "mapgen/earth/arnis-cpp/src/water_steps.h"
 #include "mapgen/earth/arnis_world_editor.h"
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
+
+namespace
+{
+struct WaterStepBlockFixture
+{
+	arnis::Block stone = arnis::block_definitions::STONE;
+	arnis::Block water = arnis::block_definitions::WATER;
+	arnis::Block oak_log = arnis::block_definitions::OAK_LOG;
+	arnis::Block oak_leaves = arnis::block_definitions::OAK_LEAVES;
+
+	WaterStepBlockFixture()
+	{
+		arnis::block_definitions::STONE = arnis::Block(320);
+		arnis::block_definitions::WATER = arnis::Block(321);
+		arnis::block_definitions::OAK_LOG = arnis::Block(322);
+		arnis::block_definitions::OAK_LEAVES = arnis::Block(323);
+	}
+
+	~WaterStepBlockFixture()
+	{
+		arnis::block_definitions::STONE = stone;
+		arnis::block_definitions::WATER = water;
+		arnis::block_definitions::OAK_LOG = oak_log;
+		arnis::block_definitions::OAK_LEAVES = oak_leaves;
+	}
+};
+} // namespace
 
 class TestFmArnisWaterSteps : public TestBase
 {
@@ -21,12 +50,39 @@ public:
 		TEST(testBoundedTreeClearStopsAtItsColumns);
 		TEST(testCarveDepthEstimateHandlesNoWater);
 		TEST(testCarveDepthEstimateCapsLargeWaterBodies);
+		TEST(testBoreCrossingsReserveConfiguredCarveDepth);
+		TEST(testScaledWaterCrossingParsesLayerLikeRust);
+	}
+
+	void testScaledWaterCrossingParsesLayerLikeRust()
+	{
+		using namespace arnis;
+		tags_t tags;
+		tags.emplace("layer", " 0 ");
+		UASSERT(water_detail::drowns_crossing(WaterDetail::Scaled, 0.5, tags));
+		tags["layer"] = "1";
+		UASSERT(!water_detail::drowns_crossing(WaterDetail::Scaled, 0.5, tags));
+		tags.clear();
+		UASSERT(!water_detail::drowns_crossing(
+				WaterDetail::Scaled, std::numeric_limits<double>::quiet_NaN(), tags));
 	}
 
 	void testOneBlockWaterDropGetsVanillaRunUp()
 	{
 		using namespace arnis;
+		WaterStepBlockFixture block_fixture;
 		WorldEditor editor;
+		editor.enable_standalone_storage();
+		// Keep a dry perimeter around the fixture so these columns are interior
+		// to the standalone area's bounds, just like the Rust water-step test.
+		for (int x = -1; x <= 41; ++x) {
+			editor.set_block_absolute(block_definitions::STONE, x, 0, -1);
+			editor.set_block_absolute(block_definitions::STONE, x, 0, 5);
+		}
+		for (int z = 0; z <= 4; ++z) {
+			editor.set_block_absolute(block_definitions::STONE, -1, 0, z);
+			editor.set_block_absolute(block_definitions::STONE, 41, 0, z);
+		}
 		for (int x = 0; x <= 40; ++x)
 			for (int z = 0; z <= 4; ++z) {
 				const bool upper = x < 20;
@@ -43,7 +99,7 @@ public:
 			const auto found = block->property_values().find("level");
 			return found == block->property_values().end() ? 0 : std::stoi(found->second);
 		};
-		UASSERT(level(19, 30) == 7);
+		UTEST(level(19, 30) == 7, "expected level 7, got %d", level(19, 30));
 		UASSERT(level(13, 30) == 1);
 		UASSERT(level(12, 30) == 0);
 		UASSERT(level(20, 29) == 0);
@@ -52,7 +108,9 @@ public:
 	void testBoundedTreeClearStopsAtItsColumns()
 	{
 		using namespace arnis;
+		WaterStepBlockFixture block_fixture;
 		WorldEditor editor;
+		editor.enable_standalone_storage();
 		auto is_block = [&](int x, int y, const Block &expected) {
 			const auto block = editor.get_block_absolute(x, y, 5);
 			return block && block->id() == expected.id();
@@ -88,6 +146,34 @@ public:
 		const std::vector<std::vector<std::uint8_t>> grid(
 				32, std::vector<std::uint8_t>(32, arnis::land_cover::LC_WATER));
 		UASSERT(arnis::water_depth::estimate_max_carve_depth(grid, 32, 32) == 6);
+	}
+
+	void testBoreCrossingsReserveConfiguredCarveDepth()
+	{
+		using namespace arnis;
+		struct ResetCrossingCarve
+		{
+			~ResetCrossingCarve()
+			{
+				water_depth::set_crossing_carve({0, WaterDetail::Default, 1.0});
+			}
+		} reset;
+		std::vector<std::vector<std::uint8_t>> grid(
+				3, std::vector<std::uint8_t>(3, land_cover::LC_GRASSLAND));
+		grid[1][1] = land_cover::LC_WATER;
+		const std::vector<std::pair<std::size_t, std::size_t>> cells{{1, 1}};
+		const auto height = [](std::size_t, std::size_t) { return 0.0; };
+
+		water_depth::set_crossing_carve({0, WaterDetail::Default, 1.0});
+		auto crossings = water_depth::bore_crossings(grid, 3, 3, cells, height);
+		UASSERT(crossings.size() == 1);
+		UASSERT(crossings.front().depth == 0);
+
+		water_depth::set_crossing_carve(
+				{water_depth::MAX_WATER_DEPTH, WaterDetail::Default, 1.0});
+		crossings = water_depth::bore_crossings(grid, 3, 3, cells, height);
+		UASSERT(crossings.size() == 1);
+		UASSERT(crossings.front().depth == water_depth::MAX_WATER_DEPTH);
 	}
 };
 

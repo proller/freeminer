@@ -1234,6 +1234,7 @@ bool Game::connectToServer(const GameStartData &start_data,
 		fallback_address = Address();
 	}
 
+// fm: Select the local server transport.
 #if USE_MULTI
 	if (start_data.isAnyServer()) { //simple_singleplayer_mode || start_data.local_server) {
 		u16 port = 0;
@@ -1260,6 +1261,7 @@ bool Game::connectToServer(const GameStartData &start_data,
 			connect_address.setPort(port);
 	}
 #endif
+	// ===
 
 	fallback_address.setPort(connect_address.getPort());
 	if (fallback_address.isValid()) {
