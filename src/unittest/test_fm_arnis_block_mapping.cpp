@@ -23,13 +23,13 @@ public:
 		// populated from the loaded game, which is absent in these unit tests.
 		struct PaletteFixture
 		{
-			std::array<std::pair<Block *, content_t>, 11> entries{
+			std::array<std::pair<Block *, content_t>, 12> entries{
 					{{&STONE, 84}, {&KELP, 66}, {&OAK_STAIRS, 144}, {&FLOWER_POT, 235},
 							{&POTTED_RED_TULIP, 246}, {&POTTED_DANDELION, 247},
 							{&POTTED_BLUE_ORCHID, 248}, {&HOPPER, 284},
 							{&CHISELED_SANDSTONE, 516}, {&CUT_SANDSTONE, 517},
-							{&RAW_GOLD_BLOCK, 518}}};
-			std::array<Block, 11> saved;
+							{&RAW_GOLD_BLOCK, 518}, {&BARRIER, 527}}};
+			std::array<Block, 12> saved;
 			Block lapis = LAPIS_BLOCK;
 			PaletteFixture()
 			{
@@ -51,6 +51,11 @@ public:
 		TEST(testPottedPlantBedrockMapping);
 		TEST(testWaterloggedBedrockState);
 		TEST(testGenericBedrockNameMapping);
+		TEST(testGenericOakSignBedrockMapping);
+		TEST(testGenericOakFenceGateBedrockMapping);
+		TEST(testGenericStairAliasBedrockMapping);
+		TEST(testGenericChainBedrockMapping);
+		TEST(testGenericSnowBlockDiffersFromSnowLayer);
 		TEST(testBedrockHoppersStartUnlocked);
 		TEST(testNestedBlockPropertyValuesSurviveSectionsAndPalettePacking);
 	}
@@ -87,7 +92,7 @@ public:
 		const auto corner = state(192, {{"north", "true"}, {"east", "true"}});
 		UASSERT(std::string(corner.name) == "mcl_panes:pane_grey_flat");
 		UASSERT(corner.param2 == 0);
-		UASSERT(std::string(to_luanti_node(Block(527)).name) == "air");
+		UASSERT(std::string(to_luanti_node(BARRIER).name) == "air");
 	}
 
 	void testPottedPlantBedrockMapping()
@@ -155,6 +160,103 @@ public:
 		const auto enabled = to_bedrock_block_with_properties(BlockWithProperties{
 				HOPPER, BlockWithProperties::Properties{{"enabled", "true"}}});
 		UASSERT(!std::get<bool>(enabled.states.at("toggle_bit")));
+	}
+
+	void testGenericOakSignBedrockMapping()
+	{
+		using namespace arnis;
+		const Block unlisted{CONTENT_UNKNOWN};
+		UASSERT(to_bedrock_block(unlisted, "minecraft:oak_sign").name ==
+				"minecraft:standing_sign");
+		const auto sign = to_bedrock_block_with_properties(
+				BlockWithProperties{
+						unlisted, BlockWithProperties::Properties{{"rotation", "15"}}},
+				"minecraft:oak_sign");
+		UASSERT(sign.name == "minecraft:standing_sign");
+		UASSERT(std::get<int>(sign.states.at("ground_sign_direction")) == 15);
+	}
+
+	void testGenericOakFenceGateBedrockMapping()
+	{
+		using namespace arnis;
+		const Block unlisted{CONTENT_UNKNOWN};
+		const auto gate = to_bedrock_block_with_properties(
+				BlockWithProperties{
+						unlisted, BlockWithProperties::Properties{{"facing", "east"},
+										  {"open", "true"}, {"in_wall", "true"}}},
+				"minecraft:oak_fence_gate");
+		UASSERT(gate.name == "minecraft:fence_gate");
+		UASSERT(std::get<std::string>(gate.states.at("minecraft:cardinal_direction")) ==
+				"east");
+		UASSERT(std::get<bool>(gate.states.at("open_bit")));
+		UASSERT(std::get<bool>(gate.states.at("in_wall_bit")));
+	}
+
+	void testGenericStairAliasBedrockMapping()
+	{
+		using namespace arnis;
+		const Block unlisted{CONTENT_UNKNOWN};
+		const BlockWithProperties variant{unlisted,
+				BlockWithProperties::Properties{{"facing", "east"}, {"half", "top"}}};
+		const auto cobblestone =
+				to_bedrock_block_with_properties(variant, "minecraft:cobblestone_stairs");
+		UASSERT(cobblestone.name == "minecraft:stone_stairs");
+		UASSERT(std::get<int>(cobblestone.states.at("weirdo_direction")) == 0);
+		UASSERT(std::get<bool>(cobblestone.states.at("upside_down_bit")));
+		const auto smooth_stone =
+				to_bedrock_block_with_properties(variant, "minecraft:stone_stairs");
+		UASSERT(smooth_stone.name == "minecraft:normal_stone_stairs");
+		UASSERT(std::get<int>(smooth_stone.states.at("weirdo_direction")) == 0);
+	}
+
+	void testGenericChainBedrockMapping()
+	{
+		using namespace arnis;
+		const Block unlisted{CONTENT_UNKNOWN};
+		const auto chain = to_bedrock_block_with_properties(
+				BlockWithProperties{
+						unlisted, BlockWithProperties::Properties{{"axis", "x"}}},
+				"minecraft:chain");
+		UASSERT(chain.name == "minecraft:iron_chain");
+		UASSERT(std::get<std::string>(chain.states.at("pillar_axis")) == "x");
+	}
+
+	void testGenericSnowBlockDiffersFromSnowLayer()
+	{
+		using namespace arnis;
+		struct SnowPaletteFixture
+		{
+			Block full = SNOW_BLOCK;
+			Block layer = SNOW_LAYER;
+			SnowPaletteFixture()
+			{
+				// The Rust palette has distinct IDs. Give the host-resolved blocks
+				// distinct IDs here too, independent of whether a game is loaded.
+				SNOW_BLOCK = Block(600);
+				SNOW_LAYER = Block(601);
+			}
+			~SnowPaletteFixture()
+			{
+				SNOW_BLOCK = full;
+				SNOW_LAYER = layer;
+			}
+		} snow_fixture;
+		const Block unlisted{CONTENT_UNKNOWN};
+		const auto full_block = to_bedrock_block_with_properties(
+				BlockWithProperties{unlisted}, "minecraft:snow_block");
+		UASSERT(full_block.name == "minecraft:snow");
+		UASSERT(full_block.states.empty());
+		const auto built_in_full_block =
+				to_bedrock_block_with_properties(BlockWithProperties{SNOW_BLOCK});
+		UASSERT(built_in_full_block.name == "minecraft:snow");
+		UASSERT(built_in_full_block.states.empty());
+
+		const auto layer = to_bedrock_block_with_properties(
+				BlockWithProperties{
+						unlisted, BlockWithProperties::Properties{{"layers", "4"}}},
+				"minecraft:snow");
+		UASSERT(layer.name == "minecraft:snow_layer");
+		UASSERT(std::get<int>(layer.states.at("height")) == 3);
 	}
 
 	void testNestedBlockPropertyValuesSurviveSectionsAndPalettePacking()
