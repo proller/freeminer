@@ -46,8 +46,9 @@ int connectionOutput(void *address, void *data, size_t size, uint8_t, uint8_t)
 	return transport ? transport->send(websocket, data, size) : EINVAL;
 }
 Connection::Connection(u32 protocol_id, u32 max_packet_size, float timeout, bool ipv6,
-		con::PeerHandler *peerhandler, bool local) :
-		con_sctp::Connection(max_packet_size, timeout, ipv6, peerhandler, false)
+		con::PeerHandler *peerhandler, bool local, bool check_game_data_timeout) :
+		con_sctp::Connection(max_packet_size, timeout, ipv6, peerhandler, false,
+				!local && check_game_data_timeout)
 {
 	(void)protocol_id;
 	m_ipv6 = ipv6;

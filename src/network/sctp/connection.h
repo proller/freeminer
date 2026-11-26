@@ -67,7 +67,8 @@ public:
 	friend class con_multi::Connection;
 
 	Connection(u32 max_packet_size, float timeout, bool ipv6,
-			con::PeerHandler *peerhandler = nullptr, bool start_worker = true);
+			con::PeerHandler *peerhandler = nullptr, bool start_worker = true,
+			bool check_game_data_timeout = true);
 	~Connection() override;
 	void *run() override;
 
@@ -151,6 +152,7 @@ private:
 	PeerHandler *m_bc_peerhandler;
 	unsigned int m_last_recieved;
 	int m_last_recieved_warn;
+	const bool m_check_game_data_timeout;
 
 	void SetPeerID(const session_t id) { m_peer_id = id; }
 	//u32 GetProtocolID() { return m_protocol_id; }

@@ -48,10 +48,10 @@ along with Freeminer.  If not, see <http://www.gnu.org/licenses/>.
 namespace con
 {
 
-ConnectionMulti::ConnectionMulti(
-		u32 max_packet_size, float timeout, bool ipv6, con::PeerHandler *peerhandler) :
+ConnectionMulti::ConnectionMulti(u32 max_packet_size, float timeout, bool ipv6,
+		con::PeerHandler *peerhandler, bool simple_singleplayer_mode) :
 		m_max_packet_size(max_packet_size), m_timeout(timeout), m_ipv6(ipv6),
-		m_peerhandler(peerhandler)
+		m_peerhandler(peerhandler), m_simple_singleplayer_mode(simple_singleplayer_mode)
 {
 }
 
@@ -63,8 +63,8 @@ IConnection *ConnectionMulti::ensureConnection(proto_name protocol)
 	switch (protocol) {
 #if USE_SCTP
 	case proto_name::sctp:
-		connection = std::make_shared<con_sctp::Connection>(
-				m_max_packet_size, m_timeout, m_ipv6, m_peerhandler);
+		connection = std::make_shared<con_sctp::Connection>(m_max_packet_size, m_timeout,
+				m_ipv6, m_peerhandler, true, !m_simple_singleplayer_mode);
 		break;
 #endif
 #if USE_ENET
@@ -81,8 +81,9 @@ IConnection *ConnectionMulti::ensureConnection(proto_name protocol)
 #endif
 #if USE_WEBSOCKET_SCTP
 	case proto_name::websocket_stcp:
-		connection = std::make_shared<con_ws_sctp::Connection>(
-				PROTOCOL_ID, m_max_packet_size, m_timeout, m_ipv6, m_peerhandler);
+		connection = std::make_shared<con_ws_sctp::Connection>(PROTOCOL_ID,
+				m_max_packet_size, m_timeout, m_ipv6, m_peerhandler, false,
+				!m_simple_singleplayer_mode);
 		break;
 #endif
 #if MINETEST_TRANSPORT
