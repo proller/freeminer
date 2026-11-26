@@ -47,12 +47,12 @@ static int conn_output(void *addr, void *buf, size_t length, uint8_t tos, uint8_
 }
 
 Connection::Connection(u32 max_packet_size, float timeout, bool ipv6,
-		PeerHandler *peerhandler, bool start_worker) :
+		PeerHandler *peerhandler, bool start_worker, bool check_game_data_timeout) :
 		thread_vector("Connection"),
 		//m_protocol_id(protocol_id),
 		m_max_packet_size(max_packet_size), m_timeout(timeout), sock(nullptr),
 		m_peer_id(0), m_bc_peerhandler(peerhandler), m_last_recieved(0),
-		m_last_recieved_warn(0)
+		m_last_recieved_warn(0), m_check_game_data_timeout(check_game_data_timeout)
 
 #ifdef __EMSCRIPTEN__
 		,
@@ -183,8 +183,8 @@ void Connection::checkPeerTimeouts()
 		// A live control plane does not prove that game data can be delivered.
 		// Servers send time-of-day updates every five seconds, even when idle.
 		// Limit this check to clients: generic/idle peers may send no game data.
-		const bool data_stalled =
-				id == PEER_ID_SERVER && u32(now - m_last_recieved) >= m_peer_timeout_ms;
+		const bool data_stalled = m_check_game_data_timeout && id == PEER_ID_SERVER &&
+								  u32(now - m_last_recieved) >= m_peer_timeout_ms;
 		if (data_stalled || u32(now - activity.second) >= m_peer_timeout_ms)
 			expired.emplace_back(id, data_stalled);
 	}

@@ -45,7 +45,8 @@ class ConnectionMulti final : public IConnection
 {
 public:
 	ConnectionMulti(u32 max_packet_size, float timeout, bool ipv6,
-			con::PeerHandler *peerhandler = nullptr);
+			con::PeerHandler *peerhandler = nullptr,
+			bool simple_singleplayer_mode = false);
 	~ConnectionMulti();
 
 	void Serve(Address bind_addr) override;
@@ -89,6 +90,7 @@ private:
 	float m_timeout;
 	bool m_ipv6;
 	PeerHandler *m_peerhandler;
+	const bool m_simple_singleplayer_mode;
 	std::shared_ptr<ReceiveSignal> m_receive_signal = std::make_shared<ReceiveSignal>();
 	ConnectionList m_connections{};
 	proto_name connected_to = proto_name::none;

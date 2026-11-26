@@ -18,7 +18,8 @@ class Connection : public con_sctp::Connection
 {
 public:
 	Connection(u32 protocol_id, u32 max_packet_size, float timeout, bool ipv6,
-			con::PeerHandler *peerhandler = nullptr, bool local = false);
+			con::PeerHandler *peerhandler = nullptr, bool local = false,
+			bool check_game_data_timeout = true);
 	~Connection() override;
 	bool hasPeer(session_t id) { return m_peers.count(id) != 0; }
 	std::shared_ptr<ws_transport::Transport> getTransport() { return m_transport; }
