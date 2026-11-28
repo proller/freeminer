@@ -499,6 +499,12 @@ Ground generate_ground_data(const Args &args_, const geographic::LLBBox &bbox,
 	// the water-carve floor, so setting bounds later in generate_world would fit
 	// against stale/default limits (notably for tall Java worlds and One World).
 	world_editor::set_world_bounds(extended_min_y_for(args), world_top_y_for(args));
+	// Rust installs the water carve policy before either the elevation or flat
+	// ground path. Refresh it for every run so flat generation cannot inherit
+	// the previous world's river/water-detail settings.
+	water_depth::set_crossing_carve(
+			{args.river_bed == RiverBed::Off ? 0 : water_depth::MAX_WATER_DEPTH,
+					args.water_detail, args.scale});
 	// Rust only collects tall-model hints when 3D placement is enabled. Enforce
 	// that policy here too, including callers that supply TerrainHints directly
 	// instead of going through generate_ground_data_from_osm(). Natural peaks
@@ -576,9 +582,6 @@ Ground generate_ground_data(const Args &args_, const geographic::LLBBox &bbox,
 	std::optional<int> elevation_lowest_y;
 	if (args.terrain_enabled()) {
 		try {
-			water_depth::set_crossing_carve(
-					{args.river_bed == RiverBed::Off ? 0 : water_depth::MAX_WATER_DEPTH,
-							args.water_detail, args.scale});
 			int max_carve_depth =
 					cover ? water_detail::max_carve_depth(args.water_detail,
 									water_depth::estimate_max_carve_depth(
@@ -758,8 +761,12 @@ Ground generate_ground_data(const Args &args_, const geographic::LLBBox &bbox,
 			ground.set_ecoregion_map(std::move(map));
 	if (args.climate_mode == climate::ClimateMode::PerPosition && earth) {
 		auto [geo, align] = frame.geography(bbox, final_width, final_height);
+		const double lon_per_block =
+				frame.mercator
+						? frame.mercator->lon_for_x(1.0) - frame.mercator->lon_for_x(0.0)
+						: geo(1.0, 0.0).second - geo(0.0, 0.0).second;
 		ground.climate_field = std::make_shared<const climate::ClimateField>(
-				geo, align, final_width, final_height);
+				geo, align, final_width, final_height, lon_per_block);
 	}
 	int base = ground.base_level(args.ground_level);
 	if (args.one_world_run && args.disable_height_limit && ground.elevation_enabled) {

@@ -6,6 +6,7 @@
 #include "arnis-cpp/src/ground_decoration.h"
 #include "arnis-cpp/src/floodfill_cache.h"
 #include "arnis-cpp/src/trees/mapped.h"
+#include "arnis-cpp/src/trees/schematic.h"
 #include "arnis-cpp/src/world_editor/floor_state.h"
 #include "arnis-cpp/src/climate.h"
 #include "arnis-cpp/src/element_processing/signage.h"
@@ -32,6 +33,67 @@ namespace world_editor
 bool WorldEditor::under_mapped_crown(int x, int z) const
 {
 	return mapped_trunks && mapped_trunks->under_crown(x, z);
+}
+
+bool WorldEditor::on_mapped_path(int x, int z) const
+{
+	return mapped_paths && mapped_paths->contains(x, z);
+}
+
+bool WorldEditor::green_at(int x, int z) const
+{
+	if (!ground)
+		return false;
+	const auto cover = cover_class(x, z);
+	return cover == land_cover::LC_SHRUBLAND || cover == land_cover::LC_GRASSLAND ||
+		   cover == land_cover::LC_CROPLAND || cover == land_cover::LC_WETLAND ||
+		   cover == land_cover::LC_MANGROVES || cover == land_cover::LC_MOSS;
+}
+
+bool WorldEditor::keeps_its_ground(
+		int x, int z, const std::function<bool(int, int)> &paved) const
+{
+	return ground_kept(x, z, paved, true);
+}
+
+bool WorldEditor::keeps_a_pit(
+		int x, int z, const std::function<bool(int, int)> &paved) const
+{
+	return ground_kept(x, z, paved, false);
+}
+
+bool WorldEditor::ground_kept(int x, int z, const std::function<bool(int, int)> &paved,
+		bool include_green) const
+{
+	if (mapped_trunks && mapped_trunks->trunk_within(
+								 x, z, 1, [&](int tx, int tz) { return !paved(tx, tz); }))
+		return true;
+	if (include_green && green_at(x, z))
+		return true;
+	if (!ground || !ground->has_canopy() || !ground->has_land_cover())
+		return false;
+	const int spacing = tree_slot_spacing();
+	std::array<std::pair<int, int>, 9> seen{};
+	std::size_t seen_count = 0;
+	for (int dx = -1; dx <= 1; ++dx) {
+		for (int dz = -1; dz <= 1; ++dz) {
+			const auto slot = trees::trunk_slot_s(x + dx, z + dz, spacing);
+			if (std::abs(slot.first - x) > 1 || std::abs(slot.second - z) > 1 ||
+					std::find(seen.begin(), seen.begin() + seen_count, slot) !=
+							seen.begin() + seen_count)
+				continue;
+			seen[seen_count++] = slot;
+			if (paved(slot.first, slot.second) ||
+					under_mapped_crown(slot.first, slot.second))
+				continue;
+			const auto [measured, tree] = ground_generation::canopy_verdict(*this,
+					slot.first, slot.second, ground_origin_x, ground_origin_z, spacing,
+					schematic_tree_pack_available, scale());
+			if (measured && tree)
+				return true;
+		}
+	}
+	return false;
 }
 
 bool WorldEditor::in_clear_corridor(int x, int z) const
@@ -291,6 +353,7 @@ WorldEditor WorldEditor::make_tile_worker() const
 	worker.garden_land = garden_land;
 	worker.ground_marks = ground_marks;
 	worker.carriageway = carriageway;
+	worker.mapped_paths = mapped_paths;
 	worker.rail_bed = rail_bed;
 	worker.kerb_strips = kerb_strips;
 	worker.clear_corridors = clear_corridors;

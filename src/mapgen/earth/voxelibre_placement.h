@@ -158,40 +158,40 @@ bool place_rooted(Editor &editor, Block plant, u8 param2, Block water, pos_t x,
 }
 
 template <typename Editor>
-void place_kelp(Editor &editor, const RootedOcean &nodes, pos_t x, pos_t bed_y, pos_t z,
+bool place_kelp(Editor &editor, const RootedOcean &nodes, pos_t x, pos_t bed_y, pos_t z,
 		int height)
 {
 	const auto bed = editor.get_block_absolute(x, bed_y, z);
 	if (!nodes.enabled || !bed)
-		return;
+		return false;
 	for (std::size_t i = 0; i < nodes.substrates.size(); ++i) {
 		if (bed->id() == nodes.substrates[i].id()) {
 			height = std::clamp(height, 1, 15);
-			place_rooted(editor, nodes.kelp[i], static_cast<u8>(height * 16), nodes.water,
-					x, bed_y, z, height);
-			return;
+			return place_rooted(editor, nodes.kelp[i], static_cast<u8>(height * 16),
+					nodes.water, x, bed_y, z, height);
 		}
 	}
+	return false;
 }
 
 // A rooted plant replaces its substrate, leaving the water above untouched.
 template <typename Editor>
-void place_seagrass(
+bool place_seagrass(
 		Editor &editor, const RootedSeagrass &nodes, pos_t x, pos_t bed_y, pos_t z)
 {
 	const auto bed = editor.get_block_absolute(x, bed_y, z);
 	const auto above = editor.get_block_absolute(x, bed_y + 1, z);
 	if (!nodes.enabled || !bed || !above || above->id() != nodes.water.id())
-		return;
+		return false;
 	for (std::size_t i = 0; i < nodes.substrates.size(); ++i) {
 		if (bed->id() != nodes.substrates[i].id())
 			continue;
 		Block plant = nodes.plants[i];
 		plant.setParam2(3); // VoxeLibre's plantlike_rooted mesh options
-		editor.try_set_block_absolute(plant, x, bed_y, z,
+		return editor.try_set_block_absolute(plant, x, bed_y, z,
 				std::optional<std::vector<Block>>({*bed}), std::nullopt);
-		return;
 	}
+	return false;
 }
 
 // Arnis uses negative Z for north; VoxeLibre's fourdir north is positive Z.

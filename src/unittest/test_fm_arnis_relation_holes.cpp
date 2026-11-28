@@ -10,6 +10,7 @@
 #include "mapgen/earth/arnis-cpp/src/floodfill_cache.h"
 #include "mapgen/earth/arnis-cpp/src/land_cover/osm_water_override.h"
 #include "mapgen/earth/arnis-cpp/src/osm_parser.h"
+#include "mapgen/earth/arnis-cpp/src/overture.h"
 #include "mapgen/earth/fm_osm_relation_tags.h"
 
 #include <algorithm>
@@ -61,6 +62,8 @@ public:
 		TEST(testStreamingXmlParserHandlesQuotedMarkupAndEntityOrder);
 		TEST(testRepeatedRelationAreaOuterSuppressionMatchesRust);
 		TEST(testBuildingPartCoverageMatchesRust);
+		TEST(testOutlineHeightReconciliationMatchesRust);
+		TEST(testOvertureHeightDoesNotHideRetainedBuildingParts);
 	}
 
 	void testNestedOuterGetsItsOwnHoleGroup()
@@ -654,6 +657,80 @@ public:
 		UASSERT(podium_data.part_groups.contains(podium.id));
 		UASSERT(podium_data.part_groups.at(podium.id) ==
 				podium_data.part_groups.at(tower.id));
+	}
+
+	void testOutlineHeightReconciliationMatchesRust()
+	{
+		using namespace arnis;
+		auto way = [](std::uint64_t id, double min_lat, double min_lon, double max_lat,
+						   double max_lon, tags_t tags) {
+			ProcessedWay result;
+			result.id = id;
+			result.tags = std::move(tags);
+			const double coordinates[5][2]{{min_lat, min_lon}, {min_lat, max_lon},
+					{max_lat, max_lon}, {max_lat, min_lon}, {min_lat, min_lon}};
+			for (std::size_t i = 0; i < 5; ++i) {
+				ProcessedNode node{};
+				node.id = id * 10 + i;
+				node.latitude = coordinates[i][0];
+				node.longitude = coordinates[i][1];
+				result.nodes.push_back(node);
+				result.source_node_refs.push_back(node.id);
+			}
+			result.nodes.back().id = result.nodes.front().id;
+			result.source_node_refs.back() = result.source_node_refs.front();
+			return result;
+		};
+		tags_t outline_tags;
+		outline_tags.emplace("building", "office");
+		outline_tags.emplace("height", "100");
+		tags_t part_tags;
+		part_tags.emplace("building:part", "yes");
+		part_tags.emplace("building:min_level", "2");
+		part_tags.emplace("height", "50");
+		std::vector<ProcessedElement> elements{
+				way(1, 0.0, 0.0, 0.001, 0.001, outline_tags),
+				way(2, 0.0, 0.0, 0.001, 0.001, part_tags)};
+		auto prepared = prepare_building_data(elements);
+		lower_outlines_under_parts(elements, prepared);
+		const auto &podium = elements.front().as_way().tags;
+		UTEST(podium.get("height") == "10.0", "podium height=%s",
+				podium.get("height").c_str());
+		UASSERT(podium.get("roof:shape") == "flat");
+		UASSERT(!podium.contains("building:levels"));
+
+		tags_t unmeasured_outline_tags;
+		unmeasured_outline_tags.emplace("building", "hotel");
+		tags_t measured_part_tags;
+		measured_part_tags.emplace("building:part", "yes");
+		measured_part_tags.emplace("height", "117.4");
+		std::vector<ProcessedElement> measured{
+				way(3, 0.0, 0.0, 0.001, 0.001, unmeasured_outline_tags),
+				way(4, 0.0, 0.0, 0.0006, 0.0007, measured_part_tags)};
+		prepared = prepare_building_data(measured);
+		lower_outlines_under_parts(measured, prepared);
+		const auto &ceiling = measured.front().as_way().tags;
+		UASSERT(ceiling.get("arnis:parts_top") == "117.4");
+		UASSERT(!ceiling.contains("height"));
+	}
+
+	void testOvertureHeightDoesNotHideRetainedBuildingParts()
+	{
+		using namespace arnis;
+		ProcessedWay outline;
+		outline.id = 510;
+		outline.tags.emplace("building", "yes");
+		outline.tags.emplace("arnis:parts_top", "100.0");
+		std::vector<ProcessedElement> elements{outline};
+		overture::OvertureHints hints;
+		hints.insert({outline.id, false}, {200.0, std::nullopt});
+		UASSERT(hints.apply(elements) == 0);
+		UASSERT(!elements.front().as_way().tags.contains("height"));
+
+		overture::OvertureHints low_hint;
+		low_hint.insert({outline.id, false}, {50.0, std::nullopt});
+		UASSERT(low_hint.apply(elements) == 1);
+		UASSERT(elements.front().as_way().tags.get("height") == "50.0");
 	}
 };
 
