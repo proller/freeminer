@@ -46,6 +46,7 @@
 #endif
 
 #include "arnis-cpp/src/data_processing.h"
+#include "arnis-cpp/src/building_suppression.h"
 #include "arnis-cpp/src/net.h"
 // fm: Share complete bridge geometry between streamed chunks.
 #include "arnis-cpp/src/element_processing/fm_bridge_context.h"
@@ -1798,8 +1799,13 @@ public:
 				if (dropped > 0)
 					actionstream << "Earth: skipped " << dropped
 								 << " building(s) on aircraft pavement\n";
+				// Rust lowers retained building outlines under their grouped parts
+				// before survey or Overture heights are applied. Keep the ceiling tag
+				// in the shared parsed elements so every generation chunk sees it.
+				auto building_data = arnis::prepare_building_data(cached.elements);
+				arnis::lower_outlines_under_parts(cached.elements, building_data);
 				cached.prepared_buildings = std::make_unique<arnis::PreparedBuildingData>(
-						arnis::prepare_building_data(cached.elements));
+						std::move(building_data));
 				// The flat-world terrain-max scan samples every X/Z column. On
 				// curved projections that becomes a very expensive cube conversion
 				// loop and does not describe a single horizontal ceiling.

@@ -185,6 +185,7 @@ struct WorldEditor
 	std::shared_ptr<const GardenLand> garden_land;
 	std::shared_ptr<GroundMarks> ground_marks;
 	std::shared_ptr<const CoordinateBitmap> carriageway;
+	std::shared_ptr<const CoordinateBitmap> mapped_paths;
 	// Surveyed paved/bare ground under at-grade tracks is ballast, not terrain.
 	std::shared_ptr<const CoordinateBitmap> rail_bed;
 	std::shared_ptr<const element_processing::kerb_strips::KerbStrips> kerb_strips;
@@ -281,6 +282,10 @@ struct WorldEditor
 	{
 		carriageway = std::move(mask);
 	}
+	void set_mapped_paths(std::shared_ptr<const CoordinateBitmap> mask)
+	{
+		mapped_paths = std::move(mask);
+	}
 	void set_water_areas(std::shared_ptr<const CoordinateBitmap> mask)
 	{
 		water_areas = std::move(mask);
@@ -325,6 +330,7 @@ struct WorldEditor
 	{
 		sealed_surface.reset();
 		water_areas.reset();
+		mapped_paths.reset();
 		garden_land.reset();
 		ground_marks.reset();
 		clear_corridors.reset();
@@ -338,6 +344,12 @@ struct WorldEditor
 	bool under_mapped_crown(int x, int z) const;
 	bool surface_is_sealed(int x, int z) const;
 	bool on_carriageway(int x, int z) const;
+	bool on_mapped_path(int x, int z) const;
+	bool green_at(int x, int z) const;
+	bool keeps_its_ground(int x, int z, const std::function<bool(int, int)> &paved) const;
+	bool keeps_a_pit(int x, int z, const std::function<bool(int, int)> &paved) const;
+	bool ground_kept(int x, int z, const std::function<bool(int, int)> &paved,
+			bool include_green) const;
 	bool nested_area_owns(int x, int z) const;
 	uint8_t cover_class(int x, int z) const;
 	bool near_beach(int x, int z, double reach) const;
